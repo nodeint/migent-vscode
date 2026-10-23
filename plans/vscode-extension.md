@@ -1,273 +1,273 @@
-# Plan: Migent cho VS Code
+# Plan: Migent for VS Code
 
-Mục tiêu: giúp dev quản lý và theo dõi session, chạy workflow trực tiếp trong VS Code mà không cần mở terminal.
+Goal: let developers manage and monitor sessions and run workflows directly inside VS Code, without opening a terminal.
 
-Điều kiện tiên quyết: [`session-cancel.md`](./session-cancel.md) phải xong trước, vì nút Stop cần `migent session cancel` (Windows không có signal để hủy êm).
+Prerequisite: [`session-cancel.md`](./session-cancel.md) must land first, because the Stop button needs `migent session cancel` (Windows has no signal for a graceful cancel).
 
-## 1. Nguyên tắc thiết kế
+## 1. Design principles
 
-1. **Native trước, webview sau.** TreeView, Quick Pick, Input Box, status bar, notification và editor có sẵn lo 90% nhu cầu. Webview chỉ dùng cho sơ đồ workflow và dashboard metrics (giai đoạn sau).
-2. **File là nguồn sự thật.** Extension đọc `.migent/sessions/**` và không giữ trạng thái riêng. Session chạy từ terminal hay từ agent khác vẫn hiện ra.
-3. **Lệnh đi qua CLI.** Mọi thao tác ghi (run, continue, cancel, prepare) gọi `migent`. Extension không ghi vào `status.json`, `events.jsonl`, `manifest.yaml` hay `executions/` (docs/sessions.md cấm sửa tay các file này).
-4. **Không import `@nodeint/migent-kernel`.** README nói các package nội bộ không có API ổn định. Contract duy nhất là: định dạng file được document, đầu ra `--json` và exit code.
-5. **Logic thuần tách khỏi `vscode`.** Thư mục `core/` không import `vscode`, test được bằng vitest không cần khởi động VS Code.
-6. **Từ chối đoán.** Gặp `schema_version` hoặc version CLI lạ thì chuyển sang chế độ chỉ-đọc và báo rõ, không suy diễn.
+1. **Native first, webview later.** TreeView, Quick Pick, Input Box, status bar, notifications and the built-in editor cover 90% of the needs. Webviews are only for the workflow graph and the metrics dashboard (later phase).
+2. **Files are the source of truth.** The extension reads `.migent/sessions/**` and keeps no state of its own. Sessions started from a terminal or by another agent show up too.
+3. **Commands go through the CLI.** Every write operation (run, continue, cancel, prepare) calls `migent`. The extension never writes to `status.json`, `events.jsonl`, `manifest.yaml` or `executions/` (docs/sessions.md forbids hand-editing these files).
+4. **Do not import `@nodeint/migent-kernel`.** The README says internal packages have no stable API. The only contract is: documented file formats, `--json` output and exit codes.
+5. **Pure logic is separated from `vscode`.** The `core/` directory never imports `vscode` and can be tested with vitest without launching VS Code.
+6. **Refuse to guess.** On an unknown `schema_version` or CLI version, switch to read-only mode and say so clearly instead of inferring.
 
-## 2. Repo, công cụ, phát hành
+## 2. Repo, tooling, release
 
-- Repo riêng: `nodeint/migent-vscode` (lý do: extension chỉ là consumer của contract công khai; toolchain, nhịp phát hành khác với CLI).
-- TypeScript, build bằng esbuild (bundle một file `dist/extension.js`, `external: ["vscode"]`), test bằng vitest cho `core/` và `@vscode/test-electron` cho phần tích hợp.
-- Package manager: pnpm (khớp migent). Lint/format theo cấu hình của migent nếu có.
-- Phát hành: `vsce package` → VS Code Marketplace, đồng thời Open VSX. Publisher: cần xác nhận (xem câu hỏi mở).
-- `engines.vscode`: `^1.90.0` (xác nhận lại khi scaffold, chỉ nâng khi cần API mới).
-- Kích hoạt: `activationEvents: ["workspaceContains:.migent/config.yaml"]`, không dùng `*`.
-- Hỗ trợ workspace nhiều thư mục (multi-root): mỗi folder có `.migent/` là một "project" riêng.
+- Separate repo: `nodeint/migent-vscode` (reason: the extension is only a consumer of the public contract; its toolchain and release cadence differ from the CLI).
+- TypeScript, built with esbuild (a single bundled `dist/extension.js`, `external: ["vscode"]`), tested with vitest for `core/` and `@vscode/test-electron` for integration.
+- Package manager: pnpm (matches migent). Lint/format follow migent's config where available.
+- Release: `vsce package` → VS Code Marketplace, plus Open VSX. Publisher: to be confirmed (see open questions).
+- `engines.vscode`: `^1.90.0` (re-confirm when scaffolding; only raise it when a newer API is needed).
+- Activation: `activationEvents: ["workspaceContains:.migent/config.yaml"]`, never `*`.
+- Multi-root workspaces: each folder containing `.migent/` is its own "project".
 
-## 3. Contract với migent
+## 3. Contract with migent
 
-Extension phụ thuộc vào những thứ sau. Thay đổi bất kỳ điều nào là thay đổi contract, phải tăng `schema_version` và báo cho repo extension.
+The extension depends on the following. Changing any of them is a contract change, must bump `schema_version`, and must be communicated to the extension repo.
 
-| Nguồn | Dùng để | Ghi chú |
+| Source | Used for | Notes |
 |---|---|---|
-| `manifest.yaml` | id, title, workflow_id, created_at, `schema_version` | `schema_version: 2` hiện tại |
-| `status.json` | trạng thái session | ghi nguyên tử |
-| `session.lock` | session đang chạy | `{pid, host, started_at, heartbeat_at, nonce}`, stale sau 30 giây |
+| `manifest.yaml` | id, title, workflow_id, created_at, `schema_version` | currently `schema_version: 2` |
+| `status.json` | session status | written atomically |
+| `session.lock` | session is running | `{pid, host, started_at, heartbeat_at, nonce}`, stale after 30 seconds |
 | `events.jsonl` | timeline | envelope `{v, seq, event, timestamp, execution_id, stage_id, summary, data}` |
 | `executions/<id>/execution.json` | stage, attempt, provider, model, status, outcome, owner_pid, hostname | |
-| `executions/<id>/{prompt.md,response.md,artifacts/,turns/*/verify.md}` | mở xem | chỉ đọc |
-| `executions/<id>/stream.jsonl` | log provider chi tiết | chỉ đọc khi người dùng mở |
-| `outputs/*` | kết quả đã publish | `status.json.outputs` có đường dẫn và provenance |
-| `metrics.json` | token, chi phí, thời gian | chỉ có khi workflow session `completed` |
-| `.migent/workflows/*.yaml` | danh sách workflow cho Run | đọc `id`/tên file và `stages` cho hiển thị |
-| `migent --version` | kiểm tra tương thích | |
-| `migent session list/show/metrics --json` | tải ban đầu, đối chiếu | |
-| `migent session run/continue/prepare/cancel` | thao tác | exit code: 0 xong, 1 chưa xong, 3 stage_failed, 6 verify_exhausted, 7 verify, 8 quota, 130 cancelled |
+| `executions/<id>/{prompt.md,response.md,artifacts/,turns/*/verify.md}` | open for viewing | read-only |
+| `executions/<id>/stream.jsonl` | detailed provider log | read only when the user opens it |
+| `outputs/*` | published results | `status.json.outputs` carries paths and provenance |
+| `metrics.json` | tokens, cost, duration | only present once a workflow session is `completed` |
+| `.migent/workflows/*.yaml` | workflow list for Run | read `id`/file name and `stages` for display |
+| `migent --version` | compatibility check | |
+| `migent session list/show/metrics --json` | initial load, reconciliation | |
+| `migent session run/continue/prepare/cancel` | operations | exit codes: 0 done, 1 not finished, 3 stage_failed, 6 verify_exhausted, 7 verify, 8 quota, 130 cancelled |
 
-Kiểm tra khi khởi động: `migent --version` ≥ bản tối thiểu (cấu hình trong extension). Thiếu CLI hoặc quá cũ thì hiển thị welcome view hướng dẫn cài và chuyển sang chỉ-đọc. Thiếu `session cancel` thì ẩn nút Stop.
+Startup check: `migent --version` ≥ the minimum version (configured in the extension). If the CLI is missing or too old, show a welcome view with install instructions and switch to read-only. If `session cancel` is missing, hide the Stop button.
 
-## 4. Trạng thái hiển thị
+## 4. Displayed state
 
-`status.json.status` không đủ. Session `active` mà không có lock chỉ là "dừng, có thể resume". Trạng thái hiển thị suy ra như sau:
+`status.json.status` is not enough. An `active` session with no lock is just "stopped, can be resumed". The displayed state is derived as follows:
 
-| Hiển thị | Điều kiện | Icon (codicon) |
+| Displayed | Condition | Icon (codicon) |
 |---|---|---|
 | Prepared | `status = prepared` | `circle-outline` |
-| Running | lock còn sống (xem dưới) | `sync~spin` |
+| Running | lock is alive (see below) | `sync~spin` |
 | Blocked | `status = blocked` | `warning` |
-| Failed | `active`, không lock, `latest_execution_status = failed` | `error` |
-| Stopped | `active`, không lock, execution cuối không failed | `debug-pause` |
+| Failed | `active`, no lock, `latest_execution_status = failed` | `error` |
+| Stopped | `active`, no lock, last execution not failed | `debug-pause` |
 | Cancelled | `status = cancelled` | `circle-slash` |
 | Completed | `status = completed` | `pass` |
-| Unknown | schema lạ, status.json hỏng | `question` |
+| Unknown | unknown schema, corrupt status.json | `question` |
 
-**Lock còn sống:** file `session.lock` parse được, `host` trùng `os.hostname()`, `process.kill(pid, 0)` không ném `ESRCH`, và `heartbeat_at` trong vòng 30 giây. Lock của host khác hiển thị Running (không kiểm được pid) nhưng thao tác ghi bị khóa. Lock không parse được thì dựa vào mtime của file, giống `session-lock.ts`.
+**Lock is alive:** `session.lock` parses, `host` equals `os.hostname()`, `process.kill(pid, 0)` does not throw `ESRCH`, and `heartbeat_at` is within 30 seconds. A lock from another host shows Running (the pid cannot be checked) but write operations are disabled. If the lock cannot be parsed, fall back to the file's mtime, as `session-lock.ts` does.
 
-Hàm `deriveDisplayState(status, lock, now)` là hàm thuần, bảng quyết định ở trên là bộ test của nó.
+`deriveDisplayState(status, lock, now)` is a pure function; the decision table above is its test suite.
 
-## 5. Kiến trúc
+## 5. Architecture
 
 ```
 migent-vscode/
   src/
-    extension.ts               # activate/deactivate: chỉ nối các phần
-    core/                      # KHÔNG import vscode
-      paths.ts                 # đường dẫn trong .migent
-      manifest.ts              # parse manifest.yaml (thư viện `yaml`)
-      statusReader.ts          # đọc status.json an toàn (retry khi đang ghi)
+    extension.ts               # activate/deactivate: wiring only
+    core/                      # does NOT import vscode
+      paths.ts                 # paths inside .migent
+      manifest.ts              # parse manifest.yaml (`yaml` library)
+      statusReader.ts          # safe status.json reader (retry while being written)
       lockProbe.ts             # session.lock -> alive | stale | none
       displayState.ts          # deriveDisplayState
-      eventTail.ts             # tail events.jsonl theo byte offset
-      executions.ts            # đọc execution.json cho cây
-      workflows.ts             # liệt kê và đọc .migent/workflows
-      model.ts                 # kiểu SessionSnapshot, ExecutionSnapshot...
-      store.ts                 # SessionStore: snapshot + sự kiện thay đổi
+      eventTail.ts             # tail events.jsonl by byte offset
+      executions.ts            # read execution.json for the tree
+      workflows.ts             # list and read .migent/workflows
+      model.ts                 # types: SessionSnapshot, ExecutionSnapshot...
+      store.ts                 # SessionStore: snapshot + change events
     cli/
-      locate.ts                # tìm binary migent (setting, PATH, node_modules)
-      invoke.ts                # chạy lệnh ngắn, parse --json
-      runner.ts                # quản lý process dài: run/continue, cancel
-      version.ts               # kiểm tra tương thích
-    vscode/                    # lớp nối với API VS Code
-      projects.ts              # theo dõi các workspace folder có .migent
+      locate.ts                # find the migent binary (setting, PATH, node_modules)
+      invoke.ts                # run short commands, parse --json
+      runner.ts                # manage long-running processes: run/continue, cancel
+      version.ts               # compatibility check
+    vscode/                    # glue to the VS Code API
+      projects.ts              # track workspace folders containing .migent
       watcher.ts               # FileSystemWatcher -> store
       views/sessionsTree.ts
       views/welcome.ts
       statusBar.ts
       notifications.ts
       content/sessionDocs.ts   # TextDocumentContentProvider
-      log/channels.ts          # LogOutputChannel theo session
-      commands/*.ts            # mỗi lệnh một file
-      pick.ts                  # Quick Pick workflow, session
+      log/channels.ts          # per-session LogOutputChannel
+      commands/*.ts            # one file per command
+      pick.ts                  # Quick Pick for workflows, sessions
   test/
-    fixtures/sessions/         # session thật (đã ẩn dữ liệu) cho từng trạng thái
+    fixtures/sessions/         # real (redacted) sessions, one per state
     core/*.test.ts
     integration/*.test.ts
   package.json  esbuild.mjs  tsconfig.json  .vscodeignore
 ```
 
-Luồng dữ liệu một chiều: **watcher → store → view**. View không bao giờ tự đọc đĩa. Lệnh gọi CLI, kết quả quay lại qua watcher (file đổi), không cập nhật store trực tiếp, để tránh hai nguồn sự thật.
+Data flows one way: **watcher → store → view**. Views never read the disk themselves. Commands call the CLI, and the result comes back through the watcher (files change); commands never update the store directly, which avoids two sources of truth.
 
 ### 5.1 SessionStore
 
 - `Map<projectRoot, Map<sessionId, SessionSnapshot>>`.
-- `SessionSnapshot` gồm manifest, status, lock, displayState, danh sách execution (nhẹ: id, stage, attempt, status, decision), `lastEventSeq`.
-- `onDidChange(event: {project, sessionId, kind})` để view refresh đúng phần cần.
-- Tải ban đầu: quét `.migent/sessions/*/` (đọc trực tiếp, nhanh hơn spawn CLI). `migent session list --json` chỉ dùng để đối chiếu khi bật chế độ chẩn đoán.
-- Nạp lười: danh sách ban đầu chỉ đọc manifest + status + lock. Danh sách execution chỉ đọc khi nút của session được mở rộng hoặc session đang chạy.
-- Giới hạn: hiển thị N session mới nhất (mặc định 50), có "Hiện thêm". Thư mục sessions có thể lên hàng trăm mục.
+- `SessionSnapshot` holds manifest, status, lock, displayState, a list of executions (lightweight: id, stage, attempt, status, decision) and `lastEventSeq`.
+- `onDidChange(event: {project, sessionId, kind})` so views refresh only what changed.
+- Initial load: scan `.migent/sessions/*/` (direct reads, faster than spawning the CLI). `migent session list --json` is used only for reconciliation when diagnostic mode is on.
+- Lazy loading: the initial list reads only manifest + status + lock. The execution list is read only when a session node is expanded or the session is running.
+- Limit: show the N most recent sessions (default 50) with a "Show more" item. The sessions directory can reach hundreds of entries.
 
 ### 5.2 Watcher
 
-- Một `FileSystemWatcher` theo project: glob `.migent/sessions/*/{status.json,session.lock,cancel.requested}` và `.migent/sessions/*/executions/*/execution.json`. Thư mục `.migent` thường bị ẩn bởi `files.watcherExclude` của người dùng; dùng `RelativePattern` trên đường dẫn cụ thể và kiểm tra ở bước thử nghiệm Windows.
-- Gom sự kiện bằng debounce 150ms theo session. Mỗi lần đọc lại session đó, không đọc cả thư mục.
-- Timer 10 giây chỉ chạy khi có ít nhất một session Running: kiểm tra lại `lockProbe` để bắt lock chết không phát sinh sự kiện file (process bị kill cứng).
-- `status.json` được ghi nguyên tử nên đọc được trọn vẹn. Khi parse lỗi (thấy trong lúc rename trên Windows), thử lại sau 100ms, tối đa 3 lần rồi đánh dấu Unknown.
+- One `FileSystemWatcher` per project: glob `.migent/sessions/*/{status.json,session.lock,cancel.requested}` and `.migent/sessions/*/executions/*/execution.json`. The `.migent` directory is often hidden by the user's `files.watcherExclude`; use `RelativePattern` on concrete paths and verify during Windows testing.
+- Coalesce events with a 150ms debounce per session. Each time, re-read that session only, not the whole directory.
+- A 10-second timer runs only while at least one session is Running: it re-checks `lockProbe` to catch dead locks that emit no file event (hard-killed process).
+- `status.json` is written atomically so reads are complete. On a parse error (seen during a rename on Windows), retry after 100ms, up to 3 times, then mark Unknown.
 
 ### 5.3 Event tail
 
-- Dùng cho Output Channel của session và thông báo thời gian thực. Giữ `offset` theo từng session; mỗi lần đọc từ `offset` đến hết file, chỉ xử lý các dòng đã có `\n` kết thúc, phần còn lại giữ cho lần sau (log có thể bị ghi dở; kernel có `sealTornTail`).
-- `seq` dùng để loại trùng. Gặp `v` lạ thì hiển thị nguyên dòng, không bỏ.
-- Chỉ bật tail cho session đang được mở log hoặc đang Running để tiết kiệm.
+- Used for the per-session Output Channel and real-time notifications. Keep an `offset` per session; each read goes from `offset` to end of file and processes only lines terminated by `\n`, keeping the remainder for next time (the log may be partially written; the kernel has `sealTornTail`).
+- `seq` is used for de-duplication. On an unknown `v`, show the raw line rather than dropping it.
+- Tail only sessions whose log is open or that are Running, to save resources.
 
-### 5.4 Thi hành lệnh (`cli/`)
+### 5.4 Command execution (`cli/`)
 
-- **Lệnh ngắn** (`--version`, `session show --json`, `prepare`): `execFile`, timeout, parse JSON, lỗi có kiểu.
-- **Lệnh dài** (`session run`, `session continue`): `spawn` với `windowsHide: true`, `stdio` được đọc (stderr là log theo dòng), `detached: true` trên POSIX để sống qua việc reload cửa sổ. Trên Windows kiểm tra riêng việc process con còn chạy sau khi extension host thoát (xem rủi ro). Không dùng shell, truyền `argv` thẳng.
-- Biến môi trường: kế thừa từ VS Code; cho phép thiết lập thêm qua setting `migent.env`.
-- Kết quả: map exit code sang enum (`Completed | NotFinished | StageFailed | VerifyExhausted | Quota | Cancelled | ConfigError`), kèm `response:` hoặc `verify:` từ stderr để mở nhanh file liên quan.
-- Chạy đồng thời: `SessionLock` đã chặn hai tiến trình cùng session, nhưng extension cũng kiểm tra trước (nút Run/Continue bị tắt khi Running) để tránh thông báo lỗi.
-- `--max-dispatches` và các cờ tương tự lấy từ settings, không hỏi mỗi lần.
+- **Short commands** (`--version`, `session show --json`, `prepare`): `execFile` with a timeout, parse JSON, typed errors.
+- **Long commands** (`session run`, `session continue`): `spawn` with `windowsHide: true`, `stdio` read (stderr is a line-based log), `detached: true` on POSIX so the process survives a window reload. On Windows, separately verify that the child keeps running after the extension host exits (see risks). No shell; pass `argv` directly.
+- Environment: inherited from VS Code; extra variables can be set via the `migent.env` setting.
+- Result: map the exit code to an enum (`Completed | NotFinished | StageFailed | VerifyExhausted | Quota | Cancelled | ConfigError`), with the `response:` or `verify:` line from stderr so the related file can be opened quickly.
+- Concurrency: `SessionLock` already blocks two processes on the same session, but the extension also checks beforehand (Run/Continue are disabled while Running) to avoid error messages.
+- `--max-dispatches` and similar flags come from settings, not from a prompt each time.
 
-## 6. Giao diện
+## 6. UI
 
-### 6.1 Activity Bar: container "Migent"
+### 6.1 Activity Bar: "Migent" container
 
-Một view container, hai view:
+One view container with two views:
 
-1. **Sessions** (TreeView). Phần tử:
-   - Gốc nhóm (khi multi-root có nhiều project): tên project.
-   - Nhóm theo trạng thái: **Running**, **Needs attention** (Blocked, Failed, Stopped), **Recent** (Completed, Cancelled, Prepared). Nhóm trống ẩn đi.
-   - Session: nhãn = `title` (cắt ở ~60 ký tự, đầy đủ trong tooltip), `description` = `workflow · stage hiện tại · thời gian trôi qua`, icon theo displayState.
-   - Con của session: execution theo `execution_order` (`plan · attempt 2`), `description` = `provider/model · decision`, icon theo status. Con của execution: `prompt.md`, `response.md`, `verify`, `artifacts/*` (mở file thật).
-   - Mục "Outputs" liệt kê `outputs/*` khi session Completed.
-2. **Workflows** (TreeView, giai đoạn 2). Liệt kê workflow trong `.migent/workflows/`, bấm để mở YAML, nút Run.
+1. **Sessions** (TreeView). Elements:
+   - Group root (when multi-root has several projects): project name.
+   - Groups by state: **Running**, **Needs attention** (Blocked, Failed, Stopped), **Recent** (Completed, Cancelled, Prepared). Empty groups are hidden.
+   - Session: label = `title` (truncated at ~60 characters, full text in the tooltip), `description` = `workflow · current stage · elapsed time`, icon by displayState.
+   - Children of a session: executions in `execution_order` (`plan · attempt 2`), `description` = `provider/model · decision`, icon by status. Children of an execution: `prompt.md`, `response.md`, `verify`, `artifacts/*` (open the real files).
+   - An "Outputs" node lists `outputs/*` when the session is Completed.
+2. **Workflows** (TreeView, phase 2). Lists workflows in `.migent/workflows/`; click to open the YAML, with a Run button.
 
-`contextValue` ghép từ displayState, ví dụ `session.running`, `session.blocked`, `session.stopped`, `session.completed`, `session.prepared`. Menu chuột phải dùng `when: viewItem =~ /^session\.(stopped|blocked|failed)$/`.
+`contextValue` is composed from displayState, e.g. `session.running`, `session.blocked`, `session.stopped`, `session.completed`, `session.prepared`. Context menus use `when: viewItem =~ /^session\.(stopped|blocked|failed)$/`.
 
-View có badge hiển thị số session Blocked + Failed cần chú ý (`TreeView.badge`).
+The view shows a badge with the number of Blocked + Failed sessions needing attention (`TreeView.badge`).
 
-Welcome view khi chưa có CLI, chưa có `.migent`, hoặc chưa có session: nút "Cài CLI", "Khởi tạo project" (`migent init` chạy qua bước hỏi trong Quick Pick), "Run workflow".
+Welcome view when there is no CLI, no `.migent`, or no sessions: buttons "Install CLI", "Initialize project" (`migent init`, driven by Quick Pick prompts), "Run workflow".
 
-### 6.2 Lệnh (Command Palette và menu)
+### 6.2 Commands (Command Palette and menus)
 
-| Lệnh | Hành vi |
+| Command | Behavior |
 |---|---|
-| `migent.session.run` | Quick Pick workflow → Input Box task (một dòng) → chạy. Có tùy chọn "Soạn task dài" tạo prepared session |
-| `migent.session.prepare` | Nhập title, tạo session, mở `task.md` để viết, sau đó nút "Run" trên editor title |
-| `migent.session.start` | Chạy prepared session đã chuẩn bị (`run --session --workflow`) |
-| `migent.session.continue` | `session continue`; hỏi cờ `--refresh-workflow` nếu workflow đã đổi so với bản frozen |
+| `migent.session.run` | Quick Pick workflow → Input Box task (single line) → run. Has a "Compose a long task" option that creates a prepared session |
+| `migent.session.prepare` | Enter a title, create the session, open `task.md` for writing, then a "Run" button in the editor title |
+| `migent.session.start` | Run a prepared session (`run --session --workflow`) |
+| `migent.session.continue` | `session continue`; asks about `--refresh-workflow` if the workflow changed from the frozen copy |
 | `migent.session.continueOnce` | `--once` |
-| `migent.session.reply` | Chỉ cho session Blocked: mở editor tạm (hoặc Input Box nhiều dòng) viết reply, chọn stage nếu nhiều stage bị chặn, `continue --reply-file` |
-| `migent.session.cancel` | `session cancel <id>`, hiện tiến trình chờ |
-| `migent.session.repair` | `session repair` (xác nhận trước) |
-| `migent.session.openTask` / `openPrompt` / `openResponse` / `openOutput` | Mở file |
-| `migent.session.showLog` | Mở Output Channel của session |
-| `migent.session.copyId` / `revealInExplorer` | Tiện ích |
-| `migent.refresh` | Quét lại |
-| `migent.doctor` | `migent doctor --json` hiển thị trong Output hoặc webview nhẹ |
+| `migent.session.reply` | Blocked sessions only: open a temp editor (or multi-line Input Box) to write the reply, pick the stage if several are blocked, `continue --reply-file` |
+| `migent.session.cancel` | `session cancel <id>`, shows a waiting progress |
+| `migent.session.repair` | `session repair` (confirm first) |
+| `migent.session.openTask` / `openPrompt` / `openResponse` / `openOutput` | Open files |
+| `migent.session.showLog` | Open the session's Output Channel |
+| `migent.session.copyId` / `revealInExplorer` | Utilities |
+| `migent.refresh` | Rescan |
+| `migent.doctor` | `migent doctor --json` shown in Output or a light webview |
 | `migent.openSettings` | |
 
-Mọi lệnh ghi đều kiểm tra: CLI đủ version, không có lock sống thuộc process khác, project không ở chế độ chỉ-đọc.
+Every write command checks: the CLI version is sufficient, no live lock belongs to another process, and the project is not in read-only mode.
 
-### 6.3 Xem nội dung
+### 6.3 Viewing content
 
-- `prompt.md`, `response.md`, `task.md`, `artifacts/*`, `outputs/*`: mở file thật trên đĩa (có sẵn tô màu, tìm kiếm, diff). Không tạo bản sao.
-- **Log tổng hợp** của session (`migent-session:/<id>/timeline`): `TextDocumentContentProvider` render `events.jsonl` thành dòng dễ đọc (`10:15:30 plan#1 started · codex/gpt-5`), có `onDidChange` khi file đổi.
-- **Output Channel** (`LogOutputChannel` theo session) cho dòng stderr của lệnh do extension chạy. Với session chạy từ nơi khác thì dùng event tail.
-- Diff của execution sửa mã: dùng git (`vscode.git` API hoặc `git diff` theo tham chiếu); để giai đoạn sau.
+- `prompt.md`, `response.md`, `task.md`, `artifacts/*`, `outputs/*`: open the real files on disk (syntax highlighting, search and diff come for free). No copies are made.
+- **Aggregated session log** (`migent-session:/<id>/timeline`): a `TextDocumentContentProvider` renders `events.jsonl` into readable lines (`10:15:30 plan#1 started · codex/gpt-5`), with `onDidChange` when the file changes.
+- **Output Channel** (per-session `LogOutputChannel`) for stderr lines of commands the extension runs. For sessions started elsewhere, use the event tail.
+- Diff of code-modifying executions: use git (`vscode.git` API or `git diff` by ref); deferred to a later phase.
 
-### 6.4 Status bar và thông báo
+### 6.4 Status bar and notifications
 
-- Status bar (trái): `$(sync~spin) Migent: 2 running` hoặc `$(warning) 1 blocked`, bấm để focus view Sessions. Ẩn khi không có gì đáng nói.
-- Thông báo (có thể tắt từng loại trong settings): Blocked (nút "Reply"), Failed (nút "Continue" / "Xem log"), Quota (kèm `retry_at` và tự động nhắc lại khi hết hạn), Completed (nút "Mở kết quả"). Chỉ thông báo cho chuyển trạng thái xảy ra **sau** khi extension kích hoạt, tránh ngập khi mở cửa sổ.
-- Tiến độ: `window.withProgress` (vị trí Notification, cancellable) cho một lệnh run do chính extension khởi chạy; hủy gọi `session cancel`.
+- Status bar (left): `$(sync~spin) Migent: 2 running` or `$(warning) 1 blocked`; click to focus the Sessions view. Hidden when there is nothing to report.
+- Notifications (each type can be disabled in settings): Blocked ("Reply" button), Failed ("Continue" / "View log" buttons), Quota (with `retry_at`, and a reminder when it expires), Completed ("Open result" button). Only notify on state transitions that happen **after** the extension activates, to avoid a flood when a window opens.
+- Progress: `window.withProgress` (Notification location, cancellable) for a run started by the extension itself; cancelling calls `session cancel`.
 
 ### 6.5 Settings (`migent.*`)
 
-| Key | Mặc định | Ý nghĩa |
+| Key | Default | Meaning |
 |---|---|---|
-| `migent.cli.path` | `""` | Đường dẫn binary; rỗng = tìm theo PATH rồi `node_modules/.bin` |
-| `migent.cli.minVersion` | do extension đặt | không cho sửa trong UI, chỉ đọc |
-| `migent.sessions.limit` | 50 | số session hiển thị |
-| `migent.run.maxDispatches` | 20 | truyền `--max-dispatches` |
-| `migent.run.progress` | true | truyền `--progress` |
+| `migent.cli.path` | `""` | Binary path; empty = look on PATH, then `node_modules/.bin` |
+| `migent.cli.minVersion` | set by the extension | not editable in the UI, read-only |
+| `migent.sessions.limit` | 50 | number of sessions shown |
+| `migent.run.maxDispatches` | 20 | passed as `--max-dispatches` |
+| `migent.run.progress` | true | passed as `--progress` |
 | `migent.notifications.*` | true | blocked / failed / quota / completed |
-| `migent.env` | `{}` | biến môi trường thêm cho CLI |
+| `migent.env` | `{}` | extra environment variables for the CLI |
 
-## 7. Webview (giai đoạn sau)
+## 7. Webview (later phase)
 
-Chỉ cho hai thứ native không làm được:
+Only for two things that native UI cannot do:
 
-1. **Workflow graph:** stage, `depends_on`, decision routes, tô màu theo tiến trình của session đang chọn. Dữ liệu do host gửi (JSON), webview không đọc file.
-2. **Metrics dashboard:** token, chi phí, thời gian theo session và theo execution từ `metrics.json`.
+1. **Workflow graph:** stages, `depends_on`, decision routes, colored by the progress of the selected session. Data is sent by the host (JSON); the webview does not read files.
+2. **Metrics dashboard:** tokens, cost, duration per session and per execution from `metrics.json`.
 
-Quy tắc: CSP `default-src 'none'` + `webview.cspSource`, script ngoài (không inline), `localResourceRoots` giới hạn thư mục `media/` của extension, nonce cho script, `getState/setState` thay vì `retainContextWhenHidden`, `WebviewPanelSerializer` để khôi phục sau khi reload. Dùng HTML thuần hoặc Preact và vẽ bằng SVG (xem skill `artifact-diagramming` cho cách vẽ graph), không kéo theo framework nặng. Host gửi state kèm số thứ tự tăng dần để webview bỏ gói cũ.
+Rules: CSP `default-src 'none'` + `webview.cspSource`, external scripts (no inline), `localResourceRoots` limited to the extension's `media/` directory, a nonce for scripts, `getState/setState` instead of `retainContextWhenHidden`, and a `WebviewPanelSerializer` to restore after a reload. Use plain HTML or Preact and draw with SVG (see the `artifact-diagramming` skill for how to draw graphs); do not pull in a heavy framework. The host sends state with an increasing sequence number so the webview can discard stale packets.
 
-## 8. Lộ trình và tiêu chí hoàn thành
+## 8. Roadmap and exit criteria
 
-### Giai đoạn 0: Chuẩn bị (ngoài repo extension)
-- Hoàn tất `session cancel` (plan riêng).
-- Rà lại `docs/sessions.md` làm tài liệu contract; ghi nhận trong CONTRIBUTING của migent rằng đổi định dạng file là đổi contract.
-- Chốt publisher và tên extension (`migent` / `nodeint.migent-vscode`).
+### Phase 0: Preparation (outside the extension repo)
+- Finish `session cancel` (separate plan).
+- Review `docs/sessions.md` as the contract document; record in migent's CONTRIBUTING that changing a file format is a contract change.
+- Settle the publisher and extension name (`migent` / `nodeint.migent-vscode`).
 
-### Giai đoạn 1: Khung và `core/` (đọc, chưa có UI)
-- Scaffold repo, esbuild, vitest, CI (build + test + `vsce package` trên Windows và Linux).
-- Cài `yaml`. Viết `paths`, `manifest`, `statusReader`, `lockProbe`, `displayState`, `eventTail`, `executions`, `store`.
-- Tạo fixture từ session thật: completed, active-stopped, failed, blocked, cancelled, prepared, running (lock sống giả), lock stale, status.json hỏng, schema lạ.
-- **Xong khi:** toàn bộ bảng trạng thái ở mục 4 có test; `eventTail` qua được ca dòng ghi dở; không file nào trong `core/` import `vscode`.
+### Phase 1: Skeleton and `core/` (read, no UI yet)
+- Scaffold the repo, esbuild, vitest, CI (build + test + `vsce package` on Windows and Linux).
+- Install `yaml`. Write `paths`, `manifest`, `statusReader`, `lockProbe`, `displayState`, `eventTail`, `executions`, `store`.
+- Build fixtures from real sessions: completed, active-stopped, failed, blocked, cancelled, prepared, running (fake live lock), stale lock, corrupt status.json, unknown schema.
+- **Done when:** the whole state table in section 4 has tests; `eventTail` handles the partial-line case; no file in `core/` imports `vscode`.
 
-### Giai đoạn 2: Theo dõi (read-only MVP)
-- Activation, `projects`, watcher, Sessions tree, welcome view, status bar, các lệnh mở file (`openTask/Prompt/Response/Output`), Output Channel, timeline document, `copyId`, `refresh`.
-- Kiểm tra version CLI.
-- **Xong khi:** mở repo migent này thấy đúng các session hiện có với đúng trạng thái; khi chạy `migent session run` ở terminal khác, session xuất hiện Running và đổi trạng thái đúng lúc mà không cần refresh; không chiếm CPU khi nghỉ.
+### Phase 2: Monitoring (read-only MVP)
+- Activation, `projects`, watcher, Sessions tree, welcome view, status bar, file-opening commands (`openTask/Prompt/Response/Output`), Output Channel, timeline document, `copyId`, `refresh`.
+- CLI version check.
+- **Done when:** opening this migent repo shows the existing sessions with the correct states; running `migent session run` in another terminal makes the session appear as Running and change state at the right time without a refresh; no CPU usage when idle.
 
-### Giai đoạn 3: Điều khiển
-- `cli/` (locate, invoke, runner), các lệnh Run, Prepare + Start, Continue, ContinueOnce, Reply, Cancel, Repair.
-- `withProgress`, thông báo Blocked/Failed/Quota/Completed.
-- **Xong khi:** chạy workflow `plan` đầu-cuối từ Command Palette; hủy giữa chừng trên Windows cho exit 130 và Continue chạy lại được; Reply cho session Blocked hoạt động; hai nơi cùng bấm Run không tạo lỗi lạ.
+### Phase 3: Control
+- `cli/` (locate, invoke, runner), the Run, Prepare + Start, Continue, ContinueOnce, Reply, Cancel and Repair commands.
+- `withProgress`, Blocked/Failed/Quota/Completed notifications.
+- **Done when:** the `plan` workflow runs end to end from the Command Palette; cancelling midway on Windows yields exit 130 and Continue can resume; Reply works for a Blocked session; two places pressing Run at once produce no strange errors.
 
-### Giai đoạn 4: Hoàn thiện và phát hành 0.1
-- Multi-root, settings, `migent doctor`, `migent init` trong UI, README, icon, ảnh chụp, CHANGELOG, đóng gói và đăng.
-- Kiểm thử thủ công theo checklist (Windows, macOS, Linux, Remote-SSH/WSL).
+### Phase 4: Polish and release 0.1
+- Multi-root, settings, `migent doctor`, `migent init` in the UI, README, icon, screenshots, CHANGELOG, packaging and publishing.
+- Manual testing against a checklist (Windows, macOS, Linux, Remote-SSH/WSL).
 
-### Giai đoạn 5 (0.2+): Workflow graph, metrics, diff execution, JSON schema + autocomplete cho `.migent/workflows/*.yaml`, danh sách workspace qua registry service.
+### Phase 5 (0.2+): Workflow graph, metrics, execution diff, JSON schema + autocomplete for `.migent/workflows/*.yaml`, workspace list via a registry service.
 
-## 9. Kiểm thử
+## 9. Testing
 
-- **Đơn vị (`core/`):** vitest, dựng thư mục tạm từ fixture, không cần VS Code.
-- **CLI:** mock `child_process` kiểm tra tham số, map exit code, `windowsHide`, xử lý stderr theo dòng.
-- **Tích hợp:** `@vscode/test-electron` mở workspace mẫu có `.migent`, kiểm tra tree xuất hiện, lệnh có đăng ký, trạng thái đổi khi sửa file fixture. Với chạy thật, dùng `fake-provider.mjs` kiểu như `integration/` trong migent.
-- **Hợp đồng:** một test đọc các session do migent thật sinh ra (CI chạy một workflow với provider giả trong repo extension, hoặc cập nhật fixture bằng script khi migent đổi version) để phát hiện lệch định dạng.
-- **Windows** là môi trường bắt buộc trong CI vì rủi ro chính nằm ở đó.
+- **Unit (`core/`):** vitest, building temp directories from fixtures, no VS Code needed.
+- **CLI:** mock `child_process` to check arguments, exit-code mapping, `windowsHide`, and line-based stderr handling.
+- **Integration:** `@vscode/test-electron` opens a sample workspace containing `.migent`, checks that the tree appears, commands are registered, and state changes when fixture files are edited. For real runs, use a `fake-provider.mjs` like migent's `integration/`.
+- **Contract:** a test that reads sessions produced by a real migent (CI runs a workflow with a fake provider in the extension repo, or a script refreshes fixtures when migent changes version) to detect format drift.
+- **Windows** is a mandatory CI environment because the main risks are there.
 
-## 10. Rủi ro và giảm thiểu
+## 10. Risks and mitigations
 
-| Rủi ro | Giảm thiểu |
+| Risk | Mitigation |
 |---|---|
-| Hủy session trên Windows | Chờ `session cancel`; nếu CLI chưa có thì ẩn nút Stop |
-| Process con `detached` trên Windows mở cửa sổ console hoặc bị chết khi VS Code thoát | `windowsHide: true`; thử nghiệm sớm ở giai đoạn 3 và quyết định giữa detached và gắn vào extension host |
-| Watcher của VS Code trễ, gộp hoặc bỏ sót sự kiện | Debounce, đọc lại theo trạng thái (không theo sự kiện), timer 10 giây khi có Running |
-| `.migent/sessions` bị `files.watcherExclude` hoặc `.gitignore` che | Dùng `RelativePattern`; kiểm thử với cấu hình mặc định; ghi chú vào README |
-| `status.json` bị đọc giữa lúc ghi | Ghi nguyên tử phía migent; đọc lại tối đa 3 lần |
-| Hàng trăm session làm chậm | Nạp lười, giới hạn N, chỉ theo dõi session đang chạy |
-| Migent đổi định dạng file | `schema_version`, fixture, test hợp đồng, chế độ chỉ-đọc |
-| Lock của máy khác (thư mục chia sẻ) | Hiển thị Running, khóa thao tác ghi |
-| Dữ liệu nhạy cảm trong fixture | Ẩn đường dẫn, hostname, prompt thật trước khi đưa vào repo |
+| Cancelling a session on Windows | Wait for `session cancel`; hide the Stop button if the CLI lacks it |
+| `detached` child on Windows opens a console window or dies when VS Code exits | `windowsHide: true`; test early in phase 3 and decide between detached and attached to the extension host |
+| VS Code watcher is late, coalesces or drops events | Debounce, re-read by state (not by event), 10-second timer while something is Running |
+| `.migent/sessions` hidden by `files.watcherExclude` or `.gitignore` | Use `RelativePattern`; test with default config; note it in the README |
+| `status.json` read mid-write | Atomic writes on the migent side; up to 3 re-reads |
+| Hundreds of sessions slow things down | Lazy loading, limit N, watch only running sessions |
+| Migent changes file formats | `schema_version`, fixtures, contract tests, read-only mode |
+| Lock from another machine (shared folder) | Show Running, disable write operations |
+| Sensitive data in fixtures | Redact paths, hostnames and real prompts before committing |
 
-## 11. Câu hỏi mở
+## 11. Open questions
 
-1. Tên publisher trên Marketplace và Open VSX, và tên hiển thị của extension.
-2. Bản `engines.vscode` tối thiểu cần hỗ trợ.
-3. Có cần hỗ trợ Remote (SSH, WSL, Dev Containers) ngay từ 0.1 không? Extension chạy ở workspace host (`extensionKind: ["workspace"]`), nên về lý thuyết đã hoạt động; vấn đề là CLI phải cài ở máy từ xa.
-4. Giai đoạn 3: process do extension chạy có phải sống sót khi đóng VS Code không? Quyết định này ảnh hưởng đến `detached` và đến việc người dùng có nhầm tưởng đã dừng khi thoát.
-5. Telemetry: không thu thập (đề xuất).
-6. Giấy phép: MIT như migent.
+1. The publisher name on the Marketplace and Open VSX, and the extension's display name.
+2. The minimum `engines.vscode` version to support.
+3. Is Remote (SSH, WSL, Dev Containers) needed from 0.1? The extension runs on the workspace host (`extensionKind: ["workspace"]`), so in theory it already works; the catch is that the CLI must be installed on the remote machine.
+4. Phase 3: must processes started by the extension survive closing VS Code? This decision affects `detached` and whether users wrongly assume work stopped when they quit.
+5. Telemetry: none (proposed).
+6. License: MIT, like migent.
