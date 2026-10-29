@@ -1,0 +1,36 @@
+schema_version: 2
+id: plan
+constraints:
+  - Plan only. Do not modify source code.
+stages:
+  - id: plan
+    role: planner
+    depends_on: []
+    max_revisions: 3
+    instructions:
+      - Analyze the task and write an implementation plan.
+      - "Structure plan.md with these sections: Goal, Steps, Files, Risks, Verification."
+      - When revising, edit the existing plan.md in place. Do not replace the whole file.
+    produces:
+      artifact: plan.md
+  - id: review_plan
+    role: reviewer
+    depends_on:
+      - plan
+    instructions:
+      - Review the plan for correctness, missing risks, and unnecessary scope.
+      - Report every gap of the same kind in one response.
+      - Check that plan.md has the sections Goal, Steps, Files, Risks, Verification.
+      - Choose revise only for a factual error, a missing risk, a missing section, or unnecessary scope. Do not revise for style.
+      - When choosing revise, list each required change so the developer can act on it.
+    decision:
+      values:
+        - approved
+        - revise
+      routes:
+        approved: complete
+        revise: plan
+outputs:
+  - name: plan
+    from_stage: plan
+    artifact: plan.md

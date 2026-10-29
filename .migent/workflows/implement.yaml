@@ -1,0 +1,27 @@
+schema_version: 2
+id: implement
+stages:
+  - id: implement
+    role: developer
+    depends_on: []
+    max_revisions: 3
+    instructions:
+      - Implement the requested change.
+      - Verify the result with relevant checks or tests.
+      - When revising, address all review findings and rerun the relevant checks.
+  - id: review_work
+    role: reviewer
+    depends_on:
+      - implement
+    instructions:
+      - Review the diff against the task and inspect the relevant code.
+      - Check correctness, regressions, missing requirements, and the reported verification results.
+      - Choose approved only when the requested change is complete and supported by verification evidence.
+      - Otherwise choose revise and list all required fixes with file locations and their impact.
+    decision:
+      values:
+        - approved
+        - revise
+      routes:
+        approved: complete
+        revise: implement

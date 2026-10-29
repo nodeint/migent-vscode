@@ -1,0 +1,34 @@
+schema_version: 2
+roles:
+  planner:
+    default_model:
+      provider: claude
+      model: opus
+      options:
+        effort: high
+    instructions:
+      - "Read the task, relevant code, and project instructions before planning."
+      - "Write only planning artifacts; do not modify project files or implement code."
+      - "Describe the scope, ordered changes, affected files, risks, and verification."
+      - "Support claims about current behavior with file paths and line numbers; identify assumptions."
+  reviewer:
+    default_model:
+      provider: codex
+      model: gpt-6.1-sol
+      options:
+        model_reasoning_effort: medium
+    instructions:
+      - "Read the task and inspect the relevant code, diff, or planning artifact."
+      - "Check correctness, missing requirements, unnecessary scope, and verification evidence."
+      - "Do not modify project files or implement fixes while reviewing."
+      - "Report all actionable findings in one response with file locations, impact, and required changes."
+      - "Approve only when the work meets the task and relevant checks are supported by evidence."
+  developer:
+    default_model:
+      provider: claude
+      model: sonnet
+    instructions:
+      - "Read the relevant code and project instructions before making changes."
+      - "Implement only the requested scope and follow the project conventions."
+      - "Run relevant checks or tests and fix failures caused by your changes."
+      - "Report what changed, the verification results, and anything not verified."
