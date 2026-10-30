@@ -49,6 +49,7 @@ Explicit user instructions take precedence over skill guidance.
 | [`create-pr`](.agents/skills/create-pr/SKILL.md) | Committing, pushing, and opening a pull request into `next` |
 | [`release`](.agents/skills/release/SKILL.md) | Preparing or publishing an extension release and synchronizing `main` |
 | [`markdownlint`](.agents/skills/markdownlint/SKILL.md) | Creating or changing repository Markdown, or validating Markdown style or links |
+| [`eslint`](.agents/skills/eslint/SKILL.md) | Creating or changing `.ts` files, reviewing those files against repository lint rules, or validating ESLint |
 
 ## Documentation entry point
 

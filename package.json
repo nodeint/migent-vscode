@@ -38,9 +38,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run && node --test scripts/*.test.mjs",
     "package": "vsce package --no-dependencies",
-    "lint": "eslint .",
-    "lint:strict": "eslint . --max-warnings 0",
-    "lint:fix": "eslint . --fix",
+    "lint": "node scripts/wrappers/run-eslint.mjs",
+    "lint:strict": "node scripts/wrappers/run-eslint.mjs --max-warnings 0",
+    "lint:fix": "node scripts/wrappers/run-eslint.mjs --fix",
     "lint:md": "node scripts/docs/lint-md.mjs",
     "lint:md:fix": "node scripts/docs/lint-md.mjs --fix",
     "lint:md:links": "node scripts/docs/lint-md-links.mjs"
