@@ -1,14 +1,14 @@
-import type { DisplayState, LockProbe, SessionStatus } from "./model";
+import type { DisplayState, LockProbe, SessionStatus } from './model';
 
-export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayState["state"], string>> = {
-  prepared: "circle-outline",
-  running: "sync~spin",
-  blocked: "warning",
-  failed: "error",
-  stopped: "debug-pause",
-  cancelled: "circle-slash",
-  completed: "pass",
-  unknown: "question",
+export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayState['state'], string>> = {
+  prepared: 'circle-outline',
+  running: 'sync~spin',
+  blocked: 'warning',
+  failed: 'error',
+  stopped: 'debug-pause',
+  cancelled: 'circle-slash',
+  completed: 'pass',
+  unknown: 'question',
 };
 
 export interface DisplayStatusInput {
@@ -35,22 +35,22 @@ export function deriveDisplayState(
   return {
     state,
     icon: DISPLAY_STATE_ICONS[state],
-    writable: !(lock.kind === "alive" && lock.foreignHost),
+    writable: !(lock.kind === 'alive' && lock.foreignHost),
   };
 }
 
-function decide(input: DisplayStatusInput, lock: LockProbe): DisplayState["state"] {
+function decide(input: DisplayStatusInput, lock: LockProbe): DisplayState['state'] {
   const { status, statusError, schemaSupported } = input;
-  if (statusError || status === null || !schemaSupported) return "unknown";
-  const sessionStatus = status.status ?? "unknown";
+  if (statusError || status === null || !schemaSupported) return 'unknown';
+  const sessionStatus = status.status ?? 'unknown';
 
-  if (sessionStatus === "prepared") return "prepared";
-  if (lock.kind === "alive") return "running";
-  if (sessionStatus === "blocked") return "blocked";
-  if (sessionStatus === "active") {
-    return status.latestExecutionStatus === "failed" ? "failed" : "stopped";
+  if (sessionStatus === 'prepared') return 'prepared';
+  if (lock.kind === 'alive') return 'running';
+  if (sessionStatus === 'blocked') return 'blocked';
+  if (sessionStatus === 'active') {
+    return status.latestExecutionStatus === 'failed' ? 'failed' : 'stopped';
   }
-  if (sessionStatus === "cancelled") return "cancelled";
-  if (sessionStatus === "completed") return "completed";
-  return "unknown";
+  if (sessionStatus === 'cancelled') return 'cancelled';
+  if (sessionStatus === 'completed') return 'completed';
+  return 'unknown';
 }

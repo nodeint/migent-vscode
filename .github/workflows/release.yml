@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: git fetch origin next
+      - run: node scripts/release.mjs
+
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: git fetch origin next
+      - run: node scripts/release.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix-ubuntu-latest
+          path: release-artifact
+      - name: Publish to VS Code Marketplace
+        run: pnpm exec vsce publish --oidc --packagePath release-artifact/*.vsix
+      - name: Publish to Open VSX
+        run: pnpm exec ovsx publish release-artifact/*.vsix --trusted-publishing
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release-artifact/*.vsix --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md

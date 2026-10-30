@@ -1,42 +1,43 @@
-import { readdirSync, statSync } from "node:fs";
-import path from "node:path";
-import { deriveDisplayState } from "./displayState";
-import { listExecutions } from "./executions";
-import { tailEvents, type TailEvent } from "./eventTail";
-import { readManifest } from "./manifest";
+import { readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
+
+import { deriveDisplayState } from './displayState';
+import { type TailEvent,tailEvents } from './eventTail';
+import { listExecutions } from './executions';
+import { probeLock } from './lockProbe';
+import { readManifest } from './manifest';
 import type {
   ExecutionSnapshot,
   SessionChangeEvent,
   SessionChangeKind,
   SessionSnapshot,
-} from "./model";
-import { probeLock } from "./lockProbe";
+} from './model';
 import {
-  MANIFEST_FILENAME,
-  STATUS_FILENAME,
   eventsPath,
   lockPath,
+  MANIFEST_FILENAME,
   manifestPath,
   sessionDir,
   sessionsDir,
+  STATUS_FILENAME,
   statusPath,
-} from "./paths";
-import { readStatus } from "./statusReader";
+} from './paths';
+import { readStatus } from './statusReader';
 
 export const DEFAULT_SESSION_LIMIT = 50;
 
 /** Minimal local emitter: the store must not import `vscode`. */
 export class Emitter<T> {
-  #listeners = new Set<(event: T) => void>();
+  readonly #listeners = new Set<(event: T) => void>();
 
-  subscribe(listener: (event: T) => void): () => void {
+  public subscribe(listener: (event: T) => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
     };
   }
 
-  emit(event: T): void {
+  public emit(event: T): void {
     for (const listener of this.#listeners) listener(event);
   }
 }
@@ -47,11 +48,11 @@ export interface SessionStoreOptions {
 }
 
 interface SnapshotBody {
-  manifest: SessionSnapshot["manifest"];
-  status: SessionSnapshot["status"];
+  manifest: SessionSnapshot['manifest'];
+  status: SessionSnapshot['status'];
   statusError: boolean;
-  lock: SessionSnapshot["lock"];
-  displayState: SessionSnapshot["displayState"];
+  lock: SessionSnapshot['lock'];
+  displayState: SessionSnapshot['displayState'];
 }
 
 function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
@@ -70,8 +71,8 @@ function createdAtOf(snapshot: SessionSnapshot): string | null {
 }
 
 function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
-  const left = createdAtOf(a) ?? "";
-  const right = createdAtOf(b) ?? "";
+  const left = createdAtOf(a) ?? '';
+  const right = createdAtOf(b) ?? '';
   if (left !== right) return left > right;
   return a.sessionId > b.sessionId;
 }
@@ -82,8 +83,8 @@ function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
  * direct reads, faster than spawning the CLI. The execution list is read lazily;
  */
 export class SessionStore {
-  readonly projectRoot: string;
-  readonly limit: number;
+  public readonly projectRoot: string;
+  public readonly limit: number;
 
   readonly #sessions = new Map<string, SessionSnapshot>();
   readonly #offsets = new Map<string, number>();
@@ -95,28 +96,28 @@ export class SessionStore {
   }
 
   /** Subscribe to changes. Returns an unsubscribe function. */
-  get onDidChange(): (listener: (event: SessionChangeEvent) => void) => () => void {
+  public get onDidChange(): (listener: (event: SessionChangeEvent) => void) => () => void {
     return (listener) => this.#changes.subscribe(listener);
   }
 
   /** All snapshots, newest first. */
-  all(): SessionSnapshot[] {
+  public all(): SessionSnapshot[] {
     return [...this.#sessions.values()].sort((a, b) => (isNewer(b, a) ? 1 : -1));
   }
 
-  snapshot(sessionId: string): SessionSnapshot | undefined {
+  public snapshot(sessionId: string): SessionSnapshot | undefined {
     return this.#sessions.get(sessionId);
   }
 
   /** Full scan of the sessions directory: direct reads, faster than spawning the CLI. */
-  load(): void {
+  public load(): void {
     const seen = new Set<string>();
     for (const sessionId of this.listSessionIds()) {
       seen.add(sessionId);
       if (this.#sessions.has(sessionId)) {
         this.refreshSession(sessionId);
       } else {
-        this.#setSession(sessionId, this.buildSnapshot(sessionId), "added");
+        this.#setSession(sessionId, this.buildSnapshot(sessionId), 'added');
       }
     }
     for (const sessionId of [...this.#sessions.keys()]) {
@@ -125,34 +126,34 @@ export class SessionStore {
     this.applyLimit();
   }
 
-  refreshSession(sessionId: string): void {
+  public refreshSession(sessionId: string): void {
     const current = this.#sessions.get(sessionId);
     if (current === undefined) {
-      this.#setSession(sessionId, this.buildSnapshot(sessionId), "added");
+      this.#setSession(sessionId, this.buildSnapshot(sessionId), 'added');
       this.applyLimit();
       return;
     }
     const next = this.buildSnapshot(sessionId);
     if (!sameBody(next, current)) {
-      this.#setSession(sessionId, next, "updated");
+      this.#setSession(sessionId, next, 'updated');
     }
   }
 
-  removeSession(sessionId: string): void {
+  public removeSession(sessionId: string): void {
     if (!this.#sessions.has(sessionId)) return;
     this.#sessions.delete(sessionId);
     this.#offsets.delete(sessionId);
-    this.#emit(sessionId, "removed");
+    this.#emit(sessionId, 'removed');
   }
 
   /** Read the execution list. Only when a node is expanded or the session is running. */
-  loadExecutions(sessionId: string): ExecutionSnapshot[] {
+  public loadExecutions(sessionId: string): ExecutionSnapshot[] {
     const snapshot = this.#sessions.get(sessionId);
     if (snapshot === undefined) return [];
     const executions = listExecutions(sessionDir(this.projectRoot, sessionId));
-    const changed = JSON.stringify(snapshot.executions) !== JSON.stringify(executions);
+    const isChanged = JSON.stringify(snapshot.executions) !== JSON.stringify(executions);
     snapshot.executions = executions;
-    if (changed) this.#emit(sessionId, "executions");
+    if (isChanged) this.#emit(sessionId, 'executions');
     return executions;
   }
 
@@ -160,7 +161,7 @@ export class SessionStore {
    * Tail events.jsonl from the stored byte offset. Only complete lines are
    * consumed; `seq` de-duplicates against the snapshot's `lastEventSeq`.
    */
-  readNewEvents(sessionId: string): TailEvent[] {
+  public readNewEvents(sessionId: string): TailEvent[] {
     const snapshot = this.#sessions.get(sessionId);
     if (snapshot === undefined) return [];
     const offset = this.#offsets.get(sessionId) ?? 0;
@@ -172,7 +173,7 @@ export class SessionStore {
     for (const event of fresh) {
       if (event.seq !== null && event.seq > snapshot.lastEventSeq) snapshot.lastEventSeq = event.seq;
     }
-    if (fresh.length > 0) this.#emit(sessionId, "events");
+    if (fresh.length > 0) this.#emit(sessionId, 'events');
     return fresh;
   }
 
@@ -228,8 +229,8 @@ export class SessionStore {
     const lock = probeLock(lockPath(this.projectRoot, sessionId));
     const displayState = deriveDisplayState(
       {
-        status: statusRead.kind === "ok" ? statusRead.status : null,
-        statusError: statusRead.kind === "error",
+        status: statusRead.kind === 'ok' ? statusRead.status : null,
+        statusError: statusRead.kind === 'error',
         schemaSupported: manifest?.schemaSupported ?? false,
       },
       lock,
@@ -237,8 +238,8 @@ export class SessionStore {
     return {
       sessionId,
       manifest,
-      status: statusRead.kind === "ok" ? statusRead.status : null,
-      statusError: statusRead.kind === "error",
+      status: statusRead.kind === 'ok' ? statusRead.status : null,
+      statusError: statusRead.kind === 'error',
       lock,
       displayState,
       executions: [],

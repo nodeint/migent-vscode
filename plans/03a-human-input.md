@@ -2,7 +2,7 @@
 
 Part of [`vscode-extension.md`](./vscode-extension.md), within **phase 3**, before [`04-release.md`](./04-release.md). Builds on [`01-core.md`](./01-core.md), [`02-monitoring.md`](./02-monitoring.md) and the CLI runner/operation gate in [`03-control.md`](./03-control.md).
 
-Protocol source of truth: Migent's [`docs/human-in-the-loop.md`](../../migent/docs/human-in-the-loop.md). The extension consumes its public files and CLI; it does not import the kernel or introduce another question/reply protocol.
+Protocol source of truth: Migent's [`docs/human-in-the-loop.md`](https://github.com/nodeint/migent/blob/HEAD/docs/human-in-the-loop.md). The extension consumes its public files and CLI; it does not import the kernel or introduce another question/reply protocol.
 
 ## 1. Scope and terminology
 

@@ -6,6 +6,8 @@ Status: scaffold. See [plans/vscode-extension.md](plans/vscode-extension.md) for
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, Git workflow, CI, and releases.
+
 ```
 pnpm install
 pnpm build

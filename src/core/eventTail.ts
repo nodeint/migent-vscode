@@ -1,5 +1,7 @@
-import { openSync, readSync, closeSync, fstatSync } from "node:fs";
-import { KNOWN_EVENT_VERSION } from "./model";
+import { closeSync, fstatSync,openSync, readSync } from 'node:fs';
+
+import { KNOWN_EVENT_VERSION } from './model';
+import { isRecord } from './record';
 
 /**
  * Tail events.jsonl by byte offset. Each call reads from `offset` to end of file
@@ -30,19 +32,19 @@ export interface TailRead {
   offset: number;
 }
 
-const CHUNK_SIZE = 64 * 1024;
+const CHUNK_SIZE = 65_536;
 
 /** Read the file from `offset` to EOF as one string. Empty when nothing new. */
 function readFrom(offset: number, filePath: string): { text: string; size: number } {
   let fd: number;
   try {
-    fd = openSync(filePath, "r");
+    fd = openSync(filePath, 'r');
   } catch {
-    return { text: "", size: offset };
+    return { text: '', size: offset };
   }
   try {
-    const size = fstatSync(fd).size;
-    if (size <= offset) return { text: "", size };
+    const {size} = fstatSync(fd);
+    if (size <= offset) return { text: '', size };
     const chunks: string[] = [];
     let position = offset;
     while (position < size) {
@@ -50,10 +52,10 @@ function readFrom(offset: number, filePath: string): { text: string; size: numbe
       const buffer = Buffer.alloc(length);
       const read = readSync(fd, buffer, 0, length, position);
       if (read <= 0) break;
-      chunks.push(buffer.toString("utf8", 0, read));
+      chunks.push(buffer.toString('utf8', 0, read));
       position += read;
     }
-    return { text: chunks.join(""), size };
+    return { text: chunks.join(''), size };
   } finally {
     closeSync(fd);
   }
@@ -66,37 +68,37 @@ function parseLine(line: string): TailEvent {
   } catch {
     // Fall through: returned as a raw line below.
   }
-  const isRecord =
-    value !== null && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
+  const record =
+    isRecord(value)
+      ? value
       : null;
-  if (isRecord === null || typeof isRecord.event !== "string") {
+  if (record === null || typeof record.event !== 'string') {
     return emptyEvent({ raw: null, rawLine: line, seq: null, v: 1, event: null });
   }
-  const version = isRecord.v;
-  const v = typeof version === "number" && Number.isInteger(version) && version >= 1 ? version : 1;
-  const unknownVersion = v > KNOWN_EVENT_VERSION;
+  const version = record.v;
+  const v = typeof version === 'number' && Number.isInteger(version) && version >= 1 ? version : 1;
+  const isUnknownVersion = v > KNOWN_EVENT_VERSION;
   const str = (key: string): string | null =>
-    typeof isRecord[key] === "string" ? (isRecord[key] as string) : null;
-  const seq = typeof isRecord.seq === "number" && Number.isInteger(isRecord.seq) ? isRecord.seq : null;
+    typeof record[key] === 'string' ? (record[key]) : null;
+  const seq = typeof record.seq === 'number' && Number.isInteger(record.seq) ? record.seq : null;
   const parsed: TailEvent = {
     seq,
     v,
-    event: isRecord.event,
-    timestamp: str("timestamp") ?? "",
-    executionId: str("execution_id"),
-    stageId: str("stage_id"),
-    summary: str("summary"),
-    data: isData(isRecord.data),
-    raw: isRecord,
-    rawLine: unknownVersion ? line : null,
+    event: record.event,
+    timestamp: str('timestamp') ?? '',
+    executionId: str('execution_id'),
+    stageId: str('stage_id'),
+    summary: str('summary'),
+    data: isData(record.data),
+    raw: record,
+    rawLine: isUnknownVersion ? line : null,
   };
   return parsed;
 }
 
 function isData(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+  return isRecord(value)
+    ? value
     : {};
 }
 
@@ -105,7 +107,7 @@ function emptyEvent(overrides: Partial<TailEvent>): TailEvent {
     seq: null,
     v: 1,
     event: null,
-    timestamp: "",
+    timestamp: '',
     executionId: null,
     stageId: null,
     summary: null,
@@ -123,15 +125,15 @@ function emptyEvent(overrides: Partial<TailEvent>): TailEvent {
  */
 export function tailEvents(filePath: string, offset: number): TailRead {
   const { text, size } = readFrom(offset, filePath);
-  if (text === "") return { events: [], offset: Math.max(offset, size) };
+  if (text === '') return { events: [], offset: Math.max(offset, size) };
 
-  const lastNewline = text.lastIndexOf("\n");
-  const consumed = lastNewline === -1 ? "" : text.slice(0, lastNewline + 1);
-  if (consumed === "") return { events: [], offset };
+  const lastNewline = text.lastIndexOf('\n');
+  const consumed = lastNewline === -1 ? '' : text.slice(0, lastNewline + 1);
+  if (consumed === '') return { events: [], offset };
 
   const events = consumed
-    .split("\n")
-    .filter((line) => line !== "")
+    .split('\n')
+    .filter((line) => line !== '')
     .map(parseLine);
-  return { events, offset: offset + Buffer.byteLength(consumed, "utf8") };
+  return { events, offset: offset + Buffer.byteLength(consumed, 'utf8') };
 }

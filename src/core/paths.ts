@@ -1,13 +1,13 @@
-import path from "node:path";
+import path from 'node:path';
 
-export const MIGENT_DIR = ".migent";
-export const SESSIONS_DIRNAME = "sessions";
-export const WORKFLOWS_DIRNAME = "workflows";
-export const MANIFEST_FILENAME = "manifest.yaml";
-export const STATUS_FILENAME = "status.json";
-export const EVENTS_FILENAME = "events.jsonl";
-export const LOCK_FILENAME = "session.lock";
-export const EXECUTIONS_DIRNAME = "executions";
+export const MIGENT_DIR = '.migent';
+export const SESSIONS_DIRNAME = 'sessions';
+export const WORKFLOWS_DIRNAME = 'workflows';
+export const MANIFEST_FILENAME = 'manifest.yaml';
+export const STATUS_FILENAME = 'status.json';
+export const EVENTS_FILENAME = 'events.jsonl';
+export const LOCK_FILENAME = 'session.lock';
+export const EXECUTIONS_DIRNAME = 'executions';
 
 export function migentDir(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR);

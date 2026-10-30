@@ -7,7 +7,7 @@
 export const KNOWN_EVENT_VERSION = 2;
 
 /** Manifest `schema_version` values this extension understands. */
-export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS = [1, 2];
+export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS = [1, KNOWN_EVENT_VERSION];
 
 /** A parsed `manifest.yaml`. Missing fields stay null instead of guessed. */
 export interface SessionManifest {
@@ -53,19 +53,19 @@ export interface RunningStage {
 
 /** Result of probing `session.lock`. Derived by `lockProbe.ts`, consumed by `displayState.ts`. */
 export type LockProbe =
-  | { kind: "none" }
-  | { kind: "alive"; pid: number | null; host: string | null; heartbeatAt: string | null; foreignHost: boolean }
-  | { kind: "stale"; reason: "dead-pid" | "heartbeat" | "unparsable" };
+  | { kind: 'none' }
+  | { kind: 'alive'; pid: number | null; host: string | null; heartbeatAt: string | null; foreignHost: boolean }
+  | { kind: 'stale'; reason: 'dead-pid' | 'heartbeat' | 'unparsable' };
 
 export type DisplayStateName =
-  | "prepared"
-  | "running"
-  | "blocked"
-  | "failed"
-  | "stopped"
-  | "cancelled"
-  | "completed"
-  | "unknown";
+  | 'prepared'
+  | 'running'
+  | 'blocked'
+  | 'failed'
+  | 'stopped'
+  | 'cancelled'
+  | 'completed'
+  | 'unknown';
 
 export interface DisplayState {
   state: DisplayStateName;
@@ -104,11 +104,11 @@ export interface SessionSnapshot {
 }
 
 export type SessionChangeKind =
-  | "added"
-  | "updated"
-  | "removed"
-  | "executions"
-  | "events";
+  | 'added'
+  | 'updated'
+  | 'removed'
+  | 'executions'
+  | 'events';
 
 export interface SessionChangeEvent {
   project: string;
