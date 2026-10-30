@@ -2,6 +2,17 @@
 
 Part of [`vscode-extension.md`](./vscode-extension.md). Previous: [`01-core.md`](./01-core.md). Next: [`03-control.md`](./03-control.md).
 
+## Implementation subplans
+
+Implement these in order. This document remains the phase-wide contract and acceptance checklist;
+the subplans partition the work without replacing its requirements.
+
+1. [2a: Monitoring data](./02a-monitoring-data.md)
+2. [2b: Project discovery and watching](./02b-monitoring-watcher.md)
+3. [2c: Sidebar and status](./02c-monitoring-sidebar.md)
+4. [2d: Content and results](./02d-monitoring-content.md)
+5. [2e: CLI compatibility and integration](./02e-monitoring-integration.md)
+
 ## Scope
 
 Activation, `projects`, watcher, Sessions and Workflows trees, Project/config access, welcome view, status bar, file-opening commands (`openTask/Prompt/Response/Output`, `openConfig`, `workflow.open`), Output Channel, timeline document, `copyId`, `refresh`, and the CLI version check. Listing workflows and opening YAML files belong to monitoring; running a workflow arrives in phase 3.
