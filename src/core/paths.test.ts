@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { sessionDir } from "../../src/core/paths";
+import { sessionDir } from "./paths";
 
 describe("paths", () => {
   it("resolves a session directory under .migent/sessions", () => {

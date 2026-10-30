@@ -1,0 +1,11 @@
+id: implement
+title: Implement
+version: 2
+requires:
+  workflow: plan
+stages:
+  - id: prepare
+  - id: implement
+    depends_on: [plan]
+  - id: review_work
+    depends_on: [implement]

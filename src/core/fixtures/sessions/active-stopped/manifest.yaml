@@ -1,0 +1,6 @@
+session_id: 00000000-0000-4000-8000-000000000001
+workflow_id: plan
+workflow_path: .migent/workflows/plan.yaml
+title: "Plan the feature"
+created_at: 2026-10-26T09:00:00.000+00:00
+schema_version: 2

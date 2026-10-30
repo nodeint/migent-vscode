@@ -1,0 +1,26 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "status": "active",
+  "title": "Plan the feature",
+  "workflow_id": "plan",
+  "workflow_path": ".migent/workflows/plan.yaml",
+  "created_at": "2026-10-26T09:00:00.000+00:00",
+  "prior_session_id": "00000000-0000-4000-8000-0000000000ff",
+  "updated_at": "2026-10-26T09:20:00.000+00:00",
+  "task_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "latest_provider_event": {
+    "v": 2,
+    "seq": 5,
+    "event": "provider.turn_completed",
+    "timestamp": "2026-10-26T09:10:00.000+00:00",
+    "execution_id": "0001-plan--attempt-01",
+    "stage_id": "plan",
+    "summary": "completed",
+    "provider": "claude",
+    "details": {},
+    "data": {}
+  },
+  "latest_execution_id": "0001-plan--attempt-01",
+  "latest_execution_status": "running",
+  "latest_stage_id": "plan"
+}

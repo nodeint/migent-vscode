@@ -1,0 +1,15 @@
+id: plan
+title: Plan
+version: 2
+stages:
+  - id: plan
+    role: planner
+    outputs:
+      - name: plan
+        artifact: plan.md
+  - id: review_plan
+    depends_on: [plan]
+outputs:
+  - name: plan
+    from_stage: plan
+    artifact: plan.md
