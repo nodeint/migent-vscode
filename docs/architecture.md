@@ -36,8 +36,8 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Session cache and notifications | [store.ts](../src/core/store.ts) | One project per store; snapshot, lazy reads, change events |
 
 Tests are colocated as `src/core/<module>.test.ts`. Shared sample data lives in
-[fixtures](../src/core/fixtures); test commands and setup belong to
-[CONTRIBUTING.md](../CONTRIBUTING.md#verification).
+[fixtures](../src/core/fixtures); testing guidance belongs to [testing.md](testing.md); verification commands and
+setup belong to [CONTRIBUTING.md](../CONTRIBUTING.md#verification).
 
 ## File-format contract
 

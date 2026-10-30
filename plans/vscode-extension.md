@@ -2,7 +2,7 @@
 
 Goal: let developers manage and monitor sessions and run workflows directly inside VS Code, without opening a terminal.
 
-Prerequisite: [`session-cancel.md`](./session-cancel.md) must land first, because the Stop button needs `migent session cancel` (Windows has no signal for a graceful cancel).
+Prerequisite: `session cancel` must land first, because the Stop button needs `migent session cancel` (Windows has no signal for a graceful cancel).
 
 ## 1. Design principles
 
@@ -54,9 +54,9 @@ The extension depends on the following. Changing any of them is a contract chang
 | `migent session continue --stage ... --reply-file ...` | submit a human batch as a JSON answer map | acceptance is reconciled from persisted answers separately from subsequent dispatch |
 | `migent session run/prepare --workflow ... --prior ...` | explicit new child/session handoff | source must be Completed; no automatic chaining; optional Run task override |
 
-Human-question contract: [`docs/human-in-the-loop.md`](../../migent/docs/human-in-the-loop.md). Workflow `schema_version: 3` enables `ask: human`; execution outcome `question` is distinct from `blocked` and a completed workflow decision. Schema versions for workflow, manifest and question history are independent. Detailed extension design: [`03a-human-input.md`](./03a-human-input.md).
+Human-question contract: [`docs/human-in-the-loop.md`](https://github.com/nodeint/migent/blob/HEAD/docs/human-in-the-loop.md). Workflow `schema_version: 3` enables `ask: human`; execution outcome `question` is distinct from `blocked` and a completed workflow decision. Schema versions for workflow, manifest and question history are independent. Detailed extension design: [`03a-human-input.md`](./03a-human-input.md).
 
-Downstream contract: [workflows](../../migent/docs/workflows.md#downstream-handoff) and [session handoff](../../migent/docs/sessions.md#reusable-workflow-boundaries). Workflow version 4, next-file version 1 and manifest schemas are independent. Results retains its content/header and adds suggestions; each selected suggestion opens a separate Next step page. Detailed design: [`03b-downstream-handoff.md`](./03b-downstream-handoff.md).
+Downstream contract: [workflows](https://github.com/nodeint/migent/blob/HEAD/docs/workflows.md#downstream-handoff) and [session handoff](https://github.com/nodeint/migent/blob/HEAD/docs/sessions.md#reusable-workflow-boundaries). Workflow version 4, next-file version 1 and manifest schemas are independent. Results retains its content/header and adds suggestions; each selected suggestion opens a separate Next step page. Detailed design: [`03b-downstream-handoff.md`](./03b-downstream-handoff.md).
 
 Startup check: `migent --version` ≥ the minimum version (configured in the extension). If the CLI is missing or too old, show install/configure instructions and disable writes while retaining any disk-readable sessions. An empty project gets a welcome view; a capability error must not look like an empty session list. If `session cancel` is missing, hide the Stop button.
 
@@ -87,7 +87,7 @@ Interactive prototypes live in [`designs/`](../designs/README.md), separate from
 | Phase 3b | [Results and downstream Next step](../designs/downstream-handoff-ui.html) |
 
 ### Phase 0: Preparation (outside the extension repo)
-- Finish `session cancel` ([`session-cancel.md`](./session-cancel.md)).
+- Finish `session cancel` (`session cancel`).
 - Review `docs/sessions.md` as the contract document; record in migent's CONTRIBUTING that changing a file format is a contract change.
 - Settle the publisher and extension name (`migent` / `nodeint.migent-vscode`).
 

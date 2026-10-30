@@ -11,8 +11,8 @@ stop when they cover the task. For work that crosses areas, follow the union of 
 | Writing, editing, or organizing documentation | [doc-authoring.md](doc-authoring.md) | Also follow the routes for the subject being documented |
 | Runtime boundaries, data flow, or module ownership | [architecture.md](architecture.md) | Follow the relevant module group and contract references |
 | Session state, locks, file readers, store refresh, or event tail behavior | [core.md](core.md) | Follow the behavior section and its linked implementation/tests |
+| Selecting test cases or verifying behavior changes | [testing.md](testing.md) | Follow the testing rules and relevant verification procedures |
 | Contribution setup, Git branches/hooks, issues, PRs, CI, or extension releases | [CONTRIBUTING.md](../CONTRIBUTING.md) | Follow the relevant setup, verification, PR, or release section |
-
 
 Standards and guides have separate roles: standards define requirements; guides describe procedures.
 Use both when a task requires a procedure governed by a standard.

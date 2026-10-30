@@ -100,11 +100,8 @@ CI runs this sequence on Ubuntu and Windows. There are currently no separate
 lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
 
-For behavior changes, cover the affected cases with meaningful tests. Core
-tests use fixtures and temporary directories without launching VS Code.
-For extension commands, activation, or UI changes, also verify the behavior
-in VS Code and describe the manual steps in the PR. Automated extension-host
-integration tests are not currently configured.
+Follow the [testing guide](docs/testing.md) when selecting test cases and
+verifying behavior changes.
 
 To check the packaged extension:
 

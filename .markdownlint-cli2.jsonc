@@ -4,7 +4,8 @@
   ],
   "ignores": [
     ".agents/skills/**",
-    ".claude/**"
+    ".claude/**",
+    "plans/**"
   ],
   "gitignore": true,
   "config": {

@@ -2,7 +2,7 @@
 
 Part of [`vscode-extension.md`](./vscode-extension.md), within **phase 3**, before [`04-release.md`](./04-release.md). Builds on the readers/store in [`01-core.md`](./01-core.md), Results/monitoring in [`02-monitoring.md`](./02-monitoring.md), and the CLI runner and command gates in [`03-control.md`](./03-control.md). It is independent of the human-question form in [`03a-human-input.md`](./03a-human-input.md).
 
-Sources of truth: Migent's [Downstream handoff](../../migent/docs/workflows.md#downstream-handoff) and [Reusable workflow boundaries](../../migent/docs/sessions.md#reusable-workflow-boundaries). Design reference: [`designs/downstream-handoff-ui.html`](../designs/downstream-handoff-ui.html).
+Sources of truth: Migent's [Downstream handoff](https://github.com/nodeint/migent/blob/HEAD/docs/workflows.md#downstream-handoff) and [Reusable workflow boundaries](https://github.com/nodeint/migent/blob/HEAD/docs/sessions.md#reusable-workflow-boundaries). Design reference: [`designs/downstream-handoff-ui.html`](../designs/downstream-handoff-ui.html).
 
 ## 1. Scope and fixed UX decisions
 

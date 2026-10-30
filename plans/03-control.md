@@ -2,7 +2,7 @@
 
 Part of [`vscode-extension.md`](./vscode-extension.md). Previous: [`02-monitoring.md`](./02-monitoring.md). Included subplans: [`03a-human-input.md`](./03a-human-input.md), [`03b-downstream-handoff.md`](./03b-downstream-handoff.md). Next phase: [`04-release.md`](./04-release.md).
 
-Prerequisite: [`session-cancel.md`](./session-cancel.md) has landed (the Stop button needs `migent session cancel`).
+Prerequisite: `session cancel` has landed (the Stop button needs `migent session cancel`).
 
 Scope: `cli/` (locate, invoke, runner, version), the write commands, `withProgress`, and notifications, including the structured human-question flow detailed in [`03a-human-input.md`](./03a-human-input.md). Decision: processes always survive closing VS Code (detached, no setting). Test early that the `detached` child behaves on Windows (no console window, survives extension host exit).
 
