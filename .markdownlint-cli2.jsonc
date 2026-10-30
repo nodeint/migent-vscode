@@ -1,0 +1,17 @@
+{
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    ".agents/skills/**",
+    ".claude/**"
+  ],
+  "gitignore": true,
+  "config": {
+    "MD013": {
+      "line_length": 120,
+      "tables": false,
+      "code_blocks": false
+    }
+  }
+}

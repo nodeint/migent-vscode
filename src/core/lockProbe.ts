@@ -1,6 +1,7 @@
-import { readFileSync, statSync } from "node:fs";
-import os from "node:os";
-import type { LockProbe } from "./model";
+import { readFileSync, statSync } from 'node:fs';
+import os from 'node:os';
+
+import type { LockProbe } from './model';
 
 export const LOCK_STALE_MS = 30_000;
 
@@ -15,16 +16,16 @@ interface LockInfo {
 function readLock(lockPath: string): LockInfo | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(lockPath, "utf8"));
+    parsed = JSON.parse(readFileSync(lockPath, 'utf8'));
   } catch {
     return null;
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const raw = parsed as Record<string, unknown>;
   if (
-    typeof raw.pid !== "number" ||
-    typeof raw.host !== "string" ||
-    typeof raw.heartbeat_at !== "string"
+    typeof raw.pid !== 'number' ||
+    typeof raw.host !== 'string' ||
+    typeof raw.heartbeat_at !== 'string'
   ) {
     return null;
   }
@@ -37,7 +38,7 @@ function pidAlive(pid: number): boolean {
     return true;
   } catch (error) {
     // EPERM means the process exists but we may not signal it: treat as alive.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -58,7 +59,7 @@ export function probeLock(lockPath: string, now: number = Date.now(), staleMs: n
   } catch {
     info = null;
   }
-  const missing = (() => {
+  const isMissing = (() => {
     try {
       statSync(lockPath);
       return false;
@@ -66,7 +67,7 @@ export function probeLock(lockPath: string, now: number = Date.now(), staleMs: n
       return true;
     }
   })();
-  if (missing) return { kind: "none" };
+  if (isMissing) return { kind: 'none' };
 
   if (info === null) {
     // Unparsable lock: as old as its mtime.
@@ -74,25 +75,25 @@ export function probeLock(lockPath: string, now: number = Date.now(), staleMs: n
     try {
       mtime = statSync(lockPath).mtimeMs;
     } catch {
-      return { kind: "none" };
+      return { kind: 'none' };
     }
     return now - mtime > staleMs
-      ? { kind: "stale", reason: "unparsable" }
-      : { kind: "alive", pid: null, host: null, heartbeatAt: null, foreignHost: true };
+      ? { kind: 'stale', reason: 'unparsable' }
+      : { kind: 'alive', pid: null, host: null, heartbeatAt: null, foreignHost: true };
   }
 
-  const foreignHost = info.host !== os.hostname();
-  if (!foreignHost && !pidAlive(info.pid)) {
-    return { kind: "stale", reason: "dead-pid" };
+  const isForeignHost = info.host !== os.hostname();
+  if (!isForeignHost && !pidAlive(info.pid)) {
+    return { kind: 'stale', reason: 'dead-pid' };
   }
   if (heartbeatAge(info.heartbeat_at, now) > staleMs) {
-    return { kind: "stale", reason: "heartbeat" };
+    return { kind: 'stale', reason: 'heartbeat' };
   }
   return {
-    kind: "alive",
+    kind: 'alive',
     pid: info.pid,
     host: info.host,
     heartbeatAt: info.heartbeat_at,
-    foreignHost,
+    foreignHost: isForeignHost,
   };
 }

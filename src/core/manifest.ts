@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
-import { parse } from "yaml";
-import type { SessionManifest } from "./model";
-import { SUPPORTED_MANIFEST_SCHEMA_VERSIONS } from "./model";
+import { readFileSync } from 'node:fs';
+
+import { parse } from 'yaml';
+
+import type { SessionManifest } from './model';
+import { SUPPORTED_MANIFEST_SCHEMA_VERSIONS } from './model';
 
 function asString(value: unknown): string | null {
-  return typeof value === "string" && value !== "" ? value : null;
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /**
@@ -18,10 +20,10 @@ export function parseManifest(text: string): SessionManifest | null {
   } catch {
     return null;
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const raw = parsed as Record<string, unknown>;
   const schemaVersion =
-    typeof raw.schema_version === "number" && Number.isInteger(raw.schema_version)
+    typeof raw.schema_version === 'number' && Number.isInteger(raw.schema_version)
       ? raw.schema_version
       : null;
   return {
@@ -42,7 +44,7 @@ export function parseManifest(text: string): SessionManifest | null {
 export function readManifest(manifestPath: string): SessionManifest | null {
   let text: string;
   try {
-    text = readFileSync(manifestPath, "utf8");
+    text = readFileSync(manifestPath, 'utf8');
   } catch {
     return null;
   }

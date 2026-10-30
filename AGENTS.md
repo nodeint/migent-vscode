@@ -48,6 +48,7 @@ Explicit user instructions take precedence over skill guidance.
 | [`checkout-issue`](.agents/skills/checkout-issue/SKILL.md) | Reading or starting work on a repository GitHub issue |
 | [`create-pr`](.agents/skills/create-pr/SKILL.md) | Committing, pushing, and opening a pull request into `next` |
 | [`release`](.agents/skills/release/SKILL.md) | Preparing or publishing an extension release and synchronizing `main` |
+| [`markdownlint`](.agents/skills/markdownlint/SKILL.md) | Creating or changing repository Markdown, or validating Markdown style or links |
 
 ## Documentation entry point
 

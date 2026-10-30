@@ -1,33 +1,34 @@
-import { readFileSync } from "node:fs";
-import type { RunningStage, SessionStatus } from "./model";
+import { readFileSync } from 'node:fs';
+
+import type { RunningStage, SessionStatus } from './model';
 
 /** Delay between retries when status.json does not parse (a rename can be observed mid-flight on Windows). */
 export const STATUS_RETRY_DELAY_MS = 100;
 export const STATUS_MAX_ATTEMPTS = 3;
 
 export type StatusRead =
-  | { kind: "ok"; status: SessionStatus }
-  | { kind: "missing" }
-  | { kind: "error" };
+  | { kind: 'ok'; status: SessionStatus }
+  | { kind: 'missing' }
+  | { kind: 'error' };
 
 function asString(value: unknown): string | null {
-  return typeof value === "string" && value !== "" ? value : null;
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 function asStringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
+  return typeof value === 'string' ? value : null;
 }
 
 function blockedIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
+  return value.filter((item): item is string => typeof item === 'string');
 }
 
 function runningStages(value: unknown): RunningStage[] {
   if (!Array.isArray(value)) return [];
   const rows: RunningStage[] = [];
   for (const entry of value) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const raw = entry as Record<string, unknown>;
     rows.push({
       executionId: asString(raw.execution_id),
@@ -48,7 +49,7 @@ export function parseStatus(text: string): SessionStatus | null {
   } catch {
     return null;
   }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   return {
     status: asString(raw.status),
@@ -73,14 +74,14 @@ function sleepSync(ms: number): void {
 function attemptRead(statusPath: string): StatusRead {
   let text: string;
   try {
-    text = readFileSync(statusPath, "utf8");
+    text = readFileSync(statusPath, 'utf8');
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code ?? "";
-    if (code === "ENOENT") return { kind: "missing" };
-    return { kind: "error" };
+    const code = (error as NodeJS.ErrnoException).code ?? '';
+    if (code === 'ENOENT') return { kind: 'missing' };
+    return { kind: 'error' };
   }
   const status = parseStatus(text);
-  return status === null ? { kind: "error" } : { kind: "ok", status };
+  return status === null ? { kind: 'error' } : { kind: 'ok', status };
 }
 
 /**
@@ -89,11 +90,11 @@ function attemptRead(statusPath: string): StatusRead {
  * 3 attempts, then give up and let the caller mark the session Unknown.
  */
 export function readStatus(statusPath: string): StatusRead {
-  let last: StatusRead = { kind: "error" };
+  let last: StatusRead = { kind: 'error' };
   for (let i = 0; i < STATUS_MAX_ATTEMPTS; i += 1) {
     if (i > 0) sleepSync(STATUS_RETRY_DELAY_MS);
     last = attemptRead(statusPath);
-    if (last.kind !== "error") return last;
+    if (last.kind !== 'error') return last;
   }
   return last;
 }
