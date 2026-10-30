@@ -32,6 +32,7 @@ function readLock(lockPath: string): LockInfo | null {
 }
 
 function pidAlive(pid: number): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;

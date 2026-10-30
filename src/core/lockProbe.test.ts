@@ -49,9 +49,9 @@ describe('probeLock', () => {
   });
 
   it('stale: dead pid on this host, even with a fresh heartbeat', () => {
-    // A pid that cannot exist: negative pids are never valid.
-    const probe = probeLock(lockFile(freshLock({ pid: -1 })), NOW);
-    expect(probe).toEqual({ kind: 'stale', reason: 'dead-pid' });
+    for (const pid of [-1, 0]) {
+      expect(probeLock(lockFile(freshLock({ pid })), NOW)).toEqual({ kind: 'stale', reason: 'dead-pid' });
+    }
   });
 
   it('stale: heartbeat older than 30 seconds', () => {
