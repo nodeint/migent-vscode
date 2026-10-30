@@ -3,8 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { deriveDisplayState, DISPLAY_STATE_ICONS, type DisplayStatusInput } from './displayState';
 import type { DisplayStateName, LockProbe, SessionStatus } from './model';
 
-const NOW = Date.parse('2026-10-26T12:00:00.000Z');
-
 function status(overrides: Partial<SessionStatus> = {}): SessionStatus {
   return {
     status: 'active',
@@ -38,7 +36,7 @@ const localLock = (over: Partial<Extract<LockProbe, { kind: 'alive' }>> = {}): L
 
 const foreignLock = localLock({ host: 'other-host', foreignHost: true });
 
-function state(inputOverrides: Partial<DisplayStatusInput> = {}, lock: LockProbe): string {
+function state(inputOverrides: Partial<DisplayStatusInput>, lock: LockProbe): string {
   return deriveDisplayState(input(inputOverrides), lock).state;
 }
 

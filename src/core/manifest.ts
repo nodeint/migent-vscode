@@ -4,6 +4,7 @@ import { parse } from 'yaml';
 
 import type { SessionManifest } from './model';
 import { SUPPORTED_MANIFEST_SCHEMA_VERSIONS } from './model';
+import { isRecord } from './record';
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
@@ -20,8 +21,8 @@ export function parseManifest(text: string): SessionManifest | null {
   } catch {
     return null;
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as Record<string, unknown>;
+  if (!isRecord(parsed)) return null;
+  const raw = parsed;
   const schemaVersion =
     typeof raw.schema_version === 'number' && Number.isInteger(raw.schema_version)
       ? raw.schema_version

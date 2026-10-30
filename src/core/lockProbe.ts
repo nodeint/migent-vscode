@@ -2,15 +2,14 @@ import { readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 
 import type { LockProbe } from './model';
+import { isRecord } from './record';
 
 export const LOCK_STALE_MS = 30_000;
 
 interface LockInfo {
   pid: number;
   host: string;
-  started_at: string;
   heartbeat_at: string;
-  nonce: string;
 }
 
 function readLock(lockPath: string): LockInfo | null {
@@ -20,8 +19,8 @@ function readLock(lockPath: string): LockInfo | null {
   } catch {
     return null;
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as Record<string, unknown>;
+  if (!isRecord(parsed)) return null;
+  const raw = parsed;
   if (
     typeof raw.pid !== 'number' ||
     typeof raw.host !== 'string' ||
@@ -29,7 +28,7 @@ function readLock(lockPath: string): LockInfo | null {
   ) {
     return null;
   }
-  return raw as unknown as LockInfo;
+  return { pid: raw.pid, host: raw.host, heartbeat_at: raw.heartbeat_at };
 }
 
 function pidAlive(pid: number): boolean {
@@ -38,7 +37,7 @@ function pidAlive(pid: number): boolean {
     return true;
   } catch (error) {
     // EPERM means the process exists but we may not signal it: treat as alive.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    return isRecord(error) && error.code === 'EPERM';
   }
 }
 

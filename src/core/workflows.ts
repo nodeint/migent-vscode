@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parse } from 'yaml';
 
 import { workflowsDir } from './paths';
+import { isRecord } from './record';
 
 export interface WorkflowSummary {
   /** Workflow id from the file body, else the file name without extension. */
@@ -15,16 +16,20 @@ export interface WorkflowSummary {
 }
 
 function stageIds(parsed: unknown): string[] {
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
-  const {stages} = (parsed as Record<string, unknown>);
+  if (!isRecord(parsed)) return [];
+  const {stages} = (parsed);
   if (!Array.isArray(stages)) return [];
   const ids: string[] = [];
   for (const stage of stages) {
-    if (stage === null || typeof stage !== 'object' || Array.isArray(stage)) continue;
-    const {id} = (stage as Record<string, unknown>);
+    if (!isRecord(stage)) continue;
+    const {id} = (stage);
     if (typeof id === 'string' && id !== '') ids.push(id);
   }
   return ids;
+}
+
+function isWorkflowFile(name: string): boolean {
+  return name.endsWith('.yaml') || name.endsWith('.yml');
 }
 
 /** List `.migent/workflows/*.yaml`. A file that fails to parse is skipped, not guessed. */
@@ -37,17 +42,16 @@ export function listWorkflows(projectRoot: string): WorkflowSummary[] {
   }
   const rows: WorkflowSummary[] = [];
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith('.yaml') && !entry.name.endsWith('.yml')) continue;
+    if (!entry.isFile() || !isWorkflowFile(entry.name)) continue;
     const file = path.join(workflowsDir(projectRoot), entry.name);
-    let parsed: unknown = null;
+    let parsed: unknown;
     try {
       parsed = parse(readFileSync(file, 'utf8'));
     } catch {
       continue;
     }
-    const body = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
+    const body = isRecord(parsed)
+      ? parsed
       : null;
     const id = typeof body?.id === 'string' && body.id !== '' ? body.id : path.basename(entry.name, path.extname(entry.name));
     const title = typeof body?.title === 'string' && body.title !== '' ? body.title : null;

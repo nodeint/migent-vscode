@@ -30,14 +30,14 @@ export const DEFAULT_SESSION_LIMIT = 50;
 export class Emitter<T> {
   readonly #listeners = new Set<(event: T) => void>();
 
-  subscribe(listener: (event: T) => void): () => void {
+  public subscribe(listener: (event: T) => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
     };
   }
 
-  emit(event: T): void {
+  public emit(event: T): void {
     for (const listener of this.#listeners) listener(event);
   }
 }
@@ -83,8 +83,8 @@ function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
  * direct reads, faster than spawning the CLI. The execution list is read lazily;
  */
 export class SessionStore {
-  readonly projectRoot: string;
-  readonly limit: number;
+  public readonly projectRoot: string;
+  public readonly limit: number;
 
   readonly #sessions = new Map<string, SessionSnapshot>();
   readonly #offsets = new Map<string, number>();
@@ -96,21 +96,21 @@ export class SessionStore {
   }
 
   /** Subscribe to changes. Returns an unsubscribe function. */
-  get onDidChange(): (listener: (event: SessionChangeEvent) => void) => () => void {
+  public get onDidChange(): (listener: (event: SessionChangeEvent) => void) => () => void {
     return (listener) => this.#changes.subscribe(listener);
   }
 
   /** All snapshots, newest first. */
-  all(): SessionSnapshot[] {
+  public all(): SessionSnapshot[] {
     return [...this.#sessions.values()].sort((a, b) => (isNewer(b, a) ? 1 : -1));
   }
 
-  snapshot(sessionId: string): SessionSnapshot | undefined {
+  public snapshot(sessionId: string): SessionSnapshot | undefined {
     return this.#sessions.get(sessionId);
   }
 
   /** Full scan of the sessions directory: direct reads, faster than spawning the CLI. */
-  load(): void {
+  public load(): void {
     const seen = new Set<string>();
     for (const sessionId of this.listSessionIds()) {
       seen.add(sessionId);
@@ -126,7 +126,7 @@ export class SessionStore {
     this.applyLimit();
   }
 
-  refreshSession(sessionId: string): void {
+  public refreshSession(sessionId: string): void {
     const current = this.#sessions.get(sessionId);
     if (current === undefined) {
       this.#setSession(sessionId, this.buildSnapshot(sessionId), 'added');
@@ -139,7 +139,7 @@ export class SessionStore {
     }
   }
 
-  removeSession(sessionId: string): void {
+  public removeSession(sessionId: string): void {
     if (!this.#sessions.has(sessionId)) return;
     this.#sessions.delete(sessionId);
     this.#offsets.delete(sessionId);
@@ -147,7 +147,7 @@ export class SessionStore {
   }
 
   /** Read the execution list. Only when a node is expanded or the session is running. */
-  loadExecutions(sessionId: string): ExecutionSnapshot[] {
+  public loadExecutions(sessionId: string): ExecutionSnapshot[] {
     const snapshot = this.#sessions.get(sessionId);
     if (snapshot === undefined) return [];
     const executions = listExecutions(sessionDir(this.projectRoot, sessionId));
@@ -161,7 +161,7 @@ export class SessionStore {
    * Tail events.jsonl from the stored byte offset. Only complete lines are
    * consumed; `seq` de-duplicates against the snapshot's `lastEventSeq`.
    */
-  readNewEvents(sessionId: string): TailEvent[] {
+  public readNewEvents(sessionId: string): TailEvent[] {
     const snapshot = this.#sessions.get(sessionId);
     if (snapshot === undefined) return [];
     const offset = this.#offsets.get(sessionId) ?? 0;

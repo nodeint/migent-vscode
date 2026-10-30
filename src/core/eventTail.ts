@@ -1,6 +1,7 @@
 import { closeSync, fstatSync,openSync, readSync } from 'node:fs';
 
 import { KNOWN_EVENT_VERSION } from './model';
+import { isRecord } from './record';
 
 /**
  * Tail events.jsonl by byte offset. Each call reads from `offset` to end of file
@@ -31,7 +32,7 @@ export interface TailRead {
   offset: number;
 }
 
-const CHUNK_SIZE = 64 * 1024;
+const CHUNK_SIZE = 65_536;
 
 /** Read the file from `offset` to EOF as one string. Empty when nothing new. */
 function readFrom(offset: number, filePath: string): { text: string; size: number } {
@@ -67,37 +68,37 @@ function parseLine(line: string): TailEvent {
   } catch {
     // Fall through: returned as a raw line below.
   }
-  const isRecord =
-    value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
+  const record =
+    isRecord(value)
+      ? value
       : null;
-  if (isRecord === null || typeof isRecord.event !== 'string') {
+  if (record === null || typeof record.event !== 'string') {
     return emptyEvent({ raw: null, rawLine: line, seq: null, v: 1, event: null });
   }
-  const version = isRecord.v;
+  const version = record.v;
   const v = typeof version === 'number' && Number.isInteger(version) && version >= 1 ? version : 1;
   const isUnknownVersion = v > KNOWN_EVENT_VERSION;
   const str = (key: string): string | null =>
-    typeof isRecord[key] === 'string' ? (isRecord[key]) : null;
-  const seq = typeof isRecord.seq === 'number' && Number.isInteger(isRecord.seq) ? isRecord.seq : null;
+    typeof record[key] === 'string' ? (record[key]) : null;
+  const seq = typeof record.seq === 'number' && Number.isInteger(record.seq) ? record.seq : null;
   const parsed: TailEvent = {
     seq,
     v,
-    event: isRecord.event,
+    event: record.event,
     timestamp: str('timestamp') ?? '',
     executionId: str('execution_id'),
     stageId: str('stage_id'),
     summary: str('summary'),
-    data: isData(isRecord.data),
-    raw: isRecord,
+    data: isData(record.data),
+    raw: record,
     rawLine: isUnknownVersion ? line : null,
   };
   return parsed;
 }
 
 function isData(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+  return isRecord(value)
+    ? value
     : {};
 }
 

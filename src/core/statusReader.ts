@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { RunningStage, SessionStatus } from './model';
+import { isRecord } from './record';
 
 /** Delay between retries when status.json does not parse (a rename can be observed mid-flight on Windows). */
 export const STATUS_RETRY_DELAY_MS = 100;
@@ -15,10 +16,6 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-function asStringOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
 function blockedIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
@@ -28,8 +25,8 @@ function runningStages(value: unknown): RunningStage[] {
   if (!Array.isArray(value)) return [];
   const rows: RunningStage[] = [];
   for (const entry of value) {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue;
-    const raw = entry as Record<string, unknown>;
+    if (!isRecord(entry)) continue;
+    const raw = entry;
     rows.push({
       executionId: asString(raw.execution_id),
       stageId: asString(raw.stage_id),
@@ -49,8 +46,8 @@ export function parseStatus(text: string): SessionStatus | null {
   } catch {
     return null;
   }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
+  if (!isRecord(value)) return null;
+  const raw = value;
   return {
     status: asString(raw.status),
     workflowId: asString(raw.workflow_id),
@@ -68,7 +65,7 @@ export function parseStatus(text: string): SessionStatus | null {
 }
 
 function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, ms);
 }
 
 function attemptRead(statusPath: string): StatusRead {
@@ -76,7 +73,7 @@ function attemptRead(statusPath: string): StatusRead {
   try {
     text = readFileSync(statusPath, 'utf8');
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code ?? '';
+    const code = isRecord(error) ? error.code : undefined;
     if (code === 'ENOENT') return { kind: 'missing' };
     return { kind: 'error' };
   }

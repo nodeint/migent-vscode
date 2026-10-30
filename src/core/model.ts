@@ -7,7 +7,7 @@
 export const KNOWN_EVENT_VERSION = 2;
 
 /** Manifest `schema_version` values this extension understands. */
-export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS = [1, 2];
+export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS = [1, KNOWN_EVENT_VERSION];
 
 /** A parsed `manifest.yaml`. Missing fields stay null instead of guessed. */
 export interface SessionManifest {
