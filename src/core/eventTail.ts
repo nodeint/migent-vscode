@@ -30,6 +30,11 @@ export interface TailRead {
   events: TailEvent[];
   /** Byte offset to pass to the next call: just past the last complete line. */
   offset: number;
+  /**
+   * True when the file was smaller than the offset passed in (truncated or rewritten
+   * by a repair). The read then restarted from byte 0 and `events` holds the new content.
+   */
+  truncated: boolean;
 }
 
 const CHUNK_SIZE = 65_536;
@@ -120,36 +125,56 @@ function emptyEvent(overrides: Partial<TailEvent>): TailEvent {
 
 /**
  * Read new events from `offset`. Only complete lines are consumed; a torn tail
- * (no trailing `\n` yet) is left for the next call. A file that shrank below the
- * offset is treated as fully consumed; the caller re-snapshots on such a rewrite.
+ * (no trailing `\n` yet) is left for the next call. A file smaller than `offset`
+ * was truncated: the read restarts from byte 0 and reports `truncated`.
  */
 export function tailEvents(filePath: string, offset: number): TailRead {
   const { text, size } = readFrom(offset, filePath);
-  if (text === '') return { events: [], offset: Math.max(offset, size) };
+  if (size < offset) return { ...tailEvents(filePath, 0), truncated: true };
+  if (text === '') return { events: [], offset: Math.max(offset, size), truncated: false };
 
   const lastNewline = text.lastIndexOf('\n');
   const consumed = lastNewline === -1 ? '' : text.slice(0, lastNewline + 1);
-  if (consumed === '') return { events: [], offset };
+  if (consumed === '') return { events: [], offset, truncated: false };
 
   const events = consumed
     .split('\n')
     .filter((line) => line !== '')
     .map(parseLine);
-  return { events, offset: offset + Buffer.byteLength(consumed, 'utf8') };
+  return { events, offset: offset + Buffer.byteLength(consumed, 'utf8'), truncated: false };
+}
+
+/** Most recent events an `EventTail` keeps; older ones are dropped and counted. */
+export const DEFAULT_MAX_HISTORY = 5000;
+
+export interface EventTailOptions {
+  maxHistory?: number;
+}
+
+export interface TailUpdate {
+  /** Events newly read by this poll (after the `seq` watermark filter). */
+  events: TailEvent[];
+  /** True when the file shrank: history was cleared and `events` is the whole new content. */
+  truncated: boolean;
 }
 
 /**
- * Incremental reader for one `events.jsonl`. Owns the byte offset and the `seq`
- * watermark, so it is independent of any session snapshot. The caller decides when
- * to `read()` and drops the instance when it no longer needs the events.
+ * Incremental reader for one `events.jsonl`. Owns the byte offset, the `seq`
+ * watermark and a bounded history, so it is independent of any session snapshot.
+ * The caller decides when to `poll()` and drops the instance when it no longer
+ * needs the events (releasing the history with it).
  */
 export class EventTail {
   readonly #filePath: string;
+  readonly #maxHistory: number;
   #offset = 0;
   #lastSeq = 0;
+  #history: TailEvent[] = [];
+  #dropped = 0;
 
-  constructor(filePath: string) {
+  constructor(filePath: string, options: EventTailOptions = {}) {
     this.#filePath = filePath;
+    this.#maxHistory = Math.max(1, options.maxHistory ?? DEFAULT_MAX_HISTORY);
   }
 
   /** Highest `seq` consumed so far; 0 before any numbered event. */
@@ -157,12 +182,29 @@ export class EventTail {
     return this.#lastSeq;
   }
 
+  /** The most recent events, oldest first, at most `maxHistory`. */
+  public get history(): readonly TailEvent[] {
+    return this.#history;
+  }
+
+  /** How many older events were dropped from the history (for a "not shown" marker). */
+  public get droppedCount(): number {
+    return this.#dropped;
+  }
+
   /**
    * Read events appended since the last call. Events with a numeric `seq` at or
-   * below the watermark are dropped; events without a `seq` are kept.
+   * below the watermark are dropped; events without a `seq` are kept. When the file
+   * shrank, offset, watermark and history are reset first and the new content is read
+   * from the start.
    */
-  public read(): TailEvent[] {
+  public poll(): TailUpdate {
     const result = tailEvents(this.#filePath, this.#offset);
+    if (result.truncated) {
+      this.#lastSeq = 0;
+      this.#history = [];
+      this.#dropped = 0;
+    }
     this.#offset = result.offset;
     const watermark = this.#lastSeq;
     const fresh = result.events.filter(
@@ -171,6 +213,21 @@ export class EventTail {
     for (const event of fresh) {
       if (event.seq !== null && event.seq > this.#lastSeq) this.#lastSeq = event.seq;
     }
-    return fresh;
+    this.#append(fresh);
+    return { events: fresh, truncated: result.truncated };
+  }
+
+  /** Same as `poll()` when only the new events matter. */
+  public read(): TailEvent[] {
+    return this.poll().events;
+  }
+
+  #append(events: readonly TailEvent[]): void {
+    this.#history.push(...events);
+    const excess = this.#history.length - this.#maxHistory;
+    if (excess > 0) {
+      this.#history.splice(0, excess);
+      this.#dropped += excess;
+    }
   }
 }

@@ -33,7 +33,11 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Lock observation and display derivation | [lockProbe.ts](../src/core/lockProbe.ts), [displayState.ts](../src/core/displayState.ts) | Separate process/file observation from pure state selection |
 | Execution and workflow summaries | [executions.ts](../src/core/executions.ts), [workflows.ts](../src/core/workflows.ts) | Read lightweight lists; do not execute workflows |
 | Project config and workflow catalog | [projectConfig.ts](../src/core/projectConfig.ts), [projectCatalog.ts](../src/core/projectCatalog.ts) | Read `config.yaml` and workflow files for display; independent of the session store |
-| Incremental event reads | [eventTail.ts](../src/core/eventTail.ts) | Complete-line parsing and byte offsets |
+| Session detail readers | [questions.ts](../src/core/questions.ts), [outputs.ts](../src/core/outputs.ts), [nextWorkflows.ts](../src/core/nextWorkflows.ts), [handoff.ts](../src/core/handoff.ts), [executionFiles.ts](../src/core/executionFiles.ts) | Stateless read side; each call reads the file and keeps nothing |
+| Grouping and attention | [attention.ts](../src/core/attention.ts) | Pure group, count and retention-exemption rules |
+| Incremental event reads | [eventTail.ts](../src/core/eventTail.ts) | Complete-line parsing, byte offsets, bounded history, truncation reset |
+| Timeline text | [timelineFormat.ts](../src/core/timelineFormat.ts) | Event to display line; raw passthrough for unrecognized lines |
+| Watch planning and debounce | [watchPlan.ts](../src/core/watchPlan.ts), [coalescer.ts](../src/core/coalescer.ts) | Pure desired watcher set and path classification; keyed debounce with injectable timers. No watcher is created in core |
 | Session cache and notifications | [store.ts](../src/core/store.ts) | One project per store; snapshot, lazy reads, change events |
 
 Tests are colocated as `src/core/<module>.test.ts`. Shared sample data lives in

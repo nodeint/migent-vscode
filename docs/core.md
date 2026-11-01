@@ -65,7 +65,7 @@ background work; its caller chooses when to scan, refresh, and load details.
 | `status.json` | Snapshot construction | Missing is distinct from error; both result in Unknown display state |
 | `session.lock` | Snapshot construction | Uses the lock rules above |
 | `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
-| `events.jsonl` | Explicit `EventTail.read()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset |
+| `events.jsonl` | Explicit `EventTail.poll()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset; a file smaller than the offset resets the tail (see below) |
 | `.migent/workflows/*.{yaml,yml}` | Explicit `scanWorkflows`, or `readWorkflowFile` for one file | Missing, empty and unreadable directories are distinct outcomes; an unparsable or unreadable file stays listed as `invalid` or `unreadable` with its error |
 | `.migent/config.yaml` | `readProjectConfig` | `missing`, `ok`, `invalid` (unparsable or not a mapping) or `unreadable`; raw integer `schema_version` or null; no defaults |
 | `status.json` `questions`, `outputs` | Snapshot construction (they come with the status read) | Records without `id` and `question` (questions) or `path` (outputs) are skipped; absent keys give empty lists |
@@ -176,11 +176,42 @@ without a sequence are retained. This does not remove duplicate sequence numbers
 within the same read batch. Reading events does not update status or display
 state; those require a session refresh.
 
-Log truncation or replacement is not automatically recovered: when file size is
-below the offset, the tail reader keeps that offset. Consumers must preserve the
-append-only log assumption.
+`EventTail` also keeps a bounded history (the most recent 5000 events by
+default, oldest first); older events are dropped and counted in `droppedCount`
+for a "not shown" marker. `poll()` returns the new events and `truncated`.
+When the file is smaller than the offset (a repair rewrote the log), the tail
+resets offset, watermark and history, re-reads from byte 0 and reports
+`truncated: true` so the consumer re-renders from the start. A failure to open
+the file is not truncation. A rewrite that leaves the file at least as large as
+the offset is not detectable and is not recovered.
 
-Evidence: [eventTail.test.ts](../src/core/eventTail.test.ts).
+[formatTimelineLine](../src/core/timelineFormat.ts) turns an event into
+`10:15:30 plan#1 started · claude/sonnet`. A malformed line or unknown version is
+passed through as `[unrecognized] <line>`.
+
+## How is the watcher set planned?
+
+[watchPlan.ts](../src/core/watchPlan.ts) is pure; core creates no watcher.
+`desiredWatches` returns one non-recursive watcher per folder (a folder and a
+pattern without path separators): `.migent/`, `workflows/`, `sessions/`, every
+discovered session directory (eligible, hidden or pending) and, only for
+retained targets whose folder exists, `executions/`, one execution directory
+with its `artifacts/`, `turns/` and each `turns/<turn>/` (`verify.md`), and
+`outputs/`. A `missing` scan drops that folder's watcher; without `.migent/`
+the set is empty. `anchorWatch` is the registry-owned watcher on the workspace
+root. `diffWatches` compares the set with live watchers.
+
+`classifyPath` maps a changed path to a project, workflow, config or session
+target, or null for paths nobody displays. `routeSessionChanges` reduces the
+changes the [Coalescer](../src/core/coalescer.ts) collected for one session to
+"refresh the snapshot" (manifest, status, lock, cancel request) plus distinct
+file targets. The coalescer is a per-key trailing debounce with a maximum wait
+and an injectable clock.
+
+Evidence: [eventTail.test.ts](../src/core/eventTail.test.ts),
+[timelineFormat.test.ts](../src/core/timelineFormat.test.ts),
+[watchPlan.test.ts](../src/core/watchPlan.test.ts),
+[coalescer.test.ts](../src/core/coalescer.test.ts).
 
 ## Updating this guide
 

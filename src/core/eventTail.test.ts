@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -116,13 +116,22 @@ describe('tailEvents', () => {
     expect(read.events.map((event) => event.seq)).toEqual([1, 2]);
   });
 
-  it('handles a file that shrank below the offset', () => {
+  it('restarts from byte 0 and reports truncation when the file shrank below the offset', () => {
     const file = tmpFile('events.jsonl', `${line1}\n${line2}\n`);
     const first = tailEvents(file, 0);
-    writeFileSync(file, '');
+    expect(first.truncated).toBe(false);
+    writeFileSync(file, `${line1}\n`);
     const read = tailEvents(file, first.offset);
-    expect(read.events).toEqual([]);
-    expect(read.offset).toBeGreaterThanOrEqual(first.offset);
+    expect(read.truncated).toBe(true);
+    expect(read.events.map((event) => event.seq)).toEqual([1]);
+    expect(read.offset).toBe(Buffer.byteLength(`${line1}\n`));
+  });
+
+  it('reports an emptied file as truncated with offset 0', () => {
+    const file = tmpFile('events.jsonl', `${line1}\n`);
+    const first = tailEvents(file, 0);
+    writeFileSync(file, '');
+    expect(tailEvents(file, first.offset)).toEqual({ events: [], offset: 0, truncated: true });
   });
 });
 
@@ -162,5 +171,39 @@ ${noSeq}
 
   it('reads nothing for a missing file', () => {
     expect(new EventTail(path.join(mkdtemp(), 'absent.jsonl')).read()).toEqual([]);
+  });
+
+  it('keeps a bounded history and counts what it dropped', () => {
+    const lines = [1, 2, 3, 4, 5].map((seq) => JSON.stringify({ v: 2, seq, event: 'e', timestamp: 't', data: {} }));
+    const file = tmpFile('events.jsonl', `${lines.join('\n')}\n`);
+    const tail = new EventTail(file, { maxHistory: 3 });
+    tail.read();
+    expect(tail.history.map((event) => event.seq)).toEqual([3, 4, 5]);
+    expect(tail.droppedCount).toBe(2);
+  });
+
+  it('resets offset, watermark and history on truncation, and re-reads the new content', () => {
+    const file = tmpFile('events.jsonl', `${line1}\n${line2}\n`);
+    const tail = new EventTail(file);
+    tail.read();
+    expect(tail.lastSeq).toBe(2);
+    // A repair rewrites the log shorter, restarting sequence numbers.
+    writeFileSync(file, `${line1}\n`);
+    const update = tail.poll();
+    expect(update.truncated).toBe(true);
+    expect(update.events.map((event) => event.seq)).toEqual([1]);
+    expect(tail.history.map((event) => event.seq)).toEqual([1]);
+    expect(tail.droppedCount).toBe(0);
+    expect(tail.lastSeq).toBe(1);
+    expect(tail.poll()).toEqual({ events: [], truncated: false });
+  });
+
+  it('does not treat an unreadable file as truncation', () => {
+    const file = tmpFile('events.jsonl', `${line1}\n`);
+    const tail = new EventTail(file);
+    tail.read();
+    rmSync(file);
+    expect(tail.poll()).toEqual({ events: [], truncated: false });
+    expect(tail.history).toHaveLength(1);
   });
 });
