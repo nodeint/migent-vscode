@@ -1,0 +1,37 @@
+source_sha256: c5e8667bf9ac95a7c9a431a8865e972c11b992f1930ab8ce97fffc32f2c18700
+workflow:
+  schema_version: 4
+  id: probe-source
+  concurrency: 1
+  constraints: []
+  stages:
+    - id: draft
+      depends_on: []
+      role: developer
+      instructions:
+        - Do not read the repository. Write one short sentence to note.md and finish.
+      produces:
+        artifact: note.md
+  downstream:
+    - workflow: probe-target
+      task: Acknowledge the note.
+      artifacts:
+        context_note: note
+  outputs:
+    - name: note
+      from_stage: draft
+      artifact: note.md
+roles:
+  developer:
+    - Read the task, relevant code, and project instructions before making changes.
+    - Address the root cause with the smallest change that meets the task. Follow project conventions.
+    - Preserve unrelated work and behavior outside the requested scope.
+    - Follow any agreed architecture. Report blockers and seek a decision before changing it.
+    - Run relevant checks or tests and fix failures caused by your changes.
+    - Report what changed, the verification results, and anything not verified.
+targets:
+  draft:
+    provider: claude
+    model: sonnet
+    options:
+      effort: medium

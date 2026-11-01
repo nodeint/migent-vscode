@@ -1,0 +1,39 @@
+{
+  "session_id": "00000000-0000-4000-8000-0000000000b1",
+  "status": "completed",
+  "title": "Probe: handoff fixture source",
+  "workflow_id": "probe-source",
+  "workflow_path": ".migent/workflows/probe-source.yaml",
+  "task": "Probe: handoff fixture source",
+  "created_at": "2026-11-01T11:17:47.350+00:00",
+  "updated_at": "2026-11-01T11:17:52.960+00:00",
+  "baseline": {
+    "commit": "0000000000000000000000000000000000000000",
+    "captured_at": "2026-11-01T11:17:47.437+00:00"
+  },
+  "task_sha256": "65ab28e97b978daf816d8de158f4ea3b7976c3f18c027cad959dcf68d294a648",
+  "latest_provider_event": {
+    "v": 2,
+    "seq": 9,
+    "event": "provider.turn_completed",
+    "timestamp": "2026-11-01T11:17:52.940+00:00",
+    "execution_id": "0001-draft--attempt-01",
+    "stage_id": "draft",
+    "summary": "completed",
+    "provider": "claude",
+    "session_id": "00000000-0000-4000-8000-0000000000b1",
+    "details": {},
+    "data": {}
+  },
+  "outputs": {
+    "note": {
+      "path": "outputs/note.md",
+      "source_execution_id": "0001-draft--attempt-01",
+      "published_by_execution_id": "0001-draft--attempt-01"
+    }
+  },
+  "latest_execution_id": "0001-draft--attempt-01",
+  "latest_execution_status": "completed",
+  "latest_stage_id": "draft",
+  "terminal_execution_id": "0001-draft--attempt-01"
+}

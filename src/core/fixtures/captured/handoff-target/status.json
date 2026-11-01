@@ -1,0 +1,51 @@
+{
+  "session_id": "00000000-0000-4000-8000-0000000000b2",
+  "status": "completed",
+  "title": "Acknowledge the note.",
+  "workflow_id": "probe-target",
+  "workflow_path": ".migent/workflows/probe-target.yaml",
+  "task": "Acknowledge the note.",
+  "created_at": "2026-11-01T11:17:59.222+00:00",
+  "prior_session_id": "00000000-0000-4000-8000-0000000000b1",
+  "updated_at": "2026-11-01T11:18:06.787+00:00",
+  "handoff": {
+    "source_session_id": "00000000-0000-4000-8000-0000000000b1",
+    "artifacts": {
+      "context_note": {
+        "output": "note",
+        "source_path": "C:\\project\\.migent\\sessions\\00000000-0000-4000-8000-0000000000b1\\outputs\\note.md",
+        "path": "handoff/1/note.md",
+        "sha256": "02edbc066ee4147972f6aa6d611524c74135a06528ec94a2450cc84dd3bf084b"
+      }
+    }
+  },
+  "baseline": {
+    "commit": "0000000000000000000000000000000000000000",
+    "captured_at": "2026-11-01T11:17:59.309+00:00"
+  },
+  "task_sha256": "792019e22bd456495d2906d05e23d2b56f77ed5ced75749512260eb0f05e4ca8",
+  "latest_provider_event": {
+    "v": 2,
+    "seq": 11,
+    "event": "provider.turn_completed",
+    "timestamp": "2026-11-01T11:18:06.768+00:00",
+    "execution_id": "0001-ack--attempt-01",
+    "stage_id": "ack",
+    "summary": "completed",
+    "provider": "claude",
+    "session_id": "00000000-0000-4000-8000-0000000000b2",
+    "details": {},
+    "data": {}
+  },
+  "outputs": {
+    "ack": {
+      "path": "outputs/ack.md",
+      "source_execution_id": "0001-ack--attempt-01",
+      "published_by_execution_id": "0001-ack--attempt-01"
+    }
+  },
+  "latest_execution_id": "0001-ack--attempt-01",
+  "latest_execution_status": "completed",
+  "latest_stage_id": "ack",
+  "terminal_execution_id": "0001-ack--attempt-01"
+}

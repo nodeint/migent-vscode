@@ -1,0 +1,32 @@
+source_sha256: 7a1a53b5ce042fb0f764d2b1e31e63ae468d24a5e4540599e8ad00efc7950946
+workflow:
+  schema_version: 4
+  id: probe-target
+  concurrency: 1
+  constraints: []
+  stages:
+    - id: ack
+      depends_on: []
+      role: developer
+      instructions:
+        - Do not read the repository. Read the handoff note context, write one short sentence to ack.md and finish.
+      produces:
+        artifact: ack.md
+  outputs:
+    - name: ack
+      from_stage: ack
+      artifact: ack.md
+roles:
+  developer:
+    - Read the task, relevant code, and project instructions before making changes.
+    - Address the root cause with the smallest change that meets the task. Follow project conventions.
+    - Preserve unrelated work and behavior outside the requested scope.
+    - Follow any agreed architecture. Report blockers and seek a decision before changing it.
+    - Run relevant checks or tests and fix failures caused by your changes.
+    - Report what changed, the verification results, and anything not verified.
+targets:
+  ack:
+    provider: claude
+    model: sonnet
+    options:
+      effort: medium

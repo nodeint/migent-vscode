@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source_session_id": "00000000-0000-4000-8000-0000000000b1",
+  "next": [
+    {
+      "workflow": "probe-target",
+      "task": "Acknowledge the note.",
+      "artifacts": {
+        "context_note": {
+          "output": "note",
+          "path": "outputs/note.md"
+        }
+      },
+      "argv": [
+        "migent",
+        "session",
+        "run",
+        "--workflow",
+        "probe-target",
+        "--prior",
+        "00000000-0000-4000-8000-0000000000b1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+1B, 2A+C, 3 Either is fine; this is a fixture probe. Reply with a one-line acknowledgement and finish, no more questions.
