@@ -48,7 +48,7 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 
 ### Extension-host integration tests
 
-`pnpm test:integration` builds `src/integration/` with esbuild, downloads VS Code
+`pnpm test:integration` builds the extension and `src/integration/` with esbuild, downloads VS Code
 through `@vscode/test-electron`, and runs the suite against the minimum
 supported version (`engines.vscode`) and the latest stable. Files named
 `*.integration.test.ts` are excluded from Vitest. Each run copies
@@ -59,3 +59,11 @@ delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to
 `dist-test/probe-report-<version>.json`. On Linux, run under a display server
 (`xvfb-run -a pnpm test:integration`).
+
+After the watcher probe, the suite runs the host scenarios in
+`monitoring.integration.test.ts`. They activate the extension in the fixture
+workspace and write files from Node, as the Migent CLI would, then wait for the
+registry, store and catalog to follow: a project appearing and disappearing, a
+session whose marker arrives late, deleted and recreated folders, workflow and
+config edits, retained execution watchers, and `migent.refresh`. They are
+skipped in `--exclude` mode, where no events arrive.

@@ -2,9 +2,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { groupOf, isCounted, isRetentionExempt, summarize } from './attention';
+import { aggregateSessionsState, groupOf, isCounted, isRetentionExempt, summarize } from './attention';
 import { deriveDisplayState } from './displayState';
-import type { LockProbe, SessionSnapshot } from './model';
+import type { LockProbe, ScanOutcome, SessionSnapshot } from './model';
 import { readStatus } from './statusReader';
 import { capturedDir, syntheticDir } from './testHelpers';
 
@@ -95,5 +95,33 @@ describe('isRetentionExempt', () => {
     expect(isRetentionExempt(bare('failed'))).toBe(false);
     expect(isRetentionExempt(bare('stopped'))).toBe(false);
     expect(isRetentionExempt(bare('completed'))).toBe(false);
+  });
+});
+
+describe('aggregateSessionsState', () => {
+  const scan = (overrides: Partial<ScanOutcome>): ScanOutcome => ({
+    state: 'ok',
+    error: null,
+    discovered: [],
+    eligible: [],
+    pending: [],
+    ...overrides,
+  });
+
+  it('is loading until the first load finished, regardless of scans', () => {
+    expect(aggregateSessionsState([scan({ eligible: ['a'] })], false)).toBe('loading');
+  });
+
+  it('reports error over ready, ready over empty, and empty for no sessions or no projects', () => {
+    expect(aggregateSessionsState([scan({ state: 'unreadable', error: 'EACCES' }), scan({ eligible: ['a'] })], true)).toBe(
+      'error',
+    );
+    expect(aggregateSessionsState([scan({ state: 'empty' }), scan({ eligible: ['a'], discovered: ['a'] })], true)).toBe(
+      'ready',
+    );
+    expect(aggregateSessionsState([scan({ state: 'missing' }), scan({ discovered: ['p'], pending: ['p'] })], true)).toBe(
+      'empty',
+    );
+    expect(aggregateSessionsState([], true)).toBe('empty');
   });
 });

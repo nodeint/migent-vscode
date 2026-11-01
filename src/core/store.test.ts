@@ -393,3 +393,62 @@ describe('SessionStore scan outcome', () => {
     expect(s.scanOutcome.state).toBe('missing');
   });
 });
+
+describe('SessionStore single-directory updates', () => {
+  it('rescanDirectories lists new and removed directories without reading sessions', () => {
+    const s = store();
+    s.load();
+    const sessionEvents: SessionChangeEvent[] = [];
+    s.onDidChange((event) => sessionEvents.push(event));
+    const project: string[] = [];
+    s.onDidChangeProject((event) => project.push(event.kind));
+
+    mkdirSync(sessionDir('fresh'));
+    s.rescanDirectories();
+    expect(s.scanOutcome.pending).toEqual(['fresh']);
+    expect(project).toEqual(['scan']);
+
+    rmSync(sessionDir('completed'), { recursive: true, force: true });
+    s.rescanDirectories();
+    expect(s.scanOutcome.discovered).not.toContain('completed');
+    // Sessions are only touched through refreshSession / removeSession.
+    expect(sessionEvents).toEqual([]);
+    expect(s.snapshot('completed')).toBeDefined();
+
+    s.rescanDirectories();
+    expect(project).toEqual(['scan', 'scan']);
+  });
+
+  it('refreshSession moves a directory from pending to eligible in the scan outcome', () => {
+    const s = store();
+    mkdirSync(sessionDir('late'));
+    s.load();
+    expect(s.scanOutcome.pending).toEqual(['late']);
+    const project: string[] = [];
+    s.onDidChangeProject((event) => project.push(event.kind));
+
+    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nschema_version: 2\n');
+    s.refreshSession('late');
+    expect(s.scanOutcome.pending).toEqual([]);
+    expect(s.scanOutcome.eligible).toContain('late');
+    expect(project).toEqual(['scan']);
+  });
+
+  it('refreshSession keeps a markerless directory pending, and drops a deleted one from the scan', () => {
+    const s = store();
+    s.load();
+    mkdirSync(sessionDir('empty-dir'));
+    s.refreshSession('empty-dir');
+    expect(s.scanOutcome.pending).toEqual(['empty-dir']);
+    expect(s.snapshot('empty-dir')).toBeUndefined();
+
+    rmSync(sessionDir('empty-dir'), { recursive: true });
+    s.refreshSession('empty-dir');
+    expect(s.scanOutcome.discovered).not.toContain('empty-dir');
+
+    rmSync(sessionDir('blocked'), { recursive: true, force: true });
+    s.refreshSession('blocked');
+    expect(s.scanOutcome.eligible).not.toContain('blocked');
+    expect(s.snapshot('blocked')).toBeUndefined();
+  });
+});

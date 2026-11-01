@@ -174,7 +174,9 @@ export class SessionStore {
    * it stays hidden, silently, otherwise.
    */
   public refreshSession(sessionId: string): void {
-    if (!this.hasMarker(sessionId)) {
+    const hasMarker = this.hasMarker(sessionId);
+    this.syncScanEntry(sessionId, hasMarker);
+    if (!hasMarker) {
       this.removeSession(sessionId);
       return;
     }
@@ -201,12 +203,56 @@ export class SessionStore {
   }
 
   /**
+   * Re-list the sessions directory (names and marker presence only) without reading any
+   * session. For a directory created or deleted: cheaper than `load()`, which reads every
+   * session. Emits `scan` when the outcome changed; call `refreshSession` or `removeSession`
+   * for the affected id.
+   */
+  public rescanDirectories(): void {
+    this.#replaceScan(this.scanSessions());
+  }
+
+  /**
    * Change the effective limit (for "Show more") and rescan so hidden sessions that now
    * fit are retained. Same cost as `load()`.
    */
   public setLimit(limit: number): void {
     this.#limit = Math.max(1, Math.floor(limit));
     this.load();
+  }
+
+  #replaceScan(scan: ScanOutcome): void {
+    const isChanged = JSON.stringify(scan) !== JSON.stringify(this.#scan);
+    this.#scan = scan;
+    if (isChanged) this.#projectChanges.emit({ project: this.projectRoot, kind: 'scan' });
+  }
+
+  /** Keep the last scan's lists in step with a single-session refresh (pending to eligible, or gone). */
+  private syncScanEntry(sessionId: string, hasMarker: boolean): void {
+    if (this.#scan.state !== 'ok' && this.#scan.state !== 'empty') return;
+    const others = (list: string[]): string[] => list.filter((id) => id !== sessionId);
+    const discovered = others(this.#scan.discovered);
+    const eligible = others(this.#scan.eligible);
+    const pending = others(this.#scan.pending);
+    if (hasMarker || this.isDirectory(sessionDir(this.projectRoot, sessionId))) {
+      discovered.push(sessionId);
+      (hasMarker ? eligible : pending).push(sessionId);
+    }
+    this.#replaceScan({
+      state: discovered.length === 0 ? 'empty' : 'ok',
+      error: null,
+      discovered: discovered.sort(),
+      eligible: eligible.sort(),
+      pending: pending.sort(),
+    });
+  }
+
+  private isDirectory(absolute: string): boolean {
+    try {
+      return statSync(absolute).isDirectory();
+    } catch {
+      return false;
+    }
   }
 
   #finish(isProjectChanged: boolean, hidden: Set<string>): void {

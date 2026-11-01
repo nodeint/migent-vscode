@@ -117,6 +117,7 @@ are not cached by the store; their readers are called on demand.
 | Operation | Effect |
 | :--- | :--- |
 | `load()` | Scans the sessions directory; adds/refreshes snapshots of directories containing a manifest or status marker, removes unseen entries, then applies the limit. A missing or unreadable directory removes every cached snapshot; `scanOutcome` tells the two apart |
+| `rescanDirectories()` | Re-lists the sessions directory (names and marker presence) without reading any session; for a directory created or deleted. `refreshSession` keeps the scan lists in step for a single session, so a pending directory becomes eligible when its marker appears |
 | `scanOutcome` | Last scan: `missing`, `empty`, `unreadable` or `ok`, with `discovered` directories split into `eligible` (marker present) and `pending` (no marker yet). A change emits `scan` on `onDidChangeProject` |
 | `refreshSession(id)` | Builds a snapshot; adds it if absent or replaces it when the compared body changes |
 | `all()` / `snapshot(id)` | Returns current cached snapshots; does not refresh disk data |
@@ -156,6 +157,17 @@ earlier are not live handles to a replacement snapshot; read `snapshot(id)` agai
 after an `updated` event.
 
 Evidence: [store.test.ts](../src/core/store.test.ts).
+
+## When does the liveness timer run?
+
+[Liveness](../src/core/liveness.ts) is one timer for every project. `update()`
+starts a 10-second interval while any store has a Running session and clears it
+when none remain; with nothing Running there is no timer. Each tick calls
+`refreshSession` for the Running sessions only, so a hard-killed runner leaves
+Running once its lock goes stale (30 seconds plus one interval). Callers invoke
+`update()` after any session change.
+
+Evidence: [liveness.test.ts](../src/core/liveness.test.ts).
 
 ## How does incremental event reading work?
 

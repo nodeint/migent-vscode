@@ -1,4 +1,4 @@
-import type { SessionSnapshot } from './model';
+import type { ScanOutcome, SessionSnapshot } from './model';
 
 export type SessionGroup = 'running' | 'attention' | 'recent';
 
@@ -43,6 +43,15 @@ export function isCounted(snapshot: SessionSnapshot): boolean {
 export function isRetentionExempt(snapshot: SessionSnapshot): boolean {
   const { state } = snapshot.displayState;
   return state === 'running' || state === 'question' || state === 'blocked' || pendingQuestionCount(snapshot) > 0;
+}
+
+/** Aggregate for welcome content across projects: `loading` until the first load finished. */
+export type SessionsState = 'loading' | 'empty' | 'error' | 'ready';
+
+export function aggregateSessionsState(scans: readonly ScanOutcome[], isLoaded: boolean): SessionsState {
+  if (!isLoaded) return 'loading';
+  if (scans.some((scan) => scan.state === 'unreadable')) return 'error';
+  return scans.some((scan) => scan.eligible.length > 0) ? 'ready' : 'empty';
 }
 
 export interface AttentionSummary {

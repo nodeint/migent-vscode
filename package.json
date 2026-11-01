@@ -30,7 +30,19 @@
         "title": "Refresh",
         "category": "Migent"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Migent",
+      "properties": {
+        "migent.sessions.limit": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "scope": "resource",
+          "description": "Show this many of the most recent sessions. Running sessions and sessions that need attention are always shown."
+        }
+      }
+    }
   },
   "scripts": {
     "setup:git": "node scripts/setup-git.mjs",

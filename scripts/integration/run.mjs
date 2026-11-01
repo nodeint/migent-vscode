@@ -24,12 +24,15 @@ const versionsArg = process.argv.indexOf('--versions');
 const versions =
   versionsArg === -1 ? [minimum, 'stable'] : process.argv[versionsArg + 1].split(',').filter(Boolean);
 
-const build = spawnSync(process.execPath, [join(root, 'esbuild.mjs'), '--integration'], {
-  cwd: root,
-  stdio: 'inherit',
-});
-if (build.status !== 0) {
-  process.exit(build.status ?? 1);
+// Build the extension itself (dist/extension.js) and the test bundle, so the suite never runs a stale extension.
+for (const flags of [[], ['--integration']]) {
+  const build = spawnSync(process.execPath, [join(root, 'esbuild.mjs'), ...flags], {
+    cwd: root,
+    stdio: 'inherit',
+  });
+  if (build.status !== 0) {
+    process.exit(build.status ?? 1);
+  }
 }
 
 // --exclude: probe with the user-level exclude that silences VS Code watchers (known limitation, not required to pass).

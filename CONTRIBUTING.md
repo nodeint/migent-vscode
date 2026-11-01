@@ -32,6 +32,7 @@ implementation so they can be resolved or explicitly accepted.
 ## Project layout
 
 - `src/extension.ts`: extension activation and command registration.
+- `src/vscode/`: the VS Code layer (project registry, watchers, context keys); verified by the integration tests.
 - `src/core/`: session and workflow data handling, with colocated Vitest tests.
 - `src/core/fixtures/`: sample session and workflow data used by tests.
 - `package.json`: extension identity, version, VS Code contributions, and scripts.

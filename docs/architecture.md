@@ -5,19 +5,29 @@ For file-reader and state behavior, see [Core behavior](core.md).
 
 ## Current runtime
 
-[extension.ts](../src/extension.ts) registers
-`migent.refresh` with an empty handler. The core readers and store exist and are
-tested independently; activation does not instantiate them.
+[extension.ts](../src/extension.ts) builds a `ProjectRegistry`, the context keys and
+the liveness timer, and registers `migent.refresh`. It returns a small API
+(`registry`, `ready`) that integration tests use. Discovery and the first load run
+after `activate()` returns. No view, status bar or file command exists yet.
 
-Core currently reads session files and workflow summaries directly from disk.
-Its implemented composition is:
+Data flows watcher, then store, then consumer; consumers never read disk:
 
 ```text
-caller -> SessionStore -> manifest/status/lock readers -> display state
-                      -> execution reader (explicit lazy load)
-                      -> event tail (explicit incremental read)
-caller -> workflow reader -> workflow summaries
+disk --FileSystemWatcher--> ProjectWatcher --> SessionStore / ProjectCatalog (core)
+                                   |                   | change events
+                                   v                   v
+                             `files` changes     ProjectRegistry --> MigentChange stream
 ```
+
+The registry owns one `ProjectContext` per workspace folder that has a `.migent/`
+directory (store, catalog, watcher) and an anchor watcher per `file` folder, so
+creating or deleting `.migent/` promotes or demotes the folder without a reload.
+Each `ProjectWatcher` mirrors core's desired watcher set (non-recursive watchers,
+one per folder), classifies and coalesces events, and calls the store, the catalog
+or the `files` callback. Consumers keep detail folders watched with
+`retain(target)` and release them by disposing the handle. Watcher creation goes
+through [watchBackend.ts](../src/vscode/watchBackend.ts), the one seam a
+different backend would replace.
 
 The store holds an in-memory projection; persisted Migent files remain the source
 of truth. Core imports no `vscode` API and does not modify session files.
@@ -27,6 +37,10 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Responsibility | Implementation | Boundary |
 | :--- | :--- | :--- |
 | Activation and command registration | [extension.ts](../src/extension.ts) | VS Code lifecycle and wiring |
+| Project discovery and change stream | [projects.ts](../src/vscode/projects.ts), [changes.ts](../src/vscode/changes.ts) | One `ProjectContext` per project; re-emits store, catalog and watcher changes as `MigentChange` |
+| Watcher ownership | [watcher.ts](../src/vscode/watcher.ts), [watchBackend.ts](../src/vscode/watchBackend.ts) | Creates, diffs and disposes `FileSystemWatcher`s from core's plan; routes events; reads no detail data |
+| Window context keys | [contextKeys.ts](../src/vscode/contextKeys.ts) | `migent.hasProjects`, `migent.sessionsState` |
+| Liveness timer | [liveness.ts](../src/core/liveness.ts) | One 10 s timer, alive only while a session is Running; no `vscode` import |
 | Session/workflow locations | [paths.ts](../src/core/paths.ts) | Shared path construction and filenames |
 | Shared parsed types and supported versions | [model.ts](../src/core/model.ts) | Core data shapes, not the complete upstream schema |
 | Manifest and status reads | [manifest.ts](../src/core/manifest.ts), [statusReader.ts](../src/core/statusReader.ts) | Parse files into nullable fields and explicit read outcomes |
