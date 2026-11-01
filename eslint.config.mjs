@@ -28,6 +28,8 @@ const BOOLEAN_NAME_OPTIONS = {
 const IGNORE_PATTERNS = [
   '**/node_modules/**',
   '**/dist/**',
+  '**/dist-test/**',
+  '**/.vscode-test/**',
   '**/.git/**',
   '**/.tmp/**',
   '**/fixtures/**',
@@ -252,10 +254,30 @@ const testFilesConfig = {
   },
 };
 
+// Layering: core and cli must stay free of the VS Code API (plans/02-monitoring.md, AC17).
+const noVscodeConfig = {
+  files: ['src/core/**/*.ts', 'src/cli/**/*.ts'],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: 'vscode',
+            message: 'src/core and src/cli must not import the VS Code API; keep it in src/vscode.',
+          },
+        ],
+        patterns: [{ group: ['vscode/*'], message: 'src/core and src/cli must not import the VS Code API.' }],
+      },
+    ],
+  },
+};
+
 export default defineConfig(
   { ignores: IGNORE_PATTERNS },
   baseConfig,
   typeAwareConfig,
   sizeConfig,
   testFilesConfig,
+  noVscodeConfig,
 );

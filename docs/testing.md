@@ -33,5 +33,17 @@ from a correct result.
 Core tests use fixtures and temporary directories without launching VS Code.
 
 For extension commands, activation, or UI changes, also verify the behavior in
-VS Code and describe the manual steps in the PR. Automated extension-host
-integration tests are not currently configured.
+VS Code and describe the manual steps in the PR.
+
+### Extension-host integration tests
+
+`pnpm test:integration` builds `src/integration/` with esbuild, downloads VS Code
+through `@vscode/test-electron`, and runs the suite against the minimum
+supported version (`engines.vscode`) and the latest stable. Files named
+`*.integration.test.ts` are excluded from Vitest. Each run copies
+`src/integration/fixtures/workspace/` to a temporary folder; it sets
+`files.watcherExclude` for `**/.migent/**` and ignores `.migent` in
+`.gitignore`. Pass `--versions a,b` to choose versions and `--control` to run
+without the exclude (harness sanity check). Reports are written to
+`dist-test/probe-report-<version>.json`. On Linux, run under a display server
+(`xvfb-run -a pnpm test:integration`).

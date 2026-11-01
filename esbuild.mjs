@@ -1,13 +1,25 @@
 import { build } from "esbuild";
 
-await build({
-  entryPoints: ["src/extension.ts"],
-  outfile: "dist/extension.js",
+const common = {
   bundle: true,
   platform: "node",
   format: "cjs",
   target: "node20",
   external: ["vscode"],
   sourcemap: true,
-  minify: process.argv.includes("--production"),
-});
+};
+
+if (process.argv.includes("--integration")) {
+  await build({
+    ...common,
+    entryPoints: ["src/integration/index.ts"],
+    outfile: "dist-test/integration/index.js",
+  });
+} else {
+  await build({
+    ...common,
+    entryPoints: ["src/extension.ts"],
+    outfile: "dist/extension.js",
+    minify: process.argv.includes("--production"),
+  });
+}
