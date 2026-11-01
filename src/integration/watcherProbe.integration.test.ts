@@ -401,10 +401,10 @@ const cases: ProbeCase[] = [
   },
 ];
 
-const isControl = (): boolean => process.env.MIGENT_IT_CONTROL === '1';
+const isExclude = (): boolean => process.env.MIGENT_IT_EXCLUDE === '1';
 
 function assertProbeEnvironment(root: string): void {
-  if (isControl()) {
+  if (!isExclude()) {
     return;
   }
   const exclude = vscode.workspace.getConfiguration('files').get<Record<string, boolean>>('watcherExclude') ?? {};
@@ -425,7 +425,7 @@ function report(results: CaseResult[]): void {
   console.log(`\nWatcher probe, VS Code ${version}, platform ${process.platform}\n${lines.join('\n')}`);
   const outDir = path.resolve(__dirname, '..');
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, `probe-report-${version}${isControl() ? '-control' : ''}.json`), JSON.stringify(results, null, 2));
+  fs.writeFileSync(path.join(outDir, `probe-report-${version}${isExclude() ? '-exclude' : ''}.json`), JSON.stringify(results, null, 2));
 }
 
 /** Run every probe case on every backend; returns the number of failed `vscode`-backend cases. */
@@ -460,5 +460,6 @@ export async function runWatcherProbe(): Promise<number> {
   }
   await resetMigent(root);
   report(results);
-  return results.filter((result) => result.backend === 'vscode' && !result.ok).length;
+  // With the exclude, VS Code delivers no events (known limitation): report only, never fail the suite.
+  return isExclude() ? 0 : results.filter((result) => result.backend === 'vscode' && !result.ok).length;
 }

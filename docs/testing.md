@@ -42,8 +42,9 @@ through `@vscode/test-electron`, and runs the suite against the minimum
 supported version (`engines.vscode`) and the latest stable. Files named
 `*.integration.test.ts` are excluded from Vitest. Each run copies
 `src/integration/fixtures/workspace/` to a temporary folder; it sets
-`files.watcherExclude` for `**/.migent/**` and ignores `.migent` in
-`.gitignore`. Pass `--versions a,b` to choose versions and `--control` to run
-without the exclude (harness sanity check). Reports are written to
+`.gitignore` ignoring `.migent`. Pass `--versions a,b` to choose versions and
+`--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
+delivers no watcher events for `.migent`; this is a known limitation that the
+user controls, so that mode only reports and never fails. Reports are written to
 `dist-test/probe-report-<version>.json`. On Linux, run under a display server
 (`xvfb-run -a pnpm test:integration`).

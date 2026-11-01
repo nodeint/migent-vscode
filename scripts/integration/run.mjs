@@ -3,7 +3,8 @@
  *
  * Usage: node scripts/integration/run.mjs [--versions 1.90.0,stable]
  * Default versions: the minimum supported VS Code (engines.vscode) and the latest stable.
- * Add --control to run without files.watcherExclude (harness sanity check).
+ * Add --exclude to run with files.watcherExclude for .migent (informational: VS Code delivers no watcher
+ * events for excluded paths, a known limitation; see docs/testing.md).
  * Every version runs even if an earlier one fails; the exit code is non-zero if any failed.
  */
 import { spawnSync } from 'node:child_process';
@@ -31,14 +32,17 @@ if (build.status !== 0) {
   process.exit(build.status ?? 1);
 }
 
-// --control: same probe without files.watcherExclude, to tell harness defects from exclude-related failures.
-const isControl = process.argv.includes('--control');
+// --exclude: probe with the user-level exclude that silences VS Code watchers (known limitation, not required to pass).
+const isExclude = process.argv.includes('--exclude');
 
 let failed = 0;
 for (const version of versions) {
   const workspace = copyFixtureWorkspace(join(root, 'src', 'integration', 'fixtures', 'workspace'));
-  if (isControl) {
-    writeFileSync(join(workspace, '.vscode', 'settings.json'), '{}\n');
+  if (isExclude) {
+    writeFileSync(
+      join(workspace, '.vscode', 'settings.json'),
+      JSON.stringify({ 'files.watcherExclude': { '**/.migent/**': true } }, null, 2) + '\n',
+    );
   }
   console.log(`\n=== VS Code ${version} (workspace ${workspace}) ===`);
   try {
@@ -47,7 +51,7 @@ for (const version of versions) {
       extensionDevelopmentPath: root,
       extensionTestsPath: join(root, 'dist-test', 'integration', 'index.js'),
       launchArgs: [workspace, '--profile-temp', '--disable-workspace-trust'],
-      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, ...(isControl ? { MIGENT_IT_CONTROL: '1' } : {}) },
+      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
     });
   } catch (error) {
     failed += 1;
