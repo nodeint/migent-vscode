@@ -8,7 +8,8 @@ For file-reader and state behavior, see [Core behavior](core.md).
 [extension.ts](../src/extension.ts) builds a `ProjectRegistry`, the context keys and
 the liveness timer, and registers `migent.refresh`. It returns a small API
 (`registry`, `ready`) that integration tests use. Discovery and the first load run
-after `activate()` returns. No view, status bar or file command exists yet.
+after `activate()` returns. The Sessions view and its read-only commands exist; the Workflows and
+Project views, status bar, CLI capability, timeline and Results page do not yet.
 
 Data flows watcher, then store, then consumer; consumers never read disk:
 
@@ -39,6 +40,9 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Activation and command registration | [extension.ts](../src/extension.ts) | VS Code lifecycle and wiring |
 | Project discovery and change stream | [projects.ts](../src/vscode/projects.ts), [changes.ts](../src/vscode/changes.ts) | One `ProjectContext` per project; re-emits store, catalog and watcher changes as `MigentChange` |
 | Watcher ownership | [watcher.ts](../src/vscode/watcher.ts), [watchBackend.ts](../src/vscode/watchBackend.ts) | Creates, diffs and disposes `FileSystemWatcher`s from core's plan; routes events; reads no detail data |
+| Sessions view | [sessionsTree.ts](../src/vscode/views/sessionsTree.ts), [sessionChildren.ts](../src/vscode/views/sessionChildren.ts), [nodes.ts](../src/vscode/views/nodes.ts) | Identity-only nodes, `TreeItem`s built from the live store, children read on expand with core readers, narrow batched refreshes, badge, watch targets retained while a node is expanded; no file-system calls of its own |
+| Row text and ids | [sessionPresentation.ts](../src/core/sessionPresentation.ts) | Pure label, description, tooltip, `contextValue`, icon and node-id rules |
+| Session commands | [sessionCommands.ts](../src/vscode/commands/sessionCommands.ts), [pick.ts](../src/vscode/pick.ts) | Open files, copy id, reveal, Show more; a Command Palette call picks its target |
 | Window context keys | [contextKeys.ts](../src/vscode/contextKeys.ts) | `migent.hasProjects`, `migent.sessionsState` |
 | Liveness timer | [liveness.ts](../src/core/liveness.ts) | One 10 s timer, alive only while a session is Running; no `vscode` import |
 | Session/workflow locations | [paths.ts](../src/core/paths.ts) | Shared path construction and filenames |

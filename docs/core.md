@@ -158,6 +158,28 @@ after an `updated` event.
 
 Evidence: [store.test.ts](../src/core/store.test.ts).
 
+## How are session rows presented?
+
+[sessionPresentation.ts](../src/core/sessionPresentation.ts) holds the plain-text rules for the
+Sessions view, so they are tested without VS Code:
+
+- Label: the manifest title, else the status title, workflow id or short id, cut to 60
+  characters (the tooltip keeps the full title).
+- Description: `workflow · stage · time`, plus `N questions` when questions are pending. Time is the
+  elapsed time since start for a Running session and the time since the last update for the others.
+  Unknown shows its reason instead (for example `Unsupported schema version 99`).
+- Icon: the display state's icon; Unknown uses `question` for an unsupported schema or an unrecognized
+  status and `bracket-error` for a missing, unreadable or invalid file.
+- Tooltip: state, reason, workflow, stage and attempt, blockers, pending questions, foreign lock, last
+  update and the small provider-event fields. Missing values read "unavailable". Retry times for a
+  quota wait are not shown: no captured sample records them.
+- `contextValue`: `session.<state>` then `;questions`, `;foreign`, `;outputs`, `;reason-<reason>`.
+- Node ids never include state, and two projects with the same session id get distinct ids.
+- A project shows "No sessions yet" for a missing, empty or marker-less sessions folder, and an error row
+  for an unreadable one.
+
+Evidence: [sessionPresentation.test.ts](../src/core/sessionPresentation.test.ts).
+
 ## When does the liveness timer run?
 
 [Liveness](../src/core/liveness.ts) is one timer for every project. `update()`
@@ -165,7 +187,7 @@ starts a 10-second interval while any store has a Running session and clears it
 when none remain; with nothing Running there is no timer. Each tick calls
 `refreshSession` for the Running sessions only, so a hard-killed runner leaves
 Running once its lock goes stale (30 seconds plus one interval). Callers invoke
-`update()` after any session change.
+`update()` after any session change; `onDidTick` lets a view refresh time-dependent text.
 
 Evidence: [liveness.test.ts](../src/core/liveness.test.ts).
 

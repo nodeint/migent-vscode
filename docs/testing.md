@@ -65,5 +65,8 @@ After the watcher probe, the suite runs the host scenarios in
 workspace and write files from Node, as the Migent CLI would, then wait for the
 registry, store and catalog to follow: a project appearing and disappearing, a
 session whose marker arrives late, deleted and recreated folders, workflow and
-config edits, retained execution watchers, and `migent.refresh`. They are
+config edits, retained execution watchers, and `migent.refresh`. The scenarios in
+`sessionsTree.integration.test.ts` read the Sessions provider as VS Code would
+(groups, icons, Unknown reasons, badge, questions and history, execution files,
+selection and active editor staying put, Show more, commands). They are
 skipped in `--exclude` mode, where no events arrive.

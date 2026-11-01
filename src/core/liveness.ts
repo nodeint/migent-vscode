@@ -40,6 +40,7 @@ export interface LivenessOptions {
 export class Liveness {
   readonly #options: LivenessOptions;
   readonly #timers: IntervalTimers;
+  readonly #tickListeners = new Set<() => void>();
   #timerId: number | null = null;
 
   constructor(options: LivenessOptions) {
@@ -49,6 +50,14 @@ export class Liveness {
 
   public get isActive(): boolean {
     return this.#timerId !== null;
+  }
+
+  /** Called after every tick, so views can refresh time-dependent text. Returns an unsubscribe function. */
+  public onDidTick(listener: () => void): () => void {
+    this.#tickListeners.add(listener);
+    return () => {
+      this.#tickListeners.delete(listener);
+    };
   }
 
   /** Start the timer when a session is Running and none is active; stop it when none remain. */
@@ -69,9 +78,11 @@ export class Liveness {
       for (const sessionId of this.runningIds(store)) store.refreshSession(sessionId);
     }
     this.update();
+    for (const listener of this.#tickListeners) listener();
   }
 
   public dispose(): void {
+    this.#tickListeners.clear();
     this.stop();
   }
 

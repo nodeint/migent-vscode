@@ -105,4 +105,18 @@ describe('Liveness', () => {
     expect(timers.active()).toBe(0);
     expect(liveness.isActive).toBe(false);
   });
+
+  it('notifies tick listeners after each tick until they unsubscribe', () => {
+    const { store } = project();
+    const liveness = new Liveness({ stores: () => [store], timers: fakeIntervals() });
+    let ticks = 0;
+    const unsubscribe = liveness.onDidTick(() => {
+      ticks += 1;
+    });
+    liveness.tick();
+    liveness.tick();
+    unsubscribe();
+    liveness.tick();
+    expect(ticks).toBe(2);
+  });
 });

@@ -28,6 +28,47 @@
       {
         "command": "migent.refresh",
         "title": "Refresh",
+        "category": "Migent",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "migent.session.openTask",
+        "title": "Open Task",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.openPrompt",
+        "title": "Open Prompt",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.openResponse",
+        "title": "Open Response",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.openOutput",
+        "title": "Open Output",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.openQuestions",
+        "title": "Open Questions File",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.copyId",
+        "title": "Copy Session ID",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.revealInExplorer",
+        "title": "Reveal Session in File Explorer",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.sessions.showMore",
+        "title": "Show More Sessions",
         "category": "Migent"
       }
     ],
@@ -42,6 +83,82 @@
           "description": "Show this many of the most recent sessions. Running sessions and sessions that need attention are always shown."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "migent",
+          "title": "Migent",
+          "icon": "media/migent.svg"
+        }
+      ]
+    },
+    "views": {
+      "migent": [
+        {
+          "id": "migent.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "migent.sessions",
+        "contents": "No Migent project was found in the open folders.\nCreate one with the Migent CLI and it appears here.",
+        "when": "!migent.hasProjects"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.sessions",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "migent.session.openTask",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@1"
+        },
+        {
+          "command": "migent.session.openQuestions",
+          "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "migent.session.openOutput",
+          "when": "view == migent.sessions && viewItem =~ /^session..*;outputs(;|$)/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "migent.session.openPrompt",
+          "when": "view == migent.sessions && viewItem =~ /^execution./",
+          "group": "1_open@1"
+        },
+        {
+          "command": "migent.session.openResponse",
+          "when": "view == migent.sessions && viewItem =~ /^execution./",
+          "group": "1_open@2"
+        },
+        {
+          "command": "migent.session.copyId",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "2_session@1"
+        },
+        {
+          "command": "migent.session.revealInExplorer",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "2_session@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "migent.sessions.showMore",
+          "when": "false"
+        }
+      ]
     }
   },
   "scripts": {

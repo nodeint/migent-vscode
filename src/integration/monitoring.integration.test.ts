@@ -6,72 +6,25 @@
  */
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import type { MigentApi } from '../extension';
-import type { MigentChange } from '../vscode/changes';
-import type { ProjectContext } from '../vscode/projects';
-
-const WAIT_MS = 6000;
-const POLL_MS = 25;
-const SETTLE_MS = 400;
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(label: string, predicate: () => boolean, timeoutMs = WAIT_MS): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await sleep(POLL_MS);
-  }
-  assert.ok(predicate(), `timed out waiting for: ${label}`);
-}
-
-interface Scenario {
-  name: string;
-  run: (env: Env) => Promise<void>;
-}
-
-interface Env {
-  root: string;
-  api: MigentApi;
-  changes: MigentChange[];
-  project: () => ProjectContext | undefined;
-}
-
-const migentPath = (root: string, ...parts: string[]): string => path.join(root, '.migent', ...parts);
-
-function write(file: string, content: string): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, content);
-}
-
-/** Replace a file the way migent does: write a temp file in the same folder, then rename it over. */
-function writeAtomic(file: string, content: string): void {
-  const temp = `${file}.tmp-${Date.now()}`;
-  fs.writeFileSync(temp, content);
-  fs.renameSync(temp, file);
-}
-
-function removeMigent(root: string): void {
-  fs.rmSync(path.join(root, '.migent'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-}
-
-function freshLock(): string {
-  return JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
-}
-
-async function createProject(env: Env): Promise<ProjectContext> {
-  write(migentPath(env.root, 'config.yaml'), 'schema_version: 1\n');
-  await waitFor('project appears', () => env.project() !== undefined);
-  return env.project() as ProjectContext;
-}
-
-const manifest = (id: string): string => `session_id: ${id}\nschema_version: 2\ncreated_at: 2026-11-01T10:00:00.000+00:00\n`;
-const status = (value: string): string => JSON.stringify({ session_id: 's', status: value, updated_at: new Date().toISOString() });
+import {
+  createProject,
+  freshLock,
+  manifest,
+  migentPath,
+  removeMigent,
+  runScenarios,
+  type Scenario,
+  SETTLE_MS,
+  sleep,
+  status,
+  waitFor,
+  write,
+  writeAtomic,
+} from './harness';
 
 const scenarios: Scenario[] = [
   {
@@ -131,7 +84,8 @@ const scenarios: Scenario[] = [
 
       fs.rmSync(migentPath(env.root, 'sessions', 's2'), { recursive: true, force: true });
       await waitFor('s2 removed', () => project.store.snapshot('s2') === undefined);
-      assert.ok(!project.store.scanOutcome.discovered.includes('s2'));
+      // The files vanish before the directory does, so the directory is dropped from the scan a debounce later.
+      await waitFor('s2 directory dropped from the scan', () => !project.store.scanOutcome.discovered.includes('s2'));
     },
   },
   {
@@ -236,39 +190,6 @@ const scenarios: Scenario[] = [
 ];
 
 /** Run the S4 scenarios; returns the number of failed ones. */
-export async function runMonitoringScenarios(): Promise<number> {
-  const root = process.env.MIGENT_IT_WORKSPACE;
-  if (!root) throw new Error('MIGENT_IT_WORKSPACE is not set; run through scripts/integration/run.mjs');
-  const extension = vscode.extensions.getExtension<MigentApi>('nodeint.migent-vscode');
-  if (!extension) throw new Error('extension nodeint.migent-vscode is not loaded');
-  const api = await extension.activate();
-  await api.ready;
-
-  const changes: MigentChange[] = [];
-  const subscription = api.registry.onDidChange((change) => changes.push(change));
-  const wanted = vscode.Uri.file(root).fsPath.toLowerCase();
-  const env: Env = {
-    root,
-    api,
-    changes,
-    project: () => api.registry.projects().find((candidate) => candidate.folder.uri.fsPath.toLowerCase() === wanted),
-  };
-
-  let failed = 0;
-  for (const scenario of scenarios) {
-    removeMigent(root);
-    await waitFor('clean start', () => env.project() === undefined);
-    await sleep(SETTLE_MS);
-    changes.length = 0;
-    try {
-      await scenario.run(env);
-      console.log(`PASS ${scenario.name}`);
-    } catch (error) {
-      failed += 1;
-      console.log(`FAIL ${scenario.name}\n     ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  removeMigent(root);
-  subscription.dispose();
-  return failed;
+export function runMonitoringScenarios(): Promise<number> {
+  return runScenarios(scenarios);
 }
