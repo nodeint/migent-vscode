@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 4
 id: implement
 stages:
   - id: implement
@@ -19,9 +19,9 @@ stages:
       - Choose approved only when the requested change is complete and supported by verification evidence.
       - Otherwise choose revise and list all required fixes with file locations and their impact.
     decision:
-      values:
-        - approved
-        - revise
-      routes:
-        approved: complete
-        revise: implement
+      - approved:
+          when: Choose approved according to the stage instructions.
+          navigate: complete
+      - revise:
+          when: Choose revise according to the stage instructions.
+          navigate: implement

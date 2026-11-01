@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 4
 id: plan
 constraints:
   - Plan only. Do not modify source code.
@@ -24,12 +24,12 @@ stages:
       - Choose revise only for a factual error, a missing risk, a missing section, or unnecessary scope. Do not revise for style.
       - When choosing revise, list each required change so the developer can act on it.
     decision:
-      values:
-        - approved
-        - revise
-      routes:
-        approved: complete
-        revise: plan
+      - approved:
+          when: Choose approved according to the stage instructions.
+          navigate: complete
+      - revise:
+          when: Choose revise according to the stage instructions.
+          navigate: plan
 outputs:
   - name: plan
     from_stage: plan
