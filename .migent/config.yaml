@@ -4,8 +4,7 @@ roles:
     default_model:
       provider: claude
       model: opus
-      options:
-        effort: high
+      effort: medium
     instructions:
       - "Read the task, relevant code, and project instructions before planning."
       - "Write only planning artifacts; do not modify project files or implement code."
@@ -15,8 +14,7 @@ roles:
     default_model:
       provider: codex
       model: gpt-6.1-sol
-      options:
-        model_reasoning_effort: medium
+      effort: medium
     instructions:
       - "Read the task and inspect the relevant code, diff, or planning artifact."
       - "Check correctness, missing requirements, unnecessary scope, and verification evidence."
@@ -27,6 +25,7 @@ roles:
     default_model:
       provider: claude
       model: sonnet
+      effort: medium
     instructions:
       - "Read the relevant code and project instructions before making changes."
       - "Implement only the requested scope and follow the project conventions."
