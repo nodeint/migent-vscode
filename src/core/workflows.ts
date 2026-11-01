@@ -3,60 +3,121 @@ import path from 'node:path';
 
 import { parse } from 'yaml';
 
+import type { DirectoryState } from './model';
 import { workflowsDir } from './paths';
 import { isRecord } from './record';
 
-export interface WorkflowSummary {
+export type WorkflowEntryState = 'ok' | 'invalid' | 'unreadable';
+
+export interface WorkflowEntry {
   /** Workflow id from the file body, else the file name without extension. */
   id: string;
   file: string;
+  state: WorkflowEntryState;
+  /** Parse or read error text; null when `state` is `ok`. */
+  error: string | null;
   title: string | null;
   /** Stage ids in declaration order, for display. */
   stages: string[];
+  /** True when another `ok` entry declares the same id. Set by `markDuplicates`. */
+  duplicate: boolean;
+}
+
+export interface WorkflowScan {
+  state: DirectoryState;
+  error: string | null;
+  /** Ordered by id, then file name. */
+  entries: WorkflowEntry[];
 }
 
 function stageIds(parsed: unknown): string[] {
   if (!isRecord(parsed)) return [];
-  const {stages} = (parsed);
+  const { stages } = parsed;
   if (!Array.isArray(stages)) return [];
   const ids: string[] = [];
   for (const stage of stages) {
     if (!isRecord(stage)) continue;
-    const {id} = (stage);
+    const { id } = stage;
     if (typeof id === 'string' && id !== '') ids.push(id);
   }
   return ids;
 }
 
-function isWorkflowFile(name: string): boolean {
+export function isWorkflowFile(name: string): boolean {
   return name.endsWith('.yaml') || name.endsWith('.yml');
 }
 
-/** List `.migent/workflows/*.yaml`. A file that fails to parse is skipped, not guessed. */
-export function listWorkflows(projectRoot: string): WorkflowSummary[] {
-  let entries;
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown error';
+}
+
+function fallbackId(file: string): string {
+  return path.basename(file, path.extname(file));
+}
+
+function failed(file: string, state: 'invalid' | 'unreadable', error: unknown): WorkflowEntry {
+  return { id: fallbackId(file), file, state, error: errorText(error), title: null, stages: [], duplicate: false };
+}
+
+/**
+ * Read one workflow file by name. Null when the file no longer exists, so a caller
+ * reacting to a delete event can drop the entry. Unreadable or unparsable files
+ * stay listed with their error: nothing is skipped silently.
+ */
+export function readWorkflowFile(projectRoot: string, file: string): WorkflowEntry | null {
+  let text: string;
   try {
-    entries = readdirSync(workflowsDir(projectRoot), { withFileTypes: true });
-  } catch {
-    return [];
+    text = readFileSync(path.join(workflowsDir(projectRoot), file), 'utf8');
+  } catch (error) {
+    const code = isRecord(error) ? error.code : undefined;
+    if (code === 'ENOENT') return null;
+    return failed(file, 'unreadable', error);
   }
-  const rows: WorkflowSummary[] = [];
+  let parsed: unknown;
+  try {
+    parsed = parse(text);
+  } catch (error) {
+    return failed(file, 'invalid', error);
+  }
+  const body = isRecord(parsed) ? parsed : null;
+  return {
+    id: typeof body?.id === 'string' && body.id !== '' ? body.id : fallbackId(file),
+    file,
+    state: 'ok',
+    error: null,
+    title: typeof body?.title === 'string' && body.title !== '' ? body.title : null,
+    stages: stageIds(parsed),
+    duplicate: false,
+  };
+}
+
+/** Sort entries and flag every `ok` entry whose id is shared with another `ok` entry. */
+export function markDuplicates(entries: WorkflowEntry[]): WorkflowEntry[] {
+  const counts = new Map<string, number>();
   for (const entry of entries) {
-    if (!entry.isFile() || !isWorkflowFile(entry.name)) continue;
-    const file = path.join(workflowsDir(projectRoot), entry.name);
-    let parsed: unknown;
-    try {
-      parsed = parse(readFileSync(file, 'utf8'));
-    } catch {
-      continue;
-    }
-    const body = isRecord(parsed)
-      ? parsed
-      : null;
-    const id = typeof body?.id === 'string' && body.id !== '' ? body.id : path.basename(entry.name, path.extname(entry.name));
-    const title = typeof body?.title === 'string' && body.title !== '' ? body.title : null;
-    rows.push({ id, file: entry.name, title, stages: stageIds(parsed) });
+    if (entry.state === 'ok') counts.set(entry.id, (counts.get(entry.id) ?? 0) + 1);
   }
-  rows.sort((left, right) => left.id.localeCompare(right.id));
-  return rows;
+  return entries
+    .map((entry) => ({ ...entry, duplicate: entry.state === 'ok' && (counts.get(entry.id) ?? 0) > 1 }))
+    .sort((left, right) => left.id.localeCompare(right.id) || left.file.localeCompare(right.file));
+}
+
+/** Scan `.migent/workflows/*.{yaml,yml}`; missing, empty and unreadable are distinct outcomes. */
+export function scanWorkflows(projectRoot: string): WorkflowScan {
+  let names: string[];
+  try {
+    names = readdirSync(workflowsDir(projectRoot), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && isWorkflowFile(entry.name))
+      .map((entry) => entry.name);
+  } catch (error) {
+    const code = isRecord(error) && typeof error.code === 'string' ? error.code : 'unknown error';
+    const state = code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'unreadable';
+    return { state, error: state === 'unreadable' ? code : null, entries: [] };
+  }
+  const entries: WorkflowEntry[] = [];
+  for (const name of names) {
+    const entry = readWorkflowFile(projectRoot, name);
+    if (entry !== null) entries.push(entry);
+  }
+  return { state: entries.length === 0 ? 'empty' : 'ok', error: null, entries: markDuplicates(entries) };
 }

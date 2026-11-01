@@ -137,3 +137,40 @@ export function tailEvents(filePath: string, offset: number): TailRead {
     .map(parseLine);
   return { events, offset: offset + Buffer.byteLength(consumed, 'utf8') };
 }
+
+/**
+ * Incremental reader for one `events.jsonl`. Owns the byte offset and the `seq`
+ * watermark, so it is independent of any session snapshot. The caller decides when
+ * to `read()` and drops the instance when it no longer needs the events.
+ */
+export class EventTail {
+  readonly #filePath: string;
+  #offset = 0;
+  #lastSeq = 0;
+
+  constructor(filePath: string) {
+    this.#filePath = filePath;
+  }
+
+  /** Highest `seq` consumed so far; 0 before any numbered event. */
+  public get lastSeq(): number {
+    return this.#lastSeq;
+  }
+
+  /**
+   * Read events appended since the last call. Events with a numeric `seq` at or
+   * below the watermark are dropped; events without a `seq` are kept.
+   */
+  public read(): TailEvent[] {
+    const result = tailEvents(this.#filePath, this.#offset);
+    this.#offset = result.offset;
+    const watermark = this.#lastSeq;
+    const fresh = result.events.filter(
+      (event) => event.seq === null || watermark === 0 || event.seq > watermark,
+    );
+    for (const event of fresh) {
+      if (event.seq !== null && event.seq > this.#lastSeq) this.#lastSeq = event.seq;
+    }
+    return fresh;
+  }
+}

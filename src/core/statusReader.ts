@@ -10,7 +10,7 @@ export const STATUS_MAX_ATTEMPTS = 3;
 export type StatusRead =
   | { kind: 'ok'; status: SessionStatus }
   | { kind: 'missing' }
-  | { kind: 'error' };
+  | { kind: 'error'; reason: 'unreadable' | 'invalid' };
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
@@ -75,10 +75,10 @@ function attemptRead(statusPath: string): StatusRead {
   } catch (error) {
     const code = isRecord(error) ? error.code : undefined;
     if (code === 'ENOENT') return { kind: 'missing' };
-    return { kind: 'error' };
+    return { kind: 'error', reason: 'unreadable' };
   }
   const status = parseStatus(text);
-  return status === null ? { kind: 'error' } : { kind: 'ok', status };
+  return status === null ? { kind: 'error', reason: 'invalid' } : { kind: 'ok', status };
 }
 
 /**
@@ -87,7 +87,7 @@ function attemptRead(statusPath: string): StatusRead {
  * 3 attempts, then give up and let the caller mark the session Unknown.
  */
 export function readStatus(statusPath: string): StatusRead {
-  let last: StatusRead = { kind: 'error' };
+  let last: StatusRead = { kind: 'error', reason: 'unreadable' };
   for (let i = 0; i < STATUS_MAX_ATTEMPTS; i += 1) {
     if (i > 0) sleepSync(STATUS_RETRY_DELAY_MS);
     last = attemptRead(statusPath);

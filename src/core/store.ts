@@ -2,18 +2,16 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { deriveDisplayState } from './displayState';
-import { type TailEvent,tailEvents } from './eventTail';
-import { listExecutions } from './executions';
 import { probeLock } from './lockProbe';
 import { readManifest } from './manifest';
 import type {
-  ExecutionSnapshot,
+  ProjectChangeEvent,
+  ScanOutcome,
   SessionChangeEvent,
   SessionChangeKind,
   SessionSnapshot,
 } from './model';
 import {
-  eventsPath,
   lockPath,
   MANIFEST_FILENAME,
   manifestPath,
@@ -22,6 +20,7 @@ import {
   STATUS_FILENAME,
   statusPath,
 } from './paths';
+import { isRecord } from './record';
 import { readStatus } from './statusReader';
 
 export const DEFAULT_SESSION_LIMIT = 50;
@@ -62,8 +61,14 @@ function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
     a.statusError === b.statusError &&
     JSON.stringify(a.lock) === JSON.stringify(b.lock) &&
     a.displayState.state === b.displayState.state &&
+    a.displayState.unknownReason === b.displayState.unknownReason &&
     a.displayState.writable === b.displayState.writable
   );
+}
+
+function manifestState(manifest: SessionSnapshot['manifest']): 'ok' | 'invalid' | 'unsupported' {
+  if (manifest === null) return 'invalid';
+  return manifest.schemaSupported ? 'ok' : 'unsupported';
 }
 
 function createdAtOf(snapshot: SessionSnapshot): string | null {
@@ -80,15 +85,17 @@ function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
 /**
  * Holds one SessionSnapshot per session of one project, and emits change events so
  * views refresh only what changed. Initial load scans the sessions directory with
- * direct reads, faster than spawning the CLI. The execution list is read lazily;
+ * direct reads, faster than spawning the CLI. It holds snapshots only: executions,
+ * events and other per-session files are read by their own readers on demand.
  */
 export class SessionStore {
   public readonly projectRoot: string;
   public readonly limit: number;
 
   readonly #sessions = new Map<string, SessionSnapshot>();
-  readonly #offsets = new Map<string, number>();
   readonly #changes = new Emitter<SessionChangeEvent>();
+  readonly #projectChanges = new Emitter<ProjectChangeEvent>();
+  #scan: ScanOutcome = { state: 'missing', error: null, discovered: [], eligible: [], pending: [] };
 
   constructor(projectRoot: string, options: SessionStoreOptions = {}) {
     this.projectRoot = projectRoot;
@@ -98,6 +105,16 @@ export class SessionStore {
   /** Subscribe to changes. Returns an unsubscribe function. */
   public get onDidChange(): (listener: (event: SessionChangeEvent) => void) => () => void {
     return (listener) => this.#changes.subscribe(listener);
+  }
+
+  /** Subscribe to project-level changes (`scan` outcome changed). */
+  public get onDidChangeProject(): (listener: (event: ProjectChangeEvent) => void) => () => void {
+    return (listener) => this.#projectChanges.subscribe(listener);
+  }
+
+  /** Outcome of the last sessions directory scan; `missing` before the first `load()`. */
+  public get scanOutcome(): ScanOutcome {
+    return this.#scan;
   }
 
   /** All snapshots, newest first. */
@@ -111,8 +128,10 @@ export class SessionStore {
 
   /** Full scan of the sessions directory: direct reads, faster than spawning the CLI. */
   public load(): void {
+    const scan = this.scanSessions();
+    this.#setScan(scan);
     const seen = new Set<string>();
-    for (const sessionId of this.listSessionIds()) {
+    for (const sessionId of scan.eligible) {
       seen.add(sessionId);
       if (this.#sessions.has(sessionId)) {
         this.refreshSession(sessionId);
@@ -142,39 +161,13 @@ export class SessionStore {
   public removeSession(sessionId: string): void {
     if (!this.#sessions.has(sessionId)) return;
     this.#sessions.delete(sessionId);
-    this.#offsets.delete(sessionId);
     this.#emit(sessionId, 'removed');
   }
 
-  /** Read the execution list. Only when a node is expanded or the session is running. */
-  public loadExecutions(sessionId: string): ExecutionSnapshot[] {
-    const snapshot = this.#sessions.get(sessionId);
-    if (snapshot === undefined) return [];
-    const executions = listExecutions(sessionDir(this.projectRoot, sessionId));
-    const isChanged = JSON.stringify(snapshot.executions) !== JSON.stringify(executions);
-    snapshot.executions = executions;
-    if (isChanged) this.#emit(sessionId, 'executions');
-    return executions;
-  }
-
-  /**
-   * Tail events.jsonl from the stored byte offset. Only complete lines are
-   * consumed; `seq` de-duplicates against the snapshot's `lastEventSeq`.
-   */
-  public readNewEvents(sessionId: string): TailEvent[] {
-    const snapshot = this.#sessions.get(sessionId);
-    if (snapshot === undefined) return [];
-    const offset = this.#offsets.get(sessionId) ?? 0;
-    const read = tailEvents(eventsPath(this.projectRoot, sessionId), offset);
-    this.#offsets.set(sessionId, read.offset);
-    const fresh = read.events.filter(
-      (event) => event.seq === null || snapshot.lastEventSeq === 0 || event.seq > snapshot.lastEventSeq,
-    );
-    for (const event of fresh) {
-      if (event.seq !== null && event.seq > snapshot.lastEventSeq) snapshot.lastEventSeq = event.seq;
-    }
-    if (fresh.length > 0) this.#emit(sessionId, 'events');
-    return fresh;
+  #setScan(scan: ScanOutcome): void {
+    const isChanged = JSON.stringify(scan) !== JSON.stringify(this.#scan);
+    this.#scan = scan;
+    if (isChanged) this.#projectChanges.emit({ project: this.projectRoot, kind: 'scan' });
   }
 
   #setSession(sessionId: string, snapshot: SessionSnapshot, kind: SessionChangeKind): void {
@@ -194,33 +187,48 @@ export class SessionStore {
     }
   }
 
-  private listSessionIds(): string[] {
+  private scanSessions(): ScanOutcome {
     let entries;
     try {
       entries = readdirSync(sessionsDir(this.projectRoot), { withFileTypes: true });
-    } catch {
-      return [];
+    } catch (error) {
+      const code = isRecord(error) && typeof error.code === 'string' ? error.code : 'unknown error';
+      const state = code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'unreadable';
+      return {
+        state,
+        error: state === 'unreadable' ? code : null,
+        discovered: [],
+        eligible: [],
+        pending: [],
+      };
     }
-    const ids: string[] = [];
+    const discovered: string[] = [];
+    const eligible: string[] = [];
+    const pending: string[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      discovered.push(entry.name);
       const dir = sessionDir(this.projectRoot, entry.name);
-      const hasMarker = (() => {
+      const hasMarker = [MANIFEST_FILENAME, STATUS_FILENAME].some((marker) => {
         try {
-          statSync(path.join(dir, MANIFEST_FILENAME));
+          statSync(path.join(dir, marker));
           return true;
         } catch {
-          try {
-            statSync(path.join(dir, STATUS_FILENAME));
-            return true;
-          } catch {
-            return false;
-          }
+          return false;
         }
-      })();
-      if (hasMarker) ids.push(entry.name);
+      });
+      (hasMarker ? eligible : pending).push(entry.name);
     }
-    return ids;
+    discovered.sort();
+    eligible.sort();
+    pending.sort();
+    return {
+      state: discovered.length === 0 ? 'empty' : 'ok',
+      error: null,
+      discovered,
+      eligible,
+      pending,
+    };
   }
 
   private buildSnapshot(sessionId: string): SessionSnapshot {
@@ -230,8 +238,8 @@ export class SessionStore {
     const displayState = deriveDisplayState(
       {
         status: statusRead.kind === 'ok' ? statusRead.status : null,
-        statusError: statusRead.kind === 'error',
-        schemaSupported: manifest?.schemaSupported ?? false,
+        statusError: statusRead.kind === 'error' ? statusRead.reason : null,
+        manifest: manifestState(manifest),
       },
       lock,
     );
@@ -242,8 +250,6 @@ export class SessionStore {
       statusError: statusRead.kind === 'error',
       lock,
       displayState,
-      executions: [],
-      lastEventSeq: 0,
     };
   }
 }

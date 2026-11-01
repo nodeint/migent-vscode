@@ -32,6 +32,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Manifest and status reads | [manifest.ts](../src/core/manifest.ts), [statusReader.ts](../src/core/statusReader.ts) | Parse files into nullable fields and explicit read outcomes |
 | Lock observation and display derivation | [lockProbe.ts](../src/core/lockProbe.ts), [displayState.ts](../src/core/displayState.ts) | Separate process/file observation from pure state selection |
 | Execution and workflow summaries | [executions.ts](../src/core/executions.ts), [workflows.ts](../src/core/workflows.ts) | Read lightweight lists; do not execute workflows |
+| Project config and workflow catalog | [projectConfig.ts](../src/core/projectConfig.ts), [projectCatalog.ts](../src/core/projectCatalog.ts) | Read `config.yaml` and workflow files for display; independent of the session store |
 | Incremental event reads | [eventTail.ts](../src/core/eventTail.ts) | Complete-line parsing and byte offsets |
 | Session cache and notifications | [store.ts](../src/core/store.ts) | One project per store; snapshot, lazy reads, change events |
 

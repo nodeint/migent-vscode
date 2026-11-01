@@ -22,7 +22,7 @@ function status(overrides: Partial<SessionStatus> = {}): SessionStatus {
 }
 
 function input(overrides: Partial<DisplayStatusInput> = {}): DisplayStatusInput {
-  return { status: status(), statusError: false, schemaSupported: true, ...overrides };
+  return { status: status(), statusError: null, manifest: 'ok', ...overrides };
 }
 
 const localLock = (over: Partial<Extract<LockProbe, { kind: 'alive' }>> = {}): LockProbe => ({
@@ -79,17 +79,29 @@ describe('deriveDisplayState', () => {
     expect(state({ status: status({ status: 'completed' }) }, { kind: 'none' })).toBe('completed');
   });
 
-  it('Unknown: corrupt status.json', () => {
-    expect(state({ status: null, statusError: true }, { kind: 'none' })).toBe('unknown');
-    expect(state({ status: null, statusError: false }, { kind: 'none' })).toBe('unknown');
+  it('Question: status = question, no live lock', () => {
+    const asked = status({ status: 'question' });
+    expect(state({ status: asked }, { kind: 'none' })).toBe('question');
+    expect(state({ status: asked }, { kind: 'stale', reason: 'heartbeat' })).toBe('question');
+    // A live lock still shows Running; Prepared and Blocked outrank Question's position.
+    expect(state({ status: asked }, localLock())).toBe('running');
   });
 
-  it('Unknown: unsupported schema_version', () => {
-    expect(state({ schemaSupported: false }, { kind: 'none' })).toBe('unknown');
+  it('Unknown carries a reason for each cause, manifest problems first', () => {
+    const reason = (over: Partial<DisplayStatusInput>): string | undefined =>
+      deriveDisplayState(input(over), { kind: 'none' }).unknownReason;
+    expect(reason({ status: null, statusError: 'unreadable' })).toBe('unreadable-status');
+    expect(reason({ status: null, statusError: 'invalid' })).toBe('invalid-status');
+    expect(reason({ status: null })).toBe('missing-status');
+    expect(reason({ manifest: 'unsupported' })).toBe('unsupported-schema');
+    expect(reason({ manifest: 'invalid' })).toBe('invalid-manifest');
+    expect(reason({ manifest: 'unsupported', status: null, statusError: 'invalid' })).toBe('unsupported-schema');
+    expect(reason({ status: status({ status: 'mysterious' }) })).toBe('unrecognized-status');
+    expect(state({ status: null, statusError: 'invalid' }, { kind: 'none' })).toBe('unknown');
   });
 
-  it('Unknown: unrecognized raw status value', () => {
-    expect(state({ status: status({ status: 'mysterious' }) }, { kind: 'none' })).toBe('unknown');
+  it('known states carry no unknownReason', () => {
+    expect(deriveDisplayState(input(), { kind: 'none' }).unknownReason).toBeUndefined();
   });
 
   it('maps each state to its codicon', () => {
@@ -97,6 +109,7 @@ describe('deriveDisplayState', () => {
       ['prepared', 'circle-outline'],
       ['running', 'sync~spin'],
       ['blocked', 'warning'],
+      ['question', 'comment-discussion'],
       ['failed', 'error'],
       ['stopped', 'debug-pause'],
       ['cancelled', 'circle-slash'],

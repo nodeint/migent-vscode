@@ -31,7 +31,7 @@ folder root; asynchronous readers.
 
 | Item | Reason | Phase 2 behavior instead | Owner of follow-up |
 | :--- | :--- | :--- | :--- |
-| Detail eviction beyond "release when interest reaches zero" (LRU, entry caps, keeping released details cached) | Releasing at zero interest already bounds memory and watchers by what is visible; a cache policy adds lifecycle complexity without a measured need | A detail and its detail-only watchers are released as soon as its interest reaches zero; re-expanding reloads it (§6.2) | Revisit if the S11 budget (§8, AC22) shows reload cost is noticeable |
+| Detail cache in the store (cached executions, questions, outputs, next, lineage with invalidation, interest counting and eviction) | A cache needs a dependency table, derived invalidation and a release policy, and it can disagree with disk; the store was thinned to snapshots instead (decided) | Consumers read the file on demand with stateless readers and re-read when told a file changed (§6.2) | Revisit only if the S11 budget (§8, AC22) shows repeated reads are noticeable |
 | Lineage resolution for sessions outside the retention limit | Requires an index over unretained sessions and on-demand reads; 3b already plans it | Only relations among retained sessions are shown; a child whose source is hidden shows the source id as text with a Show-more hint | [`03b-downstream-handoff.md`](./03b-downstream-handoff.md#9-lineage-snapshots-and-view-state) (see C8) |
 | npm `.cmd` shim parsing | Parsing an undocumented shim format is fragile; the development machine has a native `migent.exe` | `.cmd`, `.bat`, `.ps1` targets are `unsupported` with an instruction (§5.5) | Later phase, if users report npm installs |
 
@@ -57,10 +57,10 @@ stay synchronous in this phase (decided); performance is bounded by the budget i
 - `deriveDisplayState` ([`displayState.ts`](../src/core/displayState.ts)) returns `unknown` for a status error, a
   missing status or an unsupported schema without recording which; the reason is lost before the view.
 - `SessionStore` ([`store.ts`](../src/core/store.ts)) is one project per instance, synchronous, with no watcher;
-  emits `{project, sessionId, kind}` with kinds `added | updated | removed | executions | events`. `load()` reads
-  every session directory, then discards snapshots beyond `limit` (readonly, default 50).
-- Snapshot replacement resets `executions` to `[]` and `lastEventSeq` to 0 while the byte offset survives
-  ([`docs/core.md`](../docs/core.md#what-does-sessionstore-own)). Callers must reload lazy data after `updated`.
+  emits `{project, sessionId, kind}` with kinds `added | updated | removed`. `load()` reads every session
+  directory, then discards snapshots beyond `limit` (readonly, default 50). The store holds snapshots only: the
+  executions cache and the event offset were removed from it (decided, §6.2); `listExecutions` is called by the
+  consumer and `EventTail` ([`eventTail.ts`](../src/core/eventTail.ts)) owns offset and seq watermark per file.
 - `listWorkflows` ([`workflows.ts`](../src/core/workflows.ts)) silently skips unreadable or invalid YAML and returns
   `[]` on a directory error; `SessionStore.listSessionIds` also returns `[]` on a directory error. Missing,
   empty and unreadable are therefore indistinguishable today.
@@ -151,11 +151,11 @@ tests against it (S2).
 | G8a | Status reader keeps only small fields of `latest_provider_event` and does not retain it in `raw` | Memory, tooltips | Core: `statusReader.ts`, `model.ts` |
 | G9 | Published outputs from `status.json.outputs` plus path-only rows for unnamed files in `outputs/`; paths confined to the session directory | Outputs node, Results | Core: **new** `outputs.ts` |
 | G10 | `next.json` v1 reader (observed shape) and lenient frozen `downstream` reader; per-suggestion `declared` flag | Results suggestions | Core: **new** `nextWorkflows.ts` (read side only) |
-| G11 | Lineage among retained sessions: index of `prior_session_id` built from retained snapshots; `handoff` parse of the observed shape (inline JSON in YAML), local `path` confined to the target session, `source_path` kept as text only | Results lineage, child → source link | Core: `store.ts`, **new** `handoff.ts` (read side only) |
-| G12 | Lazy-detail lifecycle owned by the store with a declared dependency table: details survive snapshot replacement, are invalidated by their file and derived dependencies, are released together with their detail-only watchers when interest reaches zero, and are reconciled by full Refresh | Watcher, trees, Results | Core: `store.ts`, **new** `details.ts` |
-| G12a | Execution file discovery: per-execution availability of `prompt.md`, `task.md`, `response.md`, `questions.json`, `stream.jsonl`, `turns/*/verify.md` and the `artifacts/` listing, loaded lazily | Execution children in Sessions tree | Core: **new** `executionFiles.ts`, `store.ts` |
-| G13 | Per-session tail state independent of snapshot replacement: offset, seq watermark, bounded event history, truncation detection and reset, explicit release | Timeline, Output Channel | Core: `eventTail.ts`, `store.ts` |
-| G14 | Retention: limit with exemptions and a hidden-session count; adjustable effective limit for "Show more" | Show more, never hiding Running | Core: `store.ts` |
+| G11 | Lineage among retained sessions: pure `childrenOf(snapshots, sessionId)` over the retained snapshots' `prior_session_id` (nothing cached); `handoff` parse of the observed shape (inline JSON in YAML), local `path` confined to the target session, `source_path` kept as text only | Results lineage, child → source link | Core: **new** `handoff.ts` (read side only) |
+| G12 | Stateless detail readers and watch interest: no detail cache in the store; consumers call the readers on demand and re-read when the watcher reports a changed file; watcher interest (not data) decides which detail folders are watched | Watcher, trees, Results | Host: `watcher.ts`; readers in core |
+| G12a | Execution file discovery: stateless `listExecutionFiles` reporting `prompt.md`, `task.md`, `response.md`, `questions.json`, `stream.jsonl`, `turns/*/verify.md` and the `artifacts/` listing, called when an execution node is expanded | Execution children in Sessions tree | Core: **new** `executionFiles.ts` |
+| G13 | Per-file tail state outside the store: `EventTail` exists (offset, seq watermark); add bounded event history, truncation detection and reset, explicit release | Timeline, Output Channel | Core: `eventTail.ts` |
+| G14 | Retention: limit with exemptions and a hidden-session count; adjustable effective limit for "Show more" (snapshot-only; the store's one remaining concern besides the scan) | Show more, never hiding Running | Core: `store.ts` |
 | G15 | Pure grouping and attention: group of a snapshot, unique counted set (Unknown and Stopped excluded), status bar/badge summary | Trees, badge, status bar | Core: **new** `attention.ts` |
 | G16 | Pure watch planning and routing: the desired set of non-recursive watched folders for a project, and classification of a changed path into a target | Watcher | Core: **new** `watchPlan.ts` |
 | G17 | Per-key trailing debounce with max wait, injectable clock | Watcher | Core: **new** `coalescer.ts` |
@@ -211,12 +211,11 @@ Rules:
 | `nextWorkflows.ts` | Parse `next.json` v1 and frozen `downstream`; suggestion model with independent availability states | New (read side) |
 | `handoff.ts` | Parse manifest `handoff` (observed shape); confine `path`; expose `source_path` as inert text | New (read side) |
 | `attention.ts` | `groupOf`, `isCounted`, unique counts, summary text inputs | New |
-| `executionFiles.ts` | List one execution's known files and `artifacts/` entries with availability; paths confined to the execution directory | New |
-| `details.ts` | Detail keys, their file dependencies and derived dependencies (§6.2); maps a changed file set to the details to invalidate | New |
+| `executionFiles.ts` | Stateless listing of one execution's known files and `artifacts/` entries with availability; paths confined to the execution directory | New |
 | `watchPlan.ts` | Desired non-recursive watch set for a project (§6.1) and classification of a changed path into a target | New |
 | `coalescer.ts` | Keyed debounce (trailing, max wait), injectable timers | New |
 | `timelineFormat.ts` | `TailEvent` → display line; raw-line passthrough | New |
-| `store.ts` | G4, G11–G14, G12a; owns detail state per session and `reconcile()` for full Refresh | Changed |
+| `store.ts` | Snapshots, scan outcome (G4), retention with exemptions and hidden count (G14). No detail cache, no `reconcile()` beyond `load()` | Changed |
 
 ### 4.3 Host modules (all new under `src/vscode/`)
 
@@ -225,7 +224,7 @@ Rules:
 | `projects.ts` — `ProjectRegistry` | Discover projects, own one `ProjectContext` per project (store, catalog, watcher, capability entry), react to workspace folder changes, re-emit a unified change stream, dispose on removal |
 | `watcher.ts` — `ProjectWatcher` | Own the project's non-recursive watcher set: diff the desired set from `watchPlan` against live watchers, create/dispose watchers, classify and coalesce events, call store/catalog methods (§6.1). Watcher creation goes through one narrow internal seam so the S0 fallback (§7.1) could replace the backend without touching `watchPlan` |
 | `liveness.ts` | Single 10 s lock re-probe timer across projects, alive only while any session is Running |
-| `tails.ts` | Reference-counted tail interest per `(project, session)`; calls `readNewEvents`/`releaseEvents` |
+| `tails.ts` | Reference-counted tail interest per `(project, session)`; owns one `EventTail` per interested session and drops it when interest reaches zero |
 | `capability.ts` | Per-project CLI capability state using `cli/locate` + `cli/version`; Recheck; config change listener |
 | `contextKeys.ts` | Window context keys for welcome/menus |
 | `views/nodes.ts` | Node types, identity strings, `contextValue` builder |
@@ -259,10 +258,9 @@ Welcome content is declarative (`viewsWelcome` in `package.json`) driven by `con
 
 Core keeps its local `Emitter`. Kinds:
 
-- `SessionChangeEvent {project, sessionId, kind, executionId?}` with kinds `added | updated | removed | executions |
-  executionFiles | events | questions | outputs | next | lineage`. `executionId` is set only for `executionFiles`.
-  Events carry no snapshot payload; consumers read the store. The store emits a detail kind only when the reloaded
-  value differs from the cached one, so reconciliation does not flood consumers.
+- `SessionChangeEvent {project, sessionId, kind}` with kinds `added | updated | removed`. Events carry no snapshot
+  payload; consumers read the store. The store knows nothing else about a session: executions, questions, outputs,
+  next suggestions, lineage and events are read by their consumers (§6.2).
 - `ProjectChangeEvent {project, kind: 'scan' | 'workflows' | 'config'}` (`scan` = sessions directory scan outcome
   or hidden count changed).
 
@@ -270,17 +268,22 @@ The registry re-emits one host stream:
 
 ```text
 MigentChange =
-  | { type: 'session'; project: ProjectKey; sessionId; kind; executionId? }  // set for executionFiles
+  | { type: 'session'; project: ProjectKey; sessionId; kind: 'added' | 'updated' | 'removed' }
+  | { type: 'files'; project: ProjectKey; sessionId; targets: FileTarget[] }  // watcher-classified, no store involved
   | { type: 'project'; project: ProjectKey; kind: 'scan' | 'workflows' | 'config' }
   | { type: 'projects' }                        // project added/removed
+  | { type: 'refresh' }                         // full Refresh finished: re-read everything displayed
   | { type: 'capability'; project: ProjectKey }
+
+FileTarget = { kind: 'questions' | 'next' | 'outputs' | 'executions' | 'events' }
+           | { kind: 'execution'; executionId }   // any file under that execution directory
 ```
 
-The registry forwards `executionId` unchanged; no core event field is dropped at the host boundary.
+`files` changes are produced by the watcher from `watchPlan`'s classification and carry only file kinds, never data.
 
 Consumers batch: each tree coalesces changes received in one event-loop turn into a single
-`onDidChangeTreeData` fire with the narrowest affected element (session node for `executions/questions/outputs`,
-execution node for `executionFiles`, the project's group nodes for state changes, the root for `projects`).
+`onDidChangeTreeData` fire with the narrowest affected element (session node for `files` targets `executions/questions/outputs`,
+execution node for `files` target `execution`, the project's group nodes for state changes, the root for `projects`).
 
 ### 5.3 Item identity
 
@@ -370,19 +373,19 @@ observed by the watcher on its parent. The watched folders mirror the directorie
 | `.migent/workflows/` | `*.{yaml,yml}` | Folder exists | Workflow create/change/delete (rename = delete + create) |
 | `.migent/sessions/` | `*` | Folder exists | Session directory create/delete |
 | `.migent/sessions/<id>/` | `{manifest.yaml,status.json,session.lock,cancel.requested,questions.json,next.json,workflow.frozen.yaml,events.jsonl,executions,outputs}` | Every discovered directory under `sessions/`: eligible (retained or hidden) or pending (no marker yet) | Marker appearance, snapshot, details, tail, lineage |
-| `.migent/sessions/<id>/executions/` | `*` | Session's executions detail is loaded | New execution directories |
-| `.migent/sessions/<id>/executions/<eid>/` | `{execution.json,questions.json,prompt.md,task.md,response.md,stream.jsonl,artifacts,turns}` | Executions detail loaded | Execution summary and file availability |
-| `…/<eid>/artifacts/`, `…/<eid>/turns/` | `*` | That execution's files detail is loaded | Artifact listing; turn directory create/delete |
-| `…/<eid>/turns/<turn>/` | `verify.md` | That execution's files detail is loaded **and** the turn directory exists | Verify file create/change/delete inside an existing turn |
-| `.migent/sessions/<id>/outputs/` | `*` | Session's outputs detail is loaded | Unnamed output files |
+| `.migent/sessions/<id>/executions/` | `*` | A consumer retained `executions` for the session | New execution directories |
+| `.migent/sessions/<id>/executions/<eid>/` | `{execution.json,questions.json,prompt.md,task.md,response.md,stream.jsonl,artifacts,turns}` | A consumer retained that execution | Execution summary and file availability |
+| `…/<eid>/artifacts/`, `…/<eid>/turns/` | `*` | A consumer retained that execution | Artifact listing; turn directory create/delete |
+| `…/<eid>/turns/<turn>/` | `verify.md` | A consumer retained that execution **and** the turn directory exists | Verify file create/change/delete inside an existing turn |
+| `.migent/sessions/<id>/outputs/` | `*` | A consumer retained `outputs` for the session | Unnamed output files |
 
 Ownership and lifecycle:
 
 - `watchPlan` (core, pure) computes the desired set from: anchor, which project folders exist (from the last scan
-  outcomes of store and catalog), the discovered session directories (eligible and pending), and the store's loaded
-  details. `ProjectWatcher`
-  (host) diffs desired vs. live after every store/catalog change that alters the set, creating missing watchers and
-  disposing surplus ones. It is the only owner of `FileSystemWatcher` instances for its project and disposes all of
+  outcomes of store and catalog), the discovered session directories (eligible and pending), the targets currently
+  retained by consumers (§6.2) and the turn directories the watcher found. `ProjectWatcher`
+  (host) diffs desired vs. live after every store/catalog change or retain/release that alters the set, creating
+  missing watchers and disposing surplus ones. It is the only owner of `FileSystemWatcher` instances for its project and disposes all of
   them with the `ProjectContext`. The anchor watchers belong to `ProjectRegistry` and live as long as the folder.
 - **Creation race.** After creating a watcher for a folder that just appeared, the owner immediately reconciles
   that level (session refresh, catalog reload or session scan) because files written before the watcher existed
@@ -392,10 +395,11 @@ Ownership and lifecycle:
   `sessions/` → store scan outcome `missing`, all sessions removed; `workflows/` → catalog outcome `missing`;
   `<id>/` → session removed. A create event re-adds the watcher and reconciles that subtree. Because the anchor is
   never disposed while the folder is open, every level can be re-established without a window reload.
-- **Turn directories.** The execution-files detail records the turn directories it found, so `watchPlan` emits one
-  `turns/<turn>/` watcher per existing turn. A create event from the `turns/` watcher adds that turn's watcher and
-  then reloads the execution-files detail (creation-race rule), so a `verify.md` written before the turn watcher
-  existed is still listed. A delete event disposes the turn watcher and reloads the detail.
+- **Turn directories.** For each retained execution the watcher lists `turns/` itself and passes the names to
+  `watchPlan`, which emits one `turns/<turn>/` watcher per existing turn. A create event from the `turns/` watcher
+  adds that turn's watcher and then emits a `files` change for the execution (creation-race rule), so a `verify.md`
+  written before the turn watcher existed is still listed when the consumer re-reads. A delete event disposes the
+  turn watcher and emits the same change.
 - **Directory discovery is separate from session eligibility.** The scan reports every child directory of
   `sessions/`; only those with `manifest.yaml` or `status.json` become sessions (existing `listSessionIds` rule in
   [`store.ts`](../src/core/store.ts)). A directory without a marker is *pending*: it gets its session-level watcher
@@ -407,7 +411,7 @@ Ownership and lifecycle:
 - **Session watchers for every discovered directory (decided).** Every discovered session directory keeps its
   session-level watcher, eligible, hidden or pending, because resuming a hidden session changes files only inside
   its own directory and the `sessions/` watcher cannot see that. This lets a resumed hidden session become Running
-  (and retention-exempt). Detail watchers exist only while their detail is loaded (§6.2). Cost is checked by the
+  (and retention-exempt). Detail watchers exist only while a consumer retains their target (§6.2). Cost is checked by the
   S11 budget (§6.5).
 
 Event handling:
@@ -415,68 +419,55 @@ Event handling:
 - `watchPlan` classifies each event (`session file`, `execution file`, `workflow file`, `config`, `folder
   create/delete`); unknown paths are ignored without disk reads.
 - Session changes coalesce per `(project, sessionId)` with a 150 ms trailing debounce and a 1 s max wait, collecting
-  the set of changed files. On flush: `refreshSession(id, changedFiles)`; invalidation follows §6.2.
+  the set of changed files. On flush: if a snapshot file changed (`manifest.yaml`, `status.json`, `session.lock`,
+  `cancel.requested`) the watcher calls `store.refreshSession(id)`; for every other file it emits one `files` change
+  with the classified targets (§5.2). The watcher never reads detail data.
   `events.jsonl` changes trigger a tail read only when tail interest exists; otherwise they are dropped.
 - A changed file of a hidden (eligible, not retained) session refreshes only its snapshot, to decide whether it
-  became retention-exempt; it loads no details.
+  became retention-exempt; it emits no `files` changes.
 - A missing marker on refresh removes the session (`removed`).
 - Workflow/config changes coalesce per project (150 ms) and re-read only the affected file. They never reload
   sessions, move focus, or open editors.
 - `migent.refresh` runs full reconciliation (§6.2) and re-diffs every project's watcher set, recreating any watcher
   that failed or was lost; it is the recovery path for dropped events.
 
-### 6.2 Detail lifecycle, invalidation and Refresh
+### 6.2 Reading on demand, watch interest and Refresh
 
-The store owns all lazily loaded data of a session as **details** keyed by `DetailKey`. `details.ts` declares, for
-each key, the files whose change invalidates it and the derived dependencies:
+**Decision (thin store).** The store holds snapshots only (manifest, status, lock, display state, the pending-question
+summary and outputs map that come with `status.json`). Everything else is read from disk by a **stateless reader**
+when a consumer needs it, and nothing is cached: executions (`listExecutions`), execution files
+(`listExecutionFiles`), session `questions.json` history, outputs, `next.json` and frozen `downstream`, and lineage
+children (`childrenOf` over `store.all()`). There is no dependency table, no derived invalidation, no interest counting
+inside core and no `reconcile()` beyond `load()`.
 
-| Detail | Loaded when | Invalidated by files | Invalidated by derived dependency | Emits |
-| :--- | :--- | :--- | :--- | :--- |
-| Snapshot (manifest, status, lock, display state) | Always (retained); on file change (hidden) | `manifest.yaml`, `status.json`, `session.lock`, `cancel.requested` | Liveness tick (§6.3) | `added/updated/removed` |
-| Executions list | Session node expanded, or session Running | `executions/` entries, any `execution.json` | — | `executions` |
-| Execution files (per `eid`) | Execution node expanded | Any file event in that execution directory, its `artifacts/`, `turns/` or `turns/<turn>/` | Executions list reload that drops `eid` (detail discarded) | `executionFiles` + `executionId` |
-| Questions history | Questions node expanded, or Results open | Session `questions.json` | Snapshot change in the pending-question summary | `questions` |
-| Outputs | Outputs node expanded, or Results open | `outputs/` entries | Snapshot change in `status.json.outputs` | `outputs` |
-| Next suggestions | Next workflows node expanded, or Results open | `next.json`, `workflow.frozen.yaml` | — | `next` |
-| Lineage (children of this session among retained sessions) | Results open or Lineage node expanded | — | Any retained session's manifest `prior_session_id` added/changed/removed, or a session entering/leaving retention | `lineage` on the affected source |
-| Tail state | Tail interest (§6.4) | `events.jsonl` | — | `events` |
+| Data | Read when | Re-read when |
+| :--- | :--- | :--- |
+| Snapshot | Scan, and on `refreshSession` | Marker, `status.json`, `session.lock`, `cancel.requested` change; liveness tick (§6.3) |
+| Executions list, execution files | `getChildren` of the session or execution node | A `files` change with target `executions` or `execution` for that session/execution |
+| Questions history, outputs, next suggestions | `getChildren` of that node, or Results render | A `files` change with the matching target, or a `session` `updated` for that session (the pending summary and outputs map live in the snapshot) |
+| Lineage | Results render, Lineage node | Any `session` change in the project |
+| Event tail | §6.4 | `files` target `events` while a tail has interest |
 
 Rules:
 
-- **Ownership.** Only the store invalidates and reloads details, and only the store emits detail events. The
-  watcher passes changed files; it never decides which detail to reload. Snapshot replacement keeps all loaded
-  details (fixing today's reset of `executions` and `lastEventSeq`).
-- **Derived invalidation.** After rebuilding a snapshot, the store compares the derived inputs (pending-question
-  summary, outputs map, `prior_session_id`) with the previous snapshot and invalidates dependent details. The
-  lineage index covers retained sessions only.
-- **Cross-store joins are not cached.** Data combining a session with project metadata (suggestion target resolved
-  against the workflow catalog) is computed by the consumer at render time from current store and catalog values.
-  Consumers that show such joins (Results host, Next workflows node) subscribe to both `session` and
-  `project: workflows` changes, so no store needs to know about the catalog.
-- **Consumer interest.** Every detail has a reference count of consumers, acquired and released by the host through
-  `store.acquireDetail(key)` / `releaseDetail(key)`:
-  - Tree nodes: the Sessions provider acquires on `TreeView.onDidExpandElement` and releases on
-    `onDidCollapseElement`. When an ancestor collapses, VS Code reports only the ancestor, so the provider releases
-    the interest of every descendant it holds under that ancestor. Session executions also hold interest while the
-    session is Running.
-  - Results panel: holds questions, outputs, next and lineage for its session from creation until dispose.
-  - Timeline document and log channel: hold tail state (§6.4).
-- **Reacquisition.** `getChildren` for any detail-backed node always calls `store.ensureDetail(key)`, which loads the
-  detail synchronously if absent. Re-expanding a node therefore reloads released data and re-acquires interest.
-- **Release at zero interest (no eviction policy).** When a detail's interest reaches zero, the store drops its data
-  (tail state included, §6.4) and stops tracking it as loaded; the next watcher diff removes the watchers that only
-  that detail required (for example `executions/<eid>/artifacts/` or `outputs/`). Session-level watchers are not
-  detail watchers and stay (§6.1). There is no cache of released details, LRU or entry cap (see §1, deferred).
-  Events for a released detail's files are dropped without reads. "Loaded" in §6.1 and in this section always means
-  "has interest". Full Refresh reloads every loaded detail.
-- **Release timing.** Release is applied at the end of the event-loop turn in which interest reached zero; a detail
-  re-acquired in the same turn (for example a tree refresh that collapses and re-expands) is kept, so a refresh does
-  not cause a reload storm.
-- **Full Refresh (`store.reconcile()`, `catalog.load()`).** Rescan the sessions directory (add, remove, apply
-  retention); rebuild every retained snapshot; mark **every loaded detail dirty** and reload it regardless of events;
-  rebuild the lineage index from retained snapshots; for tail state, check truncation and read incrementally; then
-  emit only for values that changed. The catalog reloads every workflow file and the config. Targeted updates
-  (§6.1) remain the normal path; Refresh never runs automatically.
+- **Readers are pure and synchronous.** A reader takes paths, returns a typed result with `missing`/`ok`/`invalid`
+  states per §6.7, and keeps nothing. Repeated expand/collapse re-reads; each read is one small file or directory.
+- **Watch interest, not data interest.** Only *what is watched* is counted. A consumer that displays a detail folder
+  (an expanded session node watches `executions/`; an expanded execution node watches that execution's directory,
+  `artifacts/`, `turns/` and existing `turns/<turn>/`; the Questions, Next workflows and Outputs nodes and an open
+  Results panel watch their files and `outputs/`) calls `ProjectWatcher.retain(target)` and disposes the returned handle
+  when it collapses or closes. The watcher keeps a reference count per target, adds the matching watchers (§6.1) on the
+  first retain and removes them on the last release. When an ancestor collapses, VS Code reports only the ancestor, so
+  the tree provider releases the handles of every descendant it holds under that ancestor. Release applies at the end
+  of the event-loop turn, so a refresh that collapses and re-expands does not drop and recreate watchers.
+- **Events for unwatched data are dropped.** A file under a folder nobody retained produces no watcher, hence no event.
+  Session-level watchers are not detail watchers and stay (§6.1).
+- **Cross-store joins.** Data combining a session with project metadata (suggestion target resolved against the
+  workflow catalog) is computed by the consumer at render time from current store and catalog values. Consumers that
+  show such joins subscribe to both `session` and `project: workflows` changes.
+- **Full Refresh (`migent.refresh`).** `store.load()` (rescan, add, remove, apply retention, rebuild snapshots) and
+  `catalog.load()`, re-diff every watcher set, then emit `{ type: 'refresh' }`; every consumer re-reads what it
+  currently displays. It never runs automatically and is the recovery path for dropped watcher events.
 
 ### 6.3 Liveness timer
 
@@ -493,10 +484,10 @@ Rules:
   (`updated_at`, the small fields of `latest_provider_event`, `running_stages`).
 - First interest triggers a read from offset 0 into a bounded history (decision: keep the most recent 5 000 events
   per session; older lines are dropped with a marker). Subsequent `events.jsonl` changes read incrementally.
-- When interest drops to zero, `releaseEvents` frees offset, watermark and history. A log channel does a final read
+- When interest drops to zero, `tails.ts` drops its `EventTail` and history. A log channel does a final read
   when its session stops being Running, then stops tailing; `showLog` performs a catch-up read.
-- If the file shrinks below the stored offset, core reports truncation; the store resets the tail state and emits
-  `events` so consumers re-render from the start. This replaces today's "keep offset" behavior.
+- If the file shrinks below the stored offset, `EventTail` reports truncation and resets itself; `tails.ts` then
+  notifies consumers so they re-render from the start. This replaces today's "keep offset" behavior.
 
 ### 6.5 Idle guarantee and performance budget
 
@@ -556,7 +547,7 @@ empty groups hidden; a session appears once; Running sessions with pending quest
 indicator. Row: label = title (truncated ~60 chars, full in tooltip), description = `workflow · stage · elapsed`
 (Unknown: the reason), icon from display state. Tooltip: blocker/failure summary, stage/attempt, last update, quota
 retry time with timezone when present; missing reasons read "unavailable". Children: executions (`stage · attempt
-n`, `provider/model · decision`) → the files reported by the execution-files detail (§6.2): `task.md`,
+n`, `provider/model · decision`) → the files reported by `listExecutionFiles` (§6.2): `task.md`,
 `prompt.md`, `response.md`, `questions.json`, `turns/*/verify.md` as "verify · turn n", `stream.jsonl` (opened only
 on request) and `artifacts/*`; absent files are omitted, never guessed. Outputs (when outputs exist); Questions
 (pending groups by stage/execution with count; history on expand; Open questions file); Next workflows and Lineage
@@ -629,9 +620,9 @@ Each slice is one reviewable PR into `next`, updates the docs it affects ([§9](
 | :--- | :--- | :--- |
 | S0 Harness and watcher spike | G21: `@vscode/test-electron` dev dependency, integration runner and command, vitest exclusion of integration tests, CI step (display server on Ubuntu, both OS rows), fixture-workspace copy helper; G22: ESLint `vscode` import rule; the watcher probe in §7.1 run against VS Code `1.90.0` and latest stable; result report in the PR | — |
 | S1 Core state and catalog | G1–G7: `question` state, `unknownReason`, version decoupling, paths, scan outcome, workflow entry states, config reader, `ProjectCatalog`; fixtures for question status / invalid workflow / duplicate id / config states | — |
-| S2 Core session details | G8–G12a, G14, G15: status reader changes, questions/outputs/next/handoff/execution-files readers, `details.ts`, detail interest (`acquireDetail`/`releaseDetail`/`ensureDetail`), lineage index over retained sessions, store detail lifecycle and `reconcile()`, retention, attention; commit `src/core/fixtures/captured/` and test readers against it (§8.1); synthetic fixtures for pending questions in Running and Blocked sessions, next invalid/unsupported, superseded record | S1 |
-| S3 Core events and watch planning | G13, G16–G18: tail state and truncation, bounded history, `watchPlan` (desired set and classification), coalescer, timeline formatting | S1 |
-| S4 Host skeleton | `ProjectRegistry` with anchor watchers, `ProjectWatcher` (watch-set diffing, creation-race reconcile, ancestor delete/recreate) built on the backend S0 validated, liveness, context keys, `migent.refresh` (full reconciliation), extension wiring | S0 (passed or fallback decided), S1, S2, S3 |
+| S2 Core session readers | G8–G12a, G14, G15: status reader changes (pending questions, outputs map, small `latest_provider_event` fields), stateless questions/outputs/next/handoff/execution-files readers, lineage `childrenOf`, retention with exemptions and hidden count, attention; the store keeps snapshots only (executions and tail state already moved out); commit `src/core/fixtures/captured/` and test readers against it (§8.1); synthetic fixtures for pending questions in Running and Blocked sessions, next invalid/unsupported, superseded record | S1 |
+| S3 Core events and watch planning | G13, G16–G18: bounded history and truncation in `EventTail`, `watchPlan` (desired set and classification), coalescer, timeline formatting | S1 |
+| S4 Host skeleton | `ProjectRegistry` with anchor watchers, `ProjectWatcher` (watch-set diffing, creation-race reconcile, ancestor delete/recreate) built on the backend S0 validated, `retain`/release of watch targets, liveness, context keys, `migent.refresh` (full Refresh, `refresh` change), extension wiring | S0 (passed or fallback decided), S1, S2, S3 |
 | S5 Sessions tree | Sessions provider, groups, Unknown reasons, executions/files/outputs/questions nodes, Show more, badge, file/copy/reveal commands, `pick.ts` | S2, S4 |
 | S6 Workflows and Project trees | Both providers, `migent.workflow.open`, `migent.openConfig` | S1, S4 |
 | S7 CLI capability | `src/cli/locate.ts` (native and JS entry only), `src/cli/version.ts` (minimum constant, effective max with the setting), capability service, diagnostics nodes, welcome content, settings, `openSettings`, `recheck`; vitest include for `src/cli/**` | S4 |
@@ -718,8 +709,8 @@ workspace; **M** = manual check on Windows (steps recorded in the PR); **L** = E
 | AC17 | `src/core/**` and `src/cli/**` contain no `vscode` import | L (`no-restricted-imports` rule) |
 | AC18 | With `files.watcherExclude` containing `**/.migent/**` and `.migent` in `.gitignore`, sessions, workflows and config still update live | I (S0 probe, then full extension in S4), M (Windows) |
 | AC19 | Deleting and recreating `.migent/sessions`, `.migent/workflows`, a session directory, or `.migent` itself updates the views accordingly and resumes live updates without Refresh or reload; no watcher remains for a deleted folder | U (`watchPlan` desired set), I |
-| AC20 | Execution children list exactly the files present (including `turns/*/verify.md` and `artifacts/*`) and update when a response or artifact appears, or when `verify.md` is created in a new or existing turn directory; collapsing the execution releases its detail and removes its detail-only watchers; tree code performs no file-system reads | U (`executionFiles`, store detail release, `watchPlan`), I |
-| AC21 | When a `questions.json`, `next.json` or `outputs/` change is missed (simulated by writing while the watcher is suspended), `migent.refresh` updates the open Questions node and Results panel; a status change of the outputs map or pending summary reloads the dependent loaded detail without its own file event | U (`details.ts`, `reconcile()`), I |
+| AC20 | Execution children list exactly the files present (including `turns/*/verify.md` and `artifacts/*`) and update when a response or artifact appears, or when `verify.md` is created in a new or existing turn directory; collapsing the execution releases its watch target and removes its detail-only watchers; tree code performs no file-system reads | U (`executionFiles`, `watchPlan` with retained targets), I |
+| AC21 | When a `questions.json`, `next.json` or `outputs/` change is missed (simulated by writing while the watcher is suspended), `migent.refresh` makes the open Questions node and Results panel re-read and show it; a status change of the outputs map or pending summary updates the open nodes through the `session` `updated` change without a file event for them | U (readers), I |
 | AC22 | With 300 session directories on Windows, every §6.5 budget row is met with all session watchers active, and with nothing Running and no timeline/log open there are no timers, tails or child processes; resuming a session outside the retention limit makes it appear as Running without Refresh | M (Windows, recorded measurements), U (tail/liveness lifecycle), I (resume of a hidden fixture session) |
 | AC23 | Status reader keeps only the small fields of `latest_provider_event`; a status with a large `details.argv`/`usage` does not appear in snapshots or tooltips | U (synthetic large event) |
 
@@ -750,7 +741,7 @@ synthetic fixtures named as such, so a future captured sample can replace them.
   `LaunchSpec` and the minimum-version rule.
 - [`docs/core.md`](../docs/core.md): display-state table with Question and Unknown reasons; scan outcome and
   missing/empty/unreadable; workflow entry states; questions/outputs/next/lineage/execution-file read triggers,
-  observed shapes and failure policy; the detail dependency table, consumer interest and release at zero interest,
+  observed shapes and failure policy; stateless on-demand readers and watch interest,
   and full-Refresh reconciliation replacing the "callers must reload" note; retention exemptions and hidden count;
   tail state, bounded history and truncation reset replacing the "not automatically recovered" paragraph;
   synchronous readers and the §6.5 budget.
@@ -806,7 +797,7 @@ synthetic fixtures named as such, so a future captured sample can replace them.
 | Windows watcher coalesces, reorders or reports rename as delete+create; atomic `status.json` rename observed mid-flight | S0 cases P2/P3; debounce with max wait, re-read by state not by event, `readStatus` retries, directory-level create/delete watcher |
 | Many session directories mean many watchers and a large synchronous initial scan | Decided: keep every session watcher and synchronous readers; §6.5 budget measured in S11 (AC22); exceeding it is escalated to the user as a design decision |
 | `readStatus` blocking retry sleep on the host | Counted inside the §6.5 "no block > 500 ms" row; if it dominates, escalate as part of the budget decision |
-| Release at zero interest causes reloads when users repeatedly expand and collapse nodes | Reloads are single-detail synchronous reads; release waits for the end of the event-loop turn (§6.2); S11 records CPU while expanding; caching deferred (§1) |
+| Expanding and collapsing nodes re-reads files each time (no cache) | Each read is one small file or directory; watcher release waits for the end of the event-loop turn (§6.2); S11 records CPU while expanding; a cache is deferred (§1) |
 | Results requires a webview, which 3b also specifies | Phase 2 builds the minimal read-only host so 3b only adds Next step; the host contract (identity binding, intents, CSP) is fixed here |
 | npm-installed CLI resolves to a `.cmd` shim, which is `unsupported` | Explicit diagnostic telling the user to set `migent.cli.path` to `migent.exe` or the JS entry; shim parsing deferred (§1) |
 | Captured samples are from one CLI version (0.3.1) and redacted; three shapes are unobserved | Readers validate observed shapes and stay lenient for unobserved ones (§2); synthetic fixtures are named so captured samples can replace them; the minimum-version constant prevents older CLIs |
@@ -817,8 +808,9 @@ synthetic fixtures named as such, so a future captured sample can replace them.
 
 - Non-recursive watchers trade a larger, dynamically managed watcher set for immunity to user excludes and explicit
   ancestor handling.
-- Lazy-detail lifecycle moves into the store (more core logic) so the watcher and views do not need to know the
-  snapshot-replacement quirk; this changes documented store behavior.
+- A thin store (snapshots only) removes the cache-versus-disk consistency problem and most of the lifecycle logic;
+  the cost is that detail data is re-read on every expand and every relevant file change, and that the watcher
+  carries the interest counting for detail folders.
 - Retention exemptions mean the retained count can exceed the limit; in exchange the limit never hides work that
   needs attention.
 - Consumer-driven tailing defers event loading until a user opens a timeline or log; tooltips rely on `status.json`.

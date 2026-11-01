@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { tailEvents } from './eventTail';
+import { EventTail, tailEvents } from './eventTail';
 
 const dirs: string[] = [];
 
@@ -123,5 +123,44 @@ describe('tailEvents', () => {
     const read = tailEvents(file, first.offset);
     expect(read.events).toEqual([]);
     expect(read.offset).toBeGreaterThanOrEqual(first.offset);
+  });
+});
+
+describe('EventTail', () => {
+  it('keeps its own offset and watermark, and de-duplicates by seq', () => {
+    const file = tmpFile('events.jsonl', `${line1}
+${line2}
+`);
+    const tail = new EventTail(file);
+    expect(tail.read().map((event) => event.seq)).toEqual([1, 2]);
+    expect(tail.lastSeq).toBe(2);
+    expect(tail.read()).toEqual([]);
+
+    const next = JSON.stringify({ v: 2, seq: 3, event: 'provider.turn_completed', timestamp: 't', data: {} });
+    writeFileSync(file, `${line1}
+${line2}
+${next}
+`);
+    expect(tail.read().map((event) => event.seq)).toEqual([3]);
+    expect(tail.lastSeq).toBe(3);
+  });
+
+  it('drops a replayed seq at or below the watermark but keeps events without a seq', () => {
+    const noSeq = JSON.stringify({ v: 2, event: 'note', timestamp: 't', data: {} });
+    const file = tmpFile('events.jsonl', `${line1}
+${line2}
+`);
+    const tail = new EventTail(file);
+    tail.read();
+    writeFileSync(file, `${line1}
+${line2}
+${line2}
+${noSeq}
+`);
+    expect(tail.read().map((event) => event.event)).toEqual(['note']);
+  });
+
+  it('reads nothing for a missing file', () => {
+    expect(new EventTail(path.join(mkdtemp(), 'absent.jsonl')).read()).toEqual([]);
   });
 });

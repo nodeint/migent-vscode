@@ -206,7 +206,7 @@ session("corrupt-status", {
 
 // --- unknown-schema ------------------------------------------------------------
 session("unknown-schema", {
-  "manifest.yaml": manifest({ schema_version: 99 }),
+  "manifest.yaml": manifest().replace("schema_version: 2", "schema_version: 99"),
   "status.json": status({ status: "active" }),
 });
 

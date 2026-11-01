@@ -2,12 +2,28 @@ import { mkdirSync, mkdtempSync, readFileSync,rmSync, writeFileSync } from 'node
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { probeLock } from './lockProbe';
 import type { SessionChangeEvent } from './model';
 import { SessionStore } from './store';
 import { makeProject } from './testHelpers';
+
+// Lets one test make listing the sessions directory fail with a chosen error code.
+const fault = vi.hoisted(() => ({ code: null as string | null }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    readdirSync: ((...args: Parameters<typeof actual.readdirSync>) => {
+      if (fault.code !== null && String(args[0]).endsWith('sessions')) {
+        throw Object.assign(new Error('injected'), { code: fault.code });
+      }
+      return actual.readdirSync(...args);
+    }) as typeof actual.readdirSync,
+  };
+});
 
 const dirs: string[] = [];
 
@@ -16,6 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  fault.code = null;
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -80,6 +97,44 @@ describe('SessionStore.load', () => {
     expect(s.snapshot('unknown-schema')?.displayState.state).toBe('unknown');
   });
 
+  it('records why a session is Unknown', () => {
+    const s = store();
+    s.load();
+    expect(s.snapshot('corrupt-status')?.displayState.unknownReason).toBe('invalid-status');
+    expect(s.snapshot('unknown-schema')?.displayState.unknownReason).toBe('unsupported-schema');
+    // A session with a status but no readable manifest.
+    mkdirSync(sessionDir('no-manifest'), { recursive: true });
+    writeFileSync(path.join(sessionDir('no-manifest'), 'status.json'), '{"status":"active"}');
+    // A session with a manifest but no status.json.
+    mkdirSync(sessionDir('no-status'), { recursive: true });
+    writeFileSync(path.join(sessionDir('no-status'), 'manifest.yaml'), 'session_id: x\nschema_version: 2\n');
+    s.load();
+    expect(s.snapshot('no-manifest')?.displayState.unknownReason).toBe('invalid-manifest');
+    expect(s.snapshot('no-status')?.displayState.unknownReason).toBe('missing-status');
+  });
+
+  it('shows status = question as Question, and Running when a live lock exists', () => {
+    mkdirSync(sessionDir('asking'), { recursive: true });
+    writeFileSync(path.join(sessionDir('asking'), 'manifest.yaml'), 'session_id: asking\nschema_version: 2\n');
+    writeFileSync(path.join(sessionDir('asking'), 'status.json'), '{"status":"question"}');
+    const s = store();
+    s.load();
+    expect(s.snapshot('asking')?.displayState).toMatchObject({ state: 'question', icon: 'comment-discussion' });
+    writeFileSync(
+      path.join(sessionDir('asking'), 'session.lock'),
+      JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() }),
+    );
+    s.refreshSession('asking');
+    expect(s.snapshot('asking')?.displayState.state).toBe('running');
+  });
+
+  it('accepts manifest schema_version 2 independent of the event envelope version', () => {
+    const s = store();
+    s.load();
+    expect(s.snapshot('completed')?.manifest?.schemaSupported).toBe(true);
+    expect(s.snapshot('unknown-schema')?.manifest).toMatchObject({ schemaVersion: 99, schemaSupported: false });
+  });
+
   it('emits added events for new sessions and removed for deleted ones', () => {
     const s = store();
     s.load();
@@ -136,59 +191,6 @@ describe('SessionStore.load', () => {
   });
 });
 
-describe('SessionStore lazy loading', () => {
-  it('loads executions only on demand and emits an executions event on change', () => {
-    const s = store();
-    s.load();
-    expect(s.snapshot('completed')?.executions).toEqual([]);
-    const events = changes(s, () => {
-      const rows = s.loadExecutions('completed');
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.stage).toBe('plan');
-    });
-    expect(events).toContainEqual(expect.objectContaining({ sessionId: 'completed', kind: 'executions' }));
-    expect(s.snapshot('completed')?.executions).toHaveLength(1);
-  });
-
-  it('keeps a per-session event offset and de-duplicates by seq', () => {
-    const s = store();
-    s.load();
-    const first = s.readNewEvents('completed');
-    expect(first.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
-    expect(s.snapshot('completed')?.lastEventSeq).toBe(5);
-    const second = s.readNewEvents('completed');
-    expect(second).toEqual([]);
-
-    const eventsFile = path.join(sessionDir('completed'), 'events.jsonl');
-    const events = changes(s, () => {
-      writeFileSync(eventsFile, readFileSync(eventsFile, 'utf8') + '\n');
-    });
-    expect(events).toEqual([]); // empty line only: nothing new
-
-    const nextSeq = 6;
-    writeFileSync(
-      eventsFile,
-      readFileSync(eventsFile, 'utf8') +
-        JSON.stringify({ v: 2, seq: nextSeq, event: 'provider.turn_completed', timestamp: 't', data: {} }) +
-        '\n',
-    );
-    const third = changes(s, () => s.readNewEvents('completed')).filter((e) => e.kind === 'events');
-    expect(third).toHaveLength(1);
-    const eventsRead = s.readNewEvents('completed');
-    expect(eventsRead).toEqual([]); // already consumed above
-    expect(s.snapshot('completed')?.lastEventSeq).toBe(nextSeq);
-  });
-
-  it('stores no offsets or state for a session that disappears', () => {
-    const s = store();
-    s.load();
-    s.readNewEvents('completed');
-    s.removeSession('completed');
-    expect(s.snapshot('completed')).toBeUndefined();
-    expect(s.readNewEvents('completed')).toEqual([]);
-  });
-});
-
 describe('SessionStore running fixture', () => {
   it('treats a lock held by this process as running and writable', () => {
     const project = mkdtempSync(path.join(os.tmpdir(), 'migent-live-'));
@@ -209,5 +211,87 @@ describe('SessionStore running fixture', () => {
     expect(s.snapshot('live')?.displayState.state).toBe('running');
     expect(s.snapshot('live')?.displayState.writable).toBe(true);
     expect(probeLock(path.join(sessions, 'session.lock')).kind).toBe('alive');
+  });
+});
+
+describe('SessionStore scan outcome', () => {
+  function bare(): string {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-scan-'));
+    dirs.push(root);
+    mkdirSync(path.join(root, '.migent'));
+    return root;
+  }
+
+  it('separates discovered, eligible and pending directories', () => {
+    const s = store();
+    s.load();
+    mkdirSync(sessionDir('just-created'));
+    s.load();
+    const scan = s.scanOutcome;
+    expect(scan.state).toBe('ok');
+    expect(scan.pending).toEqual(['just-created']);
+    expect(scan.eligible).not.toContain('just-created');
+    expect(scan.discovered).toContain('just-created');
+    expect(s.snapshot('just-created')).toBeUndefined();
+  });
+
+  it('promotes a pending directory once its marker is written', () => {
+    const s = store();
+    mkdirSync(sessionDir('late'));
+    s.load();
+    expect(s.scanOutcome.pending).toEqual(['late']);
+    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nschema_version: 2\n');
+    const events = changes(s, () => s.refreshSession('late'));
+    expect(events).toContainEqual(expect.objectContaining({ sessionId: 'late', kind: 'added' }));
+    s.load();
+    expect(s.scanOutcome.pending).toEqual([]);
+  });
+
+  it('reports missing and empty sessions directories distinctly', () => {
+    const root = bare();
+    const s = new SessionStore(root);
+    s.load();
+    expect(s.scanOutcome).toMatchObject({ state: 'missing', discovered: [] });
+    mkdirSync(path.join(root, '.migent', 'sessions'));
+    s.load();
+    expect(s.scanOutcome).toMatchObject({ state: 'empty', discovered: [] });
+  });
+
+  it('reports an unreadable sessions directory and removes cached sessions', () => {
+    const s = store();
+    s.load();
+    const before = s.all().map((snapshot) => snapshot.sessionId);
+    expect(before.length).toBeGreaterThan(0);
+    fault.code = 'EACCES';
+    const events = changes(s, () => s.load());
+    expect(s.scanOutcome).toMatchObject({ state: 'unreadable', error: 'EACCES', discovered: [] });
+    expect(s.all()).toEqual([]);
+    expect(events.filter((event) => event.kind === 'removed')).toHaveLength(before.length);
+    fault.code = null;
+    s.load();
+    expect(s.scanOutcome.state).toBe('ok');
+    expect(s.all().map((snapshot) => snapshot.sessionId).sort()).toEqual([...before].sort());
+  });
+
+  it('emits a project scan change only when the outcome changes', () => {
+    const s = store();
+    const seen: string[] = [];
+    const unsubscribe = s.onDidChangeProject((event) => seen.push(event.kind));
+    s.load();
+    s.load();
+    expect(seen).toEqual(['scan']);
+    mkdirSync(sessionDir('pending-one'));
+    s.load();
+    expect(seen).toEqual(['scan', 'scan']);
+    unsubscribe();
+  });
+
+  it('removes all sessions when the sessions directory is deleted', () => {
+    const s = store();
+    s.load();
+    rmSync(path.join(dirs[dirs.length - 1]!, '.migent', 'sessions'), { recursive: true, force: true });
+    s.load();
+    expect(s.all()).toEqual([]);
+    expect(s.scanOutcome.state).toBe('missing');
   });
 });
