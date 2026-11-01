@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { probeLock } from './lockProbe';
 import type { SessionChangeEvent } from './model';
 import { SessionStore } from './store';
-import { makeProject } from './testHelpers';
+import { makeProject, syntheticDir } from './testHelpers';
 
 // Lets one test make listing the sessions directory fail with a chosen error code.
 const fault = vi.hoisted(() => ({ code: null as string | null }));
@@ -211,6 +211,104 @@ describe('SessionStore running fixture', () => {
     expect(s.snapshot('live')?.displayState.state).toBe('running');
     expect(s.snapshot('live')?.displayState.writable).toBe(true);
     expect(probeLock(path.join(sessions, 'session.lock')).kind).toBe('alive');
+  });
+});
+
+describe('SessionStore retention', () => {
+  /** Give a fixture session a distinct creation time so the order does not depend on ids. */
+  function stamp(name: string, createdAt: string): void {
+    const file = path.join(sessionDir(name), 'manifest.yaml');
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/created_at: .*/, `created_at: ${createdAt}`));
+  }
+
+  function retained(s: SessionStore): string[] {
+    return s.all().map((snapshot) => snapshot.sessionId).sort();
+  }
+
+  function limited(limit: number): SessionStore {
+    stamp('completed', '2026-10-26T12:00:00.000+00:00');
+    stamp('failed', '2026-10-26T11:00:00.000+00:00');
+    return new SessionStore(dirs[dirs.length - 1]!, { limit });
+  }
+
+  it('retains the newest sessions plus every Running, Blocked and Question session, and counts the rest as hidden', () => {
+    freshenLock('running', false);
+    const s = limited(2);
+    s.load();
+    expect(retained(s)).toEqual(['blocked', 'completed', 'failed', 'running']);
+    // 10 fixture sessions, 4 retained.
+    expect(s.scanOutcome.eligible).toHaveLength(10);
+    expect(s.hiddenCount).toBe(6);
+  });
+
+  it('exempts a session that only has pending questions', () => {
+    mkdirSync(sessionDir('asking'), { recursive: true });
+    writeFileSync(
+      path.join(sessionDir('asking'), 'manifest.yaml'),
+      'session_id: asking\ncreated_at: 2020-01-01T00:00:00.000+00:00\nschema_version: 2\n',
+    );
+    writeFileSync(
+      path.join(sessionDir('asking'), 'status.json'),
+      readFileSync(path.join(syntheticDir('running-questions'), 'status.json'), 'utf8'),
+    );
+    const s = limited(2);
+    s.load();
+    expect(s.snapshot('asking')?.status?.questions).toHaveLength(1);
+    expect(s.snapshot('asking')?.displayState.state).toBe('stopped');
+  });
+
+  it('lets a hidden session that resumes become retained, and emits a scan change for the hidden count', () => {
+    const s = limited(1);
+    s.load();
+    expect(s.snapshot('stale-lock')).toBeUndefined();
+    const hiddenBefore = s.hiddenCount;
+    const project: string[] = [];
+    s.onDidChangeProject((event) => project.push(event.kind));
+
+    // A non-exempt hidden session refreshed again stays hidden, silently.
+    const quiet = changes(s, () => s.refreshSession('stale-lock'));
+    expect(quiet).toEqual([]);
+    expect(project).toEqual([]);
+
+    freshenLock('stale-lock', false);
+    const events = changes(s, () => s.refreshSession('stale-lock'));
+    expect(events).toContainEqual(expect.objectContaining({ sessionId: 'stale-lock', kind: 'added' }));
+    expect(s.snapshot('stale-lock')?.displayState.state).toBe('running');
+    expect(s.hiddenCount).toBe(hiddenBefore - 1);
+    expect(project).toEqual(['scan']);
+  });
+
+  it('retains hidden sessions again when the limit is raised', () => {
+    const s = limited(1);
+    s.load();
+    expect(s.hiddenCount).toBeGreaterThan(0);
+    s.setLimit(100);
+    expect(s.limit).toBe(100);
+    expect(s.hiddenCount).toBe(0);
+    expect(s.all()).toHaveLength(10);
+  });
+
+  it('drops a session whose markers disappeared on refresh, hidden or retained', () => {
+    const s = limited(1);
+    s.load();
+    const hiddenBefore = s.hiddenCount;
+    rmSync(sessionDir('blocked'), { recursive: true, force: true });
+    rmSync(sessionDir('prepared'), { recursive: true, force: true });
+    const events = changes(s, () => {
+      s.refreshSession('blocked');
+      s.refreshSession('prepared');
+    });
+    expect(events).toEqual([expect.objectContaining({ sessionId: 'blocked', kind: 'removed' })]);
+    expect(s.snapshot('prepared')).toBeUndefined();
+    expect(s.hiddenCount).toBe(hiddenBefore - 1);
+  });
+
+  it('does not create a snapshot for a refresh of a session that never existed', () => {
+    const s = store();
+    s.load();
+    const events = changes(s, () => s.refreshSession('ghost'));
+    expect(events).toEqual([]);
+    expect(s.snapshot('ghost')).toBeUndefined();
   });
 });
 

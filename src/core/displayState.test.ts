@@ -16,6 +16,9 @@ function status(overrides: Partial<SessionStatus> = {}): SessionStatus {
     latestDecision: null,
     blockedByExecutionIds: [],
     runningStages: [],
+    questions: [],
+    outputs: [],
+    latestProviderEvent: null,
     raw: {},
     ...overrides,
   };

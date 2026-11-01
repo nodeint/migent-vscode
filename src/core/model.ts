@@ -43,7 +43,56 @@ export interface SessionStatus {
   latestDecision: string | null;
   blockedByExecutionIds: string[];
   runningStages: RunningStage[];
+  /** Pending human questions (`status.json.questions`); empty once answered. */
+  questions: PendingQuestion[];
+  /** Published outputs (`status.json.outputs`), in file order. */
+  outputs: PublishedOutput[];
+  /** Small scalar fields of `latest_provider_event`; the full object is never retained. */
+  latestProviderEvent: ProviderEventSummary | null;
+  /** The parsed `status.json` without `latest_provider_event`. */
   raw: Record<string, unknown>;
+}
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description: string | null;
+}
+
+/** Fields shared by the status summary and `questions.json` records. */
+export interface QuestionBase {
+  id: string;
+  question: string;
+  context: string | null;
+  selection: string | null;
+  options: QuestionOption[];
+  recommended: string[];
+  executionId: string | null;
+  stageId: string | null;
+  recipient: string | null;
+}
+
+/** A pending question as summarized by `status.json.questions`. */
+export interface PendingQuestion extends QuestionBase {
+  /** Session-relative path of the execution `questions.json`, as reported by migent. */
+  file: string | null;
+}
+
+export interface PublishedOutput {
+  name: string;
+  /** Session-relative path as written by migent; not yet confined to the session. */
+  path: string;
+  sourceExecutionId: string | null;
+  publishedByExecutionId: string | null;
+}
+
+export interface ProviderEventSummary {
+  event: string | null;
+  summary: string | null;
+  stageId: string | null;
+  executionId: string | null;
+  provider: string | null;
+  timestamp: string | null;
 }
 
 export interface RunningStage {

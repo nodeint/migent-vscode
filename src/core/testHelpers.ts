@@ -21,6 +21,16 @@ export function makeProject(): string {
   return projectRoot;
 }
 
+/** A session directory in the captured migent 0.3.1 samples, read in place. */
+export function capturedDir(name: string): string {
+  return path.join(fixturesDir, 'captured', name);
+}
+
+/** A hand-written fixture for a shape no captured sample covers (see `fixtures/synthetic/README.md`). */
+export function syntheticDir(name: string): string {
+  return path.join(fixturesDir, 'synthetic', name);
+}
+
 export function workflowsFixtureDir(): string {
   return path.join(fixturesDir, 'workflows');
 }

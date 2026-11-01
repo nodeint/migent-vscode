@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "1",
+      "question": "Old question?",
+      "selection": "single",
+      "options": [{ "id": "A", "label": "Yes" }],
+      "execution_id": "0001-plan--attempt-01",
+      "stage_id": "plan",
+      "recipient": "human",
+      "status": "superseded",
+      "answer": "free-form text where an object is expected",
+      "answered_at": "2026-11-01T12:02:00.000+00:00"
+    },
+    {
+      "id": "2",
+      "question": "Current question?",
+      "selection": "single",
+      "options": [{ "id": "A", "label": "Yes" }],
+      "execution_id": "0002-plan--attempt-02",
+      "stage_id": "plan",
+      "recipient": "human",
+      "status": "pending",
+      "answer": null
+    }
+  ]
+}

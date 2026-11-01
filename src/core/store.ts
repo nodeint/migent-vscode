@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { isRetentionExempt } from './attention';
 import { deriveDisplayState } from './displayState';
 import { probeLock } from './lockProbe';
 import { readManifest } from './manifest';
@@ -54,12 +55,17 @@ interface SnapshotBody {
   displayState: SessionSnapshot['displayState'];
 }
 
+function sameJson(a: unknown = null, b: unknown = null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
   return (
-    JSON.stringify(a.manifest?.raw ?? null) === JSON.stringify(b.manifest?.raw ?? null) &&
-    JSON.stringify(a.status?.raw ?? null) === JSON.stringify(b.status?.raw ?? null) &&
+    sameJson(a.manifest?.raw, b.manifest?.raw) &&
+    sameJson(a.status?.raw, b.status?.raw) &&
+    sameJson(a.status?.latestProviderEvent, b.status?.latestProviderEvent) &&
     a.statusError === b.statusError &&
-    JSON.stringify(a.lock) === JSON.stringify(b.lock) &&
+    sameJson(a.lock, b.lock) &&
     a.displayState.state === b.displayState.state &&
     a.displayState.unknownReason === b.displayState.unknownReason &&
     a.displayState.writable === b.displayState.writable
@@ -90,16 +96,28 @@ function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
  */
 export class SessionStore {
   public readonly projectRoot: string;
-  public readonly limit: number;
 
   readonly #sessions = new Map<string, SessionSnapshot>();
+  /** Eligible sessions the limit hides. Ids only: their snapshots are rebuilt when needed. */
+  #hidden = new Set<string>();
   readonly #changes = new Emitter<SessionChangeEvent>();
   readonly #projectChanges = new Emitter<ProjectChangeEvent>();
   #scan: ScanOutcome = { state: 'missing', error: null, discovered: [], eligible: [], pending: [] };
+  #limit: number;
 
   constructor(projectRoot: string, options: SessionStoreOptions = {}) {
     this.projectRoot = projectRoot;
-    this.limit = options.limit ?? DEFAULT_SESSION_LIMIT;
+    this.#limit = options.limit ?? DEFAULT_SESSION_LIMIT;
+  }
+
+  /** Effective limit on non-exempt retained sessions. */
+  public get limit(): number {
+    return this.#limit;
+  }
+
+  /** Eligible sessions the limit currently hides (pending directories are not counted). */
+  public get hiddenCount(): number {
+    return this.#hidden.size;
   }
 
   /** Subscribe to changes. Returns an unsubscribe function. */
@@ -126,48 +144,74 @@ export class SessionStore {
     return this.#sessions.get(sessionId);
   }
 
-  /** Full scan of the sessions directory: direct reads, faster than spawning the CLI. */
+  /**
+   * Full scan of the sessions directory: direct reads, faster than spawning the CLI.
+   * Every eligible session is read, then the limit decides which snapshots are retained.
+   */
   public load(): void {
     const scan = this.scanSessions();
-    this.#setScan(scan);
-    const seen = new Set<string>();
-    for (const sessionId of scan.eligible) {
-      seen.add(sessionId);
-      if (this.#sessions.has(sessionId)) {
-        this.refreshSession(sessionId);
-      } else {
-        this.#setSession(sessionId, this.buildSnapshot(sessionId), 'added');
-      }
+    const isScanChanged = JSON.stringify(scan) !== JSON.stringify(this.#scan);
+    this.#scan = scan;
+
+    const candidates = scan.eligible.map((sessionId) => this.buildSnapshot(sessionId));
+    const keep = this.selectRetained(candidates);
+    for (const snapshot of candidates) {
+      if (!keep.has(snapshot.sessionId)) continue;
+      const current = this.#sessions.get(snapshot.sessionId);
+      if (current === undefined) this.#setSession(snapshot.sessionId, snapshot, 'added');
+      else if (!sameBody(snapshot, current)) this.#setSession(snapshot.sessionId, snapshot, 'updated');
     }
     for (const sessionId of [...this.#sessions.keys()]) {
-      if (!seen.has(sessionId)) this.removeSession(sessionId);
+      if (!keep.has(sessionId)) this.removeSession(sessionId);
     }
-    this.applyLimit();
+    const hidden = new Set(candidates.map((s) => s.sessionId).filter((id) => !keep.has(id)));
+    this.#finish(isScanChanged || hidden.size !== this.#hidden.size, hidden);
   }
 
+  /**
+   * Re-read one session. A session with neither marker is removed. A hidden session is
+   * rebuilt only to learn whether it became exempt (for example, resumed and Running);
+   * it stays hidden, silently, otherwise.
+   */
   public refreshSession(sessionId: string): void {
-    const current = this.#sessions.get(sessionId);
-    if (current === undefined) {
-      this.#setSession(sessionId, this.buildSnapshot(sessionId), 'added');
-      this.applyLimit();
+    if (!this.hasMarker(sessionId)) {
+      this.removeSession(sessionId);
       return;
     }
     const next = this.buildSnapshot(sessionId);
-    if (!sameBody(next, current)) {
-      this.#setSession(sessionId, next, 'updated');
+    const current = this.#sessions.get(sessionId);
+    if (current !== undefined) {
+      if (!sameBody(next, current)) this.#setSession(sessionId, next, 'updated');
+      return;
     }
+    if (this.#hidden.has(sessionId) && !isRetentionExempt(next)) return;
+    this.#setSession(sessionId, next, 'added');
+    this.enforceLimit();
   }
 
   public removeSession(sessionId: string): void {
+    if (this.#hidden.has(sessionId)) {
+      const hidden = new Set(this.#hidden);
+      hidden.delete(sessionId);
+      this.#finish(true, hidden);
+    }
     if (!this.#sessions.has(sessionId)) return;
     this.#sessions.delete(sessionId);
     this.#emit(sessionId, 'removed');
   }
 
-  #setScan(scan: ScanOutcome): void {
-    const isChanged = JSON.stringify(scan) !== JSON.stringify(this.#scan);
-    this.#scan = scan;
-    if (isChanged) this.#projectChanges.emit({ project: this.projectRoot, kind: 'scan' });
+  /**
+   * Change the effective limit (for "Show more") and rescan so hidden sessions that now
+   * fit are retained. Same cost as `load()`.
+   */
+  public setLimit(limit: number): void {
+    this.#limit = Math.max(1, Math.floor(limit));
+    this.load();
+  }
+
+  #finish(isProjectChanged: boolean, hidden: Set<string>): void {
+    this.#hidden = hidden;
+    if (isProjectChanged) this.#projectChanges.emit({ project: this.projectRoot, kind: 'scan' });
   }
 
   #setSession(sessionId: string, snapshot: SessionSnapshot, kind: SessionChangeKind): void {
@@ -179,12 +223,41 @@ export class SessionStore {
     this.#changes.emit({ project: this.projectRoot, sessionId, kind });
   }
 
-  private applyLimit(): void {
-    if (this.#sessions.size <= this.limit) return;
-    const ordered = this.all();
-    for (const snapshot of ordered.slice(this.limit)) {
-      this.removeSession(snapshot.sessionId);
+  /** Ids to retain: the newest `limit` sessions plus every retention-exempt one. */
+  private selectRetained(snapshots: readonly SessionSnapshot[]): Set<string> {
+    const ordered = [...snapshots].sort((a, b) => (isNewer(b, a) ? 1 : -1));
+    const keep = new Set(ordered.slice(0, this.#limit).map((snapshot) => snapshot.sessionId));
+    for (const snapshot of ordered) {
+      if (isRetentionExempt(snapshot)) keep.add(snapshot.sessionId);
     }
+    return keep;
+  }
+
+  /** Move retained sessions beyond the limit to hidden, emitting `removed` for each. */
+  private enforceLimit(): void {
+    const retained = this.all();
+    const keep = this.selectRetained(retained);
+    const hidden = new Set(this.#hidden);
+    for (const snapshot of retained) {
+      if (keep.has(snapshot.sessionId)) continue;
+      this.#sessions.delete(snapshot.sessionId);
+      hidden.add(snapshot.sessionId);
+      this.#emit(snapshot.sessionId, 'removed');
+    }
+    for (const sessionId of keep) hidden.delete(sessionId);
+    this.#finish(hidden.size !== this.#hidden.size, hidden);
+  }
+
+  private hasMarker(sessionId: string): boolean {
+    const dir = sessionDir(this.projectRoot, sessionId);
+    return [MANIFEST_FILENAME, STATUS_FILENAME].some((marker) => {
+      try {
+        statSync(path.join(dir, marker));
+        return true;
+      } catch {
+        return false;
+      }
+    });
   }
 
   private scanSessions(): ScanOutcome {
@@ -208,16 +281,7 @@ export class SessionStore {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       discovered.push(entry.name);
-      const dir = sessionDir(this.projectRoot, entry.name);
-      const hasMarker = [MANIFEST_FILENAME, STATUS_FILENAME].some((marker) => {
-        try {
-          statSync(path.join(dir, marker));
-          return true;
-        } catch {
-          return false;
-        }
-      });
-      (hasMarker ? eligible : pending).push(entry.name);
+      (this.hasMarker(entry.name) ? eligible : pending).push(entry.name);
     }
     discovered.sort();
     eligible.sort();

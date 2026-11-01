@@ -35,6 +35,17 @@ Core tests use fixtures and temporary directories without launching VS Code.
 For extension commands, activation, or UI changes, also verify the behavior in
 VS Code and describe the manual steps in the PR.
 
+### Fixtures
+
+Core tests read two fixture sets in place under `src/core/fixtures/`:
+
+- `captured/` holds real files written by migent 0.3.1, redacted (see its
+  [README](../src/core/fixtures/captured/README.md)). Tests that need a project
+  layout copy from it into a temporary directory.
+- `synthetic/` holds hand-written files for shapes no captured sample covers
+  (see its [README](../src/core/fixtures/synthetic/README.md)). Name them as
+  synthetic in test titles, and replace them when a captured sample appears.
+
 ### Extension-host integration tests
 
 `pnpm test:integration` builds `src/integration/` with esbuild, downloads VS Code

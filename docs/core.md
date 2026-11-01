@@ -68,6 +68,16 @@ background work; its caller chooses when to scan, refresh, and load details.
 | `events.jsonl` | Explicit `EventTail.read()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset |
 | `.migent/workflows/*.{yaml,yml}` | Explicit `scanWorkflows`, or `readWorkflowFile` for one file | Missing, empty and unreadable directories are distinct outcomes; an unparsable or unreadable file stays listed as `invalid` or `unreadable` with its error |
 | `.migent/config.yaml` | `readProjectConfig` | `missing`, `ok`, `invalid` (unparsable or not a mapping) or `unreadable`; raw integer `schema_version` or null; no defaults |
+| `status.json` `questions`, `outputs` | Snapshot construction (they come with the status read) | Records without `id` and `question` (questions) or `path` (outputs) are skipped; absent keys give empty lists |
+| `questions.json` (session) | `readQuestions(sessionDir)` on demand | `missing`, `unreadable`, `invalid`, `unsupported` (schema other than 1) or `ok`; records keep file order; `superseded` is accepted though never observed; an answer outside the observed shapes becomes null |
+| `outputs/` | `listOutputs(sessionDir, published)` on demand | Published rows are `ok`, `missing` or `rejected` (path leaves the session directory); unnamed files in `outputs/` get path-only rows; a missing directory is normal and an unlistable one sets `directoryError` |
+| `next.json`, `workflow.frozen.yaml` | `readNext`, `readFrozenDownstream` on demand | Independent outcomes (`missing`, `unreadable`, `invalid`, `unsupported` or `ok`; `absent` for the frozen declaration). Artifact paths are checked against the session directory. `declared` is true only when workflow and artifact mapping match the frozen declaration, null when it was not read. `argv` is data, never an action |
+| Manifest `handoff` | `readHandoff(manifest, sessionDir)` | `absent`, `invalid` (outside the observed shape) or `ok`; `path` is confined to the target session, `source_path` is text only |
+| `executions/<id>/` contents | `listExecutionFiles(executionDir)` on demand | Lists only files that exist: `task.md`, `prompt.md`, `response.md`, `questions.json`, `stream.jsonl`, `turns/*/verify.md`, `artifacts/*` |
+
+The status reader keeps only the small scalar fields of `latest_provider_event`
+(`event`, `summary`, `stage_id`, `execution_id`, `provider`, `timestamp`) and
+removes the object from `raw`: its `details` and `usage` can be very large.
 
 [readStatus](../src/core/statusReader.ts) makes at most three attempts with 100 ms
 between attempts after errors. Missing files return immediately. The wait is
@@ -116,6 +126,25 @@ Sessions are ordered by manifest creation time, falling back to status creation
 time, then session id. The limit is applied after a full scan and when refresh
 adds a session, not before disk reads. It limits retained snapshots rather than
 the cost of the initial scan.
+
+Retained sessions are the newest `limit` plus every retention-exempt one
+([isRetentionExempt](../src/core/attention.ts)): Running, Question, Blocked, or
+with pending questions. The retained count can therefore exceed the limit.
+`hiddenCount` is eligible sessions minus retained; pending directories are not
+counted, and a change of the count emits `scan`. The store keeps ids only for
+hidden sessions. `refreshSession` on a hidden id rebuilds its snapshot just to
+decide exemption (for example a resumed session) and stays silent while it is
+not exempt. A session with neither marker is removed on refresh. `setLimit(n)`
+changes the effective limit and rescans (same cost as `load()`).
+
+[attention.ts](../src/core/attention.ts) holds the pure grouping: `groupOf`
+(Running; Needs attention for Question, Blocked, Failed, Stopped, Unknown;
+Recent for the rest), `isCounted` (Blocked, Failed, Question or pending
+questions, never Unknown) and `summarize` (unique counts).
+
+[childrenOf](../src/core/handoff.ts) derives lineage children from the retained
+snapshots' `prior_session_id`; nothing is cached, and a source outside the
+retained set is not resolved.
 
 Change events carry `{project, sessionId, kind}`. Kinds are `added`, `updated`
 and `removed`. Subscribing returns an unsubscribe function.

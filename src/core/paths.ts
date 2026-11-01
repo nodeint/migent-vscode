@@ -81,6 +81,18 @@ export function outputsDir(projectRoot: string, sessionId: string): string {
   return path.join(sessionDir(projectRoot, sessionId), OUTPUTS_DIRNAME);
 }
 
+/**
+ * Resolve `relative` under `baseDir`. Null when it is empty, absolute, or leaves
+ * `baseDir` (a lexical check; symbolic links are not followed).
+ */
+export function resolveWithin(baseDir: string, relative: string): string | null {
+  if (relative === '' || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) return null;
+  const resolved = path.resolve(baseDir, relative);
+  const back = path.relative(baseDir, resolved);
+  if (back === '' || back === '..' || back.startsWith(`..${path.sep}`) || path.isAbsolute(back)) return null;
+  return resolved;
+}
+
 export function handoffDir(projectRoot: string, sessionId: string): string {
   return path.join(sessionDir(projectRoot, sessionId), HANDOFF_DIRNAME);
 }
