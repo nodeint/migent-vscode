@@ -121,6 +121,39 @@
         "title": "Open Project Config",
         "category": "Migent",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "migent.session.run",
+        "title": "Run Workflow…",
+        "category": "Migent",
+        "icon": "$(play)"
+      },
+      {
+        "command": "migent.session.prepare",
+        "title": "Prepare Session…",
+        "category": "Migent",
+        "icon": "$(add)"
+      },
+      {
+        "command": "migent.session.start",
+        "title": "Save & Run",
+        "category": "Migent",
+        "shortTitle": "Save & Run",
+        "icon": "$(play)"
+      },
+      {
+        "command": "migent.session.continue",
+        "title": "Continue Session",
+        "category": "Migent",
+        "shortTitle": "Continue",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "migent.session.cancel",
+        "title": "Stop Session",
+        "category": "Migent",
+        "shortTitle": "Stop",
+        "icon": "$(debug-stop)"
       }
     ],
     "configuration": {
@@ -138,6 +171,28 @@
           "minimum": 1,
           "scope": "resource",
           "description": "Show this many of the most recent sessions. Running sessions and sessions that need attention are always shown."
+        },
+        "migent.run.maxDispatches": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "scope": "resource",
+          "description": "Stage dispatches allowed in one run or continue command (passed as --max-dispatches)."
+        },
+        "migent.run.progress": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Print each tool call when it finishes in the Migent output (passed as --progress)."
+        },
+        "migent.env": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "markdownDescription": "Extra environment variables for the Migent CLI, added to the environment VS Code inherits."
         }
       }
     },
@@ -271,6 +326,21 @@
           "command": "migent.refresh",
           "when": "(view == migent.workflows || view == migent.project) && viewItem == diag.workflows-unreadable",
           "group": "inline@1"
+        },
+        {
+          "command": "migent.session.start",
+          "when": "view == migent.sessions && viewItem =~ /^session.prepared/",
+          "group": "inline@0"
+        },
+        {
+          "command": "migent.session.cancel",
+          "when": "view == migent.sessions && viewItem =~ /^session.running/",
+          "group": "inline@0"
+        },
+        {
+          "command": "migent.session.continue",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/",
+          "group": "inline@0"
         }
       ],
       "commandPalette": [
@@ -299,6 +369,11 @@
           "submenu": "migent.results.more",
           "when": "activeWebviewPanelId == 'migent.results'",
           "group": "navigation@4"
+        },
+        {
+          "command": "migent.session.start",
+          "when": "resourceFilename == task.md && resourcePath =~ /[\\/]\\.migent[\\/]sessions[\\/]/",
+          "group": "navigation@0"
         }
       ],
       "migent.results.more": [

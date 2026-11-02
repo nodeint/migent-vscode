@@ -28,12 +28,16 @@ export async function pickProject(registry: ProjectRegistry): Promise<ProjectCon
  * Resolve a session for a command invoked from the Command Palette. A stale tree selection
  * is never an implicit target: the user picks.
  */
-export async function pickSession(registry: ProjectRegistry, title: string): Promise<PickedSession | undefined> {
+export async function pickSession(
+  registry: ProjectRegistry,
+  title: string,
+  isEligible: (snapshot: SessionSnapshot) => boolean = () => true,
+): Promise<PickedSession | undefined> {
   const context = await pickProject(registry);
   if (context === undefined) return undefined;
-  const snapshots = context.store.all();
+  const snapshots = context.store.all().filter(isEligible);
   if (snapshots.length === 0) {
-    void vscode.window.showInformationMessage('This project has no sessions yet.');
+    void vscode.window.showInformationMessage('This project has no matching sessions.');
     return undefined;
   }
   const now = Date.now();
