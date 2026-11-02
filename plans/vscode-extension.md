@@ -69,11 +69,14 @@ Each phase has its own plan file with scope, details and exit criteria. Display 
 | 0 | (below) | Preparation outside this repo |
 | 1 | [`01-core.md`](./01-core.md) | Skeleton, `core/`, display state, store, event tail, fixtures |
 | 2 | [`02-monitoring.md`](./02-monitoring.md) | Read-only MVP: watcher, Sessions/Workflows/Project views, Results with suggestion metadata, native files, status bar, logs |
-| 3 | [`03-control.md`](./03-control.md) | Run/continue/reply/cancel via CLI, per-workflow Run action, notifications |
-| 3a (within phase 3) | [`03a-human-input.md`](./03a-human-input.md) | Structured human-question form, batch JSON submission, drafts/history and recorded-answer recovery |
-| 3b (within phase 3) | [`03b-downstream-handoff.md`](./03b-downstream-handoff.md) | Separate Next step page, explicit downstream Run/Prepare, prior links, deferred context binding and recovery |
+| 3 | [`03-control.md`](./03-control.md) | CLI runner and operation gate, Run/Prepare/Save & Run/Continue/Stop via CLI, per-workflow Run action, target selection, capability reasons |
+| 3c (after phase 3) | [`03c-reply-notifications.md`](./03c-reply-notifications.md) | Blocker Reply and drafts, state notifications, quota waits, Repair/Doctor/Run next stage once, Initialize project |
+| 3a (after phase 3c) | [`03a-human-input.md`](./03a-human-input.md) | Structured human-question form, batch JSON submission, drafts/history and recorded-answer recovery |
+| 3b (after phase 3) | [`03b-downstream-handoff.md`](./03b-downstream-handoff.md) | Separate Next step page, explicit downstream Run/Prepare, prior links, deferred context binding and recovery |
 | 4 | [`04-release.md`](./04-release.md) | Multi-root polish, docs, testing checklist, release 0.1 |
 | 5 | [`05-later.md`](./05-later.md) | Workflow graph, metrics dashboard, execution diff, schema |
+
+Dependency graph: 3 → 3c → 3a, and 3 → 3b. 3b can merge independently of 3c and 3a. Suggested order: 3, 3c, then 3a and 3b. Phase 4 needs all of them.
 
 ### Design references
 
@@ -82,7 +85,7 @@ Interactive prototypes live in [`designs/`](../designs/README.md), separate from
 | Plan | Design |
 |---|---|
 | Phase 2 | [Monitoring](../designs/02-monitoring-ui.html) |
-| Phase 3 | [Session controls](../designs/03-control-ui.html) |
+| Phases 3 and 3c | [Session controls](../designs/03-control-ui.html) |
 | Phase 3a | [Human input](../designs/human-questions-ui.html) |
 | Phase 3b | [Results and downstream Next step](../designs/downstream-handoff-ui.html) |
 
