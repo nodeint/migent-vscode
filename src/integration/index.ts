@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { runCapabilityScenarios } from './capability.integration.test';
+import { runControlScenarios } from './control.integration.test';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runResultsScenarios } from './results.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
@@ -26,6 +27,7 @@ export async function run(): Promise<void> {
       scenariosFailed += await runTimelineScenarios();
       scenariosFailed += await runStatusBarScenarios();
       scenariosFailed += await runResultsScenarios();
+      scenariosFailed += await runControlScenarios();
     }
     const failed = probeFailed + scenariosFailed;
     if (failed > 0) {

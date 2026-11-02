@@ -60,6 +60,11 @@ user controls, so that mode only reports and never fails. Reports are written to
 `dist-test/probe-report-<version>.json`. On Linux, run under a display server
 (`xvfb-run -a pnpm test:integration`).
 
+The fixture CLI `fake-migent.js` also implements `session prepare`, `run`, `continue` and `cancel` by writing
+session files in the project, so `control.integration.test.ts` drives the control service through the real runner,
+gate, watcher and store: concurrent Run, Stop then Continue, Prepare then Save & Run, foreign and own locks, and
+gate release after a failed command. Quick Pick and Input Box prompts are not driven.
+
 After the watcher probe, the suite runs the host scenarios in
 `monitoring.integration.test.ts`. They activate the extension in the fixture
 workspace and write files from Node, as the Migent CLI would, then wait for the

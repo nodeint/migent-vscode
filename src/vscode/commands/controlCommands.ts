@@ -9,6 +9,7 @@ import type { WorkflowEntry } from '../../core/workflows';
 import type { ControlService, WorkflowChoice } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
+import { isMetaFileNode } from '../views/projectNodes';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
 const LAST_WORKFLOW_KEY = 'migent.lastWorkflow';
@@ -99,11 +100,8 @@ async function openTask(file: string): Promise<void> {
   await vscode.window.showTextDocument(document);
 }
 
-async function run(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
-  const context = await pickProject(registry);
-  if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'Run a workflow');
-  if (workflow === undefined) return;
+/** Task entry for a chosen workflow: a one-line task runs now; Compose in editor prepares `task.md`. */
+async function runWorkflow(control: ControlService, context: ProjectContext, workflow: WorkflowEntry): Promise<void> {
   const input = await askTask(workflow.id);
   if (input === undefined) return;
   if (input.kind === 'task') {
@@ -116,6 +114,56 @@ async function run(control: ControlService, memento: vscode.Memento, registry: C
     taskText: input.text,
   });
   if (file !== undefined) await openTask(file);
+}
+
+async function run(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
+  const context = await pickProject(registry);
+  if (context === undefined) return;
+  const workflow = await pickWorkflow(context, memento, 'Run a workflow');
+  if (workflow !== undefined) await runWorkflow(control, context, workflow);
+}
+
+/** The project and workflow file of a Workflows row or of the workflow YAML shown in an editor. */
+function workflowTarget(host: CommandHost, arg: unknown): { context: ProjectContext; file: string } | undefined {
+  if (isMetaFileNode(arg) && arg.kind === 'workflow') {
+    const context = host.registry.project(arg.project);
+    return context === undefined ? undefined : { context, file: arg.file };
+  }
+  if (!(arg instanceof vscode.Uri)) return undefined;
+  const context = host.registry.projects().find((candidate) => arg.fsPath.startsWith(candidate.root + path.sep));
+  return context === undefined ? undefined : { context, file: arg.fsPath };
+}
+
+/** Save the workflow document bound to this launch; false (with the editor kept) when it cannot be saved. */
+async function saveWorkflow(file: string): Promise<boolean> {
+  const document = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === file);
+  if (document?.isDirty !== true || (await document.save())) return true;
+  void vscode.window.showErrorMessage('The workflow was not saved, so it was not run.');
+  return false;
+}
+
+/** Run the workflow of a row or YAML editor, skipping the workflow picker. */
+interface Deps {
+  control: ControlService;
+  host: CommandHost;
+  memento: vscode.Memento;
+}
+
+async function runWorkflowFile({ control, host, memento }: Deps, arg: unknown): Promise<void> {
+  const target = workflowTarget(host, arg);
+  if (target === undefined) {
+    await run(control, memento, host.registry);
+    return;
+  }
+  if (!(await saveWorkflow(target.file))) return;
+  target.context.catalog.reloadWorkflow(target.file);
+  const entry = target.context.catalog.workflows().entries.find((candidate) => candidate.file === target.file);
+  if (entry?.state !== 'ok' || entry.duplicate) {
+    void vscode.window.showErrorMessage(entry?.error ?? 'This workflow is not valid, so it cannot be run.');
+    return;
+  }
+  await memento.update(`${LAST_WORKFLOW_KEY}.${target.context.key}`, entry.id);
+  await runWorkflow(control, target.context, entry);
 }
 
 async function prepare(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
@@ -218,6 +266,9 @@ export function registerControlCommands(
 ): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('migent.session.run', () => run(control, memento, host.registry)),
+    vscode.commands.registerCommand('migent.workflow.run', (arg?: unknown) =>
+      runWorkflowFile({ control, host, memento }, arg),
+    ),
     vscode.commands.registerCommand('migent.session.prepare', () => prepare(control, memento, host.registry)),
     vscode.commands.registerCommand('migent.session.start', (arg: unknown) => start(control, host, arg)),
     vscode.commands.registerCommand('migent.session.continue', async (arg: unknown) => {

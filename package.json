@@ -154,6 +154,13 @@
         "category": "Migent",
         "shortTitle": "Stop",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "migent.workflow.run",
+        "title": "Run Workflow",
+        "category": "Migent",
+        "icon": "$(play)",
+        "shortTitle": "Run"
       }
     ],
     "configuration": {
@@ -231,6 +238,11 @@
         "view": "migent.sessions",
         "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Open CLI Settings](command:migent.openSettings)\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
         "when": "migent.hasProjects && migent.cliState =~ /^(missing|unsupported|old|unparsable|error)$/"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "No sessions yet.\n[Run workflow](command:migent.session.run)",
+        "when": "migent.hasProjects && migent.cliState == ok && migent.sessionsState == empty"
       },
       {
         "view": "migent.workflows",
@@ -341,6 +353,11 @@
           "command": "migent.session.continue",
           "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/",
           "group": "inline@0"
+        },
+        {
+          "command": "migent.workflow.run",
+          "when": "view == migent.workflows && viewItem == workflow.ok",
+          "group": "inline@0"
         }
       ],
       "commandPalette": [
@@ -373,6 +390,11 @@
         {
           "command": "migent.session.start",
           "when": "resourceFilename == task.md && resourcePath =~ /[\\/]\\.migent[\\/]sessions[\\/]/",
+          "group": "navigation@0"
+        },
+        {
+          "command": "migent.workflow.run",
+          "when": "resourcePath =~ /[\\/]\\.migent[\\/]workflows[\\/][^\\/]+\\.ya?ml$/",
           "group": "navigation@0"
         }
       ],
