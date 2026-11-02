@@ -2,7 +2,7 @@
   "name": "migent-vscode",
   "displayName": "Migent",
   "description": "Monitor and run Migent sessions and workflows from VS Code.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "nodeint",
   "icon": "media/migent.png",
   "license": "MIT",
