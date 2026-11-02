@@ -156,8 +156,10 @@ async function runWorkflowFile({ control, host, memento }: Deps, arg: unknown): 
     return;
   }
   if (!(await saveWorkflow(target.file))) return;
-  target.context.catalog.reloadWorkflow(target.file);
-  const entry = target.context.catalog.workflows().entries.find((candidate) => candidate.file === target.file);
+  // Catalog entries are keyed by file name inside `.migent/workflows`, not by absolute path.
+  const name = path.basename(target.file);
+  target.context.catalog.reloadWorkflow(name);
+  const entry = target.context.catalog.workflows().entries.find((candidate) => candidate.file === name);
   if (entry?.state !== 'ok' || entry.duplicate) {
     void vscode.window.showErrorMessage(entry?.error ?? 'This workflow is not valid, so it cannot be run.');
     return;

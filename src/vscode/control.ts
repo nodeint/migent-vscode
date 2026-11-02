@@ -20,7 +20,7 @@ import {
 } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
 import { type GateHandle, type GateKey, OperationGate } from '../core/operationGate';
-import { frozenWorkflowPath } from '../core/paths';
+import { frozenWorkflowPath, workflowsDir } from '../core/paths';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
@@ -216,9 +216,10 @@ export class ControlService implements vscode.Disposable {
     if (entry === undefined) return undefined;
     const frozen = frozenWorkflowPath(context.root, snapshot.sessionId);
     const frozenText = readText(frozen);
-    const currentText = readText(entry.file);
+    const current = path.join(workflowsDir(context.root), entry.file);
+    const currentText = readText(current);
     if (frozenText === undefined || currentText === undefined) return undefined;
-    return normalizeYaml(frozenText) === normalizeYaml(currentText) ? undefined : { frozen, current: entry.file };
+    return normalizeYaml(frozenText) === normalizeYaml(currentText) ? undefined : { frozen, current };
   }
 
   /** `session prepare`, then (optionally) the user's task text. Returns the real `task.md` path. */

@@ -140,6 +140,27 @@ const scenarios: Scenario[] = [
       assert.ok(path.isAbsolute(env.root));
     },
   },
+  {
+    name: 'AC7: a changed workflow file is detected against the session copy, with absolute paths for the diff',
+    async run(env) {
+      const original = ['id: plan', 'stages:', '  - id: a', ''].join('\n');
+      write(migentPath(env.root, 'workflows', 'plan.yaml'), original);
+      write(migentPath(env.root, 'sessions', 'w1', 'manifest.yaml'), manifest('w1', 'workflow_id: plan' + '\n'));
+      write(migentPath(env.root, 'sessions', 'w1', 'status.json'), status('cancelled'));
+      write(migentPath(env.root, 'sessions', 'w1', 'workflow.frozen.yaml'), original);
+      const project = await createProject(env);
+      await waitFor('workflow and session', () => project.catalog.workflows().entries.length === 1 && sessions(env).length === 1);
+      const snapshot = project.store.snapshot('w1');
+      assert.ok(snapshot);
+      assert.equal(env.api.control.workflowChange(project, snapshot), undefined, 'identical copy is not a change');
+      write(migentPath(env.root, 'workflows', 'plan.yaml'), original + '  - id: b' + '\n');
+      project.catalog.reloadWorkflow('plan.yaml');
+      const change = env.api.control.workflowChange(project, snapshot);
+      assert.ok(change, 'edited workflow is a change');
+      assert.ok(path.isAbsolute(change.current) && fs.existsSync(change.current), 'current path is a real file');
+      assert.ok(fs.existsSync(change.frozen), 'frozen path is a real file');
+    },
+  },
 ];
 
 export function runControlScenarios(): Promise<number> {
