@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 
 import { Liveness } from './core/liveness';
+import { CapabilityService } from './vscode/capability';
+import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
 import { ContextKeys } from './vscode/contextKeys';
 import { ProjectRegistry } from './vscode/projects';
@@ -10,6 +12,7 @@ import { SessionsTreeProvider } from './vscode/views/sessionsTree';
 /** What activation returns; integration tests use it to observe the host. */
 export interface MigentApi {
   registry: ProjectRegistry;
+  capability: CapabilityService;
   sessionsTree: SessionsTreeProvider;
   sessionsView: vscode.TreeView<TreeNode>;
   /** Resolves after the first project load, which runs after `activate()` returned. */
@@ -19,8 +22,9 @@ export interface MigentApi {
 export function activate(context: vscode.ExtensionContext): MigentApi {
   const registry = new ProjectRegistry();
   const liveness = new Liveness({ stores: () => registry.projects().map((project) => project.store) });
-  const contextKeys = new ContextKeys(registry);
-  const sessionsTree = new SessionsTreeProvider(registry);
+  const capability = new CapabilityService(registry);
+  const contextKeys = new ContextKeys(registry, capability);
+  const sessionsTree = new SessionsTreeProvider(registry, capability);
   const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
     treeDataProvider: sessionsTree,
     showCollapseAll: true,
@@ -28,6 +32,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   sessionsTree.attach(sessionsView);
   context.subscriptions.push(
     registry,
+    capability,
     contextKeys,
     sessionsTree,
     sessionsView,
@@ -49,6 +54,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       registry.refresh();
     }),
     ...registerSessionCommands(registry),
+    ...registerCapabilityCommands(capability),
   );
   // Discovery and the first load run after activation returns.
   const ready = new Promise<void>((resolve) => {
@@ -57,7 +63,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       resolve();
     }, 0);
   });
-  return { registry, sessionsTree, sessionsView, ready };
+  return { registry, capability, sessionsTree, sessionsView, ready };
 }
 
 export function deactivate(): void {}

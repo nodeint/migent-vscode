@@ -68,5 +68,8 @@ session whose marker arrives late, deleted and recreated folders, workflow and
 config edits, retained execution watchers, and `migent.refresh`. The scenarios in
 `sessionsTree.integration.test.ts` read the Sessions provider as VS Code would
 (groups, icons, Unknown reasons, badge, questions and history, execution files,
-selection and active editor staying put, Show more, commands). They are
+selection and active editor staying put, Show more, commands). The scenarios in
+`capability.integration.test.ts` change `migent.cli.*` settings and check the diagnostic node, the
+capability states and Recheck; the fixture workspace points `migent.cli.path` at
+`fake-migent.js` (run with `node`), so they do not depend on an installed CLI. They are
 skipped in `--exclude` mode, where no events arrive.

@@ -160,7 +160,7 @@ tests against it (S2).
 | G16 | Pure watch planning and routing: the desired set of non-recursive watched folders for a project, and classification of a changed path into a target | Watcher | Core: **new** `watchPlan.ts` |
 | G17 | Per-key trailing debounce with max wait, injectable clock | Watcher | Core: **new** `coalescer.ts` |
 | G18 | Timeline line formatting from `TailEvent` | Timeline, Output Channel | Core: **new** `timelineFormat.ts` |
-| G19 | CLI locate (shell-free `LaunchSpec`: native executable or JavaScript entry only) and version check with effective minimum = max(constant, setting), no `vscode` import | Capability; reused by phase 3 runner | **New** `src/cli/locate.ts`, `src/cli/version.ts` |
+| G19 | CLI locate (shell-free `LaunchSpec`: native executable or JavaScript entry only) and version check against a minimum-version constant, no `vscode` import | Capability; reused by phase 3 runner | **New** `src/cli/locate.ts`, `src/cli/version.ts` |
 | G20 | Entire VS Code layer (registry, watcher, liveness, tails, capability, trees, content provider, log channels, status bar, Results host, commands, context keys) | Everything visible | Host, **new** `src/vscode/**` |
 | G21 | Integration test harness (approved): `@vscode/test-electron` dev dependency, runner, fixture workspace, CI step with a display server on Ubuntu | S0 spike, all **I** rows | **New**; [`package.json`](../package.json), [`vitest.config.ts`](../vitest.config.ts), CI |
 | G22 | ESLint `no-restricted-imports` forbidding `vscode` in `src/core/**` and `src/cli/**` (new repository rule, approved by the user) | AC17 | [`eslint.config.mjs`](../eslint.config.mjs) |
@@ -330,9 +330,8 @@ LaunchSpec = { command: string; prefixArgs: string[]; via: 'native' | 'node-scri
 ```
 
 - **Minimum version (decided).** A constant in extension code, initially `0.3.1`, is bumped in each extension
-  release that needs a newer CLI. `migent.cli.minVersion` can only raise the minimum: `required` =
-  max(constant, setting). A setting below the constant, or an unparsable setting, is ignored with a one-line note in
-  the diagnostic tooltip; it never lowers `required`.
+  release that needs a newer CLI. It is an environment requirement of the release, not a user setting (decided:
+  there is no `migent.cli.minVersion`).
 - **Invocation strategy (decided).** No shell is used, in this phase or in phase 3: every CLI process is started
   with `execFile`/`spawn` of `LaunchSpec.command` with `[...prefixArgs, ...args]` and `windowsHide: true`.
   `cli/locate.ts` resolves `migent.cli.path` to a `LaunchSpec`:
@@ -599,8 +598,7 @@ commands.
 
 ### 6.9 Settings and commands
 
-Settings: `migent.cli.path` (resource scope, default `migent`), `migent.cli.minVersion` (resource scope, default
-empty; can only raise the built-in minimum, §5.5), `migent.sessions.limit` (default 50).
+Settings: `migent.cli.path` (resource scope, default `migent`), `migent.sessions.limit` (default 50).
 
 Commands: `migent.session.openResult`, `migent.session.openTask`, `migent.session.openPrompt`,
 `migent.session.openResponse`, `migent.session.openOutput`, `migent.session.openQuestions`,
@@ -702,7 +700,7 @@ workspace; **M** = manual check on Windows (steps recorded in the PR); **L** = E
 | AC10 | Completed row click and Open result open the same Results panel with outputs, suggestions and the four header actions; missing/invalid `next.json` keeps the session Completed and outputs visible | U (`handoff-source` next/outputs), I (panel opens, header commands target source), M (rendering, keyboard) |
 | AC11 | A child shows its source link and handoff provenance with the local `handoff/<n>/<file>` link and no link to `source_path`; the source shows its retained children; a child whose source is not retained shows the source id as text with a Show-more hint | U (`handoff-target` with `handoff-source`), I |
 | AC12 | The timeline document renders events and appends new ones live; `showLog` streams a running session; an unknown event version appears as raw text | U (format, tail truncation), I |
-| AC13 | Missing CLI, unsupported launcher (`.cmd`, `.bat`, `.ps1`, unknown), too-old and unparsable CLI each show a diagnostic with detected/required version and path, Open Settings and Recheck, while sessions remain visible; `required` is max(constant, setting) and a lower setting never lowers it | U (`LaunchSpec` for `.exe`, JS entry, each unsupported kind; version parse/compare; effective minimum), I (bogus `migent.cli.path`), M (native `migent.exe` on Windows) |
+| AC13 | Missing CLI, unsupported launcher (`.cmd`, `.bat`, `.ps1`, unknown), too-old and unparsable CLI each show a diagnostic with detected/required version and path, Open Settings and Recheck, while sessions remain visible; `required` is the minimum-version constant | U (`LaunchSpec` for `.exe`, JS entry, each unsupported kind; version parse/compare), I (bogus `migent.cli.path`), M (native `migent.exe` on Windows) |
 | AC14 | Two projects with the same session id show two distinct rows; adding/removing a folder adds/removes its project without reload | I |
 | AC15 | Missing, empty and unreadable sessions/workflows directories render the distinct states in §6.7 | U, I |
 | AC16 | No file under `.migent/` is created or modified by the extension during the integration suite | I (tree hash before/after) |

@@ -7,9 +7,10 @@ For file-reader and state behavior, see [Core behavior](core.md).
 
 [extension.ts](../src/extension.ts) builds a `ProjectRegistry`, the context keys and
 the liveness timer, and registers `migent.refresh`. It returns a small API
-(`registry`, `ready`) that integration tests use. Discovery and the first load run
+(`registry`, `capability`, `ready`) that integration tests use. Discovery and the first load run
 after `activate()` returns. The Sessions view and its read-only commands exist; the Workflows and
-Project views, status bar, CLI capability, timeline and Results page do not yet.
+Project views, status bar, timeline and Results page do not yet. CLI capability checks run once
+per trigger (a project appearing, a `migent.cli.*` change, Recheck) and never hide data read from disk.
 
 Data flows watcher, then store, then consumer; consumers never read disk:
 
@@ -43,7 +44,9 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Sessions view | [sessionsTree.ts](../src/vscode/views/sessionsTree.ts), [sessionChildren.ts](../src/vscode/views/sessionChildren.ts), [nodes.ts](../src/vscode/views/nodes.ts) | Identity-only nodes, `TreeItem`s built from the live store, children read on expand with core readers, narrow batched refreshes, badge, watch targets retained while a node is expanded; no file-system calls of its own |
 | Row text and ids | [sessionPresentation.ts](../src/core/sessionPresentation.ts) | Pure label, description, tooltip, `contextValue`, icon and node-id rules |
 | Session commands | [sessionCommands.ts](../src/vscode/commands/sessionCommands.ts), [pick.ts](../src/vscode/pick.ts) | Open files, copy id, reveal, Show more; a Command Palette call picks its target |
-| Window context keys | [contextKeys.ts](../src/vscode/contextKeys.ts) | `migent.hasProjects`, `migent.sessionsState` |
+| Window context keys | [contextKeys.ts](../src/vscode/contextKeys.ts) | `migent.hasProjects`, `migent.sessionsState`, `migent.cliState` |
+| CLI location and version | [locate.ts](../src/cli/locate.ts), [version.ts](../src/cli/version.ts), [capabilityText.ts](../src/cli/capabilityText.ts) | No `vscode` import. `migent.cli.path` resolves to a shell-free `LaunchSpec`: a native executable, or a `.js`/`.mjs`/`.cjs` entry run with `node` from `PATH`; `.cmd`, `.bat`, `.ps1` and other launchers are unsupported. The required version is a constant in `version.ts`, bumped in the release that needs a newer CLI; there is no setting for it |
+| CLI capability service | [capability.ts](../src/vscode/capability.ts), [capabilityCommands.ts](../src/vscode/commands/capabilityCommands.ts) | Per-project state (`checking`, `ok`, `missing`, `unsupported`, `old`, `unparsable`, `error`), one `--version` probe per executable, announces `capability` changes; shows a diagnostic node in the Sessions view; `migent.openSettings` and `migent.cli.recheck` |
 | Liveness timer | [liveness.ts](../src/core/liveness.ts) | One 10 s timer, alive only while a session is Running; no `vscode` import |
 | Session/workflow locations | [paths.ts](../src/core/paths.ts) | Shared path construction and filenames |
 | Shared parsed types and supported versions | [model.ts](../src/core/model.ts) | Core data shapes, not the complete upstream schema |
@@ -58,7 +61,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Watch planning and debounce | [watchPlan.ts](../src/core/watchPlan.ts), [coalescer.ts](../src/core/coalescer.ts) | Pure desired watcher set and path classification; keyed debounce with injectable timers. No watcher is created in core |
 | Session cache and notifications | [store.ts](../src/core/store.ts) | One project per store; snapshot, lazy reads, change events |
 
-Tests are colocated as `src/core/<module>.test.ts`. Shared sample data lives in
+Tests are colocated as `src/core/<module>.test.ts` and `src/cli/<module>.test.ts`. Shared sample data lives in
 [fixtures](../src/core/fixtures); testing guidance belongs to [testing.md](testing.md); verification commands and
 setup belong to [CONTRIBUTING.md](../CONTRIBUTING.md#verification).
 

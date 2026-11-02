@@ -1,21 +1,24 @@
 import * as vscode from 'vscode';
 
 import { aggregateSessionsState } from '../core/attention';
+import type { CapabilityService } from './capability';
 import type { ProjectRegistry } from './projects';
 
 /**
- * Window context keys for welcome content and menus. `migent.cliState` joins them with
- * the CLI capability service.
+ * Window context keys for welcome content and menus: `migent.hasProjects`, `migent.sessionsState`
+ * and `migent.cliState` (the worst CLI capability across projects, `none` without a project).
  */
 export class ContextKeys implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
+  readonly #capability: CapabilityService;
   readonly #subscription: vscode.Disposable;
   readonly #values = new Map<string, boolean | string>();
 
-  constructor(registry: ProjectRegistry) {
+  constructor(registry: ProjectRegistry, capability: CapabilityService) {
     this.#registry = registry;
+    this.#capability = capability;
     this.#subscription = registry.onDidChange((change) => {
-      if (change.type === 'projects' || change.type === 'project' || change.type === 'refresh') this.update();
+      if (change.type === 'projects' || change.type === 'project' || change.type === 'refresh' || change.type === 'capability') this.update();
     });
     this.update();
   }
@@ -23,6 +26,7 @@ export class ContextKeys implements vscode.Disposable {
   public update(): void {
     const projects = this.#registry.projects();
     this.#set('migent.hasProjects', projects.length > 0);
+    this.#set('migent.cliState', this.#capability.aggregate());
     this.#set(
       'migent.sessionsState',
       aggregateSessionsState(

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { runCapabilityScenarios } from './capability.integration.test';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runWatcherProbe } from './watcherProbe.integration.test';
@@ -12,7 +13,12 @@ export async function run(): Promise<void> {
     // With files.watcherExclude on .migent VS Code delivers no events (known limitation): the probe only
     // reports in that mode, and the scenarios that depend on watcher events are skipped.
     const isExclude = process.env.MIGENT_IT_EXCLUDE === '1';
-    const scenariosFailed = isExclude ? 0 : (await runMonitoringScenarios()) + (await runSessionsTreeScenarios());
+    let scenariosFailed = 0;
+    if (!isExclude) {
+      scenariosFailed += await runMonitoringScenarios();
+      scenariosFailed += await runSessionsTreeScenarios();
+      scenariosFailed += await runCapabilityScenarios();
+    }
     const failed = probeFailed + scenariosFailed;
     if (failed > 0) {
       throw new Error(`${failed} required integration case(s) failed`);

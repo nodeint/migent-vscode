@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { describeCapability } from '../../cli/capabilityText';
 import { groupOf, type SessionGroup } from '../../core/attention';
 import { listExecutionFiles } from '../../core/executionFiles';
 import { listExecutions } from '../../core/executions';
@@ -17,6 +18,7 @@ import {
   truncate,
 } from '../../core/sessionPresentation';
 import type { WatchTarget } from '../../core/watchPlan';
+import type { CapabilityService } from '../capability';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type {
   ContainerNode,
@@ -34,6 +36,7 @@ export const GROUP_ORDER: readonly SessionGroup[] = ['running', 'attention', 're
 /** What the child builders need from the provider. */
 export interface ChildHost {
   registry: ProjectRegistry;
+  capability: CapabilityService;
   /** Return the existing node with this id (updated) or register this one; sets its parent. */
   intern: <T extends TreeNode>(node: T, parent: TreeNode | undefined) => T;
   /** Keep a detail target watched until the owning node collapses. Idempotent. Call before reading. */
@@ -59,6 +62,19 @@ function leaf(host: ChildHost, head: LeafHead, view: LeafView): LeafNode {
 export function projectContents(host: ChildHost, context: ProjectContext, parent: TreeNode | undefined): TreeNode[] {
   const { key, store } = context;
   const nodes: TreeNode[] = [];
+  const cli = describeCapability(host.capability.state(key));
+  if (cli !== null) {
+    nodes.push(
+      leaf(host, { id: nodeIds.diagnostic(key, 'cli'), parent: parent, project: key }, {
+        label: cli.label,
+        icon: 'warning',
+        color: 'list.warningForeground',
+        contextValue: 'diag.cli',
+        tooltip: cli.tooltip,
+        command: { command: 'migent.openSettings', title: 'Open Settings', arguments: [] },
+      }),
+    );
+  }
   const diagnostic = sessionsDiagnostic(store.scanOutcome);
   if (diagnostic !== null) {
     const detail = diagnostic.detail === null ? '' : ` (${diagnostic.detail})`;

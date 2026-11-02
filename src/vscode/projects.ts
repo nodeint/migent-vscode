@@ -73,6 +73,11 @@ export class ProjectRegistry implements vscode.Disposable {
     return this.#projects.get(key)?.context;
   }
 
+  /** Publish a change produced outside the registry (the capability service). */
+  public announce(change: MigentChange): void {
+    this.#emitter.fire(change);
+  }
+
   /** Discover projects and load them. Called after `activate()` returned, so activation stays fast. */
   public start(): void {
     for (const folder of vscode.workspace.workspaceFolders ?? []) this.#addFolder(folder);

@@ -1,1 +1,3 @@
-{}
+{
+  "migent.cli.path": "./fake-migent.js"
+}

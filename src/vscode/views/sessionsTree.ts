@@ -15,6 +15,7 @@ import {
   sessionTooltip,
 } from '../../core/sessionPresentation';
 import { type WatchTarget, watchTargetKey } from '../../core/watchPlan';
+import type { CapabilityService } from '../capability';
 import type { MigentChange } from '../changes';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { Releasable } from '../watchBackend';
@@ -78,11 +79,12 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
   #view: vscode.TreeView<TreeNode> | null = null;
 
-  constructor(registry: ProjectRegistry, now: () => number = Date.now) {
+  constructor(registry: ProjectRegistry, capability: CapabilityService, now: () => number = Date.now) {
     this.#registry = registry;
     this.#now = now;
     this.#host = {
       registry,
+      capability,
       intern: (node, parent) => this.#intern(node, parent),
       retain: (project, target) => {
         this.#retain(project, target);
@@ -249,6 +251,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         this.#onFiles(change.project, change.sessionId, change.targets);
         return;
       case 'capability':
+        this.#queue(this.#projectElement(change.project));
+        return;
     }
   }
 
