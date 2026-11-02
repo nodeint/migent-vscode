@@ -1,6 +1,6 @@
 # Phase 3b: Downstream handoff
 
-Part of [`vscode-extension.md`](./vscode-extension.md), within **phase 3**, before [`04-release.md`](./04-release.md). Builds on the readers/store in [`01-core.md`](./01-core.md), Results/monitoring in [`02-monitoring.md`](./02-monitoring.md), and the CLI runner and command gates in [`03-control.md`](./03-control.md). It is independent of the human-question form in [`03a-human-input.md`](./03a-human-input.md).
+Part of [`vscode-extension.md`](./vscode-extension.md), a follow-on to **phase 3**, before [`04-release.md`](./04-release.md). Builds on the readers/store in [`01-core.md`](./01-core.md), Results/monitoring in [`02-monitoring.md`](./02-monitoring.md), and the CLI runner and command gates in [`03-control.md`](./03-control.md). It is independent of the human-question form in [`03a-human-input.md`](./03a-human-input.md).
 
 Sources of truth: Migent's [Downstream handoff](https://github.com/nodeint/migent/blob/HEAD/docs/workflows.md#downstream-handoff) and [Reusable workflow boundaries](https://github.com/nodeint/migent/blob/HEAD/docs/sessions.md#reusable-workflow-boundaries). Design reference: [`designs/downstream-handoff-ui.html`](../designs/downstream-handoff-ui.html).
 
@@ -61,7 +61,7 @@ Results and read-only next/provenance inspection are phase 2 capabilities. Edita
 
 ## 4. Results overview: additive next-step suggestions
 
-Command: `migent.session.openResult`. It opens/reuses the existing Results overview for the bound session. Keep `migent.session.openOutput` for opening an individual real output file.
+Command: `migent.session.openResult` (introduced in phase 2; 3b only adds the suggestions section). It opens/reuses the existing Results overview for the bound session. Keep `migent.session.openOutput` for opening an individual real output file.
 
 Append a next-step section to the normal result content:
 
@@ -72,7 +72,7 @@ Append a next-step section to the normal result content:
 - Distinguish no declared downstream, unavailable next metadata and malformed/unsupported metadata. For a missing/write-failed file with a known declaration, offer an explicit Reload suggestions action; keep source Completed and its outputs accessible.
 - A small `next.json` file link is sufficient for raw inspection. Do not add paragraphs explaining its internals to the product UI.
 
-Use the existing lightweight Results editor surface. If this foundation is not implemented yet, create a small editor webview for the overview with host-backed links and native header actions; do not replace output file editors. This same foundation supplies the separate Next step view in phase 3b. The overview remains read-only during phase 2.
+Use the Results editor surface built in phase 2 ([`02-monitoring.md`](./02-monitoring.md)): host-backed links and native header actions; do not replace output file editors. Phase 3b reuses its host contract (identity binding, intents, shared webview rules) for the separate Next step view. The Results overview itself stays free of task fields, Run and Prepare.
 
 ## 5. Separate Next step page
 
@@ -105,7 +105,7 @@ Before dispatch:
 
 - Confirm the source is still Completed, the suggestion still refers to the selected target and the current target ID resolves unambiguously. Save a dirty target workflow document bound to this launch, as for phase 3's per-workflow Run; abort on save failure. Do not Save All unrelated editor buffers.
 - Refresh source output records/file availability for useful diagnostics. Do not snapshot files, calculate authoritative hashes, write manifest provenance or duplicate engine binding rules in the extension; the CLI does that at target start.
-- Acquire a transient local launch gate scoped to the source/target launch intent across Results, Next step, tree and Palette actions. Hold it until reconciliation determines whether a child was created. Other suggestions/sessions stay usable; source state remains Completed throughout.
+- Acquire the phase 3 **launch key** `(project URI, target workflow id, prior source session id)` from [`03-control.md`](./03-control.md) across Results, Next step, tree and Palette actions; do not add a separate gate. Hold it until reconciliation determines whether a child was created. Other suggestions/sessions stay usable; source state remains Completed throughout.
 
 At start, the CLI loads the current target definition/model configuration, validates source/artifacts, snapshots named context into target `handoff/`, computes hashes and records provenance. Every agent stage receives the bound paths. Resume/retry of that child uses its recorded snapshots, not the producer's mutable files or a newly computed mapping.
 
@@ -123,7 +123,7 @@ On success, reconcile the real Prepared session, open its real `task.md` in the 
 
 Prepare records the prior source ID. It does **not** snapshot context, compute hashes, freeze the target workflow/model, or promise that the source artifacts will still be available when started. The UI shows the source relation and source files, with no invented bound provenance.
 
-Save & Run saves and validates that child session's task, then invokes:
+Save & Run is phase 3's `migent.session.start` bound to the prepared child; 3b adds no new command for it. It saves and validates that child session's task, then invokes:
 
 ```text
 migent session run --session <prepared-child-id> --workflow <target-id>
@@ -154,7 +154,7 @@ If multiple new candidates share the same prior/target and correlation is ambigu
 
 ## 10. UI boundary and error handling
 
-Results/Next step share a lightweight editor-view host; they are separate bound pages, not a combined form and not a new workflow graph. Host-backed native title/header actions and actual file editors remain intact. Use the same CSP, external-script, resource-root, revisioned-message, serialization and theme/accessibility rules as phase 3a/phase 5 webviews.
+Results/Next step share a lightweight editor-view host; they are separate bound pages, not a combined form and not a new workflow graph. Host-backed native title/header actions and actual file editors remain intact. Use the shared webview rules (CSP, external script, resource roots, revisioned messages, serialization, theme/accessibility) defined in [`02-monitoring.md` §6.8](./02-monitoring.md#68-views-ui-decisions-retained-from-the-outline); they do not depend on 03a.
 
 Webview messages carry source/target identity, view revision and a supported intent, not executable/cwd/path/argv values chosen by the page. Host validates input, derives safe output/snapshot links within the relevant session roots, rechecks source/target/capability, and dispatches the CLI without a shell. Do not execute `next.json.argv`, rendered Markdown/HTML or arbitrary file links as commands. Render task/paths as inert text.
 
@@ -163,7 +163,7 @@ Errors identify the actual missing target/output, save failure, bind failure or 
 ## 11. Implementation and tests
 
 1. **Contract/readers:** add next/handoff models, schema-aware readers, canonical comparison, lineage index and fixtures. Confirm the published CLI's flags/identity outputs and the manifest handoff shape without importing the kernel.
-2. **Monitoring/Results:** targeted watchers, Completed-row/Open result routing, preserved result/header controls, additive suggestions, actual output links, raw next inspection and child/source links.
+2. **Monitoring/Results:** reuse phase 2's Completed-row/Open result routing, header controls, output links, raw next inspection and lineage; add only the editable suggestion entries, targeted `next.json` refresh where absent, and child/source navigation beyond the recent-session limit.
 3. **Next step:** separate page identity/tab, captured targets, task overrides, artifact table, current target YAML link, existing-child actions and no extra product copy.
 4. **Commands/recovery:** Run/Prepare/Save & Run with prior, launch gates, observed-child reconciliation, missing-next regeneration and uncertain-result recovery.
 5. **Release validation:** real CLI/fake-provider fixtures plus Windows, reload, multi-root and UI regression tests.

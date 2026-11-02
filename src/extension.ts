@@ -3,12 +3,14 @@ import * as vscode from 'vscode';
 import { Liveness } from './core/liveness';
 import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
+import { registerControlCommands } from './vscode/commands/controlCommands';
 import { registerProjectCommands } from './vscode/commands/projectCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
+import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
 import { ProjectRegistry } from './vscode/projects';
 import { ResultsPanels } from './vscode/results/panels';
@@ -23,6 +25,7 @@ import { WorkflowsTreeProvider } from './vscode/views/workflowsTree';
 export interface MigentApi {
   registry: ProjectRegistry;
   capability: CapabilityService;
+  control: ControlService;
   sessionsTree: SessionsTreeProvider;
   sessionsView: vscode.TreeView<TreeNode>;
   workflowsTree: WorkflowsTreeProvider;
@@ -36,10 +39,29 @@ export interface MigentApi {
   ready: Promise<void>;
 }
 
+/** Drive the single liveness timer and the views that follow it. */
+function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, onTick: () => void): vscode.Disposable[] {
+  return [
+    {
+      dispose: () => {
+        liveness.dispose();
+      },
+    },
+    {
+      dispose: liveness.onDidTick(onTick),
+    },
+    registry.onDidChange((change) => {
+      // Start or stop the single liveness timer whenever a session may have started or stopped running.
+      if (change.type !== 'files' && change.type !== 'capability') liveness.update();
+    }),
+  ];
+}
+
 export function activate(context: vscode.ExtensionContext): MigentApi {
   const registry = new ProjectRegistry();
   const liveness = new Liveness({ stores: () => registry.projects().map((project) => project.store) });
   const capability = new CapabilityService(registry);
+  const control = new ControlService(registry, capability);
   const contextKeys = new ContextKeys(registry, capability);
   const sessionsTree = new SessionsTreeProvider(registry, capability);
   const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
@@ -58,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   context.subscriptions.push(
     registry,
     capability,
+    control,
     contextKeys,
     sessionsTree,
     sessionsView,
@@ -70,20 +93,9 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
-    {
-      dispose: () => {
-        liveness.dispose();
-      },
-    },
-    {
-      dispose: liveness.onDidTick(() => {
-        sessionsTree.refreshRunning();
-        statusBar.update();
-      }),
-    },
-    registry.onDidChange((change) => {
-      // Start or stop the single liveness timer whenever a session may have started or stopped running.
-      if (change.type !== 'files' && change.type !== 'capability') liveness.update();
+    ...livenessSubscriptions(liveness, registry, () => {
+      sessionsTree.refreshRunning();
+      statusBar.update();
     }),
     vscode.commands.registerCommand('migent.refresh', () => {
       registry.refresh();
@@ -93,6 +105,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
     ...registerProjectCommands(registry),
+    ...registerControlCommands(host, control, context.workspaceState),
   );
   // Discovery and the first load run after activation returns.
   const ready = new Promise<void>((resolve) => {
@@ -104,6 +117,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   return {
     registry,
     capability,
+    control,
     sessionsTree,
     sessionsView,
     workflowsTree,

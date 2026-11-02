@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import type { SessionSnapshot } from '../../core/model';
 import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
@@ -58,13 +59,23 @@ export type Resolved = PickedSession & { target?: Target };
  * The target is the tree node passed in, else the session of the active Results panel, else the user's pick.
  * A stale tree selection is never an implicit target.
  */
-export async function resolve(host: CommandHost, arg: unknown, title: string): Promise<Resolved | undefined> {
+export interface ResolveQuery {
+  title: string;
+  /** Limits the Quick Pick; a clicked or panel target is returned as is and judged by the command. */
+  isEligible?: (snapshot: SessionSnapshot) => boolean;
+}
+
+export async function resolveWith(host: CommandHost, arg: unknown, query: ResolveQuery): Promise<Resolved | undefined> {
   const { registry } = host;
   const target = targetOf(arg) ?? host.active.activeTarget();
   const context = target === undefined ? undefined : registry.project(target.project);
   const snapshot = target === undefined ? undefined : context?.store.snapshot(target.sessionId);
   if (context !== undefined && snapshot !== undefined) return { context, snapshot, target };
-  return pickSession(registry, title);
+  return pickSession(registry, query.title, query.isEligible);
+}
+
+export function resolve(host: CommandHost, arg: unknown, title: string): Promise<Resolved | undefined> {
+  return resolveWith(host, arg, { title });
 }
 
 async function openOutput(host: CommandHost, arg: unknown): Promise<void> {

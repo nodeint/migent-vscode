@@ -27,7 +27,8 @@ read-only pending human questions and history; CLI version check; the settings a
 
 **Non-goals.** CLI write operations (run, continue, prepare, cancel, answer, repair, regenerate suggestions); the
 interactive Next step page ([`03b-downstream-handoff.md`](./03b-downstream-handoff.md)); the question answer form,
-drafts and fingerprints ([`03a-human-input.md`](./03a-human-input.md)); notifications; `metrics.json`; workflow
+drafts and fingerprints ([`03a-human-input.md`](./03a-human-input.md)); notifications
+([`03c-reply-notifications.md`](./03c-reply-notifications.md)); `metrics.json`; workflow
 graph and dashboards (phase 5); `migent session list --json` reconciliation; nested projects below a workspace
 folder root; asynchronous readers.
 
@@ -596,7 +597,7 @@ a child, the source link with handoff provenance (artifact name, output, local `
 "Show more to load the source" hint. Header actions are native `editor/title` contributions gated by
 `activeWebviewPanelId == 'migent.results'`: Open result, Open Task, View log, and a menu (Copy id, Reveal in
 Explorer, Open questions). They act on the panel's bound session. The page never contains a task field, Run or
-Prepare. Webview rules from [`03a-human-input.md` §9](./03a-human-input.md#9-webview-boundary): CSP
+Prepare. Shared webview rules (defined here; [`03a-human-input.md`](./03a-human-input.md#9-webview-boundary) and [`03b-downstream-handoff.md`](./03b-downstream-handoff.md#10-ui-boundary-and-error-handling) reuse them): CSP
 `default-src 'none'`, external script from `media/results/`, restricted `localResourceRoots`, inert text
 rendering, revisioned messages; the webview sends intents with identity only (`openOutput{name}`,
 `openNextFile`, `openTargetWorkflow{workflow}`, `openHandoffFile{name}`, `openSession{sessionId}`), never paths or

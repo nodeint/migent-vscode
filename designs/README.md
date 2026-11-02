@@ -5,7 +5,7 @@ Open an HTML file directly in a browser. No build or server is required; keep th
 | Design | Plan | Preview |
 |---|---|---|
 | Monitoring, sessions, workflows and project config | [Phase 2](../plans/02-monitoring.md) | [02-monitoring-ui.html](./02-monitoring-ui.html) |
-| Session controls, tasks, replies and notifications | [Phase 3](../plans/03-control.md) | [03-control-ui.html](./03-control-ui.html) |
+| Session controls, tasks, replies and notifications | [Phase 3](../plans/03-control.md), [Phase 3c](../plans/03c-reply-notifications.md) | [03-control-ui.html](./03-control-ui.html) |
 | Human question batches | [Phase 3a](../plans/03a-human-input.md) | [human-questions-ui.html](./human-questions-ui.html) |
 | Results suggestions and separate downstream Next step | [Phase 3b](../plans/03b-downstream-handoff.md) | [downstream-handoff-ui.html](./downstream-handoff-ui.html) |
 

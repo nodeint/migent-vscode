@@ -3,3 +3,4 @@
 ## Unreleased
 
 - Add read-only monitoring of Migent sessions, workflows, project configuration, timelines, logs, and results.
+- Run, prepare, continue and stop Migent sessions from VS Code, including a Run action on each workflow.

@@ -1,6 +1,6 @@
 # Phase 3a: Human input
 
-Part of [`vscode-extension.md`](./vscode-extension.md), within **phase 3**, before [`04-release.md`](./04-release.md). Builds on [`01-core.md`](./01-core.md), [`02-monitoring.md`](./02-monitoring.md) and the CLI runner/operation gate in [`03-control.md`](./03-control.md).
+Part of [`vscode-extension.md`](./vscode-extension.md), a follow-on to **phase 3**, before [`04-release.md`](./04-release.md). Builds on [`01-core.md`](./01-core.md), [`02-monitoring.md`](./02-monitoring.md) and the CLI runner/operation gate in [`03-control.md`](./03-control.md). Reuses the notification infrastructure from [`03c-reply-notifications.md`](./03c-reply-notifications.md), which ships first.
 
 Protocol source of truth: Migent's [`docs/human-in-the-loop.md`](https://github.com/nodeint/migent/blob/HEAD/docs/human-in-the-loop.md). The extension consumes its public files and CLI; it does not import the kernel or introduce another question/reply protocol.
 
@@ -55,15 +55,16 @@ Command: `migent.session.answerQuestions`. Tree inline action/notification label
 
 - Palette: pick a session with pending human questions, showing project, title, short id and pending stage count. A session with a live lock is still openable for drafting; sending remains gated.
 - If several stages have pending questions, pick the stage/batch with its stage id, originating execution and question count. Blocker reply targets remain distinguishable from question targets.
+- Also expose Answer questions for pending human batches on Running and Blocked session rows and on the corresponding stage nodes; do not hide them behind the primary displayState.
 - Tree stage/question action opens that exact batch directly. Reuse an existing panel for the same `(project, session, stage, execution)` rather than creating duplicates.
-- Notifications summarize the waiting stage/count and offer Answer questions. Do not steal focus by opening a panel automatically. Notify once per newly observed batch after activation; suppress old batches on startup and deduplicate file-event updates.
+- Notifications summarize the waiting stage/count and offer Answer questions. Do not steal focus by opening a panel automatically. Notify once per newly observed batch `(session, execution)` after activation, using the dedupe and grouping from 03c; suppress old batches on startup and deduplicate file-event updates.
 - Keep questions visible while independent branches run. Allow editing/saving a draft, show why Send is unavailable, and enable Send after reconciliation confirms the conflicting live runner has stopped. Never queue an automatic submission when the lock is released.
 
 Capture target identity throughout pickers, panel messages, confirmations and async work. Selecting another session or switching projects cannot redirect a submission. Ordinary Continue without answers does not answer a pending batch; do not present it as an alternative that resolves Question state.
 
 ## 5. Answer panel UX
 
-Use one editor webview for the selected stage batch. This is the phase 3 exception to native-first UI: a batch form requires radio groups, checkbox groups, multiline alternatives and one atomic Submit. Task, config, workflows and response files continue using normal editors.
+Use one editor webview for the selected stage batch. This is the phase 3a exception to native-first UI: a batch form requires radio groups, checkbox groups, multiline alternatives and one atomic Submit. Task, config, workflows and response files continue using normal editors.
 
 ### Layout
 
@@ -146,7 +147,7 @@ Answering does not finish the stage, select a workflow route, reset question num
 - Host sends validated question/draft DTOs with project/session/stage/execution identity, batch fingerprint and a monotonic view revision. Webview sends edits/submit intent with that identity/revision; stale messages are rejected without losing the draft.
 - A webview cannot choose a filesystem path, CLI executable, cwd or arbitrary command. Host derives them from the bound target. Revalidate every submitted question ID, option ID, input mode and string value; DOM validation is not authoritative.
 - Render agent/user content as text. No raw HTML/Markdown execution, remote scripts, network fetches or filesystem access in the webview. Open-source-file/log actions are host commands bound to known files.
-- Follow the shared webview rules: CSP starting with `default-src 'none'`, external scripts, restricted `localResourceRoots` for extension media, VS Code resource URIs and no unnecessary retained hidden contexts. Persist identity/light UI state with `getState/setState` and restore through a panel serializer; load durable answers/drafts from the host.
+- Follow the shared webview rules defined in [`02-monitoring.md` §6.8](./02-monitoring.md#68-views-ui-decisions-retained-from-the-outline): CSP starting with `default-src 'none'`, external scripts, restricted `localResourceRoots` for extension media, VS Code resource URIs and no unnecessary retained hidden contexts. Persist identity/light UI state with `getState/setState` and restore through a panel serializer; load durable answers/drafts from the host.
 - Native file editors, tree selection and other question panels keep their focus when a background batch changes. Update only the relevant panel, with a visible stale/recorded state when necessary.
 
 ## 10. Contract checks before implementation is considered complete
@@ -158,10 +159,14 @@ Answering does not finish the stage, select a workflow route, reset question num
 
 These are integration checks/known protocol limits, not permission to infer answers, mutate generated files or silently weaken identity validation.
 
+## Settings introduced
+
+`migent.notifications.question` (default true), independent of the blocker notification setting in 03c.
+
 ## 11. Implementation order and validation
 
-1. **Core contract:** add question/history readers, pending groups, fingerprints, answer validation/JSON serialization and fixtures; extend displayState without hiding mixed Running/Blocked questions.
-2. **Monitoring:** wire targeted watchers/store events, question rows, attention counts, native question/history access and exit-9 diagnostics.
+1. **Core contract:** reuse phase 2's question/history readers and fixtures; add only what is missing: pending groups, fingerprints, answer validation/JSON serialization; extend displayState without hiding mixed Running/Blocked questions.
+2. **Monitoring:** reuse phase 2's question rows, attention counts and native question/history access; add targeted question watchers/store events where absent and exit-9 diagnostics.
 3. **Submission:** add the Answer questions command, target selection, capability checks, draft/submission persistence and separate acceptance/continuation reconciliation using the shared operation gate.
 4. **Panel:** implement the batch webview, exclusive choice/text modes, draft restore, progress/jumps, stale handling and history. Add `migent.notifications.question` (default true), independent of blocker notifications.
 5. **Integration/recovery:** run fake-provider and real CLI contract scenarios, Windows file/runner checks, concurrent-client tests, reload/reconnect and accessibility checks before phase 4 release testing.
