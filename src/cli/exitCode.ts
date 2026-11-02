@@ -52,6 +52,17 @@ export function parseDiagnosticPaths(lines: readonly string[]): DiagnosticPaths 
   return found;
 }
 
+const SESSION_ID_LINE = /^\s*\[migent\]\s*session_id:\s*(\S+)\s*$/i;
+
+/** The id of the session a command started or resumed, as the CLI reports it on stderr. */
+export function parseSessionId(lines: readonly string[]): string | undefined {
+  for (const line of lines) {
+    const match = SESSION_ID_LINE.exec(line);
+    if (match !== null) return match[1];
+  }
+  return undefined;
+}
+
 /** Splits a byte stream into complete lines, holding back a trailing partial line until `flush`. */
 export class LineBuffer {
   private pending = '';
