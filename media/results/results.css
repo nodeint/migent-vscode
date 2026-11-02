@@ -1,0 +1,96 @@
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  padding: 0 20px 24px;
+  max-width: 960px;
+}
+
+h1 {
+  font-size: 1.5em;
+  margin: 16px 0 4px;
+  overflow-wrap: anywhere;
+}
+
+h2 {
+  font-size: 1.15em;
+  margin: 24px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-panelSection-border, var(--vscode-widget-border, transparent));
+}
+
+h3 {
+  font-size: 1em;
+  margin: 12px 0 4px;
+}
+
+.meta {
+  color: var(--vscode-descriptionForeground);
+  margin: 0;
+}
+
+.state {
+  font-weight: 600;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.card {
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panelSection-border, transparent));
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
+.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.warn {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.error {
+  color: var(--vscode-errorForeground);
+}
+
+.mono {
+  font-family: var(--vscode-editor-font-family);
+  overflow-wrap: anywhere;
+}
+
+button {
+  font: inherit;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 2px 8px;
+  margin: 2px 6px 2px 0;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+button.link {
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  padding: 0;
+  text-decoration: underline;
+}

@@ -18,7 +18,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:.migent/config.yaml"
+    "workspaceContains:.migent/config.yaml",
+    "onWebviewPanel:migent.results"
   ],
   "extensionKind": [
     "workspace"
@@ -32,9 +33,17 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "migent.session.openResult",
+        "title": "Open Result",
+        "category": "Migent",
+        "icon": "$(book)"
+      },
+      {
         "command": "migent.session.openTask",
         "title": "Open Task",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "Open Task",
+        "icon": "$(file-text)"
       },
       {
         "command": "migent.session.openPrompt",
@@ -49,17 +58,22 @@
       {
         "command": "migent.session.openOutput",
         "title": "Open Output",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "Open Result File",
+        "icon": "$(package)"
       },
       {
         "command": "migent.session.openQuestions",
         "title": "Open Questions File",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "Open Questions"
       },
       {
         "command": "migent.session.showLog",
         "title": "Show Session Log",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "View Log",
+        "icon": "$(output)"
       },
       {
         "command": "migent.session.showTimeline",
@@ -69,12 +83,14 @@
       {
         "command": "migent.session.copyId",
         "title": "Copy Session ID",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "Copy ID"
       },
       {
         "command": "migent.session.revealInExplorer",
         "title": "Reveal Session in File Explorer",
-        "category": "Migent"
+        "category": "Migent",
+        "shortTitle": "Reveal in Explorer"
       },
       {
         "command": "migent.sessions.showMore",
@@ -161,6 +177,11 @@
           "group": "inline@2"
         },
         {
+          "command": "migent.session.openResult",
+          "when": "view == migent.sessions && viewItem =~ /^session.completed/",
+          "group": "1_open@0"
+        },
+        {
           "command": "migent.session.openTask",
           "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "1_open@1"
@@ -211,8 +232,51 @@
           "command": "migent.sessions.showMore",
           "when": "false"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "migent.session.openOutput",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "migent.session.openTask",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "migent.session.showLog",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@3"
+        },
+        {
+          "submenu": "migent.results.more",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@4"
+        }
+      ],
+      "migent.results.more": [
+        {
+          "command": "migent.session.copyId",
+          "group": "1_session@1"
+        },
+        {
+          "command": "migent.session.revealInExplorer",
+          "group": "1_session@2"
+        },
+        {
+          "command": "migent.session.openQuestions",
+          "group": "1_session@3"
+        }
       ]
-    }
+    },
+    "submenus": [
+      {
+        "id": "migent.results.more",
+        "label": "More Actions",
+        "icon": "$(ellipsis)"
+      }
+    ]
   },
   "scripts": {
     "setup:git": "node scripts/setup-git.mjs",

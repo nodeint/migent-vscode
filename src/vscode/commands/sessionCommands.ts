@@ -6,8 +6,10 @@ import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { DEFAULT_SESSION_LIMIT } from '../../core/store';
+import { openFile } from '../openFile';
 import { type PickedSession,pickSession } from '../pick';
 import type { ProjectRegistry } from '../projects';
+import type { ActiveTarget } from '../results/panels';
 import { isTreeNode } from '../views/nodes';
 
 const STATUS_MESSAGE_MS = 2000;
@@ -44,30 +46,29 @@ function targetOf(arg: unknown): Target | undefined {
   }
 }
 
+/** What a command needs to find its session: the projects and the active Results panel. */
+export interface CommandHost {
+  registry: ProjectRegistry;
+  active: ActiveTarget;
+}
+
 export type Resolved = PickedSession & { target?: Target };
 
-export async function resolve(registry: ProjectRegistry, arg: unknown, title: string): Promise<Resolved | undefined> {
-  const target = targetOf(arg);
+/**
+ * The target is the tree node passed in, else the session of the active Results panel, else the user's pick.
+ * A stale tree selection is never an implicit target.
+ */
+export async function resolve(host: CommandHost, arg: unknown, title: string): Promise<Resolved | undefined> {
+  const { registry } = host;
+  const target = targetOf(arg) ?? host.active.activeTarget();
   const context = target === undefined ? undefined : registry.project(target.project);
   const snapshot = target === undefined ? undefined : context?.store.snapshot(target.sessionId);
   if (context !== undefined && snapshot !== undefined) return { context, snapshot, target };
   return pickSession(registry, title);
 }
 
-/** Open a real file in its native editor; a missing file is reported by path and never created. */
-async function openFile(file: string, what: string): Promise<void> {
-  const uri = vscode.Uri.file(file);
-  try {
-    await vscode.workspace.fs.stat(uri);
-  } catch {
-    void vscode.window.showWarningMessage(`${what} not found: ${file}`);
-    return;
-  }
-  await vscode.commands.executeCommand('vscode.open', uri);
-}
-
-async function openOutput(registry: ProjectRegistry, arg: unknown): Promise<void> {
-  const resolved = await resolve(registry, arg, 'Open output of which session?');
+async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
+  const resolved = await resolve(host, arg, 'Open output of which session?');
   if (resolved === undefined) return;
   if (resolved.target?.outputUri !== undefined) {
     await vscode.commands.executeCommand('vscode.open', resolved.target.outputUri);
@@ -93,8 +94,8 @@ async function openOutput(registry: ProjectRegistry, arg: unknown): Promise<void
   }
 }
 
-async function openExecutionFile(registry: ProjectRegistry, arg: unknown, file: string): Promise<void> {
-  const resolved = await resolve(registry, arg, `Open ${file} of which session?`);
+async function openExecutionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
+  const resolved = await resolve(host, arg, `Open ${file} of which session?`);
   if (resolved === undefined) return;
   const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latestExecutionId ?? null;
   if (executionId === null) {
@@ -107,8 +108,8 @@ async function openExecutionFile(registry: ProjectRegistry, arg: unknown, file: 
   );
 }
 
-async function openSessionFile(registry: ProjectRegistry, arg: unknown, file: string): Promise<void> {
-  const resolved = await resolve(registry, arg, `Open ${file} of which session?`);
+async function openSessionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
+  const resolved = await resolve(host, arg, `Open ${file} of which session?`);
   if (resolved === undefined) return;
   await openFile(path.join(sessionDir(resolved.context.root, resolved.snapshot.sessionId), file), file);
 }
@@ -124,23 +125,24 @@ function showMore(registry: ProjectRegistry, arg: unknown): void {
 }
 
 /** Read-only session commands: open files, copy the id, reveal the folder, show more. */
-export function registerSessionCommands(registry: ProjectRegistry): vscode.Disposable[] {
+export function registerSessionCommands(host: CommandHost): vscode.Disposable[] {
+  const { registry } = host;
   const register = (id: string, run: (arg: unknown) => Promise<void> | void): vscode.Disposable =>
     vscode.commands.registerCommand(id, run);
   return [
-    register('migent.session.openTask', (arg) => openSessionFile(registry, arg, TASK_FILENAME)),
-    register('migent.session.openPrompt', (arg) => openExecutionFile(registry, arg, 'prompt.md')),
-    register('migent.session.openResponse', (arg) => openExecutionFile(registry, arg, 'response.md')),
-    register('migent.session.openOutput', (arg) => openOutput(registry, arg)),
-    register('migent.session.openQuestions', (arg) => openSessionFile(registry, arg, QUESTIONS_FILENAME)),
+    register('migent.session.openTask', (arg) => openSessionFile(host, arg, TASK_FILENAME)),
+    register('migent.session.openPrompt', (arg) => openExecutionFile(host, arg, 'prompt.md')),
+    register('migent.session.openResponse', (arg) => openExecutionFile(host, arg, 'response.md')),
+    register('migent.session.openOutput', (arg) => openOutput(host, arg)),
+    register('migent.session.openQuestions', (arg) => openSessionFile(host, arg, QUESTIONS_FILENAME)),
     register('migent.session.copyId', async (arg) => {
-      const resolved = await resolve(registry, arg, 'Copy the id of which session?');
+      const resolved = await resolve(host, arg, 'Copy the id of which session?');
       if (resolved === undefined) return;
       await vscode.env.clipboard.writeText(resolved.snapshot.sessionId);
       vscode.window.setStatusBarMessage(`Copied session id ${resolved.snapshot.sessionId}`, STATUS_MESSAGE_MS);
     }),
     register('migent.session.revealInExplorer', async (arg) => {
-      const resolved = await resolve(registry, arg, 'Reveal which session?');
+      const resolved = await resolve(host, arg, 'Reveal which session?');
       if (resolved === undefined) return;
       const uri = vscode.Uri.file(sessionDir(resolved.context.root, resolved.snapshot.sessionId));
       await vscode.commands.executeCommand('revealFileInOS', uri);

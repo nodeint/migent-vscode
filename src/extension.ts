@@ -3,12 +3,14 @@ import * as vscode from 'vscode';
 import { Liveness } from './core/liveness';
 import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
+import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
 import { LogChannels } from './vscode/log/channels';
 import { ProjectRegistry } from './vscode/projects';
+import { ResultsPanels } from './vscode/results/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
@@ -24,6 +26,7 @@ export interface MigentApi {
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
   statusBar: StatusBar;
+  results: ResultsPanels;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
 }
@@ -43,6 +46,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
   const statusBar = new StatusBar(registry);
+  const results = new ResultsPanels(registry, context.extensionUri);
+  const host = { registry, active: results };
   context.subscriptions.push(
     registry,
     capability,
@@ -53,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionDocs,
     logs,
     statusBar,
+    results,
     {
       dispose: () => {
         liveness.dispose();
@@ -71,8 +77,9 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     vscode.commands.registerCommand('migent.refresh', () => {
       registry.refresh();
     }),
-    ...registerSessionCommands(registry),
-    ...registerTimelineCommands(registry, logs),
+    ...registerSessionCommands(host),
+    ...registerResultsCommands(host, results),
+    ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
   );
   // Discovery and the first load run after activation returns.
@@ -82,7 +89,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       resolve();
     }, 0);
   });
-  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, statusBar, ready };
+  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, statusBar, results, ready };
 }
 
 export function deactivate(): void {}

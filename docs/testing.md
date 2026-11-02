@@ -74,5 +74,9 @@ capability states and Recheck; the fixture workspace points `migent.cli.path` at
 `fake-migent.js` (run with `node`), so they do not depend on an installed CLI. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
-text and hidden state. They are
+text and hidden state; `results.integration.test.ts` opens Results panels from a Completed row, checks that
+reopening reuses the panel, that the header commands act on the panel's session, that page intents open real files by
+identity (and invalid ones nothing), lineage navigation, background updates without focus changes, and that closing a
+panel releases its `outputs/` watcher. The page script itself is not driven; the host's last posted model and message
+handler are. They are
 skipped in `--exclude` mode, where no events arrive.

@@ -19,7 +19,7 @@ import type { CapabilityService } from '../capability';
 import type { MigentChange } from '../changes';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { Releasable } from '../watchBackend';
-import type { LeafNode, TreeNode } from './nodes';
+import type { LeafNode, SessionNode, TreeNode } from './nodes';
 import {
   type ChildHost,
   executionChildren,
@@ -338,7 +338,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       case 'group':
         return this.#groupItem(node.group, node.project, context);
       case 'session':
-        return this.#sessionItem(node.sessionId, context);
+        return this.#sessionItem(node, context);
       case 'execution':
         return this.#executionItem(node.execution);
       case 'outputs':
@@ -368,15 +368,19 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     return item;
   }
 
-  #sessionItem(sessionId: string, context: ProjectContext | undefined): vscode.TreeItem {
-    const snapshot = context?.store.snapshot(sessionId);
-    if (snapshot === undefined) return new vscode.TreeItem(sessionId, vscode.TreeItemCollapsibleState.None);
+  #sessionItem(node: SessionNode, context: ProjectContext | undefined): vscode.TreeItem {
+    const snapshot = context?.store.snapshot(node.sessionId);
+    if (snapshot === undefined) return new vscode.TreeItem(node.sessionId, vscode.TreeItemCollapsibleState.None);
     const now = this.#now();
     const item = new vscode.TreeItem(sessionLabel(snapshot), vscode.TreeItemCollapsibleState.Collapsed);
     item.description = sessionDescription(snapshot, now);
     item.tooltip = sessionTooltip(snapshot, now);
     item.iconPath = icon(sessionIcon(snapshot), STATE_COLORS[snapshot.displayState.state]);
     item.contextValue = sessionContextValue(snapshot);
+    // A Completed row opens its Results page on click; every other row only expands.
+    if (snapshot.displayState.state === 'completed') {
+      item.command = { command: 'migent.session.openResult', title: 'Open Result', arguments: [node] };
+    }
     return item;
   }
 

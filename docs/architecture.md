@@ -7,10 +7,10 @@ For file-reader and state behavior, see [Core behavior](core.md).
 
 [extension.ts](../src/extension.ts) builds a `ProjectRegistry`, the context keys and
 the liveness timer, and registers `migent.refresh`. It returns a small API
-(`registry`, `capability`, `tails`, `logs`, `statusBar`, `ready`) that integration tests use. Discovery and
+(`registry`, `capability`, `tails`, `logs`, `statusBar`, `results`, `ready`) that integration tests use. Discovery and
 the first load run after `activate()` returns. The Sessions view, its read-only commands and the status bar
-(running and needs-attention counts) exist; the Workflows and Project views and Results page do not yet.
-Timeline documents and per-session log channels read
+(running and needs-attention counts) exist, and a Completed session opens a read-only Results page; the
+Workflows and Project views do not yet. Timeline documents and per-session log channels read
 `events.jsonl` only while one is open. CLI capability checks run once
 per trigger (a project appearing, a `migent.cli.*` change, Recheck) and never hide data read from disk.
 
@@ -60,6 +60,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Session detail readers | [questions.ts](../src/core/questions.ts), [outputs.ts](../src/core/outputs.ts), [nextWorkflows.ts](../src/core/nextWorkflows.ts), [handoff.ts](../src/core/handoff.ts), [executionFiles.ts](../src/core/executionFiles.ts) | Stateless read side; each call reads the file and keeps nothing |
 | Grouping and attention | [attention.ts](../src/core/attention.ts) | Pure group, count and retention-exemption rules |
 | Incremental event reads | [eventTail.ts](../src/core/eventTail.ts) | Complete-line parsing, byte offsets, bounded history, truncation reset |
+| Results overview | [resultsModel.ts](../src/core/resultsModel.ts), [resultsIntent.ts](../src/core/resultsIntent.ts), [panels.ts](../src/vscode/results/panels.ts), [resultsCommands.ts](../src/vscode/commands/resultsCommands.ts), [media/results](../media/results) | Core builds the page data (header, outputs, next-step suggestions with declared flag and target-workflow state, source link with handoff provenance, children among retained sessions) as inert JSON and validates the page's messages; `argv` is never passed on. The host keeps one `migent.results` webview panel per `(project, session)`, restored by a serializer, retains `outputs/` while open and posts a revisioned model only when it changed. The page (CSP `default-src 'none'`, nonce script from `media/results/`, `textContent` only) sends identity-only intents; the host resolves each against fresh data. Only `open()` reveals a panel. A Completed Sessions row runs `migent.session.openResult`; the editor-title actions act on the active panel's session |
 | Status bar text | [statusBarText.ts](../src/core/statusBarText.ts), [statusBar.ts](../src/vscode/statusBar.ts) | Pure model from per-project attention summaries (hidden when both counts are zero); the host item updates on store changes and liveness ticks, and click runs `migent.sessions.focus` |
 | Timeline text | [timelineFormat.ts](../src/core/timelineFormat.ts) | Event to display line; raw passthrough for unrecognized lines |
 | Watch planning and debounce | [watchPlan.ts](../src/core/watchPlan.ts), [coalescer.ts](../src/core/coalescer.ts) | Pure desired watcher set and path classification; keyed debounce with injectable timers. No watcher is created in core |
