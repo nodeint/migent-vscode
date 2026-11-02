@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "1",
+      "question": "Which editor theme should be the default?",
+      "context": "The default theme decides how the interface looks the first time someone opens it. Users can change it later.",
+      "selection": "single",
+      "options": [
+        {
+          "id": "A",
+          "label": "Follow system",
+          "description": "Switches between light and dark to match the OS setting."
+        },
+        {
+          "id": "B",
+          "label": "Light",
+          "description": "Always uses the light theme."
+        },
+        {
+          "id": "C",
+          "label": "Dark",
+          "description": "Always uses the dark theme."
+        }
+      ],
+      "recommended": [
+        "A"
+      ],
+      "execution_id": "0001-planner--attempt-01",
+      "stage_id": "planner",
+      "recipient": "human",
+      "status": "pending",
+      "answer": null
+    },
+    {
+      "id": "2",
+      "question": "Which platforms should be supported?",
+      "context": "Pick every platform that needs to work.",
+      "selection": "multiple",
+      "options": [
+        {
+          "id": "A",
+          "label": "Windows"
+        },
+        {
+          "id": "B",
+          "label": "macOS"
+        },
+        {
+          "id": "C",
+          "label": "Linux"
+        }
+      ],
+      "execution_id": "0001-planner--attempt-01",
+      "stage_id": "planner",
+      "recipient": "human",
+      "status": "pending",
+      "answer": null
+    },
+    {
+      "id": "3",
+      "question": "Which report format do you prefer?",
+      "context": "This sets the output format for generated reports.",
+      "selection": "single",
+      "options": [
+        {
+          "id": "A",
+          "label": "Markdown"
+        },
+        {
+          "id": "B",
+          "label": "JSON"
+        }
+      ],
+      "execution_id": "0001-planner--attempt-01",
+      "stage_id": "planner",
+      "recipient": "human",
+      "status": "pending",
+      "answer": null
+    }
+  ]
+}

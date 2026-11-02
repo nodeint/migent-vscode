@@ -1,0 +1,10 @@
+workflow:
+  id: synthetic
+  downstream:
+    - workflow: probe-target
+      task: Acknowledge the note.
+      artifacts:
+        context_note: note
+    - workflow: other-target
+      artifacts:
+        context_note: different-output

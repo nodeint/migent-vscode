@@ -6,8 +6,12 @@
 /** Highest event envelope version this extension understands (events.jsonl `v`). */
 export const KNOWN_EVENT_VERSION = 2;
 
-/** Manifest `schema_version` values this extension understands. */
-export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS = [1, KNOWN_EVENT_VERSION];
+/**
+ * Manifest `schema_version` values this extension understands. Independent of the
+ * event envelope version: each file format versions on its own.
+ */
+export const CURRENT_MANIFEST_SCHEMA_VERSION = 2;
+export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS: readonly number[] = [1, CURRENT_MANIFEST_SCHEMA_VERSION];
 
 /** A parsed `manifest.yaml`. Missing fields stay null instead of guessed. */
 export interface SessionManifest {
@@ -39,7 +43,56 @@ export interface SessionStatus {
   latestDecision: string | null;
   blockedByExecutionIds: string[];
   runningStages: RunningStage[];
+  /** Pending human questions (`status.json.questions`); empty once answered. */
+  questions: PendingQuestion[];
+  /** Published outputs (`status.json.outputs`), in file order. */
+  outputs: PublishedOutput[];
+  /** Small scalar fields of `latest_provider_event`; the full object is never retained. */
+  latestProviderEvent: ProviderEventSummary | null;
+  /** The parsed `status.json` without `latest_provider_event`. */
   raw: Record<string, unknown>;
+}
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description: string | null;
+}
+
+/** Fields shared by the status summary and `questions.json` records. */
+export interface QuestionBase {
+  id: string;
+  question: string;
+  context: string | null;
+  selection: string | null;
+  options: QuestionOption[];
+  recommended: string[];
+  executionId: string | null;
+  stageId: string | null;
+  recipient: string | null;
+}
+
+/** A pending question as summarized by `status.json.questions`. */
+export interface PendingQuestion extends QuestionBase {
+  /** Session-relative path of the execution `questions.json`, as reported by migent. */
+  file: string | null;
+}
+
+export interface PublishedOutput {
+  name: string;
+  /** Session-relative path as written by migent; not yet confined to the session. */
+  path: string;
+  sourceExecutionId: string | null;
+  publishedByExecutionId: string | null;
+}
+
+export interface ProviderEventSummary {
+  event: string | null;
+  summary: string | null;
+  stageId: string | null;
+  executionId: string | null;
+  provider: string | null;
+  timestamp: string | null;
 }
 
 export interface RunningStage {
@@ -61,15 +114,27 @@ export type DisplayStateName =
   | 'prepared'
   | 'running'
   | 'blocked'
+  | 'question'
   | 'failed'
   | 'stopped'
   | 'cancelled'
   | 'completed'
   | 'unknown';
 
+/** Why a session is shown as Unknown. Present only when the state is `unknown`. */
+export type UnknownReason =
+  | 'missing-status'
+  | 'unreadable-status'
+  | 'invalid-status'
+  | 'unsupported-schema'
+  | 'invalid-manifest'
+  | 'unrecognized-status';
+
 export interface DisplayState {
   state: DisplayStateName;
   icon: string;
+  /** Set when `state` is `unknown`; absent otherwise. */
+  unknownReason?: UnknownReason;
   /**
    * False only while another host holds a live lock: the pid cannot be checked
    * from here, so write operations are disabled. Running on this host stays writable.
@@ -77,7 +142,7 @@ export interface DisplayState {
   writable: boolean;
 }
 
-/** Lightweight execution summary for the tree. Details are read on demand (phase 2+). */
+/** Lightweight execution summary for the tree. Read on demand by `listExecutions`; not held by the store. */
 export interface ExecutionSnapshot {
   id: string;
   order: number;
@@ -97,21 +162,36 @@ export interface SessionSnapshot {
   statusError: boolean;
   lock: LockProbe;
   displayState: DisplayState;
-  /** Read lazily: only when the session node is expanded or the session is running. */
-  executions: ExecutionSnapshot[];
-  /** Highest `seq` consumed from events.jsonl; used for de-duplication. */
-  lastEventSeq: number;
 }
 
-export type SessionChangeKind =
-  | 'added'
-  | 'updated'
-  | 'removed'
-  | 'executions'
-  | 'events';
+export type SessionChangeKind = 'added' | 'updated' | 'removed';
 
 export interface SessionChangeEvent {
   project: string;
   sessionId: string;
   kind: SessionChangeKind;
+}
+
+/** Outcome of scanning a directory whose absence, emptiness and unreadability differ. */
+export type DirectoryState = 'ok' | 'empty' | 'missing' | 'unreadable';
+
+/**
+ * Result of scanning `.migent/sessions`. `discovered` is every child directory;
+ * `eligible` those with a `manifest.yaml` or `status.json`; `pending` the rest
+ * (a directory whose marker has not been written yet).
+ */
+export interface ScanOutcome {
+  state: DirectoryState;
+  /** Error code or message when `state` is `unreadable`. */
+  error: string | null;
+  discovered: string[];
+  eligible: string[];
+  pending: string[];
+}
+
+export type ProjectChangeKind = 'scan' | 'workflows' | 'config';
+
+export interface ProjectChangeEvent {
+  project: string;
+  kind: ProjectChangeKind;
 }

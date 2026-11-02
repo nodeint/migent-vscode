@@ -50,6 +50,7 @@ Explicit user instructions take precedence over skill guidance.
 | [`release`](.agents/skills/release/SKILL.md) | Preparing or publishing an extension release and synchronizing `main` |
 | [`markdownlint`](.agents/skills/markdownlint/SKILL.md) | Creating or changing repository Markdown, or validating Markdown style or links |
 | [`eslint`](.agents/skills/eslint/SKILL.md) | Creating or changing `.ts` files, reviewing those files against repository lint rules, or validating ESLint |
+| [`planning`](.agents/skills/planning/SKILL.md) | Writing, reviewing, or revising a repository-grounded implementation plan for a feature, bugfix, refactor, or migration |
 
 ## Documentation entry point
 

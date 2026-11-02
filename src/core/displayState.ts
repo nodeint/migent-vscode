@@ -1,9 +1,10 @@
-import type { DisplayState, LockProbe, SessionStatus } from './model';
+import type { DisplayState, DisplayStateName, LockProbe, SessionStatus, UnknownReason } from './model';
 
-export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayState['state'], string>> = {
+export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayStateName, string>> = {
   prepared: 'circle-outline',
   running: 'sync~spin',
   blocked: 'warning',
+  question: 'comment-discussion',
   failed: 'error',
   stopped: 'debug-pause',
   cancelled: 'circle-slash',
@@ -12,12 +13,15 @@ export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayState['state'], string>
 };
 
 export interface DisplayStatusInput {
-  /** Raw status.json content, or null when missing / unparsable / unknown schema. */
+  /** Parsed status.json, or null when missing or unreadable. */
   status: SessionStatus | null;
-  /** True when status.json exists but could not be read. */
-  statusError: boolean;
-  /** False when the manifest carries a schema_version this extension does not know. */
-  schemaSupported: boolean;
+  /** Why status.json could not be read, or null when it read cleanly or is absent. */
+  statusError: 'unreadable' | 'invalid' | null;
+  /**
+   * `invalid` when manifest.yaml is missing or does not parse; `unsupported` when it
+   * carries a schema_version this extension does not know.
+   */
+  manifest: 'ok' | 'invalid' | 'unsupported';
 }
 
 /**
@@ -31,26 +35,38 @@ export function deriveDisplayState(
   input: DisplayStatusInput,
   lock: LockProbe,
 ): DisplayState {
-  const state = decide(input, lock);
-  return {
-    state,
-    icon: DISPLAY_STATE_ICONS[state],
+  const decision = decide(input, lock);
+  const result: DisplayState = {
+    state: decision.state,
+    icon: DISPLAY_STATE_ICONS[decision.state],
     writable: !(lock.kind === 'alive' && lock.foreignHost),
   };
+  if (decision.state === 'unknown') result.unknownReason = decision.reason;
+  return result;
 }
 
-function decide(input: DisplayStatusInput, lock: LockProbe): DisplayState['state'] {
-  const { status, statusError, schemaSupported } = input;
-  if (statusError || status === null || !schemaSupported) return 'unknown';
+type Decision =
+  | { state: Exclude<DisplayStateName, 'unknown'> }
+  | { state: 'unknown'; reason: UnknownReason };
+
+const unknown = (reason: UnknownReason): Decision => ({ state: 'unknown', reason });
+
+function decide(input: DisplayStatusInput, lock: LockProbe): Decision {
+  const { status, statusError, manifest } = input;
+  if (manifest === 'invalid') return unknown('invalid-manifest');
+  if (manifest === 'unsupported') return unknown('unsupported-schema');
+  if (statusError !== null) return unknown(`${statusError}-status`);
+  if (status === null) return unknown('missing-status');
   const sessionStatus = status.status ?? 'unknown';
 
-  if (sessionStatus === 'prepared') return 'prepared';
-  if (lock.kind === 'alive') return 'running';
-  if (sessionStatus === 'blocked') return 'blocked';
+  if (sessionStatus === 'prepared') return { state: 'prepared' };
+  if (lock.kind === 'alive') return { state: 'running' };
+  if (sessionStatus === 'blocked') return { state: 'blocked' };
+  if (sessionStatus === 'question') return { state: 'question' };
   if (sessionStatus === 'active') {
-    return status.latestExecutionStatus === 'failed' ? 'failed' : 'stopped';
+    return { state: status.latestExecutionStatus === 'failed' ? 'failed' : 'stopped' };
   }
-  if (sessionStatus === 'cancelled') return 'cancelled';
-  if (sessionStatus === 'completed') return 'completed';
-  return 'unknown';
+  if (sessionStatus === 'cancelled') return { state: 'cancelled' };
+  if (sessionStatus === 'completed') return { state: 'completed' };
+  return unknown('unrecognized-status');
 }

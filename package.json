@@ -4,6 +4,7 @@
   "description": "Monitor and run Migent sessions and workflows from VS Code.",
   "version": "0.0.1",
   "publisher": "nodeint",
+  "icon": "media/migent.png",
   "license": "MIT",
   "private": true,
   "repository": {
@@ -14,11 +15,13 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "AI"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:.migent/config.yaml"
+    "workspaceContains:.migent/config.yaml",
+    "onWebviewPanel:migent.results"
   ],
   "extensionKind": [
     "workspace"
@@ -28,7 +31,296 @@
       {
         "command": "migent.refresh",
         "title": "Refresh",
+        "category": "Migent",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "migent.session.openResult",
+        "title": "Open Result",
+        "category": "Migent",
+        "icon": "$(book)"
+      },
+      {
+        "command": "migent.session.openTask",
+        "title": "Open Task",
+        "category": "Migent",
+        "shortTitle": "Open Task",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "migent.session.openPrompt",
+        "title": "Open Prompt",
         "category": "Migent"
+      },
+      {
+        "command": "migent.session.openResponse",
+        "title": "Open Response",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.openOutput",
+        "title": "Open Output",
+        "category": "Migent",
+        "shortTitle": "Open Result File",
+        "icon": "$(package)"
+      },
+      {
+        "command": "migent.session.openQuestions",
+        "title": "Open Questions File",
+        "category": "Migent",
+        "shortTitle": "Open Questions"
+      },
+      {
+        "command": "migent.session.showLog",
+        "title": "Show Session Log",
+        "category": "Migent",
+        "shortTitle": "View Log",
+        "icon": "$(output)"
+      },
+      {
+        "command": "migent.session.showTimeline",
+        "title": "Show Session Timeline",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.copyId",
+        "title": "Copy Session ID",
+        "category": "Migent",
+        "shortTitle": "Copy ID"
+      },
+      {
+        "command": "migent.session.revealInExplorer",
+        "title": "Reveal Session in File Explorer",
+        "category": "Migent",
+        "shortTitle": "Reveal in Explorer"
+      },
+      {
+        "command": "migent.sessions.showMore",
+        "title": "Show More Sessions",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.openSettings",
+        "title": "Open CLI Settings",
+        "category": "Migent",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "migent.cli.recheck",
+        "title": "Recheck CLI",
+        "category": "Migent",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "migent.workflow.open",
+        "title": "Open Workflow File",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.openConfig",
+        "title": "Open Project Config",
+        "category": "Migent",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "configuration": {
+      "title": "Migent",
+      "properties": {
+        "migent.cli.path": {
+          "type": "string",
+          "default": "migent",
+          "scope": "resource",
+          "markdownDescription": "Path or name of the Migent CLI. Use a native `migent.exe` or the CLI's JavaScript entry (`.js`, `.mjs`, `.cjs`, run with `node` from `PATH`). `.cmd`, `.bat` and `.ps1` launchers (such as an npm shim) are not supported."
+        },
+        "migent.sessions.limit": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "scope": "resource",
+          "description": "Show this many of the most recent sessions. Running sessions and sessions that need attention are always shown."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "migent",
+          "title": "Migent",
+          "icon": "media/migent-outline.svg"
+        }
+      ]
+    },
+    "views": {
+      "migent": [
+        {
+          "id": "migent.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "migent.workflows",
+          "name": "Workflows"
+        },
+        {
+          "id": "migent.project",
+          "name": "Project"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "migent.sessions",
+        "contents": "No Migent project was found in the open folders.\nCreate one with the Migent CLI and it appears here.\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
+        "when": "!migent.hasProjects"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Open CLI Settings](command:migent.openSettings)\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
+        "when": "migent.hasProjects && migent.cliState =~ /^(missing|unsupported|old|unparsable|error)$/"
+      },
+      {
+        "view": "migent.workflows",
+        "contents": "No Migent project was found in the open folders.",
+        "when": "!migent.hasProjects"
+      },
+      {
+        "view": "migent.project",
+        "contents": "No Migent project was found in the open folders.",
+        "when": "!migent.hasProjects"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.sessions",
+          "group": "navigation"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.workflows",
+          "group": "navigation"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.project",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "migent.openSettings",
+          "when": "view == migent.sessions && viewItem == diag.cli",
+          "group": "inline@1"
+        },
+        {
+          "command": "migent.cli.recheck",
+          "when": "view == migent.sessions && viewItem == diag.cli",
+          "group": "inline@2"
+        },
+        {
+          "command": "migent.session.openResult",
+          "when": "view == migent.sessions && viewItem =~ /^session.completed/",
+          "group": "1_open@0"
+        },
+        {
+          "command": "migent.session.openTask",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@1"
+        },
+        {
+          "command": "migent.session.openQuestions",
+          "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "migent.session.openOutput",
+          "when": "view == migent.sessions && viewItem =~ /^session..*;outputs(;|$)/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "migent.session.openPrompt",
+          "when": "view == migent.sessions && viewItem =~ /^execution./",
+          "group": "1_open@1"
+        },
+        {
+          "command": "migent.session.openResponse",
+          "when": "view == migent.sessions && viewItem =~ /^execution./",
+          "group": "1_open@2"
+        },
+        {
+          "command": "migent.session.showLog",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@4"
+        },
+        {
+          "command": "migent.session.showTimeline",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@5"
+        },
+        {
+          "command": "migent.session.copyId",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "2_session@1"
+        },
+        {
+          "command": "migent.session.revealInExplorer",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "2_session@2"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "(view == migent.workflows || view == migent.project) && viewItem == diag.workflows-unreadable",
+          "group": "inline@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "migent.sessions.showMore",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "migent.session.openOutput",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "migent.session.openTask",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "migent.session.showLog",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@3"
+        },
+        {
+          "submenu": "migent.results.more",
+          "when": "activeWebviewPanelId == 'migent.results'",
+          "group": "navigation@4"
+        }
+      ],
+      "migent.results.more": [
+        {
+          "command": "migent.session.copyId",
+          "group": "1_session@1"
+        },
+        {
+          "command": "migent.session.revealInExplorer",
+          "group": "1_session@2"
+        },
+        {
+          "command": "migent.session.openQuestions",
+          "group": "1_session@3"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "migent.results.more",
+        "label": "More Actions",
+        "icon": "$(ellipsis)"
       }
     ]
   },
@@ -37,6 +329,7 @@
     "build": "node esbuild.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && node --test scripts/*.test.mjs",
+    "test:integration": "node scripts/integration/run.mjs",
     "package": "vsce package --no-dependencies",
     "lint": "node scripts/wrappers/run-eslint.mjs",
     "lint:strict": "node scripts/wrappers/run-eslint.mjs --max-warnings 0",
@@ -49,6 +342,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.5",
     "@types/vscode": "1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "4.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",

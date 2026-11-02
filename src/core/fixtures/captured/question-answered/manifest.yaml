@@ -1,0 +1,7 @@
+session_id: 00000000-0000-4000-8000-0000000000a1
+title: "Probe: question fixture"
+workflow_id: agent
+role: planner
+task: "Probe: question fixture"
+created_at: 2026-11-01T11:15:03.650+00:00
+schema_version: 2

@@ -1,0 +1,19 @@
+schema_version: 4
+id: probe-source
+stages:
+  - id: draft
+    role: developer
+    depends_on: []
+    instructions:
+      - Do not read the repository. Write one short sentence to note.md and finish.
+    produces:
+      artifact: note.md
+outputs:
+  - name: note
+    from_stage: draft
+    artifact: note.md
+downstream:
+  - workflow: probe-target
+    task: Acknowledge the note.
+    artifacts:
+      context_note: note

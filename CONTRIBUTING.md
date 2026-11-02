@@ -1,7 +1,7 @@
 # Contributing
 
 This guide covers `nodeint/migent-vscode`, the Migent extension for VS Code.
-The extension is currently a scaffold. Planned features in `plans/` are not
+The extension currently provides read-only monitoring. Other planned features in `plans/` are not
 necessarily implemented.
 
 ## Development setup
@@ -32,7 +32,9 @@ implementation so they can be resolved or explicitly accepted.
 ## Project layout
 
 - `src/extension.ts`: extension activation and command registration.
+- `src/vscode/`: the VS Code layer (registry, watchers, context keys, CLI capability); verified by the integration tests.
 - `src/core/`: session and workflow data handling, with colocated Vitest tests.
+- `src/cli/`: CLI location and version checks (no `vscode` import), with colocated Vitest tests.
 - `src/core/fixtures/`: sample session and workflow data used by tests.
 - `package.json`: extension identity, version, VS Code contributions, and scripts.
 - `.vscodeignore`: allowlist of files included in the VSIX.
@@ -96,7 +98,9 @@ pnpm test
 pnpm package
 ```
 
-CI runs this sequence on Ubuntu and Windows. There are currently no separate
+CI runs this sequence on Ubuntu and Windows, followed by `pnpm test:integration`
+(informational on Ubuntu, under `xvfb-run`). `pnpm lint` enforces that
+`src/core/` and `src/cli/` never import `vscode`. There are currently no separate
 lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
 
@@ -111,8 +115,7 @@ To check the packaged extension:
 3. Reload VS Code and open a workspace containing `.migent/config.yaml` to
    exercise the declared activation event.
 4. Verify the behavior affected by the change and inspect extension-host logs
-   for errors. The current scaffold registers **Migent: Refresh** with an empty
-   handler; monitoring and execution features remain roadmap work.
+   for errors. Monitoring is implemented; running and controlling sessions remains roadmap work.
 
 ## Pull requests
 

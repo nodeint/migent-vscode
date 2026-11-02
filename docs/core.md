@@ -10,18 +10,24 @@ file-format contract.
 
 | Priority | Condition | State |
 | :--- | :--- | :--- |
-| 1 | Status read failed, status is absent, or manifest schema is unsupported/unavailable | Unknown |
+| 1 | Manifest missing/unparsable, manifest schema unsupported, status read failed, or status absent | Unknown |
 | 2 | Status is `prepared` | Prepared |
 | 3 | Lock is alive | Running |
 | 4 | Status is `blocked` | Blocked |
-| 5 | Status is `active` and latest execution status is `failed` | Failed |
-| 6 | Status is `active` | Stopped |
-| 7 | Status is `cancelled` | Cancelled |
-| 8 | Status is `completed` | Completed |
-| 9 | Anything else | Unknown |
+| 5 | Status is `question` | Question |
+| 6 | Status is `active` and latest execution status is `failed` | Failed |
+| 7 | Status is `active` | Stopped |
+| 8 | Status is `cancelled` | Cancelled |
+| 9 | Status is `completed` | Completed |
+| 10 | Anything else | Unknown |
 
-Thus a live lock overrides Completed or Blocked, but does not override Prepared
-or invalid input. `active` alone does not imply Running.
+Thus a live lock overrides Completed, Blocked or Question, but does not override
+Prepared or invalid input. `active` alone does not imply Running.
+
+Unknown carries an `unknownReason`, chosen in rule order: `invalid-manifest`,
+`unsupported-schema`, `unreadable-status` (the file could not be read),
+`invalid-status` (it did not parse after retries), `missing-status`, or
+`unrecognized-status` (rule 10). Known states carry none.
 
 `DisplayState.writable` is false only for an alive lock marked `foreignHost`.
 It is calculated independently of the state: Unknown can still have
@@ -58,9 +64,20 @@ background work; its caller chooses when to scan, refresh, and load details.
 | `manifest.yaml` | Snapshot construction | Returns null; an unavailable manifest makes display state Unknown |
 | `status.json` | Snapshot construction | Missing is distinct from error; both result in Unknown display state |
 | `session.lock` | Snapshot construction | Uses the lock rules above |
-| `executions/*/execution.json` | Explicit `loadExecutions` | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
-| `events.jsonl` | Explicit `readNewEvents` | Open failure yields no events and preserves the offset |
-| `.migent/workflows/*.{yaml,yml}` | Explicit `listWorkflows` | Directory read failure yields an empty list; YAML read/parse failures skip that file |
+| `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
+| `events.jsonl` | Explicit `EventTail.poll()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset; a file smaller than the offset resets the tail (see below) |
+| `.migent/workflows/*.{yaml,yml}` | Explicit `scanWorkflows`, or `readWorkflowFile` for one file | Missing, empty and unreadable directories are distinct outcomes; an unparsable or unreadable file stays listed as `invalid` or `unreadable` with its error |
+| `.migent/config.yaml` | `readProjectConfig` | `missing`, `ok`, `invalid` (unparsable or not a mapping) or `unreadable`; raw integer `schema_version` or null; no defaults |
+| `status.json` `questions`, `outputs` | Snapshot construction (they come with the status read) | Records without `id` and `question` (questions) or `path` (outputs) are skipped; absent keys give empty lists |
+| `questions.json` (session) | `readQuestions(sessionDir)` on demand | `missing`, `unreadable`, `invalid`, `unsupported` (schema other than 1) or `ok`; records keep file order; `superseded` is accepted though never observed; an answer outside the observed shapes becomes null |
+| `outputs/` | `listOutputs(sessionDir, published)` on demand | Published rows are `ok`, `missing` or `rejected` (path leaves the session directory); unnamed files in `outputs/` get path-only rows; a missing directory is normal and an unlistable one sets `directoryError` |
+| `next.json`, `workflow.frozen.yaml` | `readNext`, `readFrozenDownstream` on demand | Independent outcomes (`missing`, `unreadable`, `invalid`, `unsupported` or `ok`; `absent` for the frozen declaration). Artifact paths are checked against the session directory. `declared` is true only when workflow and artifact mapping match the frozen declaration, null when it was not read. `argv` is data, never an action |
+| Manifest `handoff` | `readHandoff(manifest, sessionDir)` | `absent`, `invalid` (outside the observed shape) or `ok`; `path` is confined to the target session, `source_path` is text only |
+| `executions/<id>/` contents | `listExecutionFiles(executionDir)` on demand | Lists only files that exist: `task.md`, `prompt.md`, `response.md`, `questions.json`, `stream.jsonl`, `turns/*/verify.md`, `artifacts/*` |
+
+The status reader keeps only the small scalar fields of `latest_provider_event`
+(`event`, `summary`, `stage_id`, `execution_id`, `provider`, `timestamp`) and
+removes the object from `raw`: its `details` and `usage` can be very large.
 
 [readStatus](../src/core/statusReader.ts) makes at most three attempts with 100 ms
 between attempts after errors. Missing files return immediately. The wait is
@@ -72,13 +89,17 @@ versions but marks them unsupported. An absent or non-integer schema version is
 normalized to null and currently treated as supported legacy input. Status parsing
 does not perform a separate schema-version compatibility check. Consult
 [model.ts](../src/core/model.ts) for supported manifest/event versions. Each
-file format's version is independent.
+file format's version is independent: manifest support is listed on its own and
+does not follow the event envelope version.
 
 [Execution summaries](../src/core/executions.ts) are ordered oldest first.
-[Workflow summaries](../src/core/workflows.ts) are ordered by id and fall back to
-the filename for a missing id. Successfully parsed YAML with no usable object
-body can still produce a filename-based workflow summary; this is not full
-workflow validation.
+[Workflow entries](../src/core/workflows.ts) are ordered by id, then file name,
+and fall back to the filename for a missing id. Successfully parsed YAML with no
+usable object body can still produce a filename-based entry; this is not full
+workflow validation. Every `ok` entry whose id is shared with another is flagged
+`duplicate`; no file wins. [ProjectCatalog](../src/core/projectCatalog.ts) holds
+the workflow scan and config for one project, separate from `SessionStore`, and
+emits `workflows` or `config` only when a re-read value differs.
 
 Evidence: [manifest tests](../src/core/manifest.test.ts),
 [status tests](../src/core/statusReader.test.ts),
@@ -87,36 +108,88 @@ Evidence: [manifest tests](../src/core/manifest.test.ts),
 
 ## What does SessionStore own?
 
-One [SessionStore](../src/core/store.ts) holds snapshots and event offsets for one
-`projectRoot`. It is an in-memory projection with a default limit of 50 sessions.
-There is no persistence or automatic watcher subscription.
+One [SessionStore](../src/core/store.ts) holds one snapshot per session for one
+`projectRoot`: manifest, status, lock and display state only. It is an in-memory
+projection with a default limit of 50 sessions. There is no persistence or
+automatic watcher subscription. Executions, events and other per-session files
+are not cached by the store; their readers are called on demand.
 
 | Operation | Effect |
 | :--- | :--- |
-| `load()` | Scans direct session directories containing a manifest or status marker; adds/refreshes snapshots, removes unseen entries, then applies the limit |
+| `load()` | Scans the sessions directory; adds/refreshes snapshots of directories containing a manifest or status marker, removes unseen entries, then applies the limit. A missing or unreadable directory removes every cached snapshot; `scanOutcome` tells the two apart |
+| `rescanDirectories()` | Re-lists the sessions directory (names and marker presence) without reading any session; for a directory created or deleted. `refreshSession` keeps the scan lists in step for a single session, so a pending directory becomes eligible when its marker appears |
+| `scanOutcome` | Last scan: `missing`, `empty`, `unreadable` or `ok`, with `discovered` directories split into `eligible` (marker present) and `pending` (no marker yet). A change emits `scan` on `onDidChangeProject` |
 | `refreshSession(id)` | Builds a snapshot; adds it if absent or replaces it when the compared body changes |
 | `all()` / `snapshot(id)` | Returns current cached snapshots; does not refresh disk data |
-| `loadExecutions(id)` | Reads execution summaries for a cached session and emits `executions` if changed |
-| `readNewEvents(id)` | Reads from the stored offset, filters against the sequence watermark, and emits `events` when fresh records remain |
-| `removeSession(id)` | Removes snapshot and offset, then emits `removed` |
+| `removeSession(id)` | Removes the snapshot, then emits `removed` |
 
 Sessions are ordered by manifest creation time, falling back to status creation
 time, then session id. The limit is applied after a full scan and when refresh
 adds a session, not before disk reads. It limits retained snapshots rather than
 the cost of the initial scan.
 
-Change events carry `{project, sessionId, kind}`. Kinds are `added`, `updated`,
-`removed`, `executions`, and `events`. Subscribing returns an unsubscribe function.
+Retained sessions are the newest `limit` plus every retention-exempt one
+([isRetentionExempt](../src/core/attention.ts)): Running, Question, Blocked, or
+with pending questions. The retained count can therefore exceed the limit.
+`hiddenCount` is eligible sessions minus retained; pending directories are not
+counted, and a change of the count emits `scan`. The store keeps ids only for
+hidden sessions. `refreshSession` on a hidden id rebuilds its snapshot just to
+decide exemption (for example a resumed session) and stays silent while it is
+not exempt. A session with neither marker is removed on refresh. `setLimit(n)`
+changes the effective limit and rescans (same cost as `load()`).
+
+[attention.ts](../src/core/attention.ts) holds the pure grouping: `groupOf`
+(Running; Needs attention for Question, Blocked, Failed, Stopped, Unknown;
+Recent for the rest), `isCounted` (Blocked, Failed, Question or pending
+questions, never Unknown) and `summarize` (unique counts).
+
+[childrenOf](../src/core/handoff.ts) derives lineage children from the retained
+snapshots' `prior_session_id`; nothing is cached, and a source outside the
+retained set is not resolved.
+
+Change events carry `{project, sessionId, kind}`. Kinds are `added`, `updated`
+and `removed`. Subscribing returns an unsubscribe function.
 Callers read the resulting snapshot; events do not carry a snapshot payload.
 
 Snapshot comparison uses raw manifest/status content, status-error flag, lock,
-display state name, and writable flag. A replacement snapshot starts with empty
-executions and `lastEventSeq: 0`; its separate event offset remains unchanged.
-Consequently, callers must reload lazy executions after replacement. References
-returned earlier are not live handles to a replacement snapshot. These details
-matter when adding watcher/UI consumers.
+display state name, unknown reason, and writable flag. References returned
+earlier are not live handles to a replacement snapshot; read `snapshot(id)` again
+after an `updated` event.
 
 Evidence: [store.test.ts](../src/core/store.test.ts).
+
+## How are session rows presented?
+
+[sessionPresentation.ts](../src/core/sessionPresentation.ts) holds the plain-text rules for the
+Sessions view, so they are tested without VS Code:
+
+- Label: the manifest title, else the status title, workflow id or short id, cut to 60
+  characters (the tooltip keeps the full title).
+- Description: `workflow · stage · time`, plus `N questions` when questions are pending. Time is the
+  elapsed time since start for a Running session and the time since the last update for the others.
+  Unknown shows its reason instead (for example `Unsupported schema version 99`).
+- Icon: the display state's icon; Unknown uses `question` for an unsupported schema or an unrecognized
+  status and `bracket-error` for a missing, unreadable or invalid file.
+- Tooltip: state, reason, workflow, stage and attempt, blockers, pending questions, foreign lock, last
+  update and the small provider-event fields. Missing values read "unavailable". Retry times for a
+  quota wait are not shown: no captured sample records them.
+- `contextValue`: `session.<state>` then `;questions`, `;foreign`, `;outputs`, `;reason-<reason>`.
+- Node ids never include state, and two projects with the same session id get distinct ids.
+- A project shows "No sessions yet" for a missing, empty or marker-less sessions folder, and an error row
+  for an unreadable one.
+
+Evidence: [sessionPresentation.test.ts](../src/core/sessionPresentation.test.ts).
+
+## When does the liveness timer run?
+
+[Liveness](../src/core/liveness.ts) is one timer for every project. `update()`
+starts a 10-second interval while any store has a Running session and clears it
+when none remain; with nothing Running there is no timer. Each tick calls
+`refreshSession` for the Running sessions only, so a hard-killed runner leaves
+Running once its lock goes stale (30 seconds plus one interval). Callers invoke
+`update()` after any session change; `onDidTick` lets a view refresh time-dependent text.
+
+Evidence: [liveness.test.ts](../src/core/liveness.test.ts).
 
 ## How does incremental event reading work?
 
@@ -129,18 +202,50 @@ Malformed records are returned through `rawLine`. Missing/invalid envelope
 versions fall back to version 1; versions above the supported maximum retain the
 raw line alongside extracted fields. Unknown versions are not silently dropped.
 
-The store filters numeric sequences against the snapshot's watermark at the
-start of the read, then advances the watermark to the maximum returned sequence.
-Records without a sequence are retained. This does not remove duplicate sequence
-numbers within the same read batch. Events notify consumers but do not update
-status or display state; those require a session refresh.
+[EventTail](../src/core/eventTail.ts) wraps it for one `events.jsonl`. It owns the
+byte offset and the sequence watermark, independent of any session snapshot. Each
+`read()` filters numeric sequences against the watermark at the start of the
+read, then advances the watermark to the maximum returned sequence. Records
+without a sequence are retained. This does not remove duplicate sequence numbers
+within the same read batch. Reading events does not update status or display
+state; those require a session refresh.
 
-Log truncation or replacement is not automatically recovered: when file size is
-below the offset, the tail reader keeps that offset. A snapshot refresh alone
-does not reset it. Consumers must preserve the append-only log assumption.
+`EventTail` also keeps a bounded history (the most recent 5000 events by
+default, oldest first); older events are dropped and counted in `droppedCount`
+for a "not shown" marker. `poll()` returns the new events and `truncated`.
+When the file is smaller than the offset (a repair rewrote the log), the tail
+resets offset, watermark and history, re-reads from byte 0 and reports
+`truncated: true` so the consumer re-renders from the start. A failure to open
+the file is not truncation. A rewrite that leaves the file at least as large as
+the offset is not detectable and is not recovered.
 
-Evidence: [eventTail.test.ts](../src/core/eventTail.test.ts) and
-[store.test.ts](../src/core/store.test.ts).
+[formatTimelineLine](../src/core/timelineFormat.ts) turns an event into
+`10:15:30 plan#1 started · claude/sonnet`. A malformed line or unknown version is
+passed through as `[unrecognized] <line>`.
+
+## How is the watcher set planned?
+
+[watchPlan.ts](../src/core/watchPlan.ts) is pure; core creates no watcher.
+`desiredWatches` returns one non-recursive watcher per folder (a folder and a
+pattern without path separators): `.migent/`, `workflows/`, `sessions/`, every
+discovered session directory (eligible, hidden or pending) and, only for
+retained targets whose folder exists, `executions/`, one execution directory
+with its `artifacts/`, `turns/` and each `turns/<turn>/` (`verify.md`), and
+`outputs/`. A `missing` scan drops that folder's watcher; without `.migent/`
+the set is empty. `anchorWatch` is the registry-owned watcher on the workspace
+root. `diffWatches` compares the set with live watchers.
+
+`classifyPath` maps a changed path to a project, workflow, config or session
+target, or null for paths nobody displays. `routeSessionChanges` reduces the
+changes the [Coalescer](../src/core/coalescer.ts) collected for one session to
+"refresh the snapshot" (manifest, status, lock, cancel request) plus distinct
+file targets. The coalescer is a per-key trailing debounce with a maximum wait
+and an injectable clock.
+
+Evidence: [eventTail.test.ts](../src/core/eventTail.test.ts),
+[timelineFormat.test.ts](../src/core/timelineFormat.test.ts),
+[watchPlan.test.ts](../src/core/watchPlan.test.ts),
+[coalescer.test.ts](../src/core/coalescer.test.ts).
 
 ## Updating this guide
 

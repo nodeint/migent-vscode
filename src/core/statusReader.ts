@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
-import type { RunningStage, SessionStatus } from './model';
+import type { ProviderEventSummary, PublishedOutput, RunningStage, SessionStatus } from './model';
+import { parsePendingQuestions } from './questions';
 import { isRecord } from './record';
 
 /** Delay between retries when status.json does not parse (a rename can be observed mid-flight on Windows). */
@@ -10,7 +11,7 @@ export const STATUS_MAX_ATTEMPTS = 3;
 export type StatusRead =
   | { kind: 'ok'; status: SessionStatus }
   | { kind: 'missing' }
-  | { kind: 'error' };
+  | { kind: 'error'; reason: 'unreadable' | 'invalid' };
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
@@ -39,6 +40,36 @@ function runningStages(value: unknown): RunningStage[] {
   return rows;
 }
 
+function publishedOutputs(value: unknown): PublishedOutput[] {
+  if (!isRecord(value)) return [];
+  const rows: PublishedOutput[] = [];
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isRecord(entry)) continue;
+    const outputPath = asString(entry.path);
+    if (outputPath === null) continue;
+    rows.push({
+      name,
+      path: outputPath,
+      sourceExecutionId: asString(entry.source_execution_id),
+      publishedByExecutionId: asString(entry.published_by_execution_id),
+    });
+  }
+  return rows;
+}
+
+/** Keep only the small scalar fields: the full event can carry very large `details` and `usage`. */
+function providerEventSummary(value: unknown): ProviderEventSummary | null {
+  if (!isRecord(value)) return null;
+  return {
+    event: asString(value.event),
+    summary: asString(value.summary),
+    stageId: asString(value.stage_id),
+    executionId: asString(value.execution_id),
+    provider: asString(value.provider),
+    timestamp: asString(value.timestamp),
+  };
+}
+
 export function parseStatus(text: string): SessionStatus | null {
   let value: unknown;
   try {
@@ -47,7 +78,7 @@ export function parseStatus(text: string): SessionStatus | null {
     return null;
   }
   if (!isRecord(value)) return null;
-  const raw = value;
+  const { latest_provider_event: providerEvent, ...raw } = value;
   return {
     status: asString(raw.status),
     workflowId: asString(raw.workflow_id),
@@ -60,6 +91,9 @@ export function parseStatus(text: string): SessionStatus | null {
     latestDecision: asString(raw.latest_decision),
     blockedByExecutionIds: blockedIds(raw.blocked_by_execution_ids),
     runningStages: runningStages(raw.running_stages),
+    questions: parsePendingQuestions(raw.questions),
+    outputs: publishedOutputs(raw.outputs),
+    latestProviderEvent: providerEventSummary(providerEvent),
     raw,
   };
 }
@@ -75,10 +109,10 @@ function attemptRead(statusPath: string): StatusRead {
   } catch (error) {
     const code = isRecord(error) ? error.code : undefined;
     if (code === 'ENOENT') return { kind: 'missing' };
-    return { kind: 'error' };
+    return { kind: 'error', reason: 'unreadable' };
   }
   const status = parseStatus(text);
-  return status === null ? { kind: 'error' } : { kind: 'ok', status };
+  return status === null ? { kind: 'error', reason: 'invalid' } : { kind: 'ok', status };
 }
 
 /**
@@ -87,7 +121,7 @@ function attemptRead(statusPath: string): StatusRead {
  * 3 attempts, then give up and let the caller mark the session Unknown.
  */
 export function readStatus(statusPath: string): StatusRead {
-  let last: StatusRead = { kind: 'error' };
+  let last: StatusRead = { kind: 'error', reason: 'unreadable' };
   for (let i = 0; i < STATUS_MAX_ATTEMPTS; i += 1) {
     if (i > 0) sleepSync(STATUS_RETRY_DELAY_MS);
     last = attemptRead(statusPath);

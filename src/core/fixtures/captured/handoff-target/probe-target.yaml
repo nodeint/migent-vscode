@@ -1,0 +1,14 @@
+schema_version: 4
+id: probe-target
+stages:
+  - id: ack
+    role: developer
+    depends_on: []
+    instructions:
+      - Do not read the repository. Read the handoff note context, write one short sentence to ack.md and finish.
+    produces:
+      artifact: ack.md
+outputs:
+  - name: ack
+    from_stage: ack
+    artifact: ack.md

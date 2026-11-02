@@ -8,6 +8,14 @@ export const STATUS_FILENAME = 'status.json';
 export const EVENTS_FILENAME = 'events.jsonl';
 export const LOCK_FILENAME = 'session.lock';
 export const EXECUTIONS_DIRNAME = 'executions';
+export const OUTPUTS_DIRNAME = 'outputs';
+export const HANDOFF_DIRNAME = 'handoff';
+export const QUESTIONS_FILENAME = 'questions.json';
+export const NEXT_FILENAME = 'next.json';
+export const FROZEN_WORKFLOW_FILENAME = 'workflow.frozen.yaml';
+export const TASK_FILENAME = 'task.md';
+export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
+export const CONFIG_FILENAME = 'config.yaml';
 
 export function migentDir(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR);
@@ -43,4 +51,48 @@ export function executionsDir(projectRoot: string, sessionId: string): string {
 
 export function workflowsDir(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR, WORKFLOWS_DIRNAME);
+}
+
+export function configPath(projectRoot: string): string {
+  return path.join(projectRoot, MIGENT_DIR, CONFIG_FILENAME);
+}
+
+export function questionsPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), QUESTIONS_FILENAME);
+}
+
+export function nextPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), NEXT_FILENAME);
+}
+
+export function frozenWorkflowPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), FROZEN_WORKFLOW_FILENAME);
+}
+
+export function taskPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), TASK_FILENAME);
+}
+
+export function cancelRequestPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), CANCEL_REQUEST_FILENAME);
+}
+
+export function outputsDir(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), OUTPUTS_DIRNAME);
+}
+
+/**
+ * Resolve `relative` under `baseDir`. Null when it is empty, absolute, or leaves
+ * `baseDir` (a lexical check; symbolic links are not followed).
+ */
+export function resolveWithin(baseDir: string, relative: string): string | null {
+  if (relative === '' || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) return null;
+  const resolved = path.resolve(baseDir, relative);
+  const back = path.relative(baseDir, resolved);
+  if (back === '' || back === '..' || back.startsWith(`..${path.sep}`) || path.isAbsolute(back)) return null;
+  return resolved;
+}
+
+export function handoffDir(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), HANDOFF_DIRNAME);
 }
