@@ -71,7 +71,7 @@ const scenarios: Scenario[] = [
       await waitFor('s1 loaded', () => project.store.snapshot('s1') !== undefined);
       const withSessions = project.watcher.watchCount;
 
-      fs.rmSync(migentPath(env.root, 'sessions'), { recursive: true, force: true });
+      fs.rmSync(migentPath(env.root, 'sessions'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       await waitFor('sessions state missing', () => project.store.scanOutcome.state === 'missing');
       assert.equal(project.store.snapshot('s1'), undefined);
       await waitFor('watchers of the deleted folders disposed', () => project.watcher.watchCount < withSessions);
@@ -82,7 +82,7 @@ const scenarios: Scenario[] = [
       writeAtomic(migentPath(env.root, 'sessions', 's2', 'status.json'), status('completed'));
       await waitFor('s2 follows its files', () => project.store.snapshot('s2')?.displayState.state === 'completed');
 
-      fs.rmSync(migentPath(env.root, 'sessions', 's2'), { recursive: true, force: true });
+      fs.rmSync(migentPath(env.root, 'sessions', 's2'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       await waitFor('s2 removed', () => project.store.snapshot('s2') === undefined);
       // The files vanish before the directory does, so the directory is dropped from the scan a debounce later.
       await waitFor('s2 directory dropped from the scan', () => !project.store.scanOutcome.discovered.includes('s2'));
