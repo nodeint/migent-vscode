@@ -4,6 +4,7 @@
   "description": "Monitor and run Migent sessions and workflows from VS Code.",
   "version": "0.0.1",
   "publisher": "nodeint",
+  "icon": "media/migent.png",
   "license": "MIT",
   "private": true,
   "repository": {
@@ -144,7 +145,7 @@
         {
           "id": "migent",
           "title": "Migent",
-          "icon": "media/migent.svg"
+          "icon": "media/migent-outline.svg"
         }
       ]
     },
