@@ -1,7 +1,7 @@
 # Contributing
 
 This guide covers `nodeint/migent-vscode`, the Migent extension for VS Code.
-The extension is currently a scaffold. Planned features in `plans/` are not
+The extension currently provides read-only monitoring. Other planned features in `plans/` are not
 necessarily implemented.
 
 ## Development setup
@@ -115,8 +115,7 @@ To check the packaged extension:
 3. Reload VS Code and open a workspace containing `.migent/config.yaml` to
    exercise the declared activation event.
 4. Verify the behavior affected by the change and inspect extension-host logs
-   for errors. The current scaffold registers **Migent: Refresh** with an empty
-   handler; monitoring and execution features remain roadmap work.
+   for errors. Monitoring is implemented; running and controlling sessions remains roadmap work.
 
 ## Pull requests
 

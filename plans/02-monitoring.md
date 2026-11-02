@@ -1,5 +1,9 @@
 # Phase 2: Monitoring (read-only MVP)
 
+**Status: complete with accepted verification limitations (2026-11-02).** S11's automated checks passed as
+recorded below. The user accepted the watcher exclusion limitation and waived the remaining human-evaluated
+checks; those checks were not performed and are not represented as passing.
+
 Part of [`vscode-extension.md`](./vscode-extension.md). Previous: [`01-core.md`](./01-core.md).
 Next: [`03-control.md`](./03-control.md).
 
@@ -361,7 +365,9 @@ LaunchSpec = { command: string; prefixArgs: string[]; via: 'native' | 'node-scri
 
 **Decision: only non-recursive watchers**, subject to the S0 spike (§7.1). Every watcher is
 `createFileSystemWatcher(new RelativePattern(<folder URI>, <pattern without '/'>))`, which the VS Code API
-documents as non-recursive and not subject to `files.watcherExclude`. No glob with path segments is used. A
+documents as non-recursive. On Windows, testing showed that `files.watcherExclude` can suppress these events
+when it excludes `.migent`; use Refresh to reconcile changes or remove the exclusion for live updates.
+No glob with path segments is used. A
 non-recursive watcher observes only its base folder's direct children, so deletion or recreation of a folder is
 observed by the watcher on its parent. The watched folders mirror the directories that currently exist:
 
@@ -627,7 +633,7 @@ Each slice is one reviewable PR into `next`, updates the docs it affects ([§9](
 | S8 Timeline and logs | Tail interest manager, content provider, log channels, `showLog`, `showTimeline` | S3, S4 |
 | S9 Status bar | Status bar item from attention summary | S2, S4 |
 | S10 Results overview | Results host, `media/results/`, serializer, editor-title actions, `openResult`, Completed-row routing, lineage navigation among retained sessions | S2, S5 |
-| S11 Phase verification | Windows manual pass (§8) including the §6.5 budget measurement (AC22), README monitoring section, final doc sweep | S5–S10 |
+| S11 Phase verification | Automated Windows verification, README monitoring section and final doc sweep; remaining human checks waived as recorded below | S5–S10 |
 
 S0–S3 can proceed in parallel; S5–S9 can proceed in parallel after S4.
 
@@ -659,8 +665,9 @@ What the old watcher on a deleted folder reports is recorded but not required.
 `node:fs.watch` from the extension host, so the viability of the `fs.watch` fallback is known before anyone
 decides. This is probe code only; no production backend is built in S0.
 
-**Outcome.** The PR reports each case per version. All pass → S4 builds §6.1 as designed. Any failure → stop and
-escalate to the user with the failing cases; S4 does not start until the user picks a fallback.
+**Observed outcome (2026-11-02).** Without the exclusion, the VS Code watcher probes passed on Windows with
+VS Code 1.90.0 and 1.144.0. With `**/.migent/**` excluded, P1–P7 failed on both versions. The user accepted
+this limitation: Refresh is the recovery path and the `fs.watch` fallback below is not implemented.
 
 **Fallback design (stated, not built).**
 
@@ -705,12 +712,27 @@ workspace; **M** = manual check on Windows (steps recorded in the PR); **L** = E
 | AC15 | Missing, empty and unreadable sessions/workflows directories render the distinct states in §6.7 | U, I |
 | AC16 | No file under `.migent/` is created or modified by the extension during the integration suite | I (tree hash before/after) |
 | AC17 | `src/core/**` and `src/cli/**` contain no `vscode` import | L (`no-restricted-imports` rule) |
-| AC18 | With `files.watcherExclude` containing `**/.migent/**` and `.migent` in `.gitignore`, sessions, workflows and config still update live | I (S0 probe, then full extension in S4), M (Windows) |
+| AC18 | With `files.watcherExclude` containing `**/.migent/**`, live file events may be suppressed; Refresh reconciles sessions, workflows and config. Remove the exclusion for live updates | I (Windows watcher probes); manual verification waived |
 | AC19 | Deleting and recreating `.migent/sessions`, `.migent/workflows`, a session directory, or `.migent` itself updates the views accordingly and resumes live updates without Refresh or reload; no watcher remains for a deleted folder | U (`watchPlan` desired set), I |
 | AC20 | Execution children list exactly the files present (including `turns/*/verify.md` and `artifacts/*`) and update when a response or artifact appears, or when `verify.md` is created in a new or existing turn directory; collapsing the execution releases its watch target and removes its detail-only watchers; tree code performs no file-system reads | U (`executionFiles`, `watchPlan` with retained targets), I |
 | AC21 | When a `questions.json`, `next.json` or `outputs/` change is missed (simulated by writing while the watcher is suspended), `migent.refresh` makes the open Questions node and Results panel re-read and show it; a status change of the outputs map or pending summary updates the open nodes through the `session` `updated` change without a file event for them | U (readers), I |
 | AC22 | With 300 session directories on Windows, every §6.5 budget row is met with all session watchers active, and with nothing Running and no timeline/log open there are no timers, tails or child processes; resuming a session outside the retention limit makes it appear as Running without Refresh | M (Windows, recorded measurements), U (tail/liveness lifecycle), I (resume of a hidden fixture session) |
 | AC23 | Status reader keeps only the small fields of `latest_provider_event`; a status with a large `details.argv`/`usage` does not appear in snapshots or tooltips | U (synthetic large event) |
+
+### S11 verification record
+
+On Windows, `pnpm test:integration` exited successfully with 85 PASS lines across VS Code 1.90.0 and 1.144.0;
+`pnpm typecheck` and `pnpm lint` passed. The `fs.watch` fallback pre-check reported an informational P5 EPERM.
+With the exclusion enabled, all VS Code watcher probes failed on both versions; this limitation is accepted.
+
+An exploratory host run on VS Code 1.144.0 with 300 generated sessions measured 328 ms to load and first root
+`getChildren`, 234 ms maximum event-loop delay, 0.00% idle CPU, 0.34% Running CPU, and 279 ms for a hidden
+session to appear after resume. These measurements are not a complete AC22 pass: they used an esbuild integration
+host rather than the packaged release, and did not measure `activate()`, watcher count or expand/collapse CPU.
+
+The user waived the remaining human-evaluated checks: AC2 and AC7 with a real CLI, AC3 hard-kill behavior,
+AC10 rendering and keyboard, AC13 native CLI, AC18 manual verification, and AC22 packaged-build and Process
+Explorer measurements. They remain unverified, not passed. Phase 2 is closed with these accepted limitations.
 
 Renumbering from the previous draft: old AC16 (idle) merged into AC22; old AC17–AC23 became AC16–AC22; old AC24
 (eviction) dropped with the deferred scope, and its `verify.md` part moved into AC20; AC23 is new.
@@ -791,7 +813,7 @@ synthetic fixtures named as such, so a future captured sample can replace them.
 
 | Risk | Mitigation |
 | :--- | :--- |
-| `.migent` excluded by `files.watcherExclude`, so recursive watchers deliver no events | Only non-recursive watchers (§6.1); S0 verifies the documented behavior on `1.90.0` and latest stable on Windows before S4; fallback stated in §7.1; AC18 re-verifies with the full extension; Refresh remains the recovery path |
+| `.migent` excluded by `files.watcherExclude`, so watchers deliver no events | Accepted limitation: remove the exclusion for live updates, or use Refresh to reconcile (§6.1 and AC18) |
 | Windows watcher coalesces, reorders or reports rename as delete+create; atomic `status.json` rename observed mid-flight | S0 cases P2/P3; debounce with max wait, re-read by state not by event, `readStatus` retries, directory-level create/delete watcher |
 | Many session directories mean many watchers and a large synchronous initial scan | Decided: keep every session watcher and synchronous readers; §6.5 budget measured in S11 (AC22); exceeding it is escalated to the user as a design decision |
 | `readStatus` blocking retry sleep on the host | Counted inside the §6.5 "no block > 500 ms" row; if it dominates, escalate as part of the budget decision |
