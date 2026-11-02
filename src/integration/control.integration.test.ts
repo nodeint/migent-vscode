@@ -96,6 +96,15 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: 'AC5: Prepare without task text still leaves an empty task.md to edit',
+    async run(env) {
+      const project = await createProject(env);
+      const file = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
+      assert.ok(file, 'prepare returns task.md');
+      assert.equal(fs.readFileSync(file, 'utf8'), '');
+    },
+  },
+  {
     name: 'AC6: a foreign lock blocks writes on that session only, with its owner named',
     async run(env) {
       write(migentPath(env.root, 'sessions', 'held', 'manifest.yaml'), manifest('held', 'workflow_id: plan\n'));

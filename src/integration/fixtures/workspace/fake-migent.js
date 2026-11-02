@@ -34,6 +34,7 @@ function writeStatus(id, state, extra = {}) {
   });
 }
 
+// Like the real CLI, `prepare` leaves task.md for the caller to write.
 function create(workflow, title) {
   const id = crypto.randomUUID();
   fs.mkdirSync(dirOf(id), { recursive: true });
@@ -42,7 +43,6 @@ function create(workflow, title) {
     `session_id: ${id}\ntitle: ${JSON.stringify(title)}\nworkflow_id: ${workflow}\n` +
       `created_at: ${new Date().toISOString()}\nschema_version: 2\n`,
   );
-  fs.writeFileSync(path.join(dirOf(id), 'task.md'), '');
   return id;
 }
 
