@@ -108,6 +108,17 @@
         "title": "Recheck CLI",
         "category": "Migent",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "migent.workflow.open",
+        "title": "Open Workflow File",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.openConfig",
+        "title": "Open Project Config",
+        "category": "Migent",
+        "icon": "$(settings-gear)"
       }
     ],
     "configuration": {
@@ -142,6 +153,14 @@
         {
           "id": "migent.sessions",
           "name": "Sessions"
+        },
+        {
+          "id": "migent.workflows",
+          "name": "Workflows"
+        },
+        {
+          "id": "migent.project",
+          "name": "Project"
         }
       ]
     },
@@ -155,6 +174,16 @@
         "view": "migent.sessions",
         "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Open CLI Settings](command:migent.openSettings)\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
         "when": "migent.hasProjects && migent.cliState =~ /^(missing|unsupported|old|unparsable|error)$/"
+      },
+      {
+        "view": "migent.workflows",
+        "contents": "No Migent project was found in the open folders.",
+        "when": "!migent.hasProjects"
+      },
+      {
+        "view": "migent.project",
+        "contents": "No Migent project was found in the open folders.",
+        "when": "!migent.hasProjects"
       }
     ],
     "menus": {
@@ -162,6 +191,16 @@
         {
           "command": "migent.refresh",
           "when": "view == migent.sessions",
+          "group": "navigation"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.workflows",
+          "group": "navigation"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "view == migent.project",
           "group": "navigation"
         }
       ],
@@ -225,6 +264,11 @@
           "command": "migent.session.revealInExplorer",
           "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "2_session@2"
+        },
+        {
+          "command": "migent.refresh",
+          "when": "(view == migent.workflows || view == migent.project) && viewItem == diag.workflows-unreadable",
+          "group": "inline@1"
         }
       ],
       "commandPalette": [

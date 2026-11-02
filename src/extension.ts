@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { Liveness } from './core/liveness';
 import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
+import { registerProjectCommands } from './vscode/commands/projectCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
@@ -14,7 +15,9 @@ import { ResultsPanels } from './vscode/results/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
+import { ProjectTreeProvider } from './vscode/views/projectTree';
 import { SessionsTreeProvider } from './vscode/views/sessionsTree';
+import { WorkflowsTreeProvider } from './vscode/views/workflowsTree';
 
 /** What activation returns; integration tests use it to observe the host. */
 export interface MigentApi {
@@ -22,6 +25,8 @@ export interface MigentApi {
   capability: CapabilityService;
   sessionsTree: SessionsTreeProvider;
   sessionsView: vscode.TreeView<TreeNode>;
+  workflowsTree: WorkflowsTreeProvider;
+  projectTree: ProjectTreeProvider;
   tails: TailManager;
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
@@ -42,6 +47,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     showCollapseAll: true,
   });
   sessionsTree.attach(sessionsView);
+  const workflowsTree = new WorkflowsTreeProvider(registry);
+  const projectTree = new ProjectTreeProvider(registry);
   const tails = new TailManager(registry);
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
@@ -54,6 +61,10 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     contextKeys,
     sessionsTree,
     sessionsView,
+    workflowsTree,
+    projectTree,
+    vscode.window.registerTreeDataProvider('migent.workflows', workflowsTree),
+    vscode.window.registerTreeDataProvider('migent.project', projectTree),
     tails,
     sessionDocs,
     logs,
@@ -81,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerResultsCommands(host, results),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
+    ...registerProjectCommands(registry),
   );
   // Discovery and the first load run after activation returns.
   const ready = new Promise<void>((resolve) => {
@@ -89,7 +101,20 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       resolve();
     }, 0);
   });
-  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, statusBar, results, ready };
+  return {
+    registry,
+    capability,
+    sessionsTree,
+    sessionsView,
+    workflowsTree,
+    projectTree,
+    tails,
+    sessionDocs,
+    logs,
+    statusBar,
+    results,
+    ready,
+  };
 }
 
 export function deactivate(): void {}

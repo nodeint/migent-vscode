@@ -101,13 +101,45 @@ async function environment(): Promise<Env> {
   return cached;
 }
 
+/**
+ * Remove `.migent/` between scenarios. Editors opened by a scenario are closed first, and a transient
+ * lock (EBUSY/EPERM while VS Code's watcher still holds a folder, seen on Windows) is retried with a pause.
+ */
+async function cleanMigent(root: string): Promise<void> {
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  const deadline = Date.now() + WAIT_MS;
+  for (;;) {
+    try {
+      removeMigent(root);
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+      await sleep(SETTLE_MS);
+    }
+  }
+}
+
+/**
+ * Wait until the removed project is demoted. VS Code 1.90 occasionally delivers the anchor delete event
+ * late; the product's recovery path for a dropped event is Refresh, so use it once before failing.
+ */
+async function waitForCleanStart(env: Env): Promise<void> {
+  try {
+    await waitFor('clean start', () => env.project() === undefined);
+  } catch {
+    console.log('NOTE anchor delete event not seen within the wait; recovering with migent.refresh');
+    env.api.registry.refresh();
+    await waitFor('clean start after refresh', () => env.project() === undefined);
+  }
+}
+
 /** Run scenarios one by one, each from a clean workspace; returns the number that failed. */
 export async function runScenarios(scenarios: readonly Scenario[]): Promise<number> {
   const env = await environment();
   let failed = 0;
   for (const scenario of scenarios) {
-    removeMigent(env.root);
-    await waitFor('clean start', () => env.project() === undefined);
+    await cleanMigent(env.root);
+    await waitForCleanStart(env);
     await sleep(SETTLE_MS);
     env.changes.length = 0;
     try {
@@ -118,6 +150,6 @@ export async function runScenarios(scenarios: readonly Scenario[]): Promise<numb
       console.log(`FAIL ${scenario.name}\n     ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  removeMigent(env.root);
+  await cleanMigent(env.root);
   return failed;
 }

@@ -8,6 +8,7 @@ import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runStatusBarScenarios } from './statusBar.integration.test';
 import { runTimelineScenarios } from './timeline.integration.test';
 import { runWatcherProbe } from './watcherProbe.integration.test';
+import { runWorkflowsProjectScenarios } from './workflowsProject.integration.test';
 
 /** Entry point loaded by VS Code (`extensionTestsPath`). Rejects when a required case fails. */
 export async function run(): Promise<void> {
@@ -20,6 +21,7 @@ export async function run(): Promise<void> {
     if (!isExclude) {
       scenariosFailed += await runMonitoringScenarios();
       scenariosFailed += await runSessionsTreeScenarios();
+      scenariosFailed += await runWorkflowsProjectScenarios();
       scenariosFailed += await runCapabilityScenarios();
       scenariosFailed += await runTimelineScenarios();
       scenariosFailed += await runStatusBarScenarios();
