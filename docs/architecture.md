@@ -7,9 +7,10 @@ For file-reader and state behavior, see [Core behavior](core.md).
 
 [extension.ts](../src/extension.ts) builds a `ProjectRegistry`, the context keys and
 the liveness timer, and registers `migent.refresh`. It returns a small API
-(`registry`, `capability`, `ready`) that integration tests use. Discovery and the first load run
+(`registry`, `capability`, `tails`, `logs`, `ready`) that integration tests use. Discovery and the first load run
 after `activate()` returns. The Sessions view and its read-only commands exist; the Workflows and
-Project views, status bar, timeline and Results page do not yet. CLI capability checks run once
+Project views, status bar and Results page do not yet. Timeline documents and per-session log channels read
+`events.jsonl` only while one is open. CLI capability checks run once
 per trigger (a project appearing, a `migent.cli.*` change, Recheck) and never hide data read from disk.
 
 Data flows watcher, then store, then consumer; consumers never read disk:
@@ -44,6 +45,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | Sessions view | [sessionsTree.ts](../src/vscode/views/sessionsTree.ts), [sessionChildren.ts](../src/vscode/views/sessionChildren.ts), [nodes.ts](../src/vscode/views/nodes.ts) | Identity-only nodes, `TreeItem`s built from the live store, children read on expand with core readers, narrow batched refreshes, badge, watch targets retained while a node is expanded; no file-system calls of its own |
 | Row text and ids | [sessionPresentation.ts](../src/core/sessionPresentation.ts) | Pure label, description, tooltip, `contextValue`, icon and node-id rules |
 | Session commands | [sessionCommands.ts](../src/vscode/commands/sessionCommands.ts), [pick.ts](../src/vscode/pick.ts) | Open files, copy id, reveal, Show more; a Command Palette call picks its target |
+| Event tails, timeline and log | [tails.ts](../src/vscode/tails.ts), [sessionDocs.ts](../src/vscode/content/sessionDocs.ts), [channels.ts](../src/vscode/log/channels.ts), [timelineCommands.ts](../src/vscode/commands/timelineCommands.ts) | `TailManager` reference-counts interest per session and owns the `EventTail`; with no holder there is no tail. `migent-session:/<id>/timeline?project=` documents hold interest while a tab shows them. At most 5 `LogOutputChannel`s, least recently shown disposed first; a channel follows the tail only while its session is Running, with a final read when it stops. `migent.session.showTimeline` and `showLog` |
 | Window context keys | [contextKeys.ts](../src/vscode/contextKeys.ts) | `migent.hasProjects`, `migent.sessionsState`, `migent.cliState` |
 | CLI location and version | [locate.ts](../src/cli/locate.ts), [version.ts](../src/cli/version.ts), [capabilityText.ts](../src/cli/capabilityText.ts) | No `vscode` import. `migent.cli.path` resolves to a shell-free `LaunchSpec`: a native executable, or a `.js`/`.mjs`/`.cjs` entry run with `node` from `PATH`; `.cmd`, `.bat`, `.ps1` and other launchers are unsupported. The required version is a constant in `version.ts`, bumped in the release that needs a newer CLI; there is no setting for it |
 | CLI capability service | [capability.ts](../src/vscode/capability.ts), [capabilityCommands.ts](../src/vscode/commands/capabilityCommands.ts) | Per-project state (`checking`, `ok`, `missing`, `unsupported`, `old`, `unparsable`, `error`), one `--version` probe per executable, announces `capability` changes; shows a diagnostic node in the Sessions view; `migent.openSettings` and `migent.cli.recheck` |

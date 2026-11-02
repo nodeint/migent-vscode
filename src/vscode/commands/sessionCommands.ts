@@ -44,9 +44,9 @@ function targetOf(arg: unknown): Target | undefined {
   }
 }
 
-type Resolved = PickedSession & { target?: Target };
+export type Resolved = PickedSession & { target?: Target };
 
-async function resolve(registry: ProjectRegistry, arg: unknown, title: string): Promise<Resolved | undefined> {
+export async function resolve(registry: ProjectRegistry, arg: unknown, title: string): Promise<Resolved | undefined> {
   const target = targetOf(arg);
   const context = target === undefined ? undefined : registry.project(target.project);
   const snapshot = target === undefined ? undefined : context?.store.snapshot(target.sessionId);

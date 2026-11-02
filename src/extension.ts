@@ -4,8 +4,12 @@ import { Liveness } from './core/liveness';
 import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
+import { registerTimelineCommands } from './vscode/commands/timelineCommands';
+import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
+import { LogChannels } from './vscode/log/channels';
 import { ProjectRegistry } from './vscode/projects';
+import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
 import { SessionsTreeProvider } from './vscode/views/sessionsTree';
 
@@ -15,6 +19,9 @@ export interface MigentApi {
   capability: CapabilityService;
   sessionsTree: SessionsTreeProvider;
   sessionsView: vscode.TreeView<TreeNode>;
+  tails: TailManager;
+  sessionDocs: SessionDocsProvider;
+  logs: LogChannels;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
 }
@@ -30,12 +37,18 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     showCollapseAll: true,
   });
   sessionsTree.attach(sessionsView);
+  const tails = new TailManager(registry);
+  const sessionDocs = new SessionDocsProvider(tails);
+  const logs = new LogChannels(registry, tails);
   context.subscriptions.push(
     registry,
     capability,
     contextKeys,
     sessionsTree,
     sessionsView,
+    tails,
+    sessionDocs,
+    logs,
     {
       dispose: () => {
         liveness.dispose();
@@ -54,6 +67,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       registry.refresh();
     }),
     ...registerSessionCommands(registry),
+    ...registerTimelineCommands(registry, logs),
     ...registerCapabilityCommands(capability),
   );
   // Discovery and the first load run after activation returns.
@@ -63,7 +77,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       resolve();
     }, 0);
   });
-  return { registry, capability, sessionsTree, sessionsView, ready };
+  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, ready };
 }
 
 export function deactivate(): void {}

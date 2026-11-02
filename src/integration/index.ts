@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { runCapabilityScenarios } from './capability.integration.test';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
+import { runTimelineScenarios } from './timeline.integration.test';
 import { runWatcherProbe } from './watcherProbe.integration.test';
 
 /** Entry point loaded by VS Code (`extensionTestsPath`). Rejects when a required case fails. */
@@ -18,6 +19,7 @@ export async function run(): Promise<void> {
       scenariosFailed += await runMonitoringScenarios();
       scenariosFailed += await runSessionsTreeScenarios();
       scenariosFailed += await runCapabilityScenarios();
+      scenariosFailed += await runTimelineScenarios();
     }
     const failed = probeFailed + scenariosFailed;
     if (failed > 0) {

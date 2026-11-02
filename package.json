@@ -57,6 +57,16 @@
         "category": "Migent"
       },
       {
+        "command": "migent.session.showLog",
+        "title": "Show Session Log",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.session.showTimeline",
+        "title": "Show Session Timeline",
+        "category": "Migent"
+      },
+      {
         "command": "migent.session.copyId",
         "title": "Copy Session ID",
         "category": "Migent"
@@ -174,6 +184,16 @@
           "command": "migent.session.openResponse",
           "when": "view == migent.sessions && viewItem =~ /^execution./",
           "group": "1_open@2"
+        },
+        {
+          "command": "migent.session.showLog",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@4"
+        },
+        {
+          "command": "migent.session.showTimeline",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "1_open@5"
         },
         {
           "command": "migent.session.copyId",
