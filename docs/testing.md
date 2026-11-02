@@ -73,5 +73,6 @@ selection and active editor staying put, Show more, commands). The scenarios in
 capability states and Recheck; the fixture workspace points `migent.cli.path` at
 `fake-migent.js` (run with `node`), so they do not depend on an installed CLI. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
-log channels and that no tail outlives its consumer. They are
+log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
+text and hidden state. They are
 skipped in `--exclude` mode, where no events arrive.

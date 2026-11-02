@@ -9,6 +9,7 @@ import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
 import { LogChannels } from './vscode/log/channels';
 import { ProjectRegistry } from './vscode/projects';
+import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
 import { SessionsTreeProvider } from './vscode/views/sessionsTree';
@@ -22,6 +23,7 @@ export interface MigentApi {
   tails: TailManager;
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
+  statusBar: StatusBar;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
 }
@@ -40,6 +42,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const tails = new TailManager(registry);
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
+  const statusBar = new StatusBar(registry);
   context.subscriptions.push(
     registry,
     capability,
@@ -49,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     tails,
     sessionDocs,
     logs,
+    statusBar,
     {
       dispose: () => {
         liveness.dispose();
@@ -57,6 +61,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     {
       dispose: liveness.onDidTick(() => {
         sessionsTree.refreshRunning();
+        statusBar.update();
       }),
     },
     registry.onDidChange((change) => {
@@ -77,7 +82,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       resolve();
     }, 0);
   });
-  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, ready };
+  return { registry, capability, sessionsTree, sessionsView, tails, sessionDocs, logs, statusBar, ready };
 }
 
 export function deactivate(): void {}
