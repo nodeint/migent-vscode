@@ -10,6 +10,8 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { recordFailure } from './failureReport';
+
 type Kind = 'create' | 'change' | 'delete';
 type BackendId = 'vscode' | 'fs.watch';
 type Names = string[] | '*';
@@ -462,6 +464,11 @@ export async function runWatcherProbe(): Promise<number> {
   }
   await resetMigent(root);
   report(results);
+  if (!isExclude()) {
+    for (const result of results.filter((item) => item.backend === 'vscode' && !item.ok)) {
+      recordFailure('watcher probe', `${result.id} ${result.title}`, result.detail);
+    }
+  }
   // With the exclude, VS Code delivers no events (known limitation): report only, never fail the suite.
   return isExclude() ? 0 : results.filter((result) => result.backend === 'vscode' && !result.ok).length;
 }

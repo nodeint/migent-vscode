@@ -597,7 +597,7 @@
     "setup:git": "node scripts/setup-git.mjs",
     "build": "node esbuild.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && node --test scripts/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
     "test:integration": "node scripts/integration/run.mjs",
     "package": "vsce package --no-dependencies",
     "lint": "node scripts/wrappers/run-eslint.mjs",

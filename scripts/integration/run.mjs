@@ -7,15 +7,41 @@
  * events for excluded paths, a known limitation; see docs/testing.md).
  * Every version runs even if an earlier one fails; the exit code is non-zero if any failed.
  */
-import { spawnSync } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { finished } from 'node:stream/promises';
 
 import { runTests } from '@vscode/test-electron';
 
 import { copyFixtureWorkspace } from './fixtureWorkspace.mjs';
 
+// Run in a child so all VS Code and build output can be replayed if anything fails.
+if (!process.env.MIGENT_IT_CAPTURED) {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    env: { ...process.env, MIGENT_IT_CAPTURED: '1' },
+    stdio: ['inherit', 'pipe', 'pipe'],
+  });
+  const output = [];
+  child.stdout.on('data', (chunk) => output.push(chunk));
+  child.stderr.on('data', (chunk) => output.push(chunk));
+  child.on('error', (error) => {
+    console.error('Failed to start integration tests:', error);
+    process.exitCode = 1;
+  });
+  child.on('close', (code, signal) => {
+    if (code !== 0) {
+      for (const chunk of output) process.stderr.write(chunk);
+      if (signal) console.error(`Integration tests terminated by ${signal}`);
+      process.exitCode = code || 1;
+    }
+  });
+} else {
+  await runIntegration();
+}
+
+async function runIntegration() {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const minimum = String(pkg.engines.vscode).replace(/^[^\d]*/, '');
@@ -40,6 +66,13 @@ const isExclude = process.argv.includes('--exclude');
 
 let failed = 0;
 for (const version of versions) {
+  const label = version.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const outputDir = join(root, 'dist-test');
+  mkdirSync(outputDir, { recursive: true });
+  const reportPath = join(outputDir, `integration-failure-${label}.json`);
+  const logPath = join(outputDir, `integration-${label}.log`);
+  rmSync(reportPath, { force: true });
+  const log = createWriteStream(logPath);
   const workspace = copyFixtureWorkspace(join(root, 'src', 'integration', 'fixtures', 'workspace'));
   if (isExclude) {
     writeFileSync(
@@ -54,13 +87,31 @@ for (const version of versions) {
       extensionDevelopmentPath: root,
       extensionTestsPath: join(root, 'dist-test', 'integration', 'index.js'),
       launchArgs: [workspace, '--profile-temp', '--disable-workspace-trust'],
-      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
+      stdout: log,
+      stderr: log,
+      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, MIGENT_IT_FAILURE_REPORT: reportPath, ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
     });
   } catch (error) {
     failed += 1;
-    console.error(`VS Code ${version}: integration tests failed`, error);
+    console.error(`VS Code ${version}: integration tests failed`);
+    try {
+      const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+      for (const failure of report.failures) {
+        console.error(`FAIL [${failure.suite}] ${failure.name}\n  ${failure.message}`);
+      }
+      console.error(`Failure report: ${reportPath}`);
+    } catch {
+      const message = `Test startup or reporting failed: ${String(error)}`;
+      writeFileSync(reportPath, JSON.stringify({ vscodeVersion: version, status: 'failed', failures: [{ type: 'startup', suite: 'runner', name: 'VS Code launch', message }] }, null, 2));
+      console.error(message);
+      console.error(`Failure report: ${reportPath}`);
+    }
+    console.error(`Full VS Code log: ${logPath}`);
   } finally {
+    log.end();
+    await finished(log);
     rmSync(workspace, { recursive: true, force: true });
   }
 }
 process.exit(failed === 0 ? 0 : 1);
+}
