@@ -168,6 +168,9 @@ export function sessionChildren(host: ChildHost, context: ProjectContext, node: 
       node,
     ),
   );
+  children.unshift(host.intern({
+    kind: 'directory', id: `${node.id}/files`, project: context.key, sessionId: node.sessionId, relativePath: '',
+  }, node));
   const outputs = listOutputs(dir, snapshot.status?.outputs ?? []);
   if (outputs.rows.length > 0 || outputs.directoryError !== null) {
     children.push(
@@ -203,25 +206,21 @@ export function executionChildren(host: ChildHost, context: ProjectContext, node
     };
     return [leaf(host, { id: `${node.id}/diag`, parent: node, ...fields }, view)];
   }
-  const rows = listing.files.map((file) => {
+  const rows: TreeNode[] = listing.files.filter((file) => file.kind !== 'artifact').map((file) => {
     const uri = vscode.Uri.file(file.absolutePath);
     return leaf(host, { id: nodeIds.file(uri.toString()), parent: node, ...fields }, {
       label: executionFileLabel(file),
-      icon: file.kind === 'artifact' ? 'file-binary' : 'file',
+      icon: 'file',
       contextValue: `file.${file.kind}`,
       tooltip: file.relativePath,
       uri,
     });
   });
-  if (listing.artifactsError !== null) {
-    rows.push(
-      leaf(host, { id: `${node.id}/artifacts-error`, parent: node, ...fields }, {
-        label: `Cannot read artifacts/ (${listing.artifactsError})`,
-        icon: 'error',
-        color: 'list.errorForeground',
-        contextValue: 'diag.artifacts-unreadable',
-      }),
-    );
+  if (listing.hasArtifacts) {
+    rows.push(host.intern({
+      kind: 'directory', id: `${node.id}/artifacts`, project: context.key, sessionId: node.sessionId,
+      relativePath: path.join(EXECUTIONS_DIRNAME, node.executionId, 'artifacts'),
+    }, node));
   }
   return rows;
 }

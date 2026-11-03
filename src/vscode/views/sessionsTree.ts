@@ -32,6 +32,7 @@ import {
   questionsChildren,
   sessionChildren,
 } from './sessionChildren';
+import { SessionFiles } from './sessionFiles';
 
 const GROUP_LABELS: Readonly<Record<SessionGroup, string>> = {
   running: 'Running',
@@ -77,6 +78,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   readonly #pending = new Set<TreeNode | undefined>();
   readonly #subscriptions: vscode.Disposable[] = [];
   readonly #host: ChildHost;
+  readonly #files = new SessionFiles((node) => { this.#queue(node); }, (node, parent) => this.#intern(node, parent));
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
   #view: vscode.TreeView<TreeNode> | null = null;
   #dayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -121,8 +123,12 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   /** Release the watch targets held for a node that collapsed (descendants included). */
   public collapse(node: TreeNode): void {
     if (node.kind === 'session') {
+      this.#files.release((candidate) => candidate.project === node.project && candidate.sessionId === node.sessionId);
       this.#releaseWhere((entry) => entry.project === node.project && entry.sessionId === node.sessionId);
+    } else if (node.kind === 'directory') {
+      this.#files.collapse(node);
     } else if (node.kind === 'execution') {
+      this.#files.release((candidate) => candidate.id.startsWith(`${node.id}/`));
       this.#releaseKey(node.project, { kind: 'execution', sessionId: node.sessionId, executionId: node.executionId });
     } else if (node.kind === 'outputs') {
       this.#releaseKey(node.project, { kind: 'outputs', sessionId: node.sessionId });
@@ -156,6 +162,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         return groupSessions(this.#host, context, node);
       case 'session':
         return sessionChildren(this.#host, context, node);
+      case 'directory':
+        return this.#files.children(context, node);
       case 'execution':
         return executionChildren(this.#host, context, node);
       case 'outputs':
@@ -179,6 +187,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   }
 
   public dispose(): void {
+    this.#files.dispose();
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
     if (this.#dayTimer !== null) clearTimeout(this.#dayTimer);
     this.#releaseWhere(() => true);
@@ -251,6 +260,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       case 'projects':
       case 'refresh': {
         const keys = new Set(this.#registry.projects().map((context) => context.key));
+        this.#files.release((node) => !keys.has(node.project));
         this.#releaseWhere((entry) => !keys.has(entry.project));
         this.#forget((node) => !keys.has(node.project));
         this.#queue(undefined);
@@ -279,6 +289,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   #onSession(project: string, sessionId: string, kind: 'added' | 'updated' | 'removed'): void {
     const sessionNodeId = nodeIds.session(project, sessionId);
     if (kind === 'removed') {
+      this.#files.release((node) => node.project === project && node.sessionId === sessionId);
       this.#releaseWhere((entry) => entry.project === project && entry.sessionId === sessionId);
       this.#forget((node) => node.project === project && 'sessionId' in node && node.sessionId === sessionId);
       this.#lastGroup.delete(sessionNodeId);
@@ -360,6 +371,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       }
       case 'session':
         return this.#sessionItem(node, context);
+      case 'directory':
+        return this.#files.item(context, node);
       case 'execution':
         return this.#executionItem(node.execution);
       case 'outputs':
@@ -434,9 +447,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     const item = new vscode.TreeItem(view.label, vscode.TreeItemCollapsibleState.None);
     item.description = view.description;
     item.tooltip = view.tooltip;
-    item.iconPath = icon(view.icon, view.color);
+    item.iconPath = view.uri === undefined ? icon(view.icon, view.color) : vscode.ThemeIcon.File;
     item.contextValue = view.contextValue;
     if (view.uri !== undefined) {
+      item.resourceUri = view.uri;
       item.command = { command: 'vscode.open', title: 'Open', arguments: [view.uri] };
     } else if (view.command !== undefined) {
       item.command = view.command;

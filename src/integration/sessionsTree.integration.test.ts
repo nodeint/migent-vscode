@@ -60,6 +60,42 @@ async function waitForSessions(env: Env, ids: string[]): Promise<void> {
 
 const scenarios: Scenario[] = [
   {
+    name: 'Session files retain their directory structure, file icons and live updates',
+    async run(env) {
+      addSession(env.root, 'files', 'active');
+      const folder = migentPath(env.root, 'sessions', 'files', 'custom', 'nested');
+      write(path.join(folder, 'example.ts'), 'export {};');
+      await waitForSessions(env, ['files']);
+      const session = sessionNode(env, 'files');
+      const files = children(env, session).find((node) => node.kind === 'directory');
+      assert.ok(files);
+      const baseWatchers = env.project()!.watcher.watchCount;
+      const custom = children(env, files).find((node) => text(itemOf(env, node).label) === 'custom');
+      assert.ok(custom);
+      const nested = children(env, custom).find((node) => text(itemOf(env, node).label) === 'nested');
+      assert.ok(nested);
+      const file = children(env, nested).find((node) => text(itemOf(env, node).label) === 'example.ts');
+      assert.ok(file);
+      assert.equal(env.project()!.watcher.watchCount, baseWatchers + 3);
+      const item = itemOf(env, file);
+      assert.equal(item.resourceUri?.toString(), vscode.Uri.file(path.join(folder, 'example.ts')).toString());
+      assert.equal(iconId(item), 'file');
+      assert.equal(item.command?.command, 'vscode.open');
+      const fired: unknown[] = [];
+      const subscription = env.api.sessionsTree.onDidChangeTreeData((element) => fired.push(element));
+      try {
+        write(path.join(folder, 'new.json'), '{}');
+        await waitFor('directory change notified', () => fired.some((event) => Array.isArray(event) && event.includes(nested)));
+        assert.ok(labelsOf(env, children(env, nested)).includes('new.json'));
+      } finally {
+        subscription.dispose();
+        if (files.kind === 'directory') env.api.sessionsTree.collapse(files);
+        assert.equal(env.project()!.watcher.watchCount, baseWatchers);
+        env.api.sessionsTree.collapse(session);
+      }
+    },
+  },
+  {
     name: 'Delete session respects cancellation and locks, then removes only the selected folder',
     async run(env) {
       addSession(env.root, 'delete-me', 'completed');
@@ -241,7 +277,26 @@ const scenarios: Scenario[] = [
         write(path.join(execution, 'response.md'), 'r');
         await waitFor('response.md listed', () => labelsOf(env, children(env, executions[0]!)).includes('response.md'));
         write(path.join(execution, 'artifacts', 'out.txt'), 'o');
-        await waitFor('artifact listed', () => labelsOf(env, children(env, executions[0]!)).includes('out.txt'));
+        write(path.join(execution, 'artifacts', 'nested', 'result.json'), '{}');
+        await waitFor('artifacts folder listed', () => labelsOf(env, children(env, executions[0]!)).includes('artifacts'));
+        const artifacts = children(env, executions[0]!).find((node) => text(itemOf(env, node).label) === 'artifacts');
+        assert.ok(artifacts);
+        assert.ok(!labelsOf(env, children(env, executions[0]!)).includes('out.txt'));
+        const entries = children(env, artifacts);
+        assert.ok(labelsOf(env, entries).includes('out.txt'));
+        const nested = entries.find((node) => text(itemOf(env, node).label) === 'nested');
+        assert.ok(nested);
+        const result = children(env, nested).find((node) => text(itemOf(env, node).label) === 'result.json');
+        assert.ok(result);
+        assert.equal(itemOf(env, result).resourceUri?.toString(),
+          vscode.Uri.file(path.join(execution, 'artifacts', 'nested', 'result.json')).toString());
+        write(path.join(execution, 'artifacts', 'nested', 'later.txt'), 'later');
+        await waitFor('nested artifact change notified', () => fired.some((event) => Array.isArray(event) && event.includes(nested)));
+        assert.ok(labelsOf(env, children(env, nested)).includes('later.txt'));
+        fired.length = 0;
+        fs.rmSync(path.join(execution, 'artifacts', 'nested', 'later.txt'));
+        await waitFor('nested artifact deletion notified', () => fired.some((event) => Array.isArray(event) && event.includes(nested)));
+        assert.ok(!labelsOf(env, children(env, nested)).includes('later.txt'));
         write(path.join(execution, 'turns', 'turn-1', 'verify.md'), 'v');
         await waitFor('verify listed by turn', () => labelsOf(env, children(env, executions[0]!)).includes('verify · turn 1'));
         await waitFor('the tree was told to refresh', () => fired.length > 0);

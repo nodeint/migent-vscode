@@ -74,6 +74,13 @@ export interface QuestionGroupNode extends Base {
   count: number;
 }
 
+export interface DirectoryNode extends Base {
+  kind: 'directory';
+  project: ProjectKey;
+  sessionId: string;
+  relativePath: string;
+}
+
 export interface LeafNode extends Base {
   kind: 'leaf';
   project: ProjectKey;
@@ -91,6 +98,7 @@ export type TreeNode =
   | ExecutionNode
   | ContainerNode
   | QuestionGroupNode
+  | DirectoryNode
   | LeafNode;
 
 /** Nodes that carry a session identity, for commands. */
