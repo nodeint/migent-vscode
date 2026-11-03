@@ -34,9 +34,7 @@ Running multi-stage AI workflows from a terminal often leads to constant context
 
 ---
 
-> **Status**: Full read-only monitoring, live event streaming, and project inspection are available.
-> Interactive execution (starting/stopping sessions and submitting human replies directly within VS Code)
-> is currently in active development.
+> **Status**: Monitoring and interactive session execution are available.
 
 ---
 
@@ -50,12 +48,18 @@ Running multi-stage AI workflows from a terminal often leads to constant context
   with instant validation for syntax and schema errors.
 - **Results View**: Open a comprehensive overview for completed sessions to inspect final outcomes, outputs,
   and downstream workflow suggestions.
+- **Session Controls**: Run or prepare workflows, start, continue, stop, and repair sessions, or run the next stage once.
+- **Human Input**: Answer questions and reply to blocked sessions with drafts preserved across reloads. Notifications
+  cover questions, blocked and failed sessions, quota waits, and completed sessions.
+- **Next Steps**: Run or prepare a suggested workflow using a completed session's outputs.
+- **Project Tools**: Initialize a project and run Doctor from VS Code.
 
 ## Quick Start
 
 1. Open any workspace containing a `.migent/` directory.
 2. Click the **Migent** icon in the Activity Bar.
 3. Your active sessions, logs, and workflows appear automatically.
+4. Select **Run** on a workflow to start a session, or use `Migent: Initialize Project` to set up a new project.
 
 ### Prerequisites
 
