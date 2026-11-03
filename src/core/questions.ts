@@ -29,7 +29,18 @@ export type QuestionsRead =
   | { kind: 'unreadable'; error: string }
   | { kind: 'invalid'; error: string }
   | { kind: 'unsupported'; schemaVersion: number | null }
-  | { kind: 'ok'; questions: QuestionRecord[] };
+  | { kind: 'ok'; questions: QuestionRecord[]; malformed: MalformedRecord[] };
+
+/**
+ * A record the lenient readers could not use as written (they drop what they cannot read). Kept so a batch
+ * with a malformed member is never submitted from the remnants.
+ */
+export interface MalformedRecord {
+  index: number;
+  executionId: string | null;
+  stageId: string | null;
+  reason: string;
+}
 
 export interface QuestionGroup {
   stageId: string | null;
@@ -99,6 +110,34 @@ function parseStatus(value: unknown): QuestionStatus {
   return value === 'pending' || value === 'answered' || value === 'superseded' ? value : 'unrecognized';
 }
 
+const OPTION_MIN = 2;
+const OPTION_MAX = 26;
+
+function optionProblem(options: unknown): string | null {
+  if (!Array.isArray(options)) return 'options is not a list';
+  if (options.length < OPTION_MIN || options.length > OPTION_MAX) return 'options must number 2-26';
+  const isValid = (option: unknown): boolean =>
+    isRecord(option) && str(option.id) !== null && str(option.label) !== null;
+  return options.every(isValid) ? null : 'an option has no id or label';
+}
+
+/** Why a raw record is unusable as written, or null. Mirrors the documented question shape. */
+export function recordProblem(entry: unknown): string | null {
+  if (!isRecord(entry)) return 'not an object';
+  if (str(entry.id) === null || str(entry.question) === null) return 'missing id or question';
+  if (str(entry.context) === null) return 'missing context';
+  if (entry.selection !== 'single' && entry.selection !== 'multiple') return 'unsupported selection';
+  if (!['pending', 'answered', 'superseded'].includes(String(entry.status))) return 'unrecognized status';
+  return optionProblem(entry.options);
+}
+
+function parseRecord(entry: unknown): QuestionRecord | null {
+  const base = parseQuestionBase(entry);
+  if (base === null || !isRecord(entry)) return null;
+  const answer = parseAnswer(entry.answer);
+  return { ...base, status: parseStatus(entry.status), answer, answeredAt: str(entry.answered_at) };
+}
+
 /** Parse session `questions.json` text. Records without `id` and `question` are skipped. */
 export function parseQuestionsFile(text: string): QuestionsRead {
   let value: unknown;
@@ -113,18 +152,17 @@ export function parseQuestionsFile(text: string): QuestionsRead {
     return { kind: 'unsupported', schemaVersion: typeof version === 'number' ? version : null };
   }
   if (!Array.isArray(value.questions)) return { kind: 'invalid', error: 'questions is not a list' };
-  const questions: QuestionRecord[] = [];
-  for (const entry of value.questions) {
-    const base = parseQuestionBase(entry);
-    if (base === null || !isRecord(entry)) continue;
-    questions.push({
-      ...base,
-      status: parseStatus(entry.status),
-      answer: parseAnswer(entry.answer),
-      answeredAt: str(entry.answered_at),
-    });
-  }
-  return { kind: 'ok', questions };
+  const questions = value.questions.flatMap((entry): QuestionRecord[] => {
+    const record = parseRecord(entry);
+    return record === null ? [] : [record];
+  });
+  const malformed = value.questions.flatMap((entry, index): MalformedRecord[] => {
+    const problem = recordProblem(entry);
+    if (problem === null) return [];
+    const raw = isRecord(entry) ? entry : {};
+    return [{ index, executionId: str(raw.execution_id), stageId: str(raw.stage_id), reason: problem }];
+  });
+  return { kind: 'ok', questions, malformed };
 }
 
 /** Read the session `questions.json` history on demand. Nothing is cached. File order is kept. */

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { runCapabilityScenarios } from './capability.integration.test';
 import { runControlScenarios } from './control.integration.test';
 import { runMonitoringScenarios } from './monitoring.integration.test';
+import { runQuestionScenarios } from './questions.integration.test';
 import { runResultsScenarios } from './results.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runStatusBarScenarios } from './statusBar.integration.test';
@@ -20,14 +21,18 @@ export async function run(): Promise<void> {
     const isExclude = process.env.MIGENT_IT_EXCLUDE === '1';
     let scenariosFailed = 0;
     if (!isExclude) {
-      scenariosFailed += await runMonitoringScenarios();
-      scenariosFailed += await runSessionsTreeScenarios();
-      scenariosFailed += await runWorkflowsProjectScenarios();
-      scenariosFailed += await runCapabilityScenarios();
-      scenariosFailed += await runTimelineScenarios();
-      scenariosFailed += await runStatusBarScenarios();
-      scenariosFailed += await runResultsScenarios();
-      scenariosFailed += await runControlScenarios();
+      const suites = [
+        runMonitoringScenarios,
+        runSessionsTreeScenarios,
+        runWorkflowsProjectScenarios,
+        runCapabilityScenarios,
+        runTimelineScenarios,
+        runStatusBarScenarios,
+        runResultsScenarios,
+        runControlScenarios,
+        runQuestionScenarios,
+      ];
+      for (const suite of suites) scenariosFailed += await suite();
     }
     const failed = probeFailed + scenariosFailed;
     if (failed > 0) {
