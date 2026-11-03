@@ -47,7 +47,7 @@ export class QuestionNotifier implements vscode.Disposable {
       .get<boolean>('question', true);
     if (!isEnabled || snapshot === undefined) return;
     for (const batch of fresh) {
-      const text = `${sessionLabel(snapshot)}: ${batch.stageId ?? 'a role'} is waiting for ${batch.count} answer${
+      const text = `Session ${sessionLabel(snapshot)}: ${batch.stageId ?? 'a role'} is waiting for ${batch.count} answer${
         batch.count === 1 ? '' : 's'
       }.`;
       void vscode.window.showInformationMessage(text, 'Answer questions').then((picked) => {

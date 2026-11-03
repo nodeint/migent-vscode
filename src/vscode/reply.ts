@@ -25,6 +25,8 @@ import { sessionLabel } from '../core/sessionPresentation';
 import type { ControlService } from './control';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
+const INFO_MESSAGE_MS = 5000;
+
 const DRAFT_DIRNAME = 'reply-drafts';
 const KEY_LENGTH = 32;
 const RECONCILE_ATTEMPTS = 4;
@@ -343,9 +345,10 @@ export class ReplyService implements vscode.Disposable {
   public async report(meta: DraftMeta, snapshot: SessionSnapshot | undefined, result: SendResult): Promise<void> {
     const label = snapshot === undefined ? meta.sessionId : sessionLabel(snapshot);
     if (result.kind === 'sent') {
-      vscode.window.setStatusBarMessage(`Reply sent to ${label}`, STATUS_MESSAGE_MS);
       if (result.hasKeptEdits) {
-        void vscode.window.showInformationMessage('Reply sent. Edits made while sending were kept in the draft.');
+        vscode.window.setStatusBarMessage('Reply sent. Edits made while sending were kept in the draft.', INFO_MESSAGE_MS);
+      } else {
+        vscode.window.setStatusBarMessage(`Reply sent to ${label}`, STATUS_MESSAGE_MS);
       }
       return;
     }

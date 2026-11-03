@@ -23,6 +23,8 @@ import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { ResultsPanels } from '../results/panels';
 
+const INFO_MESSAGE_MS = 5000;
+
 export const NEXT_STEP_VIEW_TYPE = 'migent.nextStep';
 
 const TITLE_MAX = 40;
@@ -461,7 +463,7 @@ export class NextStepPanels implements vscode.Disposable {
       case 'openSession':
       case 'openChildTask': {
         if (context.store.snapshot(intent.sessionId)?.manifest?.priorSessionId !== identity.sessionId) {
-          void vscode.window.showInformationMessage(`Session ${intent.sessionId} is not shown.`);
+          vscode.window.setStatusBarMessage(`Session ${intent.sessionId} is not shown.`, INFO_MESSAGE_MS);
           return;
         }
         if (intent.intent === 'openSession') {

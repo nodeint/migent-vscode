@@ -21,7 +21,7 @@ export interface LaunchKey {
 
 export type GateKey = SessionKey | LaunchKey;
 
-export type OperationPhase = 'Starting' | 'Running' | 'Sending reply' | 'Repairing' | 'Stopping';
+export type OperationPhase = 'Starting' | 'Running' | 'Sending reply' | 'Repairing' | 'Stopping' | 'Deleting';
 
 export interface GateEntry {
   key: GateKey;

@@ -157,7 +157,7 @@ export class StateNotifier implements vscode.Disposable {
       case 'quota':
         return this.#quota(snapshot, target);
       case 'completed':
-        return this.#single(`${sessionLabel(snapshot)} completed.`, 'info', {
+        return this.#single(`Session ${sessionLabel(snapshot)} completed.`, 'info', {
           label: 'Open result',
           command: 'migent.session.openResult',
           target,
@@ -178,7 +178,7 @@ export class StateNotifier implements vscode.Disposable {
     const stage = snapshot.status?.latestStageId ?? 'A stage';
     return {
       severity: 'warning',
-      text: `${sessionLabel(snapshot)}: ${stage} is blocked and needs a reply.`,
+      text: `Session ${sessionLabel(snapshot)}: ${stage} is blocked and needs a reply.`,
       buttons: ['Reply'],
       act: () =>
         void vscode.commands.executeCommand('migent.session.reply', { ...target, executionId: transition.executionId }),
@@ -200,7 +200,7 @@ export class StateNotifier implements vscode.Disposable {
     const fileButton = file === null ? [] : [file.kind === 'verify' ? 'Open verify' : 'Open response'];
     return {
       severity: 'error',
-      text: `${sessionLabel(snapshot)} failed${where === '' ? '' : ` (${where})`}. ${cause}`,
+      text: `Session ${sessionLabel(snapshot)} failed${where === '' ? '' : ` (${where})`}. ${cause}`,
       buttons: ['Continue', ...fileButton, 'View log'],
       act: (picked) => {
         if (picked === 'Continue') void vscode.commands.executeCommand('migent.session.continue', target);
@@ -214,7 +214,7 @@ export class StateNotifier implements vscode.Disposable {
     const now = Date.now();
     const wait = quotaWait(snapshot, now);
     if (wait === null) return null;
-    const text = `${sessionLabel(snapshot)} is waiting for provider quota. ${describeQuotaWait(wait, now)}`;
+    const text = `Session ${sessionLabel(snapshot)} is waiting for provider quota. ${describeQuotaWait(wait, now)}`;
     // Without a recorded time the user may retry explicitly; with one, Retry is offered when it expires.
     if (wait.retryAt === null) {
       return this.#single(text, 'info', { label: 'Retry', command: 'migent.session.retryQuota', target });
@@ -279,7 +279,7 @@ export class StateNotifier implements vscode.Disposable {
     this.#enqueue(target, () => {
       const current = this.#snapshotOf(target);
       if (current === undefined || quotaWait(current, Date.now())?.retryAt !== retryAt) return null;
-      return this.#single(`${sessionLabel(current)}: the provider quota wait is over. You can retry now.`, 'info', {
+      return this.#single(`Session ${sessionLabel(current)}: the provider quota wait is over. You can retry now.`, 'info', {
         label: 'Retry',
         command: 'migent.session.retryQuota',
         target,

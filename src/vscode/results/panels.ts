@@ -20,6 +20,8 @@ import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { Releasable } from '../watchBackend';
 
+const INFO_MESSAGE_MS = 5000;
+
 export const RESULTS_VIEW_TYPE = 'migent.results';
 
 const TITLE_MAX = 40;
@@ -354,8 +356,9 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         return;
       case 'openSession':
         if (context.store.snapshot(intent.sessionId) === undefined) {
-          void vscode.window.showInformationMessage(
+          vscode.window.setStatusBarMessage(
             `Session ${intent.sessionId} is not shown. Use Show more in the Sessions view.`,
+            INFO_MESSAGE_MS,
           );
           return;
         }

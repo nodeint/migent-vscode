@@ -60,7 +60,7 @@
     }
     node.append(list);
     if (model.outputs.directoryError) {
-      node.append(el('p', 'outputs/ unreadable (' + model.outputs.directoryError + ')', 'error'));
+      node.append(el('p', 'Cannot read outputs/ (' + model.outputs.directoryError + ')', 'error'));
     }
     return node;
   }

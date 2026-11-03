@@ -10,6 +10,7 @@ import type { QuestionOption } from '../../core/model';
 import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
 import { groupPendingQuestions, type QuestionRecord, readQuestions } from '../../core/questions';
+import { RECENT_PERIODS,recentPeriod } from '../../core/recentPeriod';
 import {
   executionFileLabel,
   nodeIds,
@@ -27,6 +28,7 @@ import type {
   LeafNode,
   LeafView,
   QuestionGroupNode,
+  RecentPeriodNode,
   SessionNode,
   TreeNode,
 } from './nodes';
@@ -37,6 +39,7 @@ export const GROUP_ORDER: readonly SessionGroup[] = ['running', 'attention', 're
 export interface ChildHost {
   registry: ProjectRegistry;
   capability: CapabilityService;
+  now: () => number;
   /** Return the existing node with this id (updated) or register this one; sets its parent. */
   intern: <T extends TreeNode>(node: T, parent: TreeNode | undefined) => T;
   /** Keep a detail target watched until the owning node collapses. Idempotent. Call before reading. */
@@ -111,10 +114,22 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
   return nodes;
 }
 
-export function groupSessions(host: ChildHost, context: ProjectContext, node: GroupNode): SessionNode[] {
+export function groupSessions(
+  host: ChildHost, context: ProjectContext, node: GroupNode | RecentPeriodNode,
+): TreeNode[] {
+  if (node.kind === 'group' && node.group === 'recent') {
+    const snapshots = context.store.all().filter((snapshot) => groupOf(snapshot) === 'recent');
+    const now = host.now();
+    const periods = new Set(snapshots.map((snapshot) => recentPeriod(snapshot, now)));
+    return RECENT_PERIODS.filter((period) => periods.has(period)).map((period) =>
+      host.intern<RecentPeriodNode>({ kind: 'recentPeriod', id: `${node.id}/${period}`, project: context.key, period }, node),
+    );
+  }
+  const group = node.kind === 'recentPeriod' ? 'recent' : node.group;
+  const now = host.now();
   return context.store
     .all()
-    .filter((snapshot) => groupOf(snapshot) === node.group)
+    .filter((snapshot) => groupOf(snapshot) === group && (node.kind !== 'recentPeriod' || recentPeriod(snapshot, now) === node.period))
     .map((snapshot) => {
       const session = host.intern<SessionNode>(
         {
@@ -125,7 +140,7 @@ export function groupSessions(host: ChildHost, context: ProjectContext, node: Gr
         },
         node,
       );
-      host.noteGroup(session.id, node.group);
+      host.noteGroup(session.id, group);
       return session;
     });
 }
@@ -201,7 +216,7 @@ export function executionChildren(host: ChildHost, context: ProjectContext, node
   if (listing.artifactsError !== null) {
     rows.push(
       leaf(host, { id: `${node.id}/artifacts-error`, parent: node, ...fields }, {
-        label: `artifacts/ unreadable (${listing.artifactsError})`,
+        label: `Cannot read artifacts/ (${listing.artifactsError})`,
         icon: 'error',
         color: 'list.errorForeground',
         contextValue: 'diag.artifacts-unreadable',
@@ -233,7 +248,7 @@ export function outputChildren(host: ChildHost, context: ProjectContext, node: C
   if (listing.directoryError !== null) {
     rows.push(
       leaf(host, { id: `${node.id}/dir-error`, parent: node, ...fields }, {
-        label: `outputs/ unreadable (${listing.directoryError})`,
+        label: `Cannot read outputs/ (${listing.directoryError})`,
         icon: 'error',
         color: 'list.errorForeground',
         contextValue: 'diag.outputs-unreadable',

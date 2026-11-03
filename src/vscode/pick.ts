@@ -4,6 +4,8 @@ import type { SessionSnapshot } from '../core/model';
 import { sessionDescription, sessionLabel } from '../core/sessionPresentation';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
+const INFO_MESSAGE_MS = 5000;
+
 export interface PickedSession {
   context: ProjectContext;
   snapshot: SessionSnapshot;
@@ -13,7 +15,7 @@ export interface PickedSession {
 export async function pickProject(registry: ProjectRegistry): Promise<ProjectContext | undefined> {
   const projects = registry.projects();
   if (projects.length === 0) {
-    void vscode.window.showInformationMessage('No Migent project is open in this window.');
+    vscode.window.setStatusBarMessage('No Migent project is open in this window.', INFO_MESSAGE_MS);
     return undefined;
   }
   if (projects.length === 1) return projects[0];
@@ -37,7 +39,7 @@ export async function pickSession(
   if (context === undefined) return undefined;
   const snapshots = context.store.all().filter(isEligible);
   if (snapshots.length === 0) {
-    void vscode.window.showInformationMessage('This project has no matching sessions.');
+    vscode.window.setStatusBarMessage('This project has no matching sessions.', INFO_MESSAGE_MS);
     return undefined;
   }
   const now = Date.now();

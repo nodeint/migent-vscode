@@ -6,7 +6,7 @@ export async function openFile(file: string, what: string): Promise<void> {
   try {
     await vscode.workspace.fs.stat(uri);
   } catch {
-    void vscode.window.showWarningMessage(`${what} not found: ${file}`);
+    void vscode.window.showWarningMessage(`Could not find ${what}: ${file}`);
     return;
   }
   await vscode.commands.executeCommand('vscode.open', uri);

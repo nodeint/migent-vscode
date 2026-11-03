@@ -9,6 +9,8 @@ import { initArgs, type InitInput, parseProviders, type ProviderChoice, provider
 import type { OperationGate } from '../../core/operationGate';
 import { migentDir } from '../../core/paths';
 
+const INFO_MESSAGE_MS = 5000;
+
 const INIT_TIMEOUT_MS = 60_000;
 /** Launch-key id for initialization; not a workflow id a project can declare. */
 const INIT_GATE_ID = '<init>';
@@ -19,12 +21,12 @@ type Role = (typeof ROLES)[number];
 async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file');
   if (folders.length === 0) {
-    void vscode.window.showInformationMessage('Open a folder first, then initialize Migent in it.');
+    vscode.window.setStatusBarMessage('Open a folder first, then initialize Migent in it.', INFO_MESSAGE_MS);
     return undefined;
   }
   const candidates = folders.filter((folder) => !existsSync(migentDir(folder.uri.fsPath)));
   if (candidates.length === 0) {
-    void vscode.window.showInformationMessage('Every open folder already has a .migent directory.');
+    vscode.window.setStatusBarMessage('Every open folder already has a .migent directory.', INFO_MESSAGE_MS);
     return undefined;
   }
   const [only] = candidates;
@@ -102,11 +104,11 @@ async function initializeFolder(target: InitTarget): Promise<void> {
   if (roles === undefined) return;
   // The prompts took time: the folder may have been initialized meanwhile, so eligibility is checked again.
   if (existsSync(migentDir(target.folder.uri.fsPath))) {
-    void vscode.window.showInformationMessage(`${target.folder.name} already has a .migent directory.`);
+    vscode.window.setStatusBarMessage(`The folder ${target.folder.name} already has a .migent directory.`, INFO_MESSAGE_MS);
     return;
   }
   const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Initializing Migent' },
+    { location: vscode.ProgressLocation.Window, title: 'Initializing Migent' },
     () => invokeText(launch, initArgs(roles), options),
   );
   if (result.kind === 'error') {
@@ -114,7 +116,7 @@ async function initializeFolder(target: InitTarget): Promise<void> {
     void vscode.window.showErrorMessage(`Could not initialize Migent: ${detail}`);
     return;
   }
-  void vscode.window.showInformationMessage(`Initialized Migent in ${target.folder.name}.`);
+  vscode.window.setStatusBarMessage(`Initialized Migent in ${target.folder.name}.`, INFO_MESSAGE_MS);
   await vscode.commands.executeCommand('migent.refresh');
 }
 
@@ -127,7 +129,7 @@ export async function initializeProject(gate: OperationGate): Promise<void> {
   if (folder === undefined) return;
   const handle = gate.tryAcquire({ kind: 'launch', project: folder.uri.toString(), workflowId: INIT_GATE_ID });
   if (handle === null) {
-    void vscode.window.showInformationMessage(`${folder.name} is already being initialized.`);
+    vscode.window.setStatusBarMessage(`The folder ${folder.name} is already being initialized.`, INFO_MESSAGE_MS);
     return;
   }
   try {

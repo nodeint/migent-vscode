@@ -163,7 +163,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       statusBar.update();
     }),
     vscode.commands.registerCommand('migent.refresh', () => registry.refresh()),
-    ...registerSessionCommands(host),
+    ...registerSessionCommands(host, control.gate),
     ...registerResultsCommands(host, results, nextStep),
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
