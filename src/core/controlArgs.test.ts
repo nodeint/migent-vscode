@@ -4,9 +4,15 @@ import {
   cancelArgs,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
+  doctorArgs,
+  doctorLines,
+  initArgs,
+  parseDoctorOutput,
   parsePrepared,
+  parseProviders,
   prepareArgs,
   regenerateNextArgs,
+  repairArgs,
   runDownstreamArgs,
   runNewArgs,
   runPreparedArgs,
@@ -73,5 +79,60 @@ describe('parsePrepared', () => {
     expect(parsePrepared(null)).toBeNull();
     expect(parsePrepared({ session_id: 'a' })).toBeNull();
     expect(parsePrepared({ session_id: '', task_path: 'x' })).toBeNull();
+  });
+});
+
+describe('reply, repair, doctor and init argv', () => {
+  it('runs the next stage once without resetting counts by passing --once', () => {
+    expect(continueArgs({ sessionId: 's', once: true }, { maxDispatches: 3, progress: false })).toEqual([
+      'session', 'continue', 's', '--once', '--max-dispatches', '3',
+    ]);
+  });
+
+  it('builds repair and doctor argv', () => {
+    expect(repairArgs('s1')).toEqual(['session', 'repair', 's1']);
+    expect(doctorArgs()).toEqual(['doctor', '--json']);
+  });
+
+  it('passes every init role as separate argv values and never prompts', () => {
+    const role = (provider: string) => ({ provider, model: `${provider} model "x"` });
+    const args = initArgs({ developer: role('d'), planner: role('p'), reviewer: role('r') });
+    expect(args).toContain('--no-input');
+    const planner = args.indexOf('--planner-provider');
+    expect(args.slice(planner, planner + 4)).toEqual(['--planner-provider', 'p', '--planner-model', 'p model "x"']);
+    const developer = args.indexOf('--provider');
+    expect(args.slice(developer, developer + 4)).toEqual(['--provider', 'd', '--model', 'd model "x"']);
+  });
+
+  it('keeps only available providers that report models', () => {
+    const providers = parseProviders({
+      providers: [
+        { name: 'a', available: true, models: ['m1', 3] },
+        { name: 'b', available: false, models: ['m'] },
+        { name: 'c', available: true, models: [] },
+      ],
+    });
+    expect(providers).toEqual([{ name: 'a', models: ['m1'] }]);
+    expect(parseProviders('nope')).toEqual([]);
+  });
+
+  it('reads doctor output, including failed checks, and rejects other shapes', () => {
+    const output = JSON.stringify({
+      ok: false,
+      checks: [
+        { name: 'config', ok: true, problems: [], warnings: ['w'] },
+        { name: 'providers', ok: false, problems: ['no claude'], warnings: [] },
+      ],
+    });
+    const checks = parseDoctorOutput(output);
+    expect(checks?.map((check) => check.ok)).toEqual([true, false]);
+    expect(doctorLines(checks ?? [])).toEqual([
+      'ok   config',
+      '     warning: w',
+      'FAIL providers',
+      '     problem: no claude',
+    ]);
+    expect(parseDoctorOutput('not json')).toBeNull();
+    expect(parseDoctorOutput('{"checks":[1]}')).toBeNull();
   });
 });

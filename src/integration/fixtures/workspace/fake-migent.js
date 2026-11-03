@@ -6,6 +6,9 @@
 //   MIGENT_FAKE_ANSWER   how `session continue --reply-file` treats the reply: record (default), reject (exit 1,
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
+//   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
+//                        with no questions.json): consume (default; the new execution's prompt carries the reply),
+//                        ignore (a new execution without the reply, exit 0), reject (exit 2, nothing written)
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -66,6 +69,24 @@ function prepare() {
 }
 
 
+// An ordinary blocker has no questions: the reply becomes the prompt of the stage's next attempt.
+function replyBlocker(id) {
+  const mode = process.env.MIGENT_FAKE_REPLY ?? 'consume';
+  if (mode === 'reject') {
+    console.error('reply rejected: configuration error');
+    process.exit(2);
+  }
+  const text = fs.readFileSync(option('--reply-file'), 'utf8');
+  const stage = option('--stage') ?? 'plan';
+  const dir = path.join(dirOf(id), 'executions', `0002-${stage}--attempt-02`);
+  fs.mkdirSync(dir, { recursive: true });
+  const blockedBy = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8')).blocked_by_execution_ids?.[0] ?? null;
+  fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: blockedBy }));
+  // The real CLI records the reply as its own user turn in the execution's conversation.json history.
+  const turn = mode === 'ignore' ? 'Continue.' : `Reply:\n${text}`;
+  fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
+}
+
 // `session continue --reply-file`: normalize the reply map into the question records, as the real CLI does.
 function answer(id) {
   // Every call is logged so tests can assert the exact argv the extension used.
@@ -74,6 +95,7 @@ function answer(id) {
   // `slow` records normally but only after a pause, so a test can observe the submission while it is in flight.
   if (process.env.MIGENT_FAKE_ANSWER_DELAY_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.MIGENT_FAKE_ANSWER_DELAY_MS));
   const file = path.join(dirOf(id), 'questions.json');
+  if (!fs.existsSync(file)) return replyBlocker(id);
   if (mode === 'reject') {
     console.error('reply rejected: invalid answer');
     process.exit(1);
@@ -137,7 +159,10 @@ function run() {
   if (option('--reply-file') !== undefined) {
     const dir = path.join(dirOf(id), 'executions', executionId);
     fs.mkdirSync(dir, { recursive: true });
-    writeJson(path.join(dir, 'execution.json'), { execution_id: executionId, stage_id: option('--stage') ?? 'plan', status: 'running' });
+    // Keep what `replyBlocker` recorded (the execution it resumes) instead of overwriting it.
+    const recordFile = path.join(dir, 'execution.json');
+    const kept = fs.existsSync(recordFile) ? JSON.parse(fs.readFileSync(recordFile, 'utf8')) : {};
+    writeJson(recordFile, { execution_id: executionId, stage_id: option('--stage') ?? 'plan', status: 'running', ...kept });
   }
   writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: executionId });
   console.error(`[migent] session_id: ${id}`);

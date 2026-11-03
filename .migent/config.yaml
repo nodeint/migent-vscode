@@ -5,6 +5,8 @@ roles:
       provider: claude
       model: opus
       effort: medium
+      options:
+        autocompact: 200000
     instructions:
       - "Read the task, relevant code, and project instructions before planning."
       - "Write only planning artifacts; do not modify project files or implement code."

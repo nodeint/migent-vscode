@@ -96,3 +96,113 @@ export function answerArgs(input: { sessionId: string; stageId: string | null; r
   if (input.stageId !== null) args.push('--stage', input.stageId);
   return [...args, '--reply-file', input.replyFile];
 }
+
+/** `session repair <id>`: rebuilds `status.json` from the session directory. */
+export function repairArgs(sessionId: string): string[] {
+  return ['session', 'repair', sessionId];
+}
+
+/** `doctor --json`: the CLI prints one JSON object and exits 1 when a check fails. */
+export function doctorArgs(): string[] {
+  return ['doctor', '--json'];
+}
+
+export function providersArgs(): string[] {
+  return ['provider', 'list', '--json'];
+}
+
+function stringList(value: unknown): string[] {
+  const items: unknown[] = Array.isArray(value) ? value : [];
+  return items.filter((entry): entry is string => typeof entry === 'string');
+}
+
+export interface ProviderChoice {
+  name: string;
+  models: string[];
+}
+
+/** The available providers of `provider list --json` with their models; unavailable ones are dropped. */
+export function parseProviders(value: unknown): ProviderChoice[] {
+  if (!isRecord(value) || !Array.isArray(value.providers)) return [];
+  const choices: ProviderChoice[] = [];
+  for (const item of value.providers as unknown[]) {
+    if (!isRecord(item) || typeof item.name !== 'string' || item.available !== true) continue;
+    const models = stringList(item.models);
+    if (models.length > 0) choices.push({ name: item.name, models });
+  }
+  return choices;
+}
+
+export interface RoleModel {
+  provider: string;
+  model: string;
+}
+
+export interface InitInput {
+  planner: RoleModel;
+  reviewer: RoleModel;
+  developer: RoleModel;
+}
+
+/** `init --no-input` with every role's provider and model as separate argv values. */
+export function initArgs(input: InitInput): string[] {
+  return [
+    'init',
+    '--planner-provider',
+    input.planner.provider,
+    '--planner-model',
+    input.planner.model,
+    '--reviewer-provider',
+    input.reviewer.provider,
+    '--reviewer-model',
+    input.reviewer.model,
+    '--provider',
+    input.developer.provider,
+    '--model',
+    input.developer.model,
+    '--no-input',
+  ];
+}
+
+export interface DoctorCheck {
+  name: string;
+  ok: boolean;
+  problems: string[];
+  warnings: string[];
+}
+
+/** The checks of `doctor --json`, or null when the output is not the documented object. */
+export function parseDoctor(value: unknown): DoctorCheck[] | null {
+  if (!isRecord(value) || !Array.isArray(value.checks)) return null;
+  const checks: DoctorCheck[] = [];
+  for (const item of value.checks as unknown[]) {
+    if (!isRecord(item) || typeof item.name !== 'string') return null;
+    checks.push({
+      name: item.name,
+      ok: item.ok === true,
+      problems: stringList(item.problems),
+      warnings: stringList(item.warnings),
+    });
+  }
+  return checks;
+}
+
+/** `parseDoctor` on raw stdout; null when it is not JSON either. */
+export function parseDoctorOutput(text: string): DoctorCheck[] | null {
+  try {
+    return parseDoctor(JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+/** Text lines for the Output channel: one line per check, then its problems and warnings. */
+export function doctorLines(checks: readonly DoctorCheck[]): string[] {
+  const lines: string[] = [];
+  for (const check of checks) {
+    lines.push(`${check.ok ? 'ok  ' : 'FAIL'} ${check.name}`);
+    for (const problem of check.problems) lines.push(`     problem: ${problem}`);
+    for (const warning of check.warnings) lines.push(`     warning: ${warning}`);
+  }
+  return lines;
+}

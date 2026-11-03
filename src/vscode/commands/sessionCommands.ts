@@ -23,8 +23,15 @@ interface Target {
   outputUri?: vscode.Uri;
 }
 
+/** A notification names its session explicitly: `{ project, sessionId }` without a tree node's `kind`. */
+function explicitTarget(arg: unknown): Target | undefined {
+  if (typeof arg !== 'object' || arg === null || !('project' in arg) || !('sessionId' in arg)) return undefined;
+  const { project, sessionId } = arg;
+  return typeof project === 'string' && typeof sessionId === 'string' ? { project, sessionId } : undefined;
+}
+
 function targetOf(arg: unknown): Target | undefined {
-  if (!isTreeNode(arg)) return undefined;
+  if (!isTreeNode(arg)) return explicitTarget(arg);
   switch (arg.kind) {
     case 'session':
     case 'outputs':
@@ -71,6 +78,11 @@ export async function resolveWith(host: CommandHost, arg: unknown, query: Resolv
   const context = target === undefined ? undefined : registry.project(target.project);
   const snapshot = target === undefined ? undefined : context?.store.snapshot(target.sessionId);
   if (context !== undefined && snapshot !== undefined) return { context, snapshot, target };
+  // A notification names its session explicitly: if that session is gone, say so instead of picking another.
+  if (explicitTarget(arg) !== undefined) {
+    void vscode.window.showInformationMessage('That session is no longer available. Refresh the Sessions view.');
+    return undefined;
+  }
   return pickSession(registry, query.title, query.isEligible);
 }
 

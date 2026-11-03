@@ -144,7 +144,6 @@ export async function runScenarios(scenarios: readonly Scenario[]): Promise<numb
     env.changes.length = 0;
     try {
       await scenario.run(env);
-      console.log(`PASS ${scenario.name}`);
     } catch (error) {
       failed += 1;
       console.log(`FAIL ${scenario.name}\n     ${error instanceof Error ? error.message : String(error)}`);

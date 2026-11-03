@@ -17,7 +17,7 @@ const TITLE_MAX_LENGTH = 60;
 
 const isPrepared = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state === 'prepared';
 const isRunning = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state === 'running';
-const CONTINUABLE = new Set(['stopped', 'cancelled', 'failed']);
+export const CONTINUABLE = new Set(['stopped', 'cancelled', 'failed']);
 const isContinuable = (snapshot: SessionSnapshot): boolean => CONTINUABLE.has(snapshot.displayState.state);
 
 type TaskInput = { kind: 'task'; text: string } | { kind: 'compose'; text: string };
@@ -233,7 +233,7 @@ const ADOPT = 'Use updated workflow';
 const VIEW = 'View changes';
 
 /** Ask which workflow definition to continue with; View changes returns to the same decision. */
-async function chooseWorkflow(
+export async function chooseWorkflow(
   control: ControlService,
   context: ProjectContext,
   snapshot: SessionSnapshot,

@@ -9,6 +9,7 @@ import { registerCapabilityCommands } from './vscode/commands/capabilityCommands
 import { registerControlCommands } from './vscode/commands/controlCommands';
 import { registerProjectCommands } from './vscode/commands/projectCommands';
 import { registerQuestionCommands } from './vscode/commands/questionCommands';
+import { registerReplyCommands } from './vscode/commands/replyCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
@@ -17,9 +18,11 @@ import { ContextKeys } from './vscode/contextKeys';
 import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
 import { NextStepPanels } from './vscode/nextStep/panels';
+import { StateNotifier } from './vscode/notifier';
 import { ProjectRegistry } from './vscode/projects';
 import { QuestionNotifier } from './vscode/questionNotifier';
 import { AnswerPanels } from './vscode/questions/panels';
+import { ReplyService } from './vscode/reply';
 import { ResultsPanels } from './vscode/results/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
@@ -45,6 +48,7 @@ export interface MigentApi {
   nextStep: NextStepPanels;
   answers: AnswerPanels;
   submitter: AnswerSubmitter;
+  replies: ReplyService;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
 }
@@ -91,15 +95,26 @@ function createNextStep(
   return { nextStep, host };
 }
 
-/** Unresolved question submissions live in extension storage so they survive a reload. */
+/** Unresolved submissions and reply drafts live in extension storage so they survive a reload. */
 function createAnswers(
   registry: ProjectRegistry,
   control: ControlService,
   context: vscode.ExtensionContext,
-): { answers: AnswerPanels; submitter: AnswerSubmitter } {
+): { answers: AnswerPanels; submitter: AnswerSubmitter; replies: ReplyService } {
   const base = context.storageUri?.fsPath ?? context.globalStorageUri.fsPath;
   const submitter = new AnswerSubmitter(control, path.join(base, 'answers'));
-  return { answers: new AnswerPanels(registry, { control, submitter }, context), submitter };
+  const answers = new AnswerPanels(registry, { control, submitter }, context);
+  return { answers, submitter, replies: new ReplyService(registry, control, base) };
+}
+
+/** Discovery and the first load run after activation returns. */
+function startRegistryLater(registry: ProjectRegistry): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      registry.start();
+      resolve();
+    }, 0);
+  });
 }
 
 export function activate(context: vscode.ExtensionContext): MigentApi {
@@ -121,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const logs = new LogChannels(registry, tails);
   const statusBar = new StatusBar(registry);
   const results = new ResultsPanels(registry, context.extensionUri);
-  const { answers, submitter } = createAnswers(registry, control, context);
+  const { answers, submitter, replies } = createAnswers(registry, control, context);
   const { nextStep, host } = createNextStep({ registry, control, results }, context);
   context.subscriptions.push(
     registry,
@@ -142,13 +157,12 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     nextStep,
     answers,
     new QuestionNotifier(registry),
+    new StateNotifier(registry, context.workspaceState),
     ...livenessSubscriptions(liveness, registry, () => {
       sessionsTree.refreshRunning();
       statusBar.update();
     }),
-    vscode.commands.registerCommand('migent.refresh', () => {
-      registry.refresh();
-    }),
+    vscode.commands.registerCommand('migent.refresh', () => registry.refresh()),
     ...registerSessionCommands(host),
     ...registerResultsCommands(host, results, nextStep),
     ...registerQuestionCommands(host, answers),
@@ -156,14 +170,9 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerCapabilityCommands(capability),
     ...registerProjectCommands(registry),
     ...registerControlCommands(host, control, context.workspaceState),
+    ...registerReplyCommands({ host, control, replies }),
   );
-  // Discovery and the first load run after activation returns.
-  const ready = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      registry.start();
-      resolve();
-    }, 0);
-  });
+  const ready = startRegistryLater(registry);
   return {
     registry,
     capability,
@@ -180,6 +189,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     nextStep,
     answers,
     submitter,
+    replies,
     ready,
   };
 }

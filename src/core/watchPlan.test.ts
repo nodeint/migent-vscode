@@ -96,6 +96,9 @@ describe('desiredWatches', () => {
     expect(folders(plan)).toEqual(
       expect.arrayContaining([exec, `${exec}/artifacts`, `${exec}/turns`, `${exec}/turns/turn-1`, `${exec}/turns/turn-2`]),
     );
+    // conversation.json holds the reply turn that confirms a reply, so a change to it must reach the consumer.
+    const execution = desiredWatches(plan).find((watch) => watch.folder.endsWith(path.join('executions', 'e1')));
+    expect(execution?.pattern).toContain('conversation.json');
     const turn = desiredWatches(plan).find((watch) => watch.folder.endsWith(path.join('turns', 'turn-1')));
     expect(turn?.pattern).toBe('verify.md');
     const noArtifacts = input({ ...plan, dirExists: (p) => !p.endsWith('artifacts') });

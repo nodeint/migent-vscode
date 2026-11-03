@@ -93,6 +93,8 @@ export interface ProviderEventSummary {
   executionId: string | null;
   provider: string | null;
   timestamp: string | null;
+  /** `details.retry_at` of a `provider.quota` event; null when absent or empty. */
+  retryAt: string | null;
 }
 
 export interface RunningStage {
