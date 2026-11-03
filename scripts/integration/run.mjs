@@ -17,8 +17,9 @@ import { downloadAndUnzipVSCode, runTests } from '@vscode/test-electron';
 
 import { copyFixtureWorkspace } from './fixtureWorkspace.mjs';
 
-// Run in a child so all VS Code and build output can be replayed if anything fails.
-if (!process.env.MIGENT_IT_CAPTURED) {
+// Locally, keep successful runs quiet and replay runner output if anything fails.
+// CI prints the runner output and each version's VS Code log for diagnosis.
+if (!process.env.MIGENT_IT_CAPTURED && !process.env.CI) {
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
     env: { ...process.env, MIGENT_IT_CAPTURED: '1' },
     stdio: ['inherit', 'pipe', 'pipe'],
@@ -131,6 +132,9 @@ async function runVersion(version, executable, downloadError) {
   } finally {
     log.end();
     await finished(log);
+    if (process.env.CI) {
+      console.log(`\n=== VS Code ${version} full log ===\n${readFileSync(logPath, 'utf8')}`);
+    }
     rmSync(workspace, { recursive: true, force: true });
   }
 }
