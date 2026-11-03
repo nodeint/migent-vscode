@@ -44,12 +44,14 @@ function create(workflow, title) {
   fs.writeFileSync(
     path.join(dirOf(id), 'manifest.yaml'),
     `session_id: ${id}\ntitle: ${JSON.stringify(title)}\nworkflow_id: ${workflow}\n` +
-      `created_at: ${new Date().toISOString()}\nschema_version: 2\n`,
+      `created_at: ${new Date().toISOString()}\nschema_version: 2\n` +
+      (option('--prior') === undefined ? '' : `prior_session_id: ${option('--prior')}\n`),
   );
   return id;
 }
 
 function prepare() {
+  fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
   const id = create(option('--workflow'), args[2]);
   writeStatus(id, 'prepared', { title: args[2], workflow_id: option('--workflow') });
   console.error(`[migent] session_id: ${id}`);
@@ -120,6 +122,9 @@ function answer(id) {
 }
 
 function run() {
+  if (option('--reply-file') === undefined) {
+    fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
+  }
   const workflow = option('--workflow');
   const id = option('--session') ?? (args[1] === 'continue' ? args[2] : create(workflow, option('--task') ?? 'task'));
   if (option('--reply-file') !== undefined) answer(id);

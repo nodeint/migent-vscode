@@ -22,6 +22,7 @@
   "activationEvents": [
     "workspaceContains:.migent/config.yaml",
     "onWebviewPanel:migent.results",
+    "onWebviewPanel:migent.nextStep",
     "onWebviewPanel:migent.answerQuestions"
   ],
   "extensionKind": [
@@ -40,6 +41,24 @@
         "title": "Open Result",
         "category": "Migent",
         "icon": "$(book)"
+      },
+      {
+        "command": "migent.session.openNextStep",
+        "title": "Open Next Step…",
+        "category": "Migent",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "migent.session.runDownstream",
+        "title": "Run Next Step…",
+        "category": "Migent",
+        "icon": "$(play)"
+      },
+      {
+        "command": "migent.session.prepareDownstream",
+        "title": "Prepare Next Step…",
+        "category": "Migent",
+        "icon": "$(add)"
       },
       {
         "command": "migent.session.answerQuestions",
@@ -393,22 +412,22 @@
       "editor/title": [
         {
           "command": "migent.session.openOutput",
-          "when": "activeWebviewPanelId == 'migent.results'",
+          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@1"
         },
         {
           "command": "migent.session.openTask",
-          "when": "activeWebviewPanelId == 'migent.results'",
+          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@2"
         },
         {
           "command": "migent.session.showLog",
-          "when": "activeWebviewPanelId == 'migent.results'",
+          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@3"
         },
         {
           "submenu": "migent.results.more",
-          "when": "activeWebviewPanelId == 'migent.results'",
+          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@4"
         },
         {

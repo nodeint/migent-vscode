@@ -7,6 +7,8 @@ import { isRecord } from './record';
 export type ResultsIntent =
   | { intent: 'openOutput'; name: string }
   | { intent: 'openNextFile' }
+  | { intent: 'reloadSuggestions' }
+  | { intent: 'openNextStep'; workflow: string }
   | { intent: 'openManifest' }
   | { intent: 'openTargetWorkflow'; workflow: string }
   | { intent: 'openHandoffFile'; name: string }
@@ -21,6 +23,7 @@ function text(value: unknown): string | null {
 function intentWith(message: Record<string, unknown>): ResultsIntent | null {
   switch (message.intent) {
     case 'openNextFile':
+    case 'reloadSuggestions':
     case 'openManifest':
       return { intent: message.intent };
     case 'openOutput':
@@ -28,9 +31,10 @@ function intentWith(message: Record<string, unknown>): ResultsIntent | null {
       const name = text(message.name);
       return name === null ? null : { intent: message.intent, name };
     }
+    case 'openNextStep':
     case 'openTargetWorkflow': {
       const workflow = text(message.workflow);
-      return workflow === null ? null : { intent: 'openTargetWorkflow', workflow };
+      return workflow === null ? null : { intent: message.intent, workflow };
     }
     case 'openSession': {
       const sessionId = text(message.sessionId);

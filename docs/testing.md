@@ -86,6 +86,11 @@ panel releases its `outputs/` watcher. The page script itself is not driven; the
 handler are. They are
 skipped in `--exclude` mode, where no events arrive.
 
+`nextStep.integration.test.ts` drives the Next step host through the fixture CLI, which records
+`prior_session_id` and logs the argv of `session run` and `session prepare`. It covers one child from concurrent
+Run calls, `--prior` without `--task` for the default task, Prepare writing the chosen task to `task.md`, and
+hostile or whitespace-only requests reaching no CLI call.
+
 `questions.integration.test.ts` drives the answer panels through their message handler against the fixture CLI's
 `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
 `questions.json`), followup (exit 9 with a new batch) or fail-after-record. It covers recorded and rejected

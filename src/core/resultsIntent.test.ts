@@ -31,6 +31,18 @@ describe('parseResultsMessage', () => {
     });
   });
 
+  it('accepts next-step intents by workflow id and reload without arguments', () => {
+    expect(parseResultsMessage({ type: 'intent', intent: 'openNextStep', workflow: 'impl', argv: ['x'] })).toEqual({
+      type: 'intent',
+      value: { intent: 'openNextStep', workflow: 'impl' },
+    });
+    expect(parseResultsMessage({ type: 'intent', intent: 'openNextStep' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'reloadSuggestions' })).toEqual({
+      type: 'intent',
+      value: { intent: 'reloadSuggestions' },
+    });
+  });
+
   it('drops extra fields such as paths and commands', () => {
     expect(
       parseResultsMessage({ type: 'intent', intent: 'openOutput', name: 'note', path: 'C:/x', command: 'rm' }),

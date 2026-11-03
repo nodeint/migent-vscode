@@ -81,7 +81,9 @@
 
   function renderSuggestion(suggestion) {
     const card = el('div', null, 'card');
-    card.append(el('h3', suggestion.workflow));
+    const heading = el('h3');
+    heading.append(button(suggestion.workflow, { intent: 'openNextStep', workflow: suggestion.workflow }, 'link'));
+    card.append(heading);
     if (suggestion.task) card.append(el('p', suggestion.task));
     let declared = 'Declaration could not be read.';
     if (suggestion.declared === true) declared = 'Declared by the workflow.';
@@ -108,6 +110,7 @@
     if (next.state !== 'ok') {
       const text = NEXT_TEXT[next.state] + (next.detail ? ' (' + next.detail + ')' : '');
       node.append(el('p', text, next.state === 'missing' ? 'muted' : 'warn'));
+      if (next.canReload) node.append(button('Reload suggestions', { intent: 'reloadSuggestions' }));
       if (next.state !== 'missing') node.append(button('Open next.json', { intent: 'openNextFile' }));
       return node;
     }

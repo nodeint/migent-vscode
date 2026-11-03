@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -85,6 +85,24 @@ describe('buildResultsModel', () => {
     expect(JSON.stringify(model)).not.toContain('argv');
   });
 
+  it('offers Reload only when next.json is unavailable although the frozen workflow declares downstream', () => {
+    const dir = tempDir();
+    cpSync(capturedDir('handoff-source'), dir, { recursive: true });
+    rmSync(path.join(dir, 'next.json'));
+    const snapshot = captured('handoff-source');
+    const build = (): boolean =>
+      buildResultsModel({
+        sessionId: SOURCE,
+        sessionDirPath: dir,
+        snapshots: [snapshot],
+        eligibleIds: [],
+        workflows: [],
+      }).next.canReload;
+    expect(build()).toBe(true);
+    cpSync(path.join(capturedDir('handoff-source'), 'next.json'), path.join(dir, 'next.json'));
+    expect(build()).toBe(false);
+  });
+
   it('reports the target workflow as not found, duplicate or invalid', () => {
     const states = (workflows: WorkflowEntry[]): string[] =>
       buildResultsModel(sourceInput(workflows)).next.suggestions.map((suggestion) => suggestion.target);
@@ -134,7 +152,7 @@ describe('buildResultsModel', () => {
         eligibleIds: [],
         workflows: [],
       });
-    expect(build().next).toMatchObject({ state: 'missing', frozen: 'absent' });
+    expect(build().next).toMatchObject({ state: 'missing', frozen: 'absent', canReload: false });
     writeFileSync(path.join(dir, 'next.json'), '{ nope');
     expect(build().next.state).toBe('invalid');
     writeFileSync(path.join(dir, 'next.json'), '{"schema_version": 9}');
