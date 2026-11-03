@@ -11,6 +11,8 @@ export interface CliError {
   detail: string;
   exitCode?: number;
   stderr: string;
+  /** Output printed before a non-zero exit; `doctor --json` reports its failed checks there. */
+  stdout?: string;
 }
 
 export type InvokeResult<T> = { kind: 'ok'; value: T } | { kind: 'error'; error: CliError };
@@ -42,7 +44,7 @@ export const execWithExecFile: Exec = (launch, args, options) =>
         if (error.killed === true) {
           resolve({ kind: 'failed', error: { kind: 'timeout', detail: `Timed out after ${options.timeoutMs} ms.`, stderr } });
         } else if (typeof error.code === 'number') {
-          resolve({ kind: 'failed', error: { kind: 'exit', detail: error.message, exitCode: error.code, stderr } });
+          resolve({ kind: 'failed', error: { kind: 'exit', detail: error.message, exitCode: error.code, stderr, stdout } });
         } else {
           resolve({ kind: 'failed', error: { kind: 'spawn', detail: error.message, stderr } });
         }

@@ -6,6 +6,7 @@ import { runControlScenarios } from './control.integration.test';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runNextStepScenarios } from './nextStep.integration.test';
 import { runQuestionScenarios } from './questions.integration.test';
+import { runReplyScenarios } from './reply.integration.test';
 import { runResultsScenarios } from './results.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runStatusBarScenarios } from './statusBar.integration.test';
@@ -33,6 +34,7 @@ export async function run(): Promise<void> {
         runControlScenarios,
         runNextStepScenarios,
         runQuestionScenarios,
+        runReplyScenarios,
       ];
       for (const suite of suites) scenariosFailed += await suite();
     }

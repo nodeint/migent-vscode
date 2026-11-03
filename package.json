@@ -188,6 +188,63 @@
         "category": "Migent",
         "icon": "$(play)",
         "shortTitle": "Run"
+      },
+      {
+        "command": "migent.session.reply",
+        "title": "Reply to Blocked Session",
+        "category": "Migent",
+        "shortTitle": "Reply",
+        "icon": "$(reply)"
+      },
+      {
+        "command": "migent.session.sendReply",
+        "title": "Send Reply",
+        "category": "Migent",
+        "shortTitle": "Send Reply",
+        "icon": "$(send)"
+      },
+      {
+        "command": "migent.session.discardReply",
+        "title": "Discard Reply…",
+        "category": "Migent",
+        "shortTitle": "Discard Reply"
+      },
+      {
+        "command": "migent.session.continueOnce",
+        "title": "Run Next Stage Once",
+        "category": "Migent",
+        "shortTitle": "Run next stage once"
+      },
+      {
+        "command": "migent.session.continueWithoutReply",
+        "title": "Continue Without Reply",
+        "category": "Migent",
+        "shortTitle": "Continue without reply"
+      },
+      {
+        "command": "migent.session.retryQuota",
+        "title": "Retry After Quota Wait",
+        "category": "Migent",
+        "shortTitle": "Retry",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "migent.session.repair",
+        "title": "Repair Session…",
+        "category": "Migent",
+        "shortTitle": "Repair…"
+      },
+      {
+        "command": "migent.doctor",
+        "title": "Run Doctor",
+        "category": "Migent",
+        "shortTitle": "Doctor"
+      },
+      {
+        "command": "migent.init",
+        "title": "Initialize Project…",
+        "category": "Migent",
+        "shortTitle": "Initialize project"
       }
     ],
     "configuration": {
@@ -198,6 +255,30 @@
           "default": "migent",
           "scope": "resource",
           "markdownDescription": "Path or name of the Migent CLI. Use a native `migent.exe` or the CLI's JavaScript entry (`.js`, `.mjs`, `.cjs`, run with `node` from `PATH`). `.cmd`, `.bat` and `.ps1` launchers (such as an npm shim) are not supported."
+        },
+        "migent.notifications.blocked": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Notify when a session becomes blocked and needs a reply."
+        },
+        "migent.notifications.failed": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Notify when a session fails."
+        },
+        "migent.notifications.quota": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Notify when a session waits for provider quota, and when the wait is over."
+        },
+        "migent.notifications.completed": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Notify when a session completes."
         },
         "migent.notifications.question": {
           "type": "boolean",
@@ -264,7 +345,7 @@
     "viewsWelcome": [
       {
         "view": "migent.sessions",
-        "contents": "No Migent project was found in the open folders.\nCreate one with the Migent CLI and it appears here.\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
+        "contents": "No Migent project was found in the open folders.\nInitialize one here, or create it with the Migent CLI and it appears here.\n[Initialize project](command:migent.init)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
         "when": "!migent.hasProjects"
       },
       {
@@ -304,6 +385,11 @@
           "command": "migent.refresh",
           "when": "view == migent.project",
           "group": "navigation"
+        },
+        {
+          "command": "migent.doctor",
+          "when": "view == migent.project",
+          "group": "1_diagnostics"
         }
       ],
       "view/item/context": [
@@ -394,19 +480,52 @@
         },
         {
           "command": "migent.session.continue",
-          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/ && !(viewItem =~ /;quota(;|$)/)",
           "group": "inline@0"
         },
         {
           "command": "migent.workflow.run",
           "when": "view == migent.workflows && viewItem == workflow.ok",
           "group": "inline@0"
+        },
+        {
+          "command": "migent.session.reply",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.blocked/ && !(viewItem =~ /;questions(;|$)/)",
+          "group": "inline@0"
+        },
+        {
+          "command": "migent.session.retryQuota",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|failed).*;quota(;|$)/",
+          "group": "inline@0"
+        },
+        {
+          "command": "migent.session.continueOnce",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed|blocked)/ && !(viewItem =~ /;questions(;|$)/)",
+          "group": "3_more@1"
+        },
+        {
+          "command": "migent.session.continueWithoutReply",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.blocked/ && !(viewItem =~ /;questions(;|$)/)",
+          "group": "3_more@2"
+        },
+        {
+          "command": "migent.session.repair",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(?!running)/",
+          "group": "3_more@3"
         }
       ],
       "commandPalette": [
         {
           "command": "migent.sessions.showMore",
           "when": "false"
+        },
+        {
+          "command": "migent.session.sendReply",
+          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/"
+        },
+        {
+          "command": "migent.session.discardReply",
+          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/"
         }
       ],
       "editor/title": [
@@ -439,6 +558,16 @@
           "command": "migent.workflow.run",
           "when": "resourcePath =~ /[\\/]\\.migent[\\/]workflows[\\/][^\\/]+\\.ya?ml$/",
           "group": "navigation@0"
+        },
+        {
+          "command": "migent.session.sendReply",
+          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/",
+          "group": "navigation@0"
+        },
+        {
+          "command": "migent.session.discardReply",
+          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/",
+          "group": "1_modification"
         }
       ],
       "migent.results.more": [

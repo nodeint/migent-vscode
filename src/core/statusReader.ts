@@ -60,6 +60,7 @@ function publishedOutputs(value: unknown): PublishedOutput[] {
 /** Keep only the small scalar fields: the full event can carry very large `details` and `usage`. */
 function providerEventSummary(value: unknown): ProviderEventSummary | null {
   if (!isRecord(value)) return null;
+  const retryAt = isRecord(value.details) ? asString(value.details.retry_at) : null;
   return {
     event: asString(value.event),
     summary: asString(value.summary),
@@ -67,6 +68,7 @@ function providerEventSummary(value: unknown): ProviderEventSummary | null {
     executionId: asString(value.execution_id),
     provider: asString(value.provider),
     timestamp: asString(value.timestamp),
+    retryAt: retryAt === null || retryAt.trim() === '' ? null : retryAt,
   };
 }
 

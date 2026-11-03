@@ -122,9 +122,21 @@ describe('parseStatus questions, outputs and provider event', () => {
       executionId: '0001-planner--attempt-01',
       provider: 'claude',
       timestamp: '2026-11-01T11:17:13.282+00:00',
+      retryAt: null,
     });
     expect(parsed?.raw).not.toHaveProperty('latest_provider_event');
     expect(JSON.stringify(parsed)).not.toContain('--flag-4999');
+  });
+});
+
+describe('parseStatus quota event', () => {
+  it('reads details.retry_at and treats an empty value as absent', () => {
+    const quota = (retryAt: string) =>
+      parseStatus(
+        JSON.stringify({ status: 'active', latest_provider_event: { event: 'provider.quota', details: { retry_at: retryAt } } }),
+      )?.latestProviderEvent?.retryAt;
+    expect(quota('2026-11-03T12:00:00.000+00:00')).toBe('2026-11-03T12:00:00.000+00:00');
+    expect(quota('')).toBeNull();
   });
 });
 

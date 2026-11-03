@@ -60,7 +60,7 @@ const SESSION_PATTERN = `{${[
   OUTPUTS_DIRNAME,
 ].join(',')}}`;
 
-const EXECUTION_PATTERN = '{execution.json,questions.json,prompt.md,task.md,response.md,stream.jsonl,artifacts,turns}';
+const EXECUTION_PATTERN = '{execution.json,conversation.json,questions.json,prompt.md,task.md,response.md,stream.jsonl,artifacts,turns}';
 
 /** The anchor watcher on a workspace folder root: `.migent` created or deleted. Owned by the registry. */
 export function anchorWatch(workspaceRoot: string): WatchSpec {

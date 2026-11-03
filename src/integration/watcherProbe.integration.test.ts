@@ -419,10 +419,12 @@ function assertProbeEnvironment(root: string): void {
 
 function report(results: CaseResult[]): void {
   const version = results[0]?.vscodeVersion ?? vscode.version;
-  const lines = results.map(
-    (result) => `${result.ok ? 'PASS' : 'FAIL'} ${result.backend.padEnd(8)} ${result.id} ${result.detail}`,
+  const lines = results.filter((result) => !result.ok).map(
+    (result) => `FAIL ${result.backend.padEnd(8)} ${result.id} ${result.detail}`,
   );
-  console.log(`\nWatcher probe, VS Code ${version}, platform ${process.platform}\n${lines.join('\n')}`);
+  if (lines.length > 0) {
+    console.log(`\nWatcher probe, VS Code ${version}, platform ${process.platform}\n${lines.join('\n')}`);
+  }
   const outDir = path.resolve(__dirname, '..');
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, `probe-report-${version}${isExclude() ? '-exclude' : ''}.json`), JSON.stringify(results, null, 2));

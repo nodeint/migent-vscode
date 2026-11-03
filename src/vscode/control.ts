@@ -12,9 +12,13 @@ import {
   cancelArgs,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
+  doctorArgs,
+  doctorLines,
+  parseDoctorOutput,
   parsePrepared,
   prepareArgs,
   regenerateNextArgs,
+  repairArgs,
   runDownstreamArgs,
   runNewArgs,
   runPreparedArgs,
@@ -290,12 +294,29 @@ export class ControlService implements vscode.Disposable {
     snapshot: SessionSnapshot,
     choice: WorkflowChoice = 'session',
   ): Promise<void> {
+    await this.#continue(context, snapshot, { choice, isOnce: false });
+  }
+
+  /** Dispatch the next eligible stage once (`--once`), without resetting revision counts. */
+  public async continueOnce(
+    context: ProjectContext,
+    snapshot: SessionSnapshot,
+    choice: WorkflowChoice = 'session',
+  ): Promise<void> {
+    await this.#continue(context, snapshot, { choice, isOnce: true });
+  }
+
+  async #continue(
+    context: ProjectContext,
+    snapshot: SessionSnapshot,
+    options: { choice: WorkflowChoice; isOnce: boolean },
+  ): Promise<void> {
     if (!(await this.ensureWritable(context, snapshot))) return;
-    const input = { sessionId: snapshot.sessionId, refreshWorkflow: choice === 'updated' };
+    const input = { sessionId: snapshot.sessionId, refreshWorkflow: options.choice === 'updated', once: options.isOnce };
     await this.#execute(context, {
       key: this.#sessionKey(context, snapshot.sessionId),
       args: continueArgs(input, this.settings(context)),
-      title: `Continuing ${sessionLabel(snapshot)}`,
+      title: `${options.isOnce ? 'Running next stage of' : 'Continuing'} ${sessionLabel(snapshot)}`,
       sessionId: snapshot.sessionId,
     });
   }
@@ -374,6 +395,60 @@ export class ControlService implements vscode.Disposable {
       const detail = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(`The session was prepared but task.md was not written: ${detail}`);
     }
+  }
+
+  /** `session repair` under the session's gate; the rebuilt `status.json` returns through the watcher. */
+  public async repair(context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+    if (!(await this.ensureWritable(context, snapshot))) return;
+    const launch = this.#launch(context);
+    if (launch === undefined) return;
+    const id = snapshot.sessionId;
+    const handle = this.gate.tryAcquire(this.#sessionKey(context, id), 'Repairing');
+    if (handle === null) {
+      void vscode.window.showInformationMessage('Another operation on this session is in progress.');
+      return;
+    }
+    try {
+      const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Repairing ${sessionLabel(snapshot)}` },
+        () => invokeText(launch, repairArgs(id), options),
+      );
+      context.store.refreshSession(id);
+      if (result.kind === 'ok') {
+        vscode.window.setStatusBarMessage(`Repaired ${sessionLabel(snapshot)}`, STATUS_MESSAGE_MS);
+        return;
+      }
+      const detail = result.error.stderr.trim() || result.error.detail;
+      this.#output.error(`repair failed: ${detail}`);
+      const picked = await vscode.window.showErrorMessage(`Could not repair the session: ${detail}`, 'View log');
+      if (picked === 'View log') this.showLog();
+    } finally {
+      handle.release();
+    }
+  }
+
+  /** `doctor --json` shown in the Migent output channel. A failed check is a result, not an error. */
+  public async doctor(context: ProjectContext): Promise<void> {
+    if (!(await this.ensureWritable(context))) return;
+    const launch = this.#launch(context);
+    if (launch === undefined) return;
+    const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Running Migent doctor' },
+      () => invokeText(launch, doctorArgs(), options),
+    );
+    const checks = parseDoctorOutput(result.kind === 'ok' ? result.value : (result.error.stdout ?? ''));
+    if (checks === null) {
+      const detail = result.kind === 'error' ? result.error.stderr.trim() || result.error.detail : 'unexpected output';
+      this.#output.error(`doctor failed: ${detail}`);
+      const picked = await vscode.window.showErrorMessage(`Doctor could not run: ${detail}`, 'View log');
+      if (picked === 'View log') this.showLog();
+      return;
+    }
+    this.#output.appendLine(`doctor (${context.folder.name}):`);
+    for (const line of doctorLines(checks)) this.#output.appendLine(line);
+    this.showLog();
   }
 
   /** Ask the session's runner to stop. Cancelled is shown only once persisted state agrees. */

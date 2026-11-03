@@ -91,6 +91,13 @@ skipped in `--exclude` mode, where no events arrive.
 Run calls, `--prior` without `--task` for the default task, Prepare writing the chosen task to `task.md`, and
 hostile or whitespace-only requests reaching no CLI call.
 
+`reply.integration.test.ts` drives `ReplyService` against the fixture CLI's ordinary-blocker reply
+(`MIGENT_FAKE_REPLY`: consume, ignore or reject): the draft keeps the blocker and is found again by a new service,
+the exact argv of a send, a rejected send keeping the draft, a superseding execution without the reply being
+unconfirmed, edits made while sending (on disk or unsaved in the editor) being kept, a no longer blocked session and
+an empty reply. Notifications and Quick Picks are not driven; their rules are covered by `transitions.test.ts`,
+`notificationGate.test.ts` and `replyFlow.test.ts`.
+
 `questions.integration.test.ts` drives the answer panels through their message handler against the fixture CLI's
 `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
 `questions.json`), followup (exit 9 with a new batch) or fail-after-record. It covers recorded and rejected

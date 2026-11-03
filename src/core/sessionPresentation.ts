@@ -1,6 +1,8 @@
+import { formatDuration } from './duration';
 import type { ExecutionFile } from './executionFiles';
 import { parseExecutionId } from './executions';
 import type { ExecutionSnapshot, ScanOutcome, SessionSnapshot, UnknownReason } from './model';
+import { blockKind, describeQuotaWait, quotaWait } from './replyFlow';
 
 /** Plain-text presentation of sessions for tree views. Nothing here reads disk or imports `vscode`. */
 
@@ -9,10 +11,9 @@ const SHORT_ID_LENGTH = 8;
 const UNAVAILABLE = 'unavailable';
 
 const MS_PER_SECOND = 1000;
-const SECONDS_PER_MINUTE = 60;
-const MINUTES_PER_HOUR = 60;
-const HOURS_PER_DAY = 24;
 const JUST_NOW_SECONDS = 5;
+
+export { formatDuration };
 
 export function shortId(sessionId: string): string {
   return sessionId.slice(0, SHORT_ID_LENGTH);
@@ -30,18 +31,6 @@ export function sessionTitle(snapshot: SessionSnapshot): string {
 
 export function sessionLabel(snapshot: SessionSnapshot): string {
   return truncate(sessionTitle(snapshot));
-}
-
-/** Duration such as `45s`, `3m 12s`, `2h 5m`, `1d 4h`. */
-export function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / MS_PER_SECOND));
-  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
-  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
-  const days = Math.floor(hours / HOURS_PER_DAY);
-  if (days > 0) return `${days}d ${hours % HOURS_PER_DAY}h`;
-  if (hours > 0) return `${hours}h ${minutes % MINUTES_PER_HOUR}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % SECONDS_PER_MINUTE}s`;
-  return `${seconds}s`;
 }
 
 /** `just now` or `<duration> ago`, for a time in the past. */
@@ -151,6 +140,11 @@ function blockerLine(snapshot: SessionSnapshot): string | null {
   return null;
 }
 
+function quotaLine(snapshot: SessionSnapshot, now: number): string | null {
+  const wait = quotaWait(snapshot, now);
+  return wait === null ? null : `Waiting for provider quota: ${describeQuotaWait(wait, now)}`;
+}
+
 function updateLine(snapshot: SessionSnapshot, now: number): string {
   const updatedAt = snapshot.status?.updatedAt ?? null;
   const updated = parseTime(updatedAt);
@@ -167,6 +161,7 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
     `Workflow: ${snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? UNAVAILABLE}`,
     stageLine(snapshot),
     blockerLine(snapshot),
+    quotaLine(snapshot, now),
     questions > 0 ? `Pending questions: ${questions}` : null,
     snapshot.displayState.writable ? null : 'Lock held by another host',
     updateLine(snapshot, now),
@@ -176,10 +171,11 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
   return lines.filter((line): line is string => line !== null).join('\n');
 }
 
-/** `session.<state>` plus `;questions`, `;foreign`, `;outputs`, `;reason-<reason>` in that order. */
+/** `session.<state>` plus `;questions`, `;quota`, `;foreign`, `;outputs`, `;reason-<reason>` in that order. */
 export function sessionContextValue(snapshot: SessionSnapshot): string {
   const flags = [
     pendingQuestionTotal(snapshot) > 0 ? 'questions' : null,
+    blockKind(snapshot) === 'quota' ? 'quota' : null,
     snapshot.displayState.writable ? null : 'foreign',
     (snapshot.status?.outputs.length ?? 0) > 0 ? 'outputs' : null,
     snapshot.displayState.unknownReason === undefined ? null : `reason-${snapshot.displayState.unknownReason}`,
