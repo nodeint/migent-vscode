@@ -5,6 +5,8 @@ import { sessionDir } from '../../core/paths';
 import { isNextStepIdentity, type LaunchMode, type NextStepIdentity, type NextStepPanels } from '../nextStep/panels';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
+const INFO_MESSAGE_MS = 5000;
+
 async function pickIdentity(
   host: CommandHost,
   panels: NextStepPanels,
@@ -22,7 +24,7 @@ async function pickIdentity(
   const next = readNext(sessionDir(context.root, snapshot.sessionId));
   const workflows = next.kind === 'ok' ? [...new Set(next.suggestions.map((suggestion) => suggestion.workflow))] : [];
   if (workflows.length === 0) {
-    void vscode.window.showInformationMessage('This session has no next-step suggestions.');
+    vscode.window.setStatusBarMessage('This session has no next-step suggestions.', INFO_MESSAGE_MS);
     return undefined;
   }
   const workflow =

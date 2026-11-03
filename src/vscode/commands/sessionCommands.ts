@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
+import type { OperationGate } from '../../core/operationGate';
 import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
@@ -12,6 +13,9 @@ import { type PickedSession,pickSession } from '../pick';
 import type { ProjectRegistry } from '../projects';
 import type { ActiveTarget } from '../results/panels';
 import { isTreeNode } from '../views/nodes';
+import { deleteSession } from './deleteSession';
+
+const INFO_MESSAGE_MS = 5000;
 
 const STATUS_MESSAGE_MS = 2000;
 
@@ -80,7 +84,7 @@ export async function resolveWith(host: CommandHost, arg: unknown, query: Resolv
   if (context !== undefined && snapshot !== undefined) return { context, snapshot, target };
   // A notification names its session explicitly: if that session is gone, say so instead of picking another.
   if (explicitTarget(arg) !== undefined) {
-    void vscode.window.showInformationMessage('That session is no longer available. Refresh the Sessions view.');
+    vscode.window.setStatusBarMessage('That session is no longer available. Refresh the Sessions view.', INFO_MESSAGE_MS);
     return undefined;
   }
   return pickSession(registry, query.title, query.isEligible);
@@ -102,7 +106,7 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
     (row) => row.state === 'ok' && row.absolutePath !== null,
   );
   if (rows.length === 0) {
-    void vscode.window.showInformationMessage(`${sessionLabel(snapshot)} has no output files.`);
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} has no output files.`, INFO_MESSAGE_MS);
     return;
   }
   const picked =
@@ -122,7 +126,7 @@ async function openExecutionFile(host: CommandHost, arg: unknown, file: string):
   if (resolved === undefined) return;
   const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latestExecutionId ?? null;
   if (executionId === null) {
-    void vscode.window.showInformationMessage(`${sessionLabel(resolved.snapshot)} has no execution yet.`);
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(resolved.snapshot)} has no execution yet.`, INFO_MESSAGE_MS);
     return;
   }
   await openFile(
@@ -148,11 +152,12 @@ function showMore(registry: ProjectRegistry, arg: unknown): void {
 }
 
 /** Read-only session commands: open files, copy the id, reveal the folder, show more. */
-export function registerSessionCommands(host: CommandHost): vscode.Disposable[] {
+export function registerSessionCommands(host: CommandHost, gate: OperationGate): vscode.Disposable[] {
   const { registry } = host;
   const register = (id: string, run: (arg: unknown) => Promise<void> | void): vscode.Disposable =>
     vscode.commands.registerCommand(id, run);
   return [
+    register('migent.session.delete', (arg) => deleteSession({ registry, gate }, arg)),
     register('migent.session.openTask', (arg) => openSessionFile(host, arg, TASK_FILENAME)),
     register('migent.session.openPrompt', (arg) => openExecutionFile(host, arg, 'prompt.md')),
     register('migent.session.openResponse', (arg) => openExecutionFile(host, arg, 'response.md')),

@@ -33,6 +33,8 @@ import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../
 import type { CapabilityService } from './capability';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
+const INFO_MESSAGE_MS = 5000;
+
 /** How long Stop waits for the CLI (it waits 15 seconds itself) before the extension gives up. */
 export const STOP_TIMEOUT_MS = 20_000;
 const RECONCILE_ATTEMPTS = 4;
@@ -140,7 +142,7 @@ export class ControlService implements vscode.Disposable {
   async #explain(block: WriteBlock): Promise<void> {
     const text = describeBlock(block);
     if (block.recovery === 'none') {
-      void vscode.window.showInformationMessage(text);
+      vscode.window.setStatusBarMessage(text, INFO_MESSAGE_MS);
       return;
     }
     const action = { settings: 'Open Settings', recheck: 'Recheck', refresh: 'Refresh' }[block.recovery];
@@ -219,7 +221,7 @@ export class ControlService implements vscode.Disposable {
    */
   public async regenerateNext(context: ProjectContext, snapshot: SessionSnapshot): Promise<boolean> {
     if (snapshot.displayState.state !== 'completed') {
-      void vscode.window.showInformationMessage('The session is no longer completed.');
+      vscode.window.setStatusBarMessage('The session is no longer completed.', INFO_MESSAGE_MS);
       return false;
     }
     if (!(await this.ensureWritable(context, snapshot))) return false;
@@ -352,7 +354,7 @@ export class ControlService implements vscode.Disposable {
       priorSessionId: input.priorSessionId,
     });
     if (handle === null) {
-      void vscode.window.showInformationMessage(`A ${input.workflowId} session is already being created.`);
+      vscode.window.setStatusBarMessage(`A ${input.workflowId} session is already being created.`, INFO_MESSAGE_MS);
       return undefined;
     }
     try {
@@ -405,13 +407,13 @@ export class ControlService implements vscode.Disposable {
     const id = snapshot.sessionId;
     const handle = this.gate.tryAcquire(this.#sessionKey(context, id), 'Repairing');
     if (handle === null) {
-      void vscode.window.showInformationMessage('Another operation on this session is in progress.');
+      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
       return;
     }
     try {
       const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
       const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `Repairing ${sessionLabel(snapshot)}` },
+        { location: vscode.ProgressLocation.Window, title: `Repairing ${sessionLabel(snapshot)}` },
         () => invokeText(launch, repairArgs(id), options),
       );
       context.store.refreshSession(id);
@@ -435,7 +437,7 @@ export class ControlService implements vscode.Disposable {
     if (launch === undefined) return;
     const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
     const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Running Migent doctor' },
+      { location: vscode.ProgressLocation.Window, title: 'Running Migent doctor' },
       () => invokeText(launch, doctorArgs(), options),
     );
     const checks = parseDoctorOutput(result.kind === 'ok' ? result.value : (result.error.stdout ?? ''));
@@ -463,7 +465,7 @@ export class ControlService implements vscode.Disposable {
     const existing = this.#handles.get(this.#handleKey(context, id));
     const handle = existing ?? this.gate.tryAcquire(this.#sessionKey(context, id), 'Stopping');
     if (handle === null) {
-      void vscode.window.showInformationMessage('Another operation on this session is in progress.');
+      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
       return;
     }
     handle.setPhase('Stopping');
@@ -492,7 +494,7 @@ export class ControlService implements vscode.Disposable {
     launch: LaunchSpec,
     snapshot: SessionSnapshot,
   ): Promise<InvokeResult<unknown>> {
-    const options = { location: vscode.ProgressLocation.Notification, title: `Stopping ${sessionLabel(snapshot)}` };
+    const options = { location: vscode.ProgressLocation.Window, title: `Stopping ${sessionLabel(snapshot)}` };
     const result = await vscode.window.withProgress(options, async (progress) => {
       progress.report({ message: 'Sending stop request…' });
       const pending = invokeJson(launch, cancelArgs(snapshot.sessionId), {
@@ -570,7 +572,7 @@ export class ControlService implements vscode.Disposable {
     if (launch === undefined) return undefined;
     const handle = this.gate.tryAcquire(job.key, 'Starting');
     if (handle === null) {
-      void vscode.window.showInformationMessage('This action is already in progress.');
+      vscode.window.setStatusBarMessage('This action is already in progress.', INFO_MESSAGE_MS);
       return undefined;
     }
     const known = job.sessionId;
@@ -589,26 +591,18 @@ export class ControlService implements vscode.Disposable {
         this.#onLine(context, state, line);
       },
     });
-    const result = await this.#showProgress(context, state, run.result);
+    const result = await this.#showProgress(state, run.result);
     stopWatching();
     await this.#finish(context, state, result);
     return state.sessionId;
   }
 
-  async #showProgress(context: ProjectContext, state: RunState, done: Promise<RunResult>): Promise<RunResult> {
-    const onCancel = (): void => {
-      const target = state.sessionId === undefined ? undefined : context.store.snapshot(state.sessionId);
-      if (target !== undefined) void this.cancel(context, target);
-    };
+  async #showProgress(state: RunState, done: Promise<RunResult>): Promise<RunResult> {
     const options = {
-      location: vscode.ProgressLocation.Notification,
+      location: vscode.ProgressLocation.Window,
       title: `${state.title} — continues after closing VS Code`,
-      cancellable: true,
     };
-    return vscode.window.withProgress(options, (_progress, token) => {
-      token.onCancellationRequested(onCancel);
-      return done;
-    });
+    return vscode.window.withProgress(options, () => done);
   }
 
   async #finish(context: ProjectContext, state: RunState, result: RunResult): Promise<void> {

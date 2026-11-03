@@ -8,6 +8,8 @@ import type { AnswerPanels } from '../questions/panels';
 import { isTreeNode } from '../views/nodes';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
+const INFO_MESSAGE_MS = 5000;
+
 const hasPending = (snapshot: SessionSnapshot): boolean => (snapshot.status?.questions.length ?? 0) > 0;
 
 /** A group is addressable only with an execution; the identity of a batch is `(execution, stage)`. */
@@ -39,7 +41,7 @@ async function resolveBatch(host: CommandHost, arg: unknown): Promise<BatchIdent
   const { context, snapshot } = resolved;
   const groups = groupPendingQuestions(snapshot.status?.questions ?? []).filter(isAddressable);
   if (groups.length === 0) {
-    void vscode.window.showInformationMessage(`${sessionLabel(snapshot)} has no pending questions.`);
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} has no pending questions.`, INFO_MESSAGE_MS);
     return undefined;
   }
   const group = await pickGroup(groups);

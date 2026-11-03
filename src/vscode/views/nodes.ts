@@ -2,6 +2,7 @@ import type * as vscode from 'vscode';
 
 import type { SessionGroup } from '../../core/attention';
 import type { ExecutionSnapshot } from '../../core/model';
+import type { RecentPeriod } from '../../core/recentPeriod';
 import type { ProjectKey } from '../changes';
 
 /** How a leaf row looks and what a click does. Built when the parent's children are listed. */
@@ -35,6 +36,12 @@ export interface GroupNode extends Base {
   kind: 'group';
   project: ProjectKey;
   group: SessionGroup;
+}
+
+export interface RecentPeriodNode extends Base {
+  kind: 'recentPeriod';
+  project: ProjectKey;
+  period: RecentPeriod;
 }
 
 export interface SessionNode extends Base {
@@ -79,6 +86,7 @@ export interface LeafNode extends Base {
 export type TreeNode =
   | ProjectNode
   | GroupNode
+  | RecentPeriodNode
   | SessionNode
   | ExecutionNode
   | ContainerNode
@@ -86,7 +94,7 @@ export type TreeNode =
   | LeafNode;
 
 /** Nodes that carry a session identity, for commands. */
-export type SessionScopedNode = Exclude<TreeNode, ProjectNode | GroupNode> & { sessionId?: string };
+export type SessionScopedNode = Exclude<TreeNode, ProjectNode | GroupNode | RecentPeriodNode> & { sessionId?: string };
 
 export function isTreeNode(value: unknown): value is TreeNode {
   return typeof value === 'object' && value !== null && 'kind' in value && 'id' in value && 'project' in value;

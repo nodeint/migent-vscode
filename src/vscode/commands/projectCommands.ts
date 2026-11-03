@@ -8,6 +8,8 @@ import { pickProject } from '../pick';
 import type { ProjectRegistry } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
 
+const INFO_MESSAGE_MS = 5000;
+
 /**
  * Open a workflow file. The target is the tree node passed in, else the user's pick: a stale tree
  * selection is never an implicit target. Opens the real file; a missing file is reported, not created.
@@ -21,7 +23,7 @@ async function openWorkflow(registry: ProjectRegistry, arg: unknown): Promise<vo
   if (context === undefined) return;
   const { entries } = context.catalog.workflows();
   if (entries.length === 0) {
-    void vscode.window.showInformationMessage('This project has no workflow files.');
+    vscode.window.setStatusBarMessage('This project has no workflow files.', INFO_MESSAGE_MS);
     return;
   }
   const picked = await vscode.window.showQuickPick(

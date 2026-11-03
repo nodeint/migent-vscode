@@ -116,6 +116,12 @@
         "shortTitle": "Copy ID"
       },
       {
+        "command": "migent.session.delete",
+        "title": "Delete Session",
+        "category": "Migent",
+        "shortTitle": "Delete"
+      },
+      {
         "command": "migent.session.revealInExplorer",
         "title": "Reveal Session in File Explorer",
         "category": "Migent",
@@ -394,6 +400,11 @@
       ],
       "view/item/context": [
         {
+          "command": "migent.session.delete",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
+          "group": "9_delete"
+        },
+        {
           "command": "migent.openSettings",
           "when": "view == migent.sessions && viewItem == diag.cli",
           "group": "inline@1"
@@ -516,16 +527,120 @@
       ],
       "commandPalette": [
         {
+          "command": "migent.session.delete",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openResult",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openNextStep",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.runDownstream",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.prepareDownstream",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.answerQuestions",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openTask",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openPrompt",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openResponse",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openOutput",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openQuestions",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.showLog",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.showTimeline",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.copyId",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.revealInExplorer",
+          "when": "false"
+        },
+        {
           "command": "migent.sessions.showMore",
           "when": "false"
         },
         {
+          "command": "migent.cli.recheck",
+          "when": "false"
+        },
+        {
+          "command": "migent.workflow.open",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.start",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.continue",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.cancel",
+          "when": "false"
+        },
+        {
+          "command": "migent.workflow.run",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.reply",
+          "when": "false"
+        },
+        {
           "command": "migent.session.sendReply",
-          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/"
+          "when": "false"
         },
         {
           "command": "migent.session.discardReply",
-          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/"
+          "when": "false"
+        },
+        {
+          "command": "migent.session.continueOnce",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.continueWithoutReply",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.retryQuota",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.repair",
+          "when": "false"
         }
       ],
       "editor/title": [

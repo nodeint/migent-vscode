@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { groupOf, type SessionGroup, summarize } from '../../core/attention';
 import type { DisplayStateName, ExecutionSnapshot } from '../../core/model';
+import { RECENT_PERIOD_LABELS } from '../../core/recentPeriod';
 import {
   executionContextValue,
   executionDescription,
@@ -78,6 +79,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   readonly #host: ChildHost;
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
   #view: vscode.TreeView<TreeNode> | null = null;
+  #dayTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(registry: ProjectRegistry, capability: CapabilityService, now: () => number = Date.now) {
     this.#registry = registry;
@@ -85,6 +87,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     this.#host = {
       registry,
       capability,
+      now,
       intern: (node, parent) => this.#intern(node, parent),
       retain: (project, target) => {
         this.#retain(project, target);
@@ -93,6 +96,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         this.#lastGroup.set(sessionNodeId, group);
       },
     };
+    this.#scheduleDayRefresh();
     this.#subscriptions.push(registry.onDidChange((change) => {
       this.#onChange(change);
     }));
@@ -148,6 +152,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       case 'project':
         return projectContents(this.#host, context, node);
       case 'group':
+      case 'recentPeriod':
         return groupSessions(this.#host, context, node);
       case 'session':
         return sessionChildren(this.#host, context, node);
@@ -175,9 +180,19 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 
   public dispose(): void {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
+    if (this.#dayTimer !== null) clearTimeout(this.#dayTimer);
     this.#releaseWhere(() => true);
     for (const subscription of this.#subscriptions.splice(0)) subscription.dispose();
     this.#emitter.dispose();
+  }
+
+  #scheduleDayRefresh(): void {
+    const now = new Date(this.#now());
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    this.#dayTimer = setTimeout(() => {
+      this.#queue(undefined);
+      this.#scheduleDayRefresh();
+    }, Math.max(1, tomorrow.getTime() - now.getTime()));
   }
 
   #rootChildren(): TreeNode[] {
@@ -277,7 +292,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       kind === 'added' ||
       snapshot === undefined ||
       node === undefined ||
-      this.#lastGroup.get(sessionNodeId) !== groupOf(snapshot);
+      this.#lastGroup.get(sessionNodeId) !== groupOf(snapshot) ||
+      groupOf(snapshot) === 'recent';
     this.#queue(hasMoved ? this.#projectElement(project) : node);
   }
 
@@ -337,6 +353,11 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       }
       case 'group':
         return this.#groupItem(node.group, node.project, context);
+      case 'recentPeriod': {
+        const item = new vscode.TreeItem(RECENT_PERIOD_LABELS[node.period], vscode.TreeItemCollapsibleState.Expanded);
+        item.contextValue = 'recentPeriod';
+        return item;
+      }
       case 'session':
         return this.#sessionItem(node, context);
       case 'execution':

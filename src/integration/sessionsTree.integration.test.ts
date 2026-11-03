@@ -8,6 +8,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { deleteSession } from '../vscode/commands/deleteSession';
 import type { TreeNode } from '../vscode/views/nodes';
 import {
   createProject,
@@ -35,7 +36,8 @@ const iconId = (item: vscode.TreeItem): string => (item.iconPath instanceof vsco
 
 function sessionNode(env: Env, sessionId: string): TreeNode {
   for (const group of children(env)) {
-    const found = children(env, group).find((node) => node.kind === 'session' && node.sessionId === sessionId);
+    const descendants = children(env, group).flatMap((node) => node.kind === 'recentPeriod' ? children(env, node) : [node]);
+    const found = descendants.find((node) => node.kind === 'session' && node.sessionId === sessionId);
     if (found) return found;
   }
   throw new Error(`session ${sessionId} is not in the tree`);
@@ -57,6 +59,55 @@ async function waitForSessions(env: Env, ids: string[]): Promise<void> {
 }
 
 const scenarios: Scenario[] = [
+  {
+    name: 'Delete session respects cancellation and locks, then removes only the selected folder',
+    async run(env) {
+      addSession(env.root, 'delete-me', 'completed');
+      addSession(env.root, 'keep-me', 'completed');
+      await waitForSessions(env, ['delete-me', 'keep-me']);
+      const project = env.project()!;
+      const target = sessionNode(env, 'delete-me');
+      const directory = migentPath(env.root, 'sessions', 'delete-me');
+      const errors: string[] = [];
+      let confirmed = false;
+      let removals = 0;
+      const ui = {
+        confirm: async (): Promise<boolean> => confirmed,
+        remove: async (uri: vscode.Uri): Promise<void> => {
+          assert.equal(uri.fsPath.toLowerCase(), directory.toLowerCase());
+          removals += 1;
+          fs.rmSync(uri.fsPath, { recursive: true });
+        },
+        error: (message: string): void => { errors.push(message); },
+      };
+      const remove = (): Promise<void> =>
+        deleteSession({ registry: env.api.registry, gate: env.api.control.gate }, target, ui);
+      await remove();
+      assert.equal(removals, 0, 'cancelling leaves the folder alone');
+      confirmed = true;
+      const held = env.api.control.gate.tryAcquire({ kind: 'session', project: project.key, sessionId: 'delete-me' });
+      assert.ok(held);
+      await remove();
+      held.release();
+      write(path.join(directory, 'session.lock'), freshLock());
+      await remove();
+      assert.equal(removals, 0, 'busy and locked sessions are not removed');
+      assert.equal(errors.length, 2);
+      fs.rmSync(path.join(directory, 'session.lock'));
+      await deleteSession({ registry: env.api.registry, gate: env.api.control.gate }, target, {
+        ...ui,
+        remove: async () => { throw new Error('trash unavailable'); },
+      });
+      assert.match(errors[2] ?? '', /trash unavailable/);
+      assert.ok(fs.existsSync(directory), 'a failed delete keeps the session');
+      await remove();
+      assert.equal(removals, 1);
+      assert.equal(fs.existsSync(directory), false);
+      assert.equal(fs.existsSync(migentPath(env.root, 'sessions', 'keep-me')), true);
+      assert.equal(project.store.snapshot('delete-me'), undefined);
+      assert.ok(project.store.snapshot('keep-me'));
+    },
+  },
   {
     name: 'AC1/AC9: sessions are grouped by state with icons, Unknown shows its reason, and the badge counts unique attention sessions',
     async run(env) {
@@ -81,7 +132,9 @@ const scenarios: Scenario[] = [
         children(env, group).flatMap((node) => (node.kind === 'session' ? [node.sessionId] : [])).sort();
       assert.deepEqual(idsIn(groups[0]!), ['running']);
       assert.deepEqual(idsIn(groups[1]!), ['asking', 'blocked', 'broken', 'failed', 'future', 'stopped']);
-      assert.deepEqual(idsIn(groups[2]!), ['completed']);
+      const periods = children(env, groups[2]!);
+      assert.equal(periods.length, 1);
+      assert.deepEqual(idsIn(periods[0]!), ['completed']);
 
       assert.equal(iconId(itemOf(env, sessionNode(env, 'running'))), 'sync~spin');
       assert.equal(iconId(itemOf(env, sessionNode(env, 'failed'))), 'error');
@@ -96,6 +149,28 @@ const scenarios: Scenario[] = [
 
       // Blocked, Failed and Question count once each; Stopped and Unknown do not.
       await waitFor('badge', () => env.api.sessionsView.badge?.value === 3);
+    },
+  },
+  {
+    name: 'Recent groups sessions by creation date and preserves session commands',
+    async run(env) {
+      const now = new Date();
+      for (const [id, days] of [['today', 0], ['yesterday', 1], ['older', 31]] as const) {
+        const created = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 12).toISOString();
+        write(migentPath(env.root, 'sessions', id, 'manifest.yaml'), manifest(id, '').replace('2026-11-01T10:00:00.000+00:00', created));
+        write(migentPath(env.root, 'sessions', id, 'status.json'), status('completed'));
+      }
+      await waitForSessions(env, ['today', 'yesterday', 'older']);
+      const recent = children(env).find((node) => node.kind === 'group' && node.group === 'recent');
+      assert.ok(recent);
+      const periods = children(env, recent);
+      assert.deepEqual(labelsOf(env, periods), ['Today', 'Yesterday', 'Older']);
+      assert.deepEqual(periods.map((period) => children(env, period).map((node) => node.kind === 'session' && node.sessionId)), [
+        ['today'], ['yesterday'], ['older'],
+      ]);
+      const session = sessionNode(env, 'today');
+      assert.equal(itemOf(env, session).command?.command, 'migent.session.openResult');
+      assert.equal(env.api.sessionsTree.getParent(session)?.id, periods[0]?.id);
     },
   },
   {

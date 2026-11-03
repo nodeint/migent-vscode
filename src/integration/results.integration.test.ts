@@ -68,6 +68,7 @@ function sessionNode(env: Env, sessionId: string): TreeNode {
   for (const group of env.api.sessionsTree.getChildren()) {
     const found = env.api.sessionsTree
       .getChildren(group)
+      .flatMap((node) => node.kind === 'recentPeriod' ? env.api.sessionsTree.getChildren(node) : [node])
       .find((node) => node.kind === 'session' && node.sessionId === sessionId);
     if (found) return found;
   }

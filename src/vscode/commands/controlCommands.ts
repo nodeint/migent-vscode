@@ -12,6 +12,8 @@ import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
+const INFO_MESSAGE_MS = 5000;
+
 const LAST_WORKFLOW_KEY = 'migent.lastWorkflow';
 const TITLE_MAX_LENGTH = 60;
 
@@ -65,7 +67,7 @@ async function pickWorkflow(
 ): Promise<WorkflowEntry | undefined> {
   const entries = runnable(context);
   if (entries.length === 0) {
-    void vscode.window.showInformationMessage('This project has no valid workflow to run.');
+    vscode.window.setStatusBarMessage('This project has no valid workflow to run.', INFO_MESSAGE_MS);
     return undefined;
   }
   const last = memento.get<string>(`${LAST_WORKFLOW_KEY}.${context.key}`);
@@ -202,12 +204,12 @@ async function taskTarget(control: ControlService, host: CommandHost, arg: unkno
 async function savedTask(target: TaskTarget): Promise<string | undefined> {
   const document = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === target.uri?.fsPath);
   if (document?.isDirty === true && !(await document.save())) {
-    void vscode.window.showErrorMessage('task.md was not saved, so the session was not started.');
+    void vscode.window.showErrorMessage('The task.md file was not saved, so the session was not started.');
     return undefined;
   }
   const text = document?.getText() ?? (await readTask(target.context, target.sessionId));
   if (text === undefined || text.trim().length === 0) {
-    void vscode.window.showErrorMessage('task.md is empty. Write the task, then run again.');
+    void vscode.window.showErrorMessage('The task.md file is empty. Write the task, then run again.');
     return undefined;
   }
   return text;
@@ -220,7 +222,7 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   const snapshot = target.context.store.snapshot(target.sessionId);
   const workflowId = snapshot?.manifest?.workflowId;
   if (snapshot === undefined || !isPrepared(snapshot)) {
-    void vscode.window.showInformationMessage('This session is no longer prepared.');
+    vscode.window.setStatusBarMessage('This session is no longer prepared.', INFO_MESSAGE_MS);
   } else if (workflowId === null || workflowId === undefined) {
     void vscode.window.showErrorMessage('The session does not record which workflow to run.');
   } else {

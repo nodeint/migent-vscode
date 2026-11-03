@@ -17,6 +17,8 @@ import { chooseWorkflow, CONTINUABLE } from './controlCommands';
 import { initializeProject } from './initCommand';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
+const INFO_MESSAGE_MS = 5000;
+
 const isOrdinaryBlocker = (snapshot: SessionSnapshot): boolean => blockKind(snapshot) === 'blocker';
 const isQuota = (snapshot: SessionSnapshot): boolean => blockKind(snapshot) === 'quota';
 /** Run next stage once: any resumable session, including an ordinary blocker; never a pending human question. */
@@ -44,11 +46,11 @@ function explainNoReply(snapshot: SessionSnapshot): void {
   const kind = blockKind(snapshot);
   const label = sessionLabel(snapshot);
   if (kind === 'question') {
-    void vscode.window.showInformationMessage(`${label} is waiting for answers. Use Answer questions.`);
+    vscode.window.setStatusBarMessage(`Session ${label} is waiting for answers. Use Answer questions.`, INFO_MESSAGE_MS);
   } else if (kind === 'quota') {
-    void vscode.window.showInformationMessage(`${label} is waiting for provider quota. Use Retry once the wait is over.`);
+    vscode.window.setStatusBarMessage(`Session ${label} is waiting for provider quota. Use Retry once the wait is over.`, INFO_MESSAGE_MS);
   } else {
-    void vscode.window.showInformationMessage(`${label} is not blocked, so there is nothing to reply to.`);
+    vscode.window.setStatusBarMessage(`Session ${label} is not blocked, so there is nothing to reply to.`, INFO_MESSAGE_MS);
   }
 }
 
@@ -74,7 +76,7 @@ async function sendReply(replies: ReplyService, arg: unknown): Promise<void> {
   const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
   const meta = uri === undefined ? undefined : replies.identityOf(uri);
   if (meta === undefined) {
-    void vscode.window.showInformationMessage('Open a Migent reply draft to send it.');
+    vscode.window.setStatusBarMessage('Open a Migent reply draft to send it.', INFO_MESSAGE_MS);
     return;
   }
   const result = await replies.send(meta);
@@ -99,12 +101,11 @@ async function continueOnce(
   snapshot: SessionSnapshot,
 ): Promise<void> {
   if (!canRunOnce(snapshot)) {
-    void vscode.window.showInformationMessage(`${sessionLabel(snapshot)} has no stage to run once.`);
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} has no stage to run once.`, INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
-  const choice = await chooseWorkflow(control, context, snapshot);
-  if (choice !== undefined) await control.continueOnce(context, snapshot, choice);
+  await control.continueOnce(context, snapshot);
 }
 
 async function continueWithoutReply(
@@ -132,11 +133,11 @@ async function continueWithoutReply(
 async function retryQuota(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
   const wait = quotaWait(snapshot, Date.now());
   if (wait === null) {
-    void vscode.window.showInformationMessage(`${sessionLabel(snapshot)} is not waiting for provider quota.`);
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} is not waiting for provider quota.`, INFO_MESSAGE_MS);
     return;
   }
   if (wait.retryAt !== null && !wait.isReady) {
-    void vscode.window.showInformationMessage(`Retry is available later: ${describeQuotaWait(wait, Date.now())}.`);
+    vscode.window.setStatusBarMessage(`Retry is available later: ${describeQuotaWait(wait, Date.now())}.`, INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
@@ -154,7 +155,7 @@ async function retryQuota(control: ControlService, context: ProjectContext, snap
 
 async function repair(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
   if (!isRepairable(snapshot)) {
-    void vscode.window.showInformationMessage('A running session cannot be repaired. Stop it first.');
+    vscode.window.setStatusBarMessage('A running session cannot be repaired. Stop it first.', INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
