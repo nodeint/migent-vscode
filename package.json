@@ -21,7 +21,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "workspaceContains:.migent/config.yaml",
-    "onWebviewPanel:migent.results"
+    "onWebviewPanel:migent.results",
+    "onWebviewPanel:migent.answerQuestions"
   ],
   "extensionKind": [
     "workspace"
@@ -39,6 +40,13 @@
         "title": "Open Result",
         "category": "Migent",
         "icon": "$(book)"
+      },
+      {
+        "command": "migent.session.answerQuestions",
+        "title": "Answer Questions",
+        "category": "Migent",
+        "shortTitle": "Answer questions",
+        "icon": "$(comment-discussion)"
       },
       {
         "command": "migent.session.openTask",
@@ -172,6 +180,12 @@
           "scope": "resource",
           "markdownDescription": "Path or name of the Migent CLI. Use a native `migent.exe` or the CLI's JavaScript entry (`.js`, `.mjs`, `.cjs`, run with `node` from `PATH`). `.cmd`, `.bat` and `.ps1` launchers (such as an npm shim) are not supported."
         },
+        "migent.notifications.question": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Notify when a session starts waiting for answers to human questions."
+        },
         "migent.sessions.limit": {
           "type": "number",
           "default": 50,
@@ -283,6 +297,16 @@
           "command": "migent.cli.recheck",
           "when": "view == migent.sessions && viewItem == diag.cli",
           "group": "inline@2"
+        },
+        {
+          "command": "migent.session.answerQuestions",
+          "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
+          "group": "inline@3"
+        },
+        {
+          "command": "migent.session.answerQuestions",
+          "when": "view == migent.sessions && viewItem == questionGroup",
+          "group": "inline@0"
         },
         {
           "command": "migent.session.openResult",

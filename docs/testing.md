@@ -85,3 +85,14 @@ identity (and invalid ones nothing), lineage navigation, background updates with
 panel releases its `outputs/` watcher. The page script itself is not driven; the host's last posted model and message
 handler are. They are
 skipped in `--exclude` mode, where no events arrive.
+
+`questions.integration.test.ts` drives the answer panels through their message handler against the fixture CLI's
+`session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
+`questions.json`), followup (exit 9 with a new batch) or fail-after-record. It covers recorded and rejected
+replies, an unconfirmed submission restored after closing the panel, stale batches and the archived draft,
+generation-checked edits, lock/recipient/schema blocks and a standalone role session. The page script is not run.
+
+The fixture CLI enforces `--stage` targeting (only that stage's pending batch, answered whole) and logs each
+`session continue --reply-file` argv to `fake-argv.log` in the project, so tests assert the exact arguments (a role
+session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply so a test can observe the recovery
+record while the CLI runs.

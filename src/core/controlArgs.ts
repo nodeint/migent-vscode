@@ -66,3 +66,13 @@ export function parsePrepared(value: unknown): { sessionId: string; taskPath: st
   if (sessionId.length === 0 || taskPath.length === 0) return null;
   return { sessionId, taskPath };
 }
+
+/**
+ * `session continue <id> [--stage <stage>] --reply-file <path>`: submits one complete question batch.
+ * Run flags are not added: the reply continues the stage, and the CLI enforces its own budgets.
+ */
+export function answerArgs(input: { sessionId: string; stageId: string | null; replyFile: string }): string[] {
+  const args = ['session', 'continue', input.sessionId];
+  if (input.stageId !== null) args.push('--stage', input.stageId);
+  return [...args, '--reply-file', input.replyFile];
+}

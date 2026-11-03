@@ -1,10 +1,14 @@
+import path from 'node:path';
+
 import * as vscode from 'vscode';
 
 import { Liveness } from './core/liveness';
+import { AnswerSubmitter } from './vscode/answers';
 import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
 import { registerControlCommands } from './vscode/commands/controlCommands';
 import { registerProjectCommands } from './vscode/commands/projectCommands';
+import { registerQuestionCommands } from './vscode/commands/questionCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
@@ -13,6 +17,8 @@ import { ContextKeys } from './vscode/contextKeys';
 import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
 import { ProjectRegistry } from './vscode/projects';
+import { QuestionNotifier } from './vscode/questionNotifier';
+import { AnswerPanels } from './vscode/questions/panels';
 import { ResultsPanels } from './vscode/results/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
@@ -35,6 +41,8 @@ export interface MigentApi {
   logs: LogChannels;
   statusBar: StatusBar;
   results: ResultsPanels;
+  answers: AnswerPanels;
+  submitter: AnswerSubmitter;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
 }
@@ -57,6 +65,17 @@ function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, on
   ];
 }
 
+/** Unresolved question submissions live in extension storage so they survive a reload. */
+function createAnswers(
+  registry: ProjectRegistry,
+  control: ControlService,
+  context: vscode.ExtensionContext,
+): { answers: AnswerPanels; submitter: AnswerSubmitter } {
+  const base = context.storageUri?.fsPath ?? context.globalStorageUri.fsPath;
+  const submitter = new AnswerSubmitter(control, path.join(base, 'answers'));
+  return { answers: new AnswerPanels(registry, { control, submitter }, context), submitter };
+}
+
 export function activate(context: vscode.ExtensionContext): MigentApi {
   const registry = new ProjectRegistry();
   const liveness = new Liveness({ stores: () => registry.projects().map((project) => project.store) });
@@ -76,6 +95,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const logs = new LogChannels(registry, tails);
   const statusBar = new StatusBar(registry);
   const results = new ResultsPanels(registry, context.extensionUri);
+  const { answers, submitter } = createAnswers(registry, control, context);
   const host = { registry, active: results };
   context.subscriptions.push(
     registry,
@@ -93,6 +113,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    answers,
+    new QuestionNotifier(registry),
     ...livenessSubscriptions(liveness, registry, () => {
       sessionsTree.refreshRunning();
       statusBar.update();
@@ -102,6 +124,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     }),
     ...registerSessionCommands(host),
     ...registerResultsCommands(host, results),
+    ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
     ...registerProjectCommands(registry),
@@ -127,6 +150,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    answers,
+    submitter,
     ready,
   };
 }

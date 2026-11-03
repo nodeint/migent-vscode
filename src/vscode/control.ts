@@ -56,6 +56,14 @@ function readText(file: string): string | undefined {
   }
 }
 
+/** The CLI launch, environment and log sinks for one project. */
+export interface AnswerRuntime {
+  launch: LaunchSpec;
+  env: NodeJS.ProcessEnv;
+  log: (line: string) => void;
+  logError: (line: string) => void;
+}
+
 export type WorkflowChoice = 'session' | 'updated';
 
 export interface PrepareInput {
@@ -184,6 +192,39 @@ export class ControlService implements vscode.Disposable {
       title: `Running ${sessionLabel(snapshot)}`,
       sessionId: snapshot.sessionId,
     });
+  }
+
+  /**
+   * The write check for sending answers. A live lock (even this host's own runner) blocks sending, and
+   * nothing is queued for when it is released.
+   */
+  public answerBlock(context: ProjectContext, snapshot: SessionSnapshot, hasGate = false): string | null {
+    const check = hasGate
+      ? checkWrite({ capability: this.#capability.state(context.key).kind, snapshot })
+      : this.check(context, snapshot);
+    if (!check.ok) return describeBlock(check);
+    if (snapshot.lock.kind === 'alive') return 'The session is running. Send is available once the runner stops.';
+    return null;
+  }
+
+  /** What a CLI call for `context` needs, or undefined while the CLI is unusable. */
+  public runtime(context: ProjectContext): AnswerRuntime | undefined {
+    const launch = this.#launch(context);
+    if (launch === undefined) return undefined;
+    return {
+      launch,
+      env: this.#env(context),
+      log: (line) => {
+        this.#output.appendLine(line);
+      },
+      logError: (line) => {
+        this.#output.error(line);
+      },
+    };
+  }
+
+  public sessionKey(project: string, sessionId: string): GateKey {
+    return { kind: 'session', project, sessionId };
   }
 
   /** Resume a stopped session. `choice` selects the workflow definition the user decided on. */

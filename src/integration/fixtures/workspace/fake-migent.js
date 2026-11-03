@@ -3,6 +3,9 @@
 // CLI does, in the current directory's `.migent/sessions`, so the extension's watcher and store follow.
 //   MIGENT_FAKE_RUN_MS   how long `session run|continue` keeps its lock before completing (default 1500)
 //   MIGENT_FAKE_EXIT     exit code a finished run reports instead of 0, with the status left unchanged
+//   MIGENT_FAKE_ANSWER   how `session continue --reply-file` treats the reply: record (default), reject (exit 1,
+//                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
+//                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -60,15 +63,78 @@ function prepare() {
   );
 }
 
+
+// `session continue --reply-file`: normalize the reply map into the question records, as the real CLI does.
+function answer(id) {
+  // Every call is logged so tests can assert the exact argv the extension used.
+  fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
+  const mode = process.env.MIGENT_FAKE_ANSWER ?? 'record';
+  // `slow` records normally but only after a pause, so a test can observe the submission while it is in flight.
+  if (process.env.MIGENT_FAKE_ANSWER_DELAY_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.MIGENT_FAKE_ANSWER_DELAY_MS));
+  const file = path.join(dirOf(id), 'questions.json');
+  if (mode === 'reject') {
+    console.error('reply rejected: invalid answer');
+    process.exit(1);
+  }
+  if (mode === 'garble') {
+    fs.writeFileSync(file, '{ not json');
+    process.exit(0);
+  }
+  const reply = JSON.parse(fs.readFileSync(option('--reply-file'), 'utf8'));
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // Like the real CLI: `--stage` selects that stage's pending batch; without it the session's only batch.
+  const stage = option('--stage');
+  const target = stored.questions.filter((record) => record.status === 'pending' && (stage === undefined || record.stage_id === stage));
+  const stages = new Set(target.map((record) => record.stage_id));
+  if (target.length === 0 || (stage === undefined && stages.size > 1)) {
+    console.error('no single pending question batch to answer; pass --stage');
+    process.exit(2);
+  }
+  // The whole batch is answered at once: every id, and only those.
+  const expected = target.map((record) => record.id).sort().join(',');
+  if (Object.keys(reply).sort().join(',') !== expected) {
+    console.error('reply must answer every pending question of the batch');
+    process.exit(2);
+  }
+  for (const record of target) {
+    const value = reply[record.id];
+    const ids = record.options.map((entry) => entry.id);
+    const selected = Array.isArray(value) ? value : ids.includes(value) ? [value] : [];
+    record.status = 'answered';
+    // Like the real CLI, `text` is present only for a free-text answer.
+    record.answer = typeof value === 'string' && selected.length === 0 ? { selected, text: value } : { selected };
+    record.answered_at = new Date().toISOString();
+  }
+  if (mode === 'followup') {
+    stored.questions.push(
+      ...JSON.parse(JSON.stringify(stored.questions.filter((record) => record.status === 'answered'))).map(
+        (record) => ({ ...record, status: 'pending', answer: null, answered_at: null, execution_id: '0002-plan--attempt-02' }),
+      ),
+    );
+  }
+  writeJson(file, stored);
+  const pending = stored.questions.filter((record) => record.status === 'pending');
+  writeStatus(id, pending.length > 0 ? 'question' : 'active', { questions: pending });
+  if (mode === 'followup') process.exit(9);
+  if (mode === 'fail-after-record') process.exit(1);
+}
+
 function run() {
   const workflow = option('--workflow');
   const id = option('--session') ?? (args[1] === 'continue' ? args[2] : create(workflow, option('--task') ?? 'task'));
+  if (option('--reply-file') !== undefined) answer(id);
   const lockFile = path.join(dirOf(id), 'session.lock');
   const cancelFile = path.join(dirOf(id), 'cancel.requested');
   const beat = () =>
     writeJson(lockFile, { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
   beat();
-  writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: '0001-plan--attempt-01' });
+  const executionId = option('--reply-file') === undefined ? '0001-plan--attempt-01' : '0002-plan--attempt-02';
+  if (option('--reply-file') !== undefined) {
+    const dir = path.join(dirOf(id), 'executions', executionId);
+    fs.mkdirSync(dir, { recursive: true });
+    writeJson(path.join(dir, 'execution.json'), { execution_id: executionId, stage_id: option('--stage') ?? 'plan', status: 'running' });
+  }
+  writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: executionId });
   console.error(`[migent] session_id: ${id}`);
   console.error('[migent] stage plan started');
   const startedAt = Date.now();
