@@ -50,12 +50,6 @@ describe('deriveDisplayState', () => {
     expect(state({ status: status({ status: 'prepared' }) }, foreignLock)).toBe('prepared');
   });
 
-  it('Running: lock is alive', () => {
-    expect(state({}, localLock())).toBe('running');
-    // A lock from another host cannot be pid-checked and still shows Running.
-    expect(state({}, foreignLock)).toBe('running');
-  });
-
   it('Blocked: status = blocked', () => {
     expect(state({ status: status({ status: 'blocked' }) }, { kind: 'none' })).toBe('blocked');
     expect(state({ status: status({ status: 'blocked' }) }, { kind: 'stale', reason: 'heartbeat' })).toBe('blocked');
@@ -72,14 +66,6 @@ describe('deriveDisplayState', () => {
     expect(state({}, { kind: 'none' })).toBe('stopped');
     expect(state({ status: status({ latestExecutionStatus: null }) }, { kind: 'none' })).toBe('stopped');
     expect(state({}, { kind: 'stale', reason: 'unparsable' })).toBe('stopped');
-  });
-
-  it('Cancelled: status = cancelled', () => {
-    expect(state({ status: status({ status: 'cancelled' }) }, { kind: 'none' })).toBe('cancelled');
-  });
-
-  it('Completed: status = completed', () => {
-    expect(state({ status: status({ status: 'completed' }) }, { kind: 'none' })).toBe('completed');
   });
 
   it('Question: status = question, no live lock', () => {

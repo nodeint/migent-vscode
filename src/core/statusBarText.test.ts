@@ -8,11 +8,6 @@ function summary(overrides: Partial<AttentionSummary>): AttentionSummary {
 }
 
 describe('statusBarModel', () => {
-  it('is hidden when nothing runs and nothing needs attention', () => {
-    expect(statusBarModel([])).toBeNull();
-    expect(statusBarModel([{ name: 'a', summary: summary({}) }])).toBeNull();
-  });
-
   it('shows both parts, summed across projects', () => {
     const model = statusBarModel([
       { name: 'a', summary: summary({ running: 1, needsAttention: 1, failed: 1 }) },

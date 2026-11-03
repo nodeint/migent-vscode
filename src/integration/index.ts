@@ -53,7 +53,7 @@ export async function run(): Promise<void> {
     }
     const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
     console.error('INTEGRATION ERROR:', text);
-    fs.writeFileSync(path.resolve(__dirname, '..', 'last-error.txt'), text);
+    fs.writeFileSync(process.env.MIGENT_IT_ERROR_PATH ?? path.resolve(__dirname, '..', 'last-error.txt'), text);
     throw error;
   }
 }

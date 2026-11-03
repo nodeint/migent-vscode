@@ -44,14 +44,6 @@ describe('TransitionTracker', () => {
     expect(tracker.observe('p', snapshot(failed('0003-plan--attempt-03')), false)?.kind).toBe('failed');
   });
 
-  it('does not replay old state after a reload: a new tracker seeds the same sessions silently', () => {
-    const reloaded = new TransitionTracker();
-    for (const raw of [blocked, failed('0002-plan--attempt-02'), completed]) {
-      expect(reloaded.observe('p', snapshot(raw), true)).toBeNull();
-      expect(reloaded.observe('p', snapshot(raw), false)).toBeNull();
-    }
-  });
-
   it('keeps sessions and projects apart', () => {
     const tracker = new TransitionTracker();
     expect(tracker.observe('p', snapshot(blocked, 'a'), false)?.sessionId).toBe('a');

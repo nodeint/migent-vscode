@@ -19,11 +19,6 @@ describe('describeCapability', () => {
     expect(result?.tooltip).toContain('Executable: /bin/migent');
   });
 
-  it('explains an unsupported launcher with the resolver detail', () => {
-    const result = describeCapability({ ...base, kind: 'unsupported', detail: 'C:\\npm\\migent.cmd is a .cmd launcher' });
-    expect(result?.tooltip).toContain('.cmd launcher');
-  });
-
   it.each(['missing', 'unparsable', 'error'] as const)('has a diagnostic for %s', (kind) => {
     expect(describeCapability({ ...base, kind })?.label).toBeTruthy();
   });

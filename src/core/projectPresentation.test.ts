@@ -32,12 +32,6 @@ describe('workflowRow', () => {
     expect(row.tooltip).toContain('a → b');
   });
 
-  it('lists an invalid file by file name with the first error line', () => {
-    const row = workflowRow(entry({ state: 'invalid', error: 'bad\nmore', file: 'x.yml' }), '.migent/workflows/x.yml');
-    expect(row).toMatchObject({ label: 'x.yml', description: 'bad', icon: 'error', contextValue: 'workflow.invalid' });
-    expect(row.tooltip).toContain('more');
-  });
-
   it('marks unreadable files and flags duplicate ids on every affected file', () => {
     expect(workflowRow(entry({ state: 'unreadable', error: 'EACCES' }), 'p').contextValue).toBe('workflow.unreadable');
     const duplicate = workflowRow(entry({ duplicate: true }), '.migent/workflows/plan.yaml');

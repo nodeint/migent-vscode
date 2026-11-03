@@ -78,7 +78,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'AC5: Prepare keeps task text; Save & Run starts that prepared session without changing task.md',
+    name: 'AC5: Prepare creates editable tasks and Save & Run preserves the task',
     async run(env) {
       const project = await createProject(env);
       const file = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Prepared', taskText: 'Write it.' });
@@ -93,15 +93,9 @@ const scenarios: Scenario[] = [
       });
       assert.equal(fs.readFileSync(file, 'utf8'), 'Write it.', 'task.md untouched by the run');
       assert.equal(sessions(env).length, 1, 'no replacement session');
-    },
-  },
-  {
-    name: 'AC5: Prepare without task text still leaves an empty task.md to edit',
-    async run(env) {
-      const project = await createProject(env);
-      const file = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
-      assert.ok(file, 'prepare returns task.md');
-      assert.equal(fs.readFileSync(file, 'utf8'), '');
+      const emptyFile = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
+      assert.ok(emptyFile, 'prepare returns task.md');
+      assert.equal(fs.readFileSync(emptyFile, 'utf8'), '');
     },
   },
   {

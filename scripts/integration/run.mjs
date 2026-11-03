@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { finished } from 'node:stream/promises';
 
-import { runTests } from '@vscode/test-electron';
+import { downloadAndUnzipVSCode, runTests } from '@vscode/test-electron';
 
 import { copyFixtureWorkspace } from './fixtureWorkspace.mjs';
 
@@ -49,6 +49,8 @@ const minimum = String(pkg.engines.vscode).replace(/^[^\d]*/, '');
 const versionsArg = process.argv.indexOf('--versions');
 const versions =
   versionsArg === -1 ? [minimum, 'stable'] : process.argv[versionsArg + 1].split(',').filter(Boolean);
+const labels = versions.map((version) => version.replace(/[^a-zA-Z0-9._-]/g, '_'));
+if (new Set(labels).size !== labels.length) throw new Error('VS Code versions must have distinct report names');
 
 // Build the extension itself (dist/extension.js) and the test bundle, so the suite never runs a stale extension.
 for (const flags of [[], ['--integration']]) {
@@ -64,8 +66,25 @@ for (const flags of [[], ['--integration']]) {
 // --exclude: probe with the user-level exclude that silences VS Code watchers (known limitation, not required to pass).
 const isExclude = process.argv.includes('--exclude');
 
-let failed = 0;
+const runs = [];
 for (const version of versions) {
+  // Resolve downloads sequentially: an alias and an explicit version can share one cache directory.
+  let executable;
+  let downloadError;
+  try {
+    executable = await downloadAndUnzipVSCode({ version });
+  } catch (error) {
+    downloadError = error;
+  }
+  runs.push(runVersion(version, executable, downloadError).catch((error) => {
+    console.error(`VS Code ${version}: integration runner failed:`, error);
+    return 1;
+  }));
+}
+const outcomes = await Promise.all(runs);
+process.exit(outcomes.some((outcome) => outcome !== 0) ? 1 : 0);
+
+async function runVersion(version, executable, downloadError) {
   const label = version.replace(/[^a-zA-Z0-9._-]/g, '_');
   const outputDir = join(root, 'dist-test');
   mkdirSync(outputDir, { recursive: true });
@@ -82,17 +101,18 @@ for (const version of versions) {
   }
   console.log(`\n=== VS Code ${version} (workspace ${workspace}) ===`);
   try {
+    if (downloadError) throw downloadError;
     await runTests({
-      version,
+      vscodeExecutablePath: executable,
       extensionDevelopmentPath: root,
       extensionTestsPath: join(root, 'dist-test', 'integration', 'index.js'),
-      launchArgs: [workspace, '--profile-temp', '--disable-workspace-trust'],
+      launchArgs: [workspace, `--user-data-dir=${join(workspace, '.vscode-user')}`, `--extensions-dir=${join(workspace, '.vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, MIGENT_IT_FAILURE_REPORT: reportPath, ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
+      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
     });
+    return 0;
   } catch (error) {
-    failed += 1;
     console.error(`VS Code ${version}: integration tests failed`);
     try {
       const report = JSON.parse(readFileSync(reportPath, 'utf8'));
@@ -107,11 +127,11 @@ for (const version of versions) {
       console.error(`Failure report: ${reportPath}`);
     }
     console.error(`Full VS Code log: ${logPath}`);
+    return 1;
   } finally {
     log.end();
     await finished(log);
     rmSync(workspace, { recursive: true, force: true });
   }
 }
-process.exit(failed === 0 ? 0 : 1);
 }

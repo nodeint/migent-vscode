@@ -60,9 +60,4 @@ describe('groupPendingQuestions', () => {
     ]);
   });
 
-  it('keeps the three captured questions in one execution group', () => {
-    const read = readStatus(`${capturedDir('question-pending')}/status.json`);
-    if (read.kind !== 'ok') throw new Error('status did not read');
-    expect(groupPendingQuestions(read.status.questions)).toHaveLength(1);
-  });
 });

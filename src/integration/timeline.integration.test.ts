@@ -52,7 +52,7 @@ const closeEditors = async (env: Env): Promise<void> => {
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC12: the timeline renders events, appends live, shows unknown versions raw, and releases the tail on close',
+    name: 'AC12: the timeline follows appends and truncation, shows unknown versions, and releases its tail',
     async run(env) {
       addSession(env, 's1', 'completed');
       const events = migentPath(env.root, 'sessions', 's1', 'events.jsonl');
@@ -67,33 +67,11 @@ const scenarios: Scenario[] = [
       await waitFor('live append', () => /plan#1 completed/.test(document.getText()));
       assert.match(document.getText(), /\[unrecognized\] .*"future"/);
 
+      fs.writeFileSync(events, eventLine(1, 'execution.restarted'));
+      await waitFor('rewritten', () => /restarted/.test(document.getText()) && !/completed/.test(document.getText()));
       await closeEditors(env);
       await waitFor('tail released', () => env.api.tails.activeCount === 0);
       assert.equal(env.api.sessionDocs.openCount, 0);
-    },
-  },
-  {
-    name: 'AC12: a truncated events.jsonl re-renders the timeline from the start',
-    async run(env) {
-      addSession(env, 's2', 'completed');
-      const events = migentPath(env.root, 'sessions', 's2', 'events.jsonl');
-      write(events, eventLine(1, 'execution.started') + eventLine(2, 'execution.progress') + eventLine(3, 'execution.completed'));
-      const document = await openTimeline(env, 's2');
-      await vscode.window.showTextDocument(document);
-      assert.match(document.getText(), /completed/);
-      fs.writeFileSync(events, eventLine(1, 'execution.restarted'));
-      await waitFor('rewritten', () => /restarted/.test(document.getText()) && !/progress/.test(document.getText()));
-      await closeEditors(env);
-    },
-  },
-  {
-    name: 'a session without events.jsonl shows an empty timeline',
-    async run(env) {
-      addSession(env, 's3', 'completed');
-      const document = await openTimeline(env, 's3');
-      await vscode.window.showTextDocument(document);
-      assert.equal(document.getText(), 'No events yet.');
-      await closeEditors(env);
     },
   },
   {

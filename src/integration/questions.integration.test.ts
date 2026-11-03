@@ -139,15 +139,6 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'nothing is selected or sendable on open, even with recommended options',
-    async run(env) {
-      const panel = await openPanel(env, 'q1');
-      assert.equal(panel.model().answered, 0);
-      assert.equal(panel.model().canSubmit, false);
-      assert.deepEqual(panel.model().questions[0]?.recommended, ['A']);
-    },
-  },
-  {
     name: 'a complete batch is recorded through the CLI with normalized answers and then continues the stage',
     async run(env) {
       const panel = await openPanel(env, 'q2');

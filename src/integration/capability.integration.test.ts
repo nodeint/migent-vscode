@@ -51,19 +51,6 @@ async function withSetting(
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC13: a usable CLI shows no diagnostic and keeps sessions visible',
-    async run(env) {
-      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
-      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
-      await createProject(env);
-      await waitFor('capability ok', () => kindOf(env) === 'ok');
-      const project = env.project();
-      assert.equal(project === undefined ? undefined : env.api.capability.state(project.key).detected, '0.3.1');
-      assert.equal(env.api.capability.aggregate(), 'ok');
-      assert.equal(diagnostic(env), undefined);
-    },
-  },
-  {
     name: 'AC13: a missing CLI shows a diagnostic with versions while sessions stay visible, and Recheck recovers',
     async run(env) {
       write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');

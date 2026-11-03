@@ -71,6 +71,7 @@ const scenarios: Scenario[] = [
       assert.equal(item.command?.command, 'migent.openConfig');
       await vscode.commands.executeCommand('migent.openConfig', config);
       assert.equal(activeFile(), vscode.Uri.file(migentPath(env.root, 'config.yaml')).fsPath.toLowerCase());
+
     },
   },
   {
