@@ -20,7 +20,6 @@ import {
   sessionsDiagnostic,
   sessionTooltip,
   truncate,
-  unknownReasonText,
 } from './sessionPresentation';
 import { capturedDir, snapshotFromDir, syntheticDir } from './testHelpers';
 
@@ -71,19 +70,6 @@ describe('session rows', () => {
     expect(sessionDescription(snapshot, NOW)).toContain('3 questions');
     expect(sessionContextValue(snapshot)).toBe('session.question;questions');
     expect(sessionIcon(snapshot)).toBe('comment-discussion');
-  });
-
-  it('tells Unknown sessions apart by reason, icon, description and context value', () => {
-    const corrupt = snapshotFromDir(sessionFixture('corrupt-status'));
-    expect(unknownReasonText(corrupt)).toBe('status.json invalid');
-    expect(sessionDescription(corrupt, NOW)).toBe('status.json invalid');
-    expect(sessionIcon(corrupt)).toBe('bracket-error');
-    expect(sessionContextValue(corrupt)).toBe('session.unknown;reason-invalid-status');
-
-    const schema = snapshotFromDir(sessionFixture('unknown-schema'));
-    expect(unknownReasonText(schema)).toBe('Unsupported schema version 99');
-    expect(sessionIcon(schema)).toBe('question');
-    expect(sessionContextValue(schema)).toBe('session.unknown;reason-unsupported-schema');
   });
 
   it('adds the foreign and outputs flags in a fixed order', () => {

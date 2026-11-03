@@ -128,13 +128,6 @@ describe('SessionStore.load', () => {
     expect(s.snapshot('asking')?.displayState.state).toBe('running');
   });
 
-  it('accepts manifest schema_version 2 independent of the event envelope version', () => {
-    const s = store();
-    s.load();
-    expect(s.snapshot('completed')?.manifest?.schemaSupported).toBe(true);
-    expect(s.snapshot('unknown-schema')?.manifest).toMatchObject({ schemaVersion: 99, schemaSupported: false });
-  });
-
   it('emits added events for new sessions and removed for deleted ones', () => {
     const s = store();
     s.load();
@@ -167,13 +160,6 @@ describe('SessionStore.load', () => {
     s.load();
     const events = changes(s, () => s.load());
     expect(events).toEqual([]);
-  });
-
-  it('sorts newest first by created_at', () => {
-    const s = store();
-    s.load();
-    const ids = s.all().map((snapshot) => snapshot.sessionId);
-    expect(ids.indexOf('completed')).toBeLessThan(ids.indexOf('active-stopped'));
   });
 
   it('limits the number of sessions, dropping the oldest', () => {

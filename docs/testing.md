@@ -49,16 +49,19 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 ### Extension-host integration tests
 
 `pnpm test:integration` builds the extension and `src/integration/` with esbuild, downloads VS Code
-through `@vscode/test-electron`, and runs the suite against the minimum
-supported version (`engines.vscode`) and the latest stable. Files named
+through `@vscode/test-electron`, and runs the suite concurrently against the minimum
+supported version (`engines.vscode`) and the latest stable in separate workspaces and profiles. Files named
 `*.integration.test.ts` are excluded from Vitest. Each run copies
 `src/integration/fixtures/workspace/` to a temporary folder; it sets
 `.gitignore` ignoring `.migent`. Pass `--versions a,b` to choose versions and
 `--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
 delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to
-`dist-test/probe-report-<version>.json`. On Linux, run under a display server
+`dist-test/probe-report-<requested-version>.json` (for example, `stable`). On Linux, run under a display server
 (`xvfb-run -a pnpm test:integration`).
+
+The watcher probe exercises VS Code's non-recursive file watchers and records
+their results in that report.
 
 The fixture CLI `fake-migent.js` also implements `session prepare`, `run`, `continue` and `cancel` by writing
 session files in the project, so `control.integration.test.ts` drives the control service through the real runner,

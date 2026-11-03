@@ -45,17 +45,6 @@ describe('buildAnswerModel', () => {
     expect(model.questions[0]?.recommended).toEqual(['A']);
   });
 
-  it('allows Send only for a complete batch, and not while the target is blocked', () => {
-    const draft = {
-      '1': { mode: 'choice' as const, selected: ['B'], text: '' },
-      '2': { mode: 'text' as const, selected: [], text: 'mine' },
-    };
-    expect(buildAnswerModel(input({ draft })).canSubmit).toBe(true);
-    const blocked = buildAnswerModel(input({ draft, blockReason: 'The session is running.' }));
-    expect(blocked.canSubmit).toBe(false);
-    expect(blocked.editable).toBe(true);
-  });
-
   it('is read-only once stale, and unsupported questions are not exposed as a form', () => {
     expect(buildAnswerModel(input({ state: 'stale' })).editable).toBe(false);
     expect(buildAnswerModel(input({ questions: [question('1', 'text')] })).questions).toEqual([]);

@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import type { MigentApi } from '../extension';
 import type { MigentChange } from '../vscode/changes';
 import type { ProjectContext } from '../vscode/projects';
+import { recordFailure } from './failureReport';
 
 const WAIT_MS = 6000;
 const POLL_MS = 25;
@@ -146,6 +147,7 @@ export async function runScenarios(scenarios: readonly Scenario[]): Promise<numb
       await scenario.run(env);
     } catch (error) {
       failed += 1;
+      recordFailure('scenario', scenario.name, error);
       console.log(`FAIL ${scenario.name}\n     ${error instanceof Error ? error.message : String(error)}`);
     }
   }

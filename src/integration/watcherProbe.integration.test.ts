@@ -2,16 +2,16 @@
  * S0 watcher probe (plans/02-monitoring.md §7.1).
  *
  * Runs inside the extension host. Verifies that non-recursive `RelativePattern` watchers deliver the events
- * §6.1 relies on while `files.watcherExclude` hides `.migent`. The same scenarios run against non-recursive
- * `node:fs.watch` as a fallback pre-check (informational; only the `vscode` backend can fail the suite).
+ * §6.1 relies on while `files.watcherExclude` hides `.migent`.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { recordFailure } from './failureReport';
+
 type Kind = 'create' | 'change' | 'delete';
-type BackendId = 'vscode' | 'fs.watch';
 type Names = string[] | '*';
 
 interface Recorded {
@@ -21,14 +21,12 @@ interface Recorded {
 
 interface Recorder {
   events: Recorded[];
-  errors: string[];
   clear(): void;
   dispose(): void;
 }
 
 interface CaseContext {
   root: string;
-  backend: BackendId;
   notes: string[];
   watch(base: string, names: Names): Recorder;
 }
@@ -36,13 +34,12 @@ interface CaseContext {
 interface ProbeCase {
   id: string;
   title: string;
-  backends: BackendId[];
   run(ctx: CaseContext): Promise<string[]>;
 }
 
 interface CaseResult {
   vscodeVersion: string;
-  backend: BackendId;
+  backend: 'vscode';
   id: string;
   title: string;
   ok: boolean;
@@ -105,7 +102,6 @@ function watchWithVscode(base: string, names: Names): Recorder {
   ];
   return {
     events,
-    errors: [],
     clear: () => {
       events.length = 0;
     },
@@ -114,41 +110,6 @@ function watchWithVscode(base: string, names: Names): Recorder {
         subscription.dispose();
       }
       watcher.dispose();
-    },
-  };
-}
-
-function watchWithFs(base: string, names: Names): Recorder {
-  const events: Recorded[] = [];
-  const errors: string[] = [];
-  let watcher: fs.FSWatcher | undefined;
-  try {
-    watcher = fs.watch(base, { persistent: false }, (eventType, filename) => {
-      if (!filename) {
-        return;
-      }
-      const name = String(filename);
-      if (names !== '*' && !names.includes(name)) {
-        return;
-      }
-      if (eventType === 'change') {
-        events.push({ kind: 'change', name });
-        return;
-      }
-      events.push({ kind: fs.existsSync(path.join(base, name)) ? 'create' : 'delete', name });
-    });
-    watcher.on('error', (error) => errors.push(String(error)));
-  } catch (error) {
-    errors.push(String(error));
-  }
-  return {
-    events,
-    errors,
-    clear: () => {
-      events.length = 0;
-    },
-    dispose: () => {
-      watcher?.close();
     },
   };
 }
@@ -214,7 +175,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P1',
     title: 'Session-level brace pattern: create/modify/delete status.json, session.lock; events.jsonl append',
-    backends: ['vscode', 'fs.watch'],
     async run({ root, watch }) {
       const failures: string[] = [];
       const dir = sessionDir(root);
@@ -231,7 +191,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P2',
     title: 'Atomic replace of status.json (temp file + rename): event for status.json, none for temp name',
-    backends: ['vscode'],
     async run({ root, watch }) {
       const failures: string[] = [];
       const dir = sessionDir(root);
@@ -257,7 +216,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P3',
     title: 'sessions/ with *: create, delete and rename of a session directory',
-    backends: ['vscode', 'fs.watch'],
     async run({ root, watch, notes }) {
       const failures: string[] = [];
       const sessions = path.join(root, '.migent', 'sessions');
@@ -292,7 +250,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P4',
     title: 'Anchor on workspace root with .migent: create and delete of .migent/',
-    backends: ['vscode', 'fs.watch'],
     async run({ root, watch }) {
       const failures: string[] = [];
       const rec = watch(root, ['.migent']);
@@ -313,7 +270,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P5',
     title: 'Folder lifecycle: delete watched folder, recreate, dispose old watcher, new watcher delivers events',
-    backends: ['vscode', 'fs.watch'],
     async run({ root, watch, notes }) {
       const failures: string[] = [];
       const dir = sessionDir(root);
@@ -332,8 +288,7 @@ const cases: ProbeCase[] = [
           failures.push(`P5: disposing old watcher threw ${String(error)}`);
         }
         notes.push(
-          `old watcher after delete/recreate: ${old.events.map((event) => `${event.kind}:${event.name}`).join(',') || 'none'}` +
-            (old.errors.length > 0 ? ` errors=${old.errors.join('|')}` : ''),
+          `old watcher after delete/recreate: ${old.events.map((event) => `${event.kind}:${event.name}`).join(',') || 'none'}`,
         );
         fresh = watch(dir, SESSION_NAMES);
         await sleep(WARMUP_MS);
@@ -350,7 +305,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P6',
     title: '.migent/ with {config.yaml,sessions,workflows}: create/delete of sessions/ and workflows/, config.yaml change',
-    backends: ['vscode', 'fs.watch'],
     async run({ root, watch }) {
       const failures: string[] = [];
       const base = path.join(root, '.migent');
@@ -381,7 +335,6 @@ const cases: ProbeCase[] = [
   {
     id: 'P7',
     title: 'Excluded sibling sanity: an unwatched file next to a watched one produces no event',
-    backends: ['vscode'],
     async run({ root, watch }) {
       const failures: string[] = [];
       const dir = sessionDir(root);
@@ -427,10 +380,11 @@ function report(results: CaseResult[]): void {
   }
   const outDir = path.resolve(__dirname, '..');
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, `probe-report-${version}${isExclude() ? '-exclude' : ''}.json`), JSON.stringify(results, null, 2));
+  const label = process.env.MIGENT_IT_PROBE_LABEL ?? version;
+  fs.writeFileSync(path.join(outDir, `probe-report-${label}${isExclude() ? '-exclude' : ''}.json`), JSON.stringify(results, null, 2));
 }
 
-/** Run every probe case on every backend; returns the number of failed `vscode`-backend cases. */
+/** Run every VS Code watcher probe; returns the number of failed cases. */
 export async function runWatcherProbe(): Promise<number> {
   const root = process.env.MIGENT_IT_WORKSPACE;
   if (!root) {
@@ -438,30 +392,32 @@ export async function runWatcherProbe(): Promise<number> {
   }
   assertProbeEnvironment(root);
   const results: CaseResult[] = [];
-  for (const backend of ['vscode', 'fs.watch'] as const) {
-    const watch = backend === 'vscode' ? watchWithVscode : watchWithFs;
-    for (const probe of cases.filter((candidate) => candidate.backends.includes(backend))) {
-      await resetMigent(root);
-      const notes: string[] = [];
-      let failures: string[];
-      try {
-        failures = await probe.run({ root, backend, notes, watch });
-      } catch (error) {
-        failures = [`threw ${String(error)}`];
-      }
-      const detail = [...(failures.length > 0 ? failures : ['ok']), ...notes].join('; ');
-      results.push({
-        vscodeVersion: vscode.version,
-        backend,
-        id: probe.id,
-        title: probe.title,
-        ok: failures.length === 0,
-        detail,
-      });
+  for (const probe of cases) {
+    await resetMigent(root);
+    const notes: string[] = [];
+    let failures: string[];
+    try {
+      failures = await probe.run({ root, notes, watch: watchWithVscode });
+    } catch (error) {
+      failures = [`threw ${String(error)}`];
     }
+    const detail = [...(failures.length > 0 ? failures : ['ok']), ...notes].join('; ');
+    results.push({
+      vscodeVersion: vscode.version,
+      backend: 'vscode',
+      id: probe.id,
+      title: probe.title,
+      ok: failures.length === 0,
+      detail,
+    });
   }
   await resetMigent(root);
   report(results);
+  if (!isExclude()) {
+    for (const result of results.filter((item) => !item.ok)) {
+      recordFailure('watcher probe', `${result.id} ${result.title}`, result.detail);
+    }
+  }
   // With the exclude, VS Code delivers no events (known limitation): report only, never fail the suite.
-  return isExclude() ? 0 : results.filter((result) => result.backend === 'vscode' && !result.ok).length;
+  return isExclude() ? 0 : results.filter((result) => !result.ok).length;
 }

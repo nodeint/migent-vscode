@@ -42,12 +42,14 @@ describe('locateCli on Windows', () => {
     expect(result.kind === 'unsupported' && result.detail).toContain('npm shim');
   });
 
-  it.each(['.cmd', '.bat', '.ps1'])('reports a %s target as unsupported', (extension) => {
-    const file = `C:\\x\\migent${extension}`;
-    expect(locateCli(options(file, 'win32', [file], WIN_ENV))).toMatchObject({
-      kind: 'unsupported',
-      reason: 'script-shim',
-    });
+  it('reports Windows script targets as unsupported', () => {
+    for (const extension of ['.cmd', '.bat', '.ps1']) {
+      const file = `C:\\x\\migent${extension}`;
+      expect(locateCli(options(file, 'win32', [file], WIN_ENV))).toMatchObject({
+        kind: 'unsupported',
+        reason: 'script-shim',
+      });
+    }
   });
 
   it('runs a JavaScript entry through node found on PATH', () => {

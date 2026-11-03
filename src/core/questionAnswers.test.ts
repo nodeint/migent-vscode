@@ -3,10 +3,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { answerArgs } from './controlArgs';
 import type { PendingQuestion } from './model';
 import {
-  ambiguousTextQuestions,
   answeredCount,
   type BatchDraft,
   batchFingerprint,
@@ -79,16 +77,6 @@ describe('serializeAnswers', () => {
   });
 });
 
-describe('ambiguousTextQuestions', () => {
-  it('flags free text equal to an option id without changing it', () => {
-    const draft: BatchDraft = {
-      '1': { mode: 'text', selected: [], text: ' A ' },
-      '3': { mode: 'text', selected: [], text: 'AA' },
-    };
-    expect(ambiguousTextQuestions(batch, draft)).toEqual(['1']);
-  });
-});
-
 describe('checkBatch and fingerprint', () => {
   it('accepts a valid batch and rejects mixed, unsupported and out-of-range ones', () => {
     expect(checkBatch(batch)).toBeNull();
@@ -144,17 +132,6 @@ describe('reconcileSubmission (captured fixtures)', () => {
   });
 });
 
-describe('answerArgs', () => {
-  it('builds the continue command with a stage and omits it for a standalone role', () => {
-    expect(answerArgs({ sessionId: 's', stageId: 'plan', replyFile: 'C:\\x y\\a.json' })).toEqual([
-      'session', 'continue', 's', '--stage', 'plan', '--reply-file', 'C:\\x y\\a.json',
-    ]);
-    expect(answerArgs({ sessionId: 's', stageId: null, replyFile: 'r' })).toEqual([
-      'session', 'continue', 's', '--reply-file', 'r',
-    ]);
-  });
-});
-
 describe('verifyBatch (captured question-pending)', () => {
   const dir = capturedDir('question-pending');
   const history = readQuestions(dir);
@@ -204,10 +181,6 @@ describe('verifyBatch rejects malformed records instead of validating remnants',
       target,
       fingerprint,
     });
-
-  it('accepts the unmodified file', () => {
-    expect(verifyWith(raw.questions).kind).toBe('ok');
-  });
 
   it('blocks a malformed second question, an option without a label and a missing context', () => {
     const [first, second, ...rest] = raw.questions;

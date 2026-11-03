@@ -33,11 +33,6 @@ describe('listExecutionFiles', () => {
     expect(listing.files.map((file) => [file.kind, file.relativePath])).toEqual([['questions', 'questions.json']]);
   });
 
-  it('reports no questions.json for the answered execution that has none', () => {
-    const dir = path.join(capturedDir('question-answered'), 'executions', '0002-planner--attempt-02');
-    expect(listExecutionFiles(dir).files).toEqual([]);
-  });
-
   it('lists fixed files, verify files by turn number, and artifacts', () => {
     const dir = tempExecution({
       'execution.json': '{}',

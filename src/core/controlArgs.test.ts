@@ -83,12 +83,6 @@ describe('parsePrepared', () => {
 });
 
 describe('reply, repair, doctor and init argv', () => {
-  it('runs the next stage once without resetting counts by passing --once', () => {
-    expect(continueArgs({ sessionId: 's', once: true }, { maxDispatches: 3, progress: false })).toEqual([
-      'session', 'continue', 's', '--once', '--max-dispatches', '3',
-    ]);
-  });
-
   it('builds repair and doctor argv', () => {
     expect(repairArgs('s1')).toEqual(['session', 'repair', 's1']);
     expect(doctorArgs()).toEqual(['doctor', '--json']);

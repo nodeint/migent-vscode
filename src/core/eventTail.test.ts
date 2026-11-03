@@ -42,7 +42,7 @@ describe('tailEvents', () => {
     expect(read.offset).toBe(0);
   });
 
-  it('reads complete lines and stops before a partial line', () => {
+  it('stops before a partial line and reads it once completed', () => {
     const file = tmpFile('events.jsonl', `${line1}\n${line2}\n${line2.slice(0, 10)}`);
     const first = tailEvents(file, 0);
     expect(first.events.map((event) => event.seq)).toEqual([1, 2]);
@@ -51,15 +51,7 @@ describe('tailEvents', () => {
     expect(first.events[1]?.summary).toBe('claude/sonnet');
     // The torn tail stays unconsumed.
     expect(tailEvents(file, first.offset).events).toEqual([]);
-  });
-
-  it('picks up the previously torn tail once the line is complete', () => {
-    const file = tmpFile('events.jsonl', `${line1}\n`);
-    const first = tailEvents(file, 0);
-    expect(first.events).toHaveLength(1);
-
-    // The kernel appends the rest of the line later.
-    writeFileSync(file, `${line1}\n${line2}\n`);
+    writeFileSync(file, `${line1}\n${line2}\n${line2}\n`);
     const second = tailEvents(file, first.offset);
     expect(second.events.map((event) => event.seq)).toEqual([2]);
     expect(second.offset).toBeGreaterThan(first.offset);
@@ -70,13 +62,6 @@ describe('tailEvents', () => {
     const read = tailEvents(file, 0);
     expect(read.events).toEqual([]);
     expect(read.offset).toBe(0);
-  });
-
-  it('continues after the last offset only', () => {
-    const file = tmpFile('events.jsonl', `${line1}\n${line2}\n`);
-    const first = tailEvents(file, 0);
-    const second = tailEvents(file, first.offset);
-    expect(second.events).toEqual([]);
   });
 
   it('returns the raw line for a line that is not JSON', () => {
@@ -116,7 +101,7 @@ describe('tailEvents', () => {
     expect(read.events.map((event) => event.seq)).toEqual([1, 2]);
   });
 
-  it('restarts from byte 0 and reports truncation when the file shrank below the offset', () => {
+  it('restarts from byte 0 when truncated, including when the file is emptied', () => {
     const file = tmpFile('events.jsonl', `${line1}\n${line2}\n`);
     const first = tailEvents(file, 0);
     expect(first.truncated).toBe(false);
@@ -125,13 +110,8 @@ describe('tailEvents', () => {
     expect(read.truncated).toBe(true);
     expect(read.events.map((event) => event.seq)).toEqual([1]);
     expect(read.offset).toBe(Buffer.byteLength(`${line1}\n`));
-  });
-
-  it('reports an emptied file as truncated with offset 0', () => {
-    const file = tmpFile('events.jsonl', `${line1}\n`);
-    const first = tailEvents(file, 0);
     writeFileSync(file, '');
-    expect(tailEvents(file, first.offset)).toEqual({ events: [], offset: 0, truncated: true });
+    expect(tailEvents(file, read.offset)).toEqual({ events: [], offset: 0, truncated: true });
   });
 });
 

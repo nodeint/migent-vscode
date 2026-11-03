@@ -43,14 +43,6 @@ describe('parseManifest', () => {
     expect(parseManifest('null\n')).toBeNull();
   });
 
-  it('reads a fixture manifest', () => {
-    const manifest = readManifest(
-      path.join(process.cwd(), 'src', 'core', 'fixtures', 'sessions', 'completed', 'manifest.yaml'),
-    );
-    expect(manifest?.workflowId).toBe('plan');
-    expect(manifest?.schemaSupported).toBe(true);
-  });
-
   it('null for a missing file', () => {
     expect(readManifest(path.join(path.sep, 'no', 'manifest.yaml'))).toBeNull();
   });

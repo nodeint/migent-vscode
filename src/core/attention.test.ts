@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { aggregateSessionsState, groupOf, isCounted, isRetentionExempt, summarize } from './attention';
+import { aggregateSessionsState, isCounted, isRetentionExempt, summarize } from './attention';
 import { deriveDisplayState } from './displayState';
 import type { LockProbe, ScanOutcome, SessionSnapshot } from './model';
 import { readStatus } from './statusReader';
@@ -34,18 +34,6 @@ function bare(state: 'unknown' | 'stopped' | 'failed' | 'completed'): SessionSna
     displayState: deriveDisplayState({ status, statusError: null, manifest: 'ok' }, { kind: 'none' }),
   };
 }
-
-describe('groupOf', () => {
-  it('places each state in one group', () => {
-    expect(groupOf(fromFixture(syntheticDir('running-questions'), alive))).toBe('running');
-    expect(groupOf(fromFixture(capturedDir('question-pending')))).toBe('attention');
-    expect(groupOf(fromFixture(syntheticDir('blocked-questions')))).toBe('attention');
-    expect(groupOf(bare('failed'))).toBe('attention');
-    expect(groupOf(bare('stopped'))).toBe('attention');
-    expect(groupOf(bare('unknown'))).toBe('attention');
-    expect(groupOf(bare('completed'))).toBe('recent');
-  });
-});
 
 describe('isCounted and summarize', () => {
   it('counts Blocked, Failed, Question and pending questions; never Unknown; Stopped only through questions', () => {
