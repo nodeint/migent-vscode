@@ -5,7 +5,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import { parseSessionId } from '../cli/exitCode';
-import { invokeJson,type InvokeResult } from '../cli/invoke';
+import { invokeJson, type InvokeResult, invokeText } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
 import { runLong, type RunResult } from '../cli/runner';
 import {
@@ -14,6 +14,8 @@ import {
   DEFAULT_RUN_SETTINGS,
   parsePrepared,
   prepareArgs,
+  regenerateNextArgs,
+  runDownstreamArgs,
   runNewArgs,
   runPreparedArgs,
   type RunSettings,
@@ -32,6 +34,7 @@ export const STOP_TIMEOUT_MS = 20_000;
 const RECONCILE_ATTEMPTS = 4;
 const RECONCILE_DELAY_MS = 500;
 const PREPARE_TIMEOUT_MS = 30_000;
+const REGENERATE_TIMEOUT_MS = 60_000;
 const STATUS_MESSAGE_MS = 3000;
 /** `session cancel` exits 2 when the session does not exist, is not running, or runs elsewhere. */
 const CANCEL_REFUSED_EXIT = 2;
@@ -69,6 +72,8 @@ export type WorkflowChoice = 'session' | 'updated';
 export interface PrepareInput {
   workflowId: string;
   title: string;
+  /** The Completed source whose published outputs become this session's context. */
+  priorSessionId?: string;
   /** Written to `task.md` after the session is prepared. */
   taskText?: string;
 }
@@ -183,6 +188,58 @@ export class ControlService implements vscode.Disposable {
     });
   }
 
+  /**
+   * Start a new session from a Completed source (`session run --workflow --prior`). Returns the new
+   * session id when it was observed. The launch key includes the source, so every entry point shares it.
+   */
+  public async runDownstream(
+    context: ProjectContext,
+    input: { workflowId: string; priorSessionId: string; task: string | null },
+  ): Promise<string | undefined> {
+    if (!(await this.ensureWritable(context))) return undefined;
+    return this.#execute(context, {
+      key: { kind: 'launch', project: context.key, workflowId: input.workflowId, priorSessionId: input.priorSessionId },
+      args: runDownstreamArgs(input, this.settings(context)),
+      title: `Running ${input.workflowId}`,
+    });
+  }
+
+  /** Whether a launch for this source and target is pending in this extension instance. */
+  public isDownstreamBusy(context: ProjectContext, workflowId: string, priorSessionId: string): boolean {
+    return this.gate.isLaunchBusy({ kind: 'launch', project: context.key, workflowId, priorSessionId });
+  }
+
+  /**
+   * Ask the CLI to regenerate `next.json` of a Completed source (`session continue <id>`, which dispatches
+   * no stage). The result is read back from disk by the watcher; failures never change the session.
+   */
+  public async regenerateNext(context: ProjectContext, snapshot: SessionSnapshot): Promise<boolean> {
+    if (snapshot.displayState.state !== 'completed') {
+      void vscode.window.showInformationMessage('The session is no longer completed.');
+      return false;
+    }
+    if (!(await this.ensureWritable(context, snapshot))) return false;
+    const launch = this.#launch(context);
+    const handle = this.gate.tryAcquire(this.#sessionKey(context, snapshot.sessionId), 'Starting');
+    if (launch === undefined || handle === null) return false;
+    try {
+      const result = await invokeText(launch, regenerateNextArgs(snapshot.sessionId), {
+        cwd: context.root,
+        env: this.#env(context),
+        timeoutMs: REGENERATE_TIMEOUT_MS,
+      });
+      context.store.refreshSession(snapshot.sessionId);
+      if (result.kind === 'error') {
+        this.#output.error(`reload suggestions failed: ${result.error.detail} ${result.error.stderr}`.trim());
+        void vscode.window.showErrorMessage(`Could not reload suggestions: ${result.error.detail}`);
+        return false;
+      }
+      return true;
+    } finally {
+      handle.release();
+    }
+  }
+
   /** Start the prepared session `snapshot` (Save & Run). */
   public async runPrepared(context: ProjectContext, snapshot: SessionSnapshot, workflowId: string): Promise<void> {
     if (!(await this.ensureWritable(context, snapshot))) return;
@@ -267,7 +324,12 @@ export class ControlService implements vscode.Disposable {
   /** `session prepare`, then (optionally) the user's task text. Returns the real `task.md` path. */
   public async prepare(context: ProjectContext, input: PrepareInput): Promise<string | undefined> {
     if (!(await this.ensureWritable(context))) return undefined;
-    const handle = this.gate.tryAcquire({ kind: 'launch', project: context.key, workflowId: input.workflowId });
+    const handle = this.gate.tryAcquire({
+      kind: 'launch',
+      project: context.key,
+      workflowId: input.workflowId,
+      priorSessionId: input.priorSessionId,
+    });
     if (handle === null) {
       void vscode.window.showInformationMessage(`A ${input.workflowId} session is already being created.`);
       return undefined;
@@ -428,13 +490,13 @@ export class ControlService implements vscode.Disposable {
     context.store.refreshSession(id);
   }
 
-  async #execute(context: ProjectContext, job: Job): Promise<void> {
+  async #execute(context: ProjectContext, job: Job): Promise<string | undefined> {
     const launch = this.#launch(context);
-    if (launch === undefined) return;
+    if (launch === undefined) return undefined;
     const handle = this.gate.tryAcquire(job.key, 'Starting');
     if (handle === null) {
       void vscode.window.showInformationMessage('This action is already in progress.');
-      return;
+      return undefined;
     }
     const known = job.sessionId;
     const state: RunState = {
@@ -455,6 +517,7 @@ export class ControlService implements vscode.Disposable {
     const result = await this.#showProgress(context, state, run.result);
     stopWatching();
     await this.#finish(context, state, result);
+    return state.sessionId;
   }
 
   async #showProgress(context: ProjectContext, state: RunState, done: Promise<RunResult>): Promise<RunResult> {

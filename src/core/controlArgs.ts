@@ -33,9 +33,29 @@ export function runPreparedArgs(
   return ['session', 'run', '--session', input.sessionId, '--workflow', input.workflowId, ...runFlags(settings)];
 }
 
-/** `session prepare <title> --workflow <id>`; the CLI prints one JSON object on stdout. */
-export function prepareArgs(input: { title: string; workflowId: string }): string[] {
-  return ['session', 'prepare', input.title, '--workflow', input.workflowId];
+/**
+ * `session run --workflow <id> --prior <source> [--task <override>]`: a new session whose context comes from a
+ * Completed source. Without `task` the CLI takes the declared default (plans/03b-downstream-handoff.md §6).
+ */
+export function runDownstreamArgs(
+  input: { workflowId: string; priorSessionId: string; task: string | null },
+  settings: RunSettings,
+): string[] {
+  const args = ['session', 'run', '--workflow', input.workflowId, '--prior', input.priorSessionId];
+  if (input.task !== null) args.push('--task', input.task);
+  return [...args, ...runFlags(settings)];
+}
+
+/** `session prepare <title> --workflow <id> [--prior <source>]`; the CLI prints one JSON object on stdout. */
+export function prepareArgs(input: { title: string; workflowId: string; priorSessionId?: string }): string[] {
+  const args = ['session', 'prepare', input.title, '--workflow', input.workflowId];
+  if (input.priorSessionId !== undefined) args.push('--prior', input.priorSessionId);
+  return args;
+}
+
+/** `session continue <source>` on a Completed session: regenerates `next.json` and dispatches no stage. */
+export function regenerateNextArgs(sessionId: string): string[] {
+  return ['session', 'continue', sessionId];
 }
 
 export interface ContinueInput {

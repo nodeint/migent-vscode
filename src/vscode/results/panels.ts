@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import type { SessionSnapshot } from '../../core/model';
 import { manifestPath, nextPath, sessionDir, workflowsDir } from '../../core/paths';
 import { parseResultsMessage, type ResultsIntent } from '../../core/resultsIntent';
 import {
@@ -63,6 +64,12 @@ function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
 <script nonce="${nonce}" src="${asset('results.js')}"></script>
 </body>
 </html>`;
+}
+
+/** Actions the overview delegates to the Next step feature; set once by the extension. */
+export interface ResultsActions {
+  openNextStep: (identity: Identity, workflow: string) => void;
+  reloadSuggestions: (context: ProjectContext, snapshot: SessionSnapshot) => Promise<void>;
 }
 
 /** One open panel and what was last posted to it. */
@@ -127,6 +134,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
   readonly #dirty = new Set<string>();
   readonly #subscriptions: vscode.Disposable[];
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
+  #actions: ResultsActions | null = null;
 
   constructor(registry: ProjectRegistry, extensionUri: vscode.Uri) {
     this.#registry = registry;
@@ -142,6 +150,10 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         },
       }),
     ];
+  }
+
+  public setActions(actions: ResultsActions): void {
+    this.#actions = actions;
   }
 
   /** Number of open panels (for tests). */
@@ -327,6 +339,10 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         else await openFile(file, 'Handoff file');
         return;
       }
+      case 'openNextStep':
+      case 'reloadSuggestions':
+        await this.#delegate(context, identity, intent);
+        return;
       case 'openNextFile':
         await openFile(nextPath(context.root, identity.sessionId), 'next.json');
         return;
@@ -346,6 +362,20 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         this.open({ project: identity.project, sessionId: intent.sessionId });
         return;
     }
+  }
+
+  /** Next-step actions belong to the Next step feature; the overview only forwards them. */
+  async #delegate(
+    context: ProjectContext,
+    identity: Identity,
+    intent: Extract<ResultsIntent, { intent: 'openNextStep' | 'reloadSuggestions' }>,
+  ): Promise<void> {
+    if (intent.intent === 'openNextStep') {
+      this.#actions?.openNextStep(identity, intent.workflow);
+      return;
+    }
+    const snapshot = context.store.snapshot(identity.sessionId);
+    if (snapshot !== undefined) await this.#actions?.reloadSuggestions(context, snapshot);
   }
 
   async #openWorkflow(context: ProjectContext, workflow: string): Promise<void> {

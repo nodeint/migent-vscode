@@ -38,6 +38,8 @@ export interface ResultsNext {
   state: 'ok' | 'missing' | 'unreadable' | 'invalid' | 'unsupported';
   detail: string | null;
   frozen: 'ok' | 'absent' | 'unreadable' | 'invalid';
+  /** next.json is not available although the frozen workflow declares downstream targets. */
+  canReload: boolean;
   suggestions: ResultsSuggestion[];
 }
 
@@ -116,7 +118,7 @@ function isFile(absolute: string | null): boolean {
   }
 }
 
-function targetState(workflow: string, workflows: readonly WorkflowEntry[]): TargetWorkflowState {
+export function targetState(workflow: string, workflows: readonly WorkflowEntry[]): TargetWorkflowState {
   const matches = workflows.filter((entry) => entry.id === workflow);
   if (matches.length === 0) return 'not-found';
   if (matches.length > 1) return 'duplicate';
@@ -127,7 +129,8 @@ function nextModel(input: ResultsInput): ResultsNext {
   const read = readNext(input.sessionDirPath);
   const frozen = readFrozenDownstream(input.sessionDirPath);
   const frozenState = frozen.kind;
-  const base = { frozen: frozenState, suggestions: [] };
+  const isDeclaring = frozen.kind === 'ok' && frozen.downstream.length > 0;
+  const base = { frozen: frozenState, canReload: isDeclaring && read.kind !== 'ok', suggestions: [] };
   switch (read.kind) {
     case 'missing':
       return { ...base, state: 'missing', detail: null };
@@ -199,7 +202,7 @@ function unavailable(sessionId: string): ResultsModel {
     workflowId: null,
     completedAt: null,
     outputs: { rows: [], directoryError: null },
-    next: { state: 'missing', detail: null, frozen: 'absent', suggestions: [] },
+    next: { state: 'missing', detail: null, frozen: 'absent', canReload: false, suggestions: [] },
     source: null,
     children: [],
   };

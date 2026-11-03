@@ -10,12 +10,13 @@ import { registerControlCommands } from './vscode/commands/controlCommands';
 import { registerProjectCommands } from './vscode/commands/projectCommands';
 import { registerQuestionCommands } from './vscode/commands/questionCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
-import { registerSessionCommands } from './vscode/commands/sessionCommands';
+import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
 import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
+import { NextStepPanels } from './vscode/nextStep/panels';
 import { ProjectRegistry } from './vscode/projects';
 import { QuestionNotifier } from './vscode/questionNotifier';
 import { AnswerPanels } from './vscode/questions/panels';
@@ -41,6 +42,7 @@ export interface MigentApi {
   logs: LogChannels;
   statusBar: StatusBar;
   results: ResultsPanels;
+  nextStep: NextStepPanels;
   answers: AnswerPanels;
   submitter: AnswerSubmitter;
   /** Resolves after the first project load, which runs after `activate()` returned. */
@@ -63,6 +65,30 @@ function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, on
       if (change.type !== 'files' && change.type !== 'capability') liveness.update();
     }),
   ];
+}
+
+/** Next step pages, and the Results actions that open them. */
+function createNextStep(
+  deps: { registry: ProjectRegistry; control: ControlService; results: ResultsPanels },
+  context: vscode.ExtensionContext,
+): { nextStep: NextStepPanels; host: CommandHost } {
+  const { registry, control, results } = deps;
+  const nextStep = new NextStepPanels(
+    registry,
+    { control, results, memento: context.workspaceState },
+    context.extensionUri,
+  );
+  results.setActions({
+    openNextStep: (identity, workflow) => {
+      nextStep.open({ ...identity, workflow });
+    },
+    reloadSuggestions: async (project, snapshot) => {
+      await control.regenerateNext(project, snapshot);
+    },
+  });
+  // Header actions keep targeting the source session from a Results panel or a Next step page.
+  const host = { registry, active: { activeTarget: () => results.activeTarget() ?? nextStep.activeTarget() } };
+  return { nextStep, host };
 }
 
 /** Unresolved question submissions live in extension storage so they survive a reload. */
@@ -96,7 +122,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const statusBar = new StatusBar(registry);
   const results = new ResultsPanels(registry, context.extensionUri);
   const { answers, submitter } = createAnswers(registry, control, context);
-  const host = { registry, active: results };
+  const { nextStep, host } = createNextStep({ registry, control, results }, context);
   context.subscriptions.push(
     registry,
     capability,
@@ -113,6 +139,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    nextStep,
     answers,
     new QuestionNotifier(registry),
     ...livenessSubscriptions(liveness, registry, () => {
@@ -123,7 +150,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
       registry.refresh();
     }),
     ...registerSessionCommands(host),
-    ...registerResultsCommands(host, results),
+    ...registerResultsCommands(host, results, nextStep),
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
@@ -150,6 +177,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    nextStep,
     answers,
     submitter,
     ready,

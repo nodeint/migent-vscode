@@ -6,6 +6,8 @@ import {
   DEFAULT_RUN_SETTINGS,
   parsePrepared,
   prepareArgs,
+  regenerateNextArgs,
+  runDownstreamArgs,
   runNewArgs,
   runPreparedArgs,
 } from './controlArgs';
@@ -42,6 +44,20 @@ describe('control argv builders', () => {
       'session', 'prepare', 'My title', '--workflow', 'plan',
     ]);
     expect(cancelArgs('s')).toEqual(['session', 'cancel', 's', '--json']);
+  });
+
+  it('builds downstream run and prepare arguments with the prior as its own value', () => {
+    const task = 'Ship "it" — ca sĩ';
+    expect(runDownstreamArgs({ workflowId: 'impl', priorSessionId: 'src', task: null }, DEFAULT_RUN_SETTINGS)).toEqual([
+      'session', 'run', '--workflow', 'impl', '--prior', 'src', '--max-dispatches', '20', '--progress',
+    ]);
+    const withTask = runDownstreamArgs({ workflowId: 'impl', priorSessionId: 'src', task }, DEFAULT_RUN_SETTINGS);
+    expect(withTask.slice(0, 8)).toEqual(['session', 'run', '--workflow', 'impl', '--prior', 'src', '--task', task]);
+    expect(prepareArgs({ title: 'T', workflowId: 'impl', priorSessionId: 'src' })).toEqual([
+      'session', 'prepare', 'T', '--workflow', 'impl', '--prior', 'src',
+    ]);
+    expect(prepareArgs({ title: 'T', workflowId: 'impl' })).not.toContain('--prior');
+    expect(regenerateNextArgs('src')).toEqual(['session', 'continue', 'src']);
   });
 });
 
