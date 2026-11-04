@@ -1,7 +1,7 @@
 # Webview UI
 
 This page defines how Migent webview pages are built: the shared page foundation, the design vocabulary and the
-rules every page keeps. Results is the only page on the foundation today; see [Not shared yet](#not-shared-yet).
+rules every page keeps. Results and Session Metrics are on the foundation today; see [Not shared yet](#not-shared-yet).
 For module ownership see [Architecture](architecture.md); for how to verify UI changes see [Testing](testing.md).
 
 ## Page architecture
@@ -41,7 +41,7 @@ The helper never takes HTML fragments or user data, so a page cannot weaken the 
 | `el(tag, text, className)` | Create an element; `text` goes in with `textContent` |
 | `section(title, className)` | A `<section>` with an `<h2>` |
 | `connect({ render })` | Own the VS Code API handle, the revision guard, `setState` and the `ready` handshake. Returns `{ send }`; `send(intent)` adds the current revision |
-| `details(key, summary, className)` | A `<details>` whose open state survives a model re-render, keyed by `key` and held in memory only |
+| `details(key, summary, className, isOpenByDefault)` | A `<details>` whose open state survives a model re-render, keyed by `key` and held in memory only. It starts closed unless `isOpenByDefault` is true and the reader has not toggled it |
 | `menuButton({ label, ariaLabel, items })` | A menu button; `items` is a list of `{ label, onSelect }` |
 
 A model update rebuilds the page. State that must survive it (open `details`) is kept by the helper; an open menu
@@ -58,6 +58,7 @@ each with a fallback; never hard-code a color.
 | Tone: `--mg-ok`, `--mg-warn`, `--mg-error`, `--mg-info` | `testing.iconPassed`, `editorWarning.foreground`, `errorForeground`, `descriptionForeground` |
 | Surface: `--mg-surface`, `--mg-hover`, `--mg-border` | `editorWidget.background`, `list.hoverBackground`, `panelSection.border` |
 | Focus: `--mg-focus` | `focusBorder` |
+| Bar: `--mg-bar` | `progressBar.background`, then `textLink.foreground` |
 | Spacing: `--mg-space-1` to `--mg-space-5` | 4, 8, 12, 16 and 24 px |
 | Type: `--mg-font`, `--mg-font-size`, `--mg-mono` | The editor and UI fonts |
 
@@ -78,6 +79,10 @@ each with a fallback; never hard-code a color.
 Choose by purpose: a **row** lists many similar items, a **card** offers an action with context, a **pill** tags,
 the **status indicator** reports state, and **details** hold what a reader needs only sometimes. A problem the reader
 must notice (a warning, an error, a reload action) stays visible outside any details control.
+
+A bar (`<progress>`) is decorative: it uses `--mg-bar`, is hidden from assistive technology and always sits beside its
+numeric value, so a value is never conveyed by length or color alone. Size a bar through properties (`max`, `value`),
+never an inline `style` attribute.
 
 ## Layout and states
 
@@ -108,6 +113,13 @@ themes. The page script is not driven by automated tests; record the manual pass
 3. Define the model in `src/core` as inert JSON and validate every message in `src/core` before the host acts on it.
 4. Reuse the components above. Add a new component to `base.css` only when two pages need it, and document it here.
 5. Add the manual checks above to the pull request.
+
+## Pages on the foundation
+
+| Page | Assets | Notes |
+| :--- | :--- | :--- |
+| Results | [media/results](../media/results) | Header actions, outputs, next-step suggestions, child sessions |
+| Session Metrics | [media/sessionmetrics](../media/sessionmetrics) | Read-only metrics of one completed session: header, partial-cost warning, summary, stages, usage, executions (one expandable row each, the last open), details. `missing`, `invalid` and `unreadable` files get an explanation instead of zeros; a skipped execution shows its reason and no token or cost story. Reached from the Results **Metrics** button and the Sessions context menu, never from the Command Palette |
 
 ## Not shared yet
 

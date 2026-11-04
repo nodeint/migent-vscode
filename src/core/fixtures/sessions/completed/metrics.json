@@ -1,0 +1,155 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "workflow_id": "plan",
+  "status": "completed",
+  "created_at": "2026-10-26T09:00:00.000+00:00",
+  "updated_at": "2026-10-26T09:20:00.000+00:00",
+  "totals": {
+    "executions": 2,
+    "skipped": 0,
+    "wall_seconds": 1200,
+    "active_seconds": 1200,
+    "verify_seconds": 0,
+    "turns": 2,
+    "uncaptured_turns": 0,
+    "usage": {
+      "input_tokens": 300,
+      "output_tokens": 10,
+      "reasoning_tokens": null,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.5
+    },
+    "usage_missing": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 1
+    },
+    "cost_partial": true,
+    "failed_executions": 0,
+    "blocked": 0,
+    "cancelled": 0,
+    "verify_red": 0,
+    "revisions": 1,
+    "revisions_reset": 0
+  },
+  "stages": {
+    "plan": {
+      "executions": 1,
+      "skipped": 0,
+      "revisions": 1,
+      "failed": 0,
+      "blocked": 0
+    },
+    "review_plan": {
+      "executions": 1,
+      "skipped": 0,
+      "revisions": 0,
+      "failed": 0,
+      "blocked": 0
+    }
+  },
+  "executions": [
+    {
+      "execution_id": "0001-plan--attempt-01",
+      "execution_order": 1,
+      "stage_id": "plan",
+      "stage_attempt": 1,
+      "role": "planner",
+      "provider": "claude",
+      "model": "opus",
+      "cli_version": "9.9.9 (Test CLI)",
+      "argv": [
+        "claude",
+        "-C",
+        "D:\\secret\\project",
+        "--session-id",
+        "agent-secret"
+      ],
+      "agent_id": "agent-secret",
+      "resumes_execution_id": null,
+      "routed_from": null,
+      "git_head": "0123456789abcdef",
+      "git_dirty": true,
+      "status": "completed",
+      "outcome_status": "complete",
+      "decision": null,
+      "created_at": "2026-10-26T09:00:00.000+00:00",
+      "completed_at": "2026-10-26T09:10:00.000+00:00",
+      "wall_seconds": 600,
+      "verify_seconds": 0,
+      "turns": 1,
+      "uncaptured_turns": 0,
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "reasoning_tokens": null,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.5
+      },
+      "usage_missing": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0
+      },
+      "verify": null,
+      "skip": null
+    },
+    {
+      "execution_id": "0002-review_plan--attempt-01",
+      "execution_order": 2,
+      "stage_id": "review_plan",
+      "stage_attempt": 1,
+      "role": "reviewer",
+      "provider": "codex",
+      "model": "gpt-test",
+      "cli_version": "9.9.9 (Test CLI)",
+      "argv": [
+        "codex",
+        "-C",
+        "D:\\secret\\project",
+        "--session-id",
+        "agent-secret"
+      ],
+      "agent_id": "agent-secret",
+      "resumes_execution_id": null,
+      "routed_from": null,
+      "git_head": "0123456789abcdef",
+      "git_dirty": true,
+      "status": "completed",
+      "outcome_status": "complete",
+      "decision": "approved",
+      "created_at": "2026-10-26T09:10:00.000+00:00",
+      "completed_at": "2026-10-26T09:20:00.000+00:00",
+      "wall_seconds": 600,
+      "verify_seconds": 0,
+      "turns": 1,
+      "uncaptured_turns": 0,
+      "usage": {
+        "input_tokens": 200,
+        "output_tokens": 10,
+        "reasoning_tokens": null,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": null
+      },
+      "usage_missing": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 1
+      },
+      "verify": null,
+      "skip": null
+    }
+  ]
+}

@@ -54,10 +54,13 @@
   // Open/closed state of <details>, kept in memory so a model re-render does not collapse them.
   const detailsOpen = new Map();
 
-  /** A collapsible block (<details>/<summary>) that stays as the user left it across re-renders. */
-  function details(key, summaryText, className) {
+  /**
+   * A collapsible block (<details>/<summary>) that stays as the user left it across re-renders.
+   * It starts closed unless `isOpenByDefault` is true and the reader has not toggled it yet.
+   */
+  function details(key, summaryText, className, isOpenByDefault) {
     const node = el('details', null, 'mg-details' + (className ? ' ' + className : ''));
-    node.open = detailsOpen.get(key) === true;
+    node.open = detailsOpen.has(key) ? detailsOpen.get(key) === true : isOpenByDefault === true;
     node.append(el('summary', summaryText));
     node.addEventListener('toggle', () => detailsOpen.set(key, node.open));
     return node;

@@ -9,6 +9,7 @@ import { runNextStepScenarios } from './nextStep.integration.test';
 import { runQuestionScenarios } from './questions.integration.test';
 import { runReplyScenarios } from './reply.integration.test';
 import { runResultsScenarios } from './results.integration.test';
+import { runSessionMetricsScenarios } from './sessionMetrics.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runStatusBarScenarios } from './statusBar.integration.test';
 import { runTimelineScenarios } from './timeline.integration.test';
@@ -33,6 +34,7 @@ export async function run(): Promise<void> {
         runTimelineScenarios,
         runStatusBarScenarios,
         runResultsScenarios,
+        runSessionMetricsScenarios,
         runControlScenarios,
         runNextStepScenarios,
         runQuestionScenarios,

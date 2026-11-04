@@ -51,13 +51,14 @@ function isIdentity(value: unknown): value is Identity {
  * Header actions and the existing session command each one runs. The command always receives the panel's
  * own `{ project, sessionId }`, so it never falls back to the active panel or a picker.
  */
-const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
+export const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
   openResult: 'migent.session.openOutput',
   openTask: 'migent.session.openTask',
   showLog: 'migent.session.showLog',
   copyId: 'migent.session.copyId',
   revealInExplorer: 'migent.session.revealInExplorer',
   openQuestions: 'migent.session.openQuestions',
+  openMetrics: 'migent.session.openMetrics',
 };
 
 /** Actions the overview delegates to the Next step feature; set once by the extension. */

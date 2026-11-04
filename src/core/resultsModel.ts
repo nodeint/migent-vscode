@@ -110,7 +110,7 @@ function outputKey(row: { name: string | null; path: string }): string {
   return row.name === null ? `path:${row.path}` : `name:${row.name}`;
 }
 
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -210,7 +210,7 @@ function sourceModel(input: ResultsInput, snapshot: SessionSnapshot): ResultsSou
   };
 }
 
-function durationOf(snapshot: SessionSnapshot): number | null {
+export function durationOf(snapshot: SessionSnapshot): number | null {
   if (snapshot.displayState.state !== 'completed') return null;
   const created = Date.parse(snapshot.status?.createdAt ?? '');
   const updated = Date.parse(snapshot.status?.updatedAt ?? '');

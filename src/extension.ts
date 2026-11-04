@@ -12,6 +12,7 @@ import { registerQuestionCommands } from './vscode/commands/questionCommands';
 import { registerReplyCommands } from './vscode/commands/replyCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
+import { registerSessionMetricsCommands } from './vscode/commands/sessionMetricsCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
@@ -24,6 +25,7 @@ import { QuestionNotifier } from './vscode/questionNotifier';
 import { AnswerPanels } from './vscode/questions/panels';
 import { ReplyService } from './vscode/reply';
 import { ResultsPanels } from './vscode/results/panels';
+import { SessionMetricsPanels } from './vscode/sessionMetrics/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
@@ -45,12 +47,24 @@ export interface MigentApi {
   logs: LogChannels;
   statusBar: StatusBar;
   results: ResultsPanels;
+  sessionMetrics: SessionMetricsPanels;
   nextStep: NextStepPanels;
   answers: AnswerPanels;
   submitter: AnswerSubmitter;
   replies: ReplyService;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
+}
+
+/** The Results overview and the Session Metrics page: two read-only pages of one session. */
+function createResultsPages(
+  registry: ProjectRegistry,
+  extensionUri: vscode.Uri,
+): { results: ResultsPanels; sessionMetrics: SessionMetricsPanels } {
+  return {
+    results: new ResultsPanels(registry, extensionUri),
+    sessionMetrics: new SessionMetricsPanels(registry, extensionUri),
+  };
 }
 
 /** Drive the single liveness timer and the views that follow it. */
@@ -135,7 +149,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
   const statusBar = new StatusBar(registry);
-  const results = new ResultsPanels(registry, context.extensionUri);
+  const { results, sessionMetrics } = createResultsPages(registry, context.extensionUri);
   const { answers, submitter, replies } = createAnswers(registry, control, context);
   const { nextStep, host } = createNextStep({ registry, control, results }, context);
   context.subscriptions.push(
@@ -154,6 +168,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    sessionMetrics,
     nextStep,
     answers,
     new QuestionNotifier(registry),
@@ -165,6 +180,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     vscode.commands.registerCommand('migent.refresh', () => registry.refresh()),
     ...registerSessionCommands(host, control.gate),
     ...registerResultsCommands(host, results, nextStep),
+    ...registerSessionMetricsCommands(host, sessionMetrics),
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
@@ -186,6 +202,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     results,
+    sessionMetrics,
     nextStep,
     answers,
     submitter,

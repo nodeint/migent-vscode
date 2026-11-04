@@ -22,6 +22,7 @@
   "activationEvents": [
     "workspaceContains:.migent/config.yaml",
     "onWebviewPanel:migent.results",
+    "onWebviewPanel:migent.sessionMetrics",
     "onWebviewPanel:migent.nextStep",
     "onWebviewPanel:migent.answerQuestions"
   ],
@@ -41,6 +42,12 @@
         "title": "Open Result",
         "category": "Migent",
         "icon": "$(book)"
+      },
+      {
+        "command": "migent.session.openMetrics",
+        "title": "Open Metrics",
+        "category": "Migent",
+        "icon": "$(graph)"
       },
       {
         "command": "migent.session.openNextStep",
@@ -445,6 +452,11 @@
           "group": "1_open@3"
         },
         {
+          "command": "migent.session.openMetrics",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.completed/",
+          "group": "1_open@6"
+        },
+        {
           "command": "migent.session.openPrompt",
           "when": "view == migent.sessions && viewItem =~ /^execution./",
           "group": "1_open@1"
@@ -532,6 +544,10 @@
         },
         {
           "command": "migent.session.openResult",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openMetrics",
           "when": "false"
         },
         {
