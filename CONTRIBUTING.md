@@ -145,10 +145,11 @@ approval; do not force-push or bypass branch protection.
 
 ## Releasing
 
-The tag-triggered `.github/workflows/release.yml` publishes the same tested
-VSIX to VS Code Marketplace, Open VSX, and GitHub Releases. It validates the
-tag, runs the reusable CI workflow on Windows and Ubuntu, and publishes from
-the Ubuntu artifact. `main` advances only after publication is verified.
+The tag-triggered `.github/workflows/release.yml` publishes the VSIX
+to VS Code Marketplace, Open VSX, and GitHub Releases. It validates the tag,
+then builds and packages the VSIX without rerunning tests; the release PR's CI
+on Windows and Ubuntu is the test gate. `main` advances only after publication
+is verified.
 
 ### One-time maintainer setup
 
@@ -212,9 +213,9 @@ git push origin refs/tags/vX.Y.Z:refs/tags/vX.Y.Z
 ```
 
 The workflow accepts stable `vX.Y.Z` tags only and rejects tags outside next,
-version mismatches, missing notes, and unexpected extension identity. It runs
-the complete CI matrix before the environment-gated publishing job. Approve
-that job when ready. It publishes the tested artifact to Marketplace, then
+version mismatches, missing notes, and unexpected extension identity. It does
+not rerun tests; confirm the release PR's CI passed before tagging. Approve the
+environment-gated publishing job when ready. It builds and publishes the VSIX to Marketplace, then
 Open VSX, then creates the GitHub Release using the matching changelog section.
 Keep tag references immutable and do not tag an unmerged branch.
 

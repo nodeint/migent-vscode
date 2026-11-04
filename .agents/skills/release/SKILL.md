@@ -69,8 +69,8 @@ gh release view vX.Y.Z
 Pushing the tag starts publication after the environment approval gate.
 If no run is listed, wait 30 seconds and retry, at most five times.
 The workflow validates next ancestry, version, and nonempty release notes;
-runs CI on Windows/Linux; publishes the tested Ubuntu VSIX through OIDC to
-both registries; then creates the GitHub Release with that VSIX.
+builds the VSIX without rerunning tests (the release PR's CI is the gate);
+publishes it through OIDC to both registries; then creates the GitHub Release with that VSIX.
 
 Report success only when the workflow concludes success. On failure, leave
 main and the tag unchanged and report completed external steps. Follow
