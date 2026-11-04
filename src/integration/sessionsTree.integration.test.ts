@@ -349,8 +349,8 @@ const scenarios: Scenario[] = [
       await createProject(env);
       assert.deepEqual(labelsOf(env, children(env)), ['No sessions yet']);
 
-      const configuration = vscode.workspace.getConfiguration('migent');
-      await configuration.update('sessions.limit', 1, vscode.ConfigurationTarget.Workspace);
+      const configuration = vscode.workspace.getConfiguration('migent', vscode.Uri.file(root));
+      await configuration.update('sessions.limit', 1, vscode.ConfigurationTarget.WorkspaceFolder);
       try {
         fs.rmSync(path.join(root, '.migent'), { recursive: true, force: true });
         await waitFor('project removed', () => env.project() === undefined);
@@ -366,7 +366,7 @@ const scenarios: Scenario[] = [
         await vscode.commands.executeCommand(more.view.command!.command, ...more.view.command!.arguments);
         assert.equal(project.store.hiddenCount, 1, 'limit raised by migent.sessions.limit');
       } finally {
-        await configuration.update('sessions.limit', undefined, vscode.ConfigurationTarget.Workspace);
+        await configuration.update('sessions.limit', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
       }
     },
   },

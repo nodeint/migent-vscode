@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { recordFailure } from './failureReport';
+import { openScenarioFolder } from './harness';
 
 type Kind = 'create' | 'change' | 'delete';
 type Names = string[] | '*';
@@ -133,11 +134,6 @@ async function expectQuiet(failures: string[], rec: Recorder, name: string, labe
   if (seenAny(rec, name)) {
     failures.push(`${label}: unexpected event for ${name}`);
   }
-}
-
-function resetMigent(root: string): Promise<void> {
-  fs.rmSync(path.join(root, '.migent'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  return sleep(SETTLE_MS);
 }
 
 function sessionDir(root: string): string {
@@ -360,13 +356,9 @@ function assertProbeEnvironment(root: string): void {
   if (!isExclude()) {
     return;
   }
-  const exclude = vscode.workspace.getConfiguration('files').get<Record<string, boolean>>('watcherExclude') ?? {};
+  const exclude = vscode.workspace.getConfiguration('files', vscode.Uri.file(root)).get<Record<string, boolean>>('watcherExclude') ?? {};
   if (exclude['**/.migent/**'] !== true) {
     throw new Error('files.watcherExclude does not contain "**/.migent/**"; the probe would be meaningless');
-  }
-  const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!folder || path.resolve(folder).toLowerCase() !== path.resolve(root).toLowerCase()) {
-    throw new Error(`workspace folder ${String(folder)} does not match fixture workspace ${root}`);
   }
 }
 
@@ -384,22 +376,23 @@ function report(results: CaseResult[]): void {
   fs.writeFileSync(path.join(outDir, `probe-report-${label}${isExclude() ? '-exclude' : ''}.json`), JSON.stringify(results, null, 2));
 }
 
-/** Run every VS Code watcher probe; returns the number of failed cases. */
+/** Run every VS Code watcher probe, each in its own workspace folder; returns the number of failed cases. */
 export async function runWatcherProbe(): Promise<number> {
-  const root = process.env.MIGENT_IT_WORKSPACE;
-  if (!root) {
-    throw new Error('MIGENT_IT_WORKSPACE is not set; run through scripts/integration/run.mjs');
-  }
-  assertProbeEnvironment(root);
   const results: CaseResult[] = [];
   for (const probe of cases) {
-    await resetMigent(root);
+    const folder = await openScenarioFolder();
     const notes: string[] = [];
     let failures: string[];
     try {
-      failures = await probe.run({ root, notes, watch: watchWithVscode });
+      assertProbeEnvironment(folder.root);
+      failures = await probe.run({ root: folder.root, notes, watch: watchWithVscode });
     } catch (error) {
       failures = [`threw ${String(error)}`];
+    }
+    try {
+      await folder.dispose();
+    } catch (error) {
+      failures.push(`cleanup: ${String(error)}`);
     }
     const detail = [...(failures.length > 0 ? failures : ['ok']), ...notes].join('; ');
     results.push({
@@ -411,7 +404,6 @@ export async function runWatcherProbe(): Promise<number> {
       detail,
     });
   }
-  await resetMigent(root);
   report(results);
   if (!isExclude()) {
     for (const result of results.filter((item) => !item.ok)) {
