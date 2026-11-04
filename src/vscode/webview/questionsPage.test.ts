@@ -261,7 +261,7 @@ describe('Questions page', () => {
     });
     page.deliver(2, model(2, { draft: {} }));
     expect(page.byId('q1A').checked).toBe(true);
-    expect(page.byId('counter').textContent).toBe('1/2 answered');
+    expect(page.byId('jump-1').className).toContain('q-jump--done');
   });
 
   it('shows the shared session header with Questions, Results and Metrics tabs', () => {
@@ -283,10 +283,17 @@ describe('Questions page', () => {
       expect.stringMatching(/ ago$/),
       '3 pending',
     ]);
-    expect(page.byId('counter').textContent).toBe('0/2 answered');
-    expect(page.doc.root.descendants().some((node) => node.textContent === 'Recorded')).toBe(false);
-    page.deliver(2, model(2, { state: 'recorded', editable: false, canSubmit: false }));
-    expect(page.doc.root.descendants().some((node) => node.textContent === 'Recorded')).toBe(true);
+    const banners = (): string[] =>
+      page.doc.root
+        .descendants()
+        .filter((node) => node.className.startsWith('mg-banner '))
+        .map((node) => node.className);
+    expect(banners()).toEqual([]);
+    page.deliver(2, model(2, { state: 'recorded', message: 'Answers recorded.', editable: false, canSubmit: false }));
+    expect(banners()).toEqual(['mg-banner mg-banner--ok']);
+    // Once the answers are sent the page is a record: no jump chips and no footer.
+    expect(page.doc.root.descendants().some((node) => node.className === 'q-jumps')).toBe(false);
+    expect(page.doc.root.querySelector('footer')).toBeNull();
     // The session facts do not depend on the page's own state.
     const again = page.doc.root.descendants().filter((node) => node.className.includes('mg-meta-item'));
     expect(again.map((fact) => fact.textContent)).toEqual(facts.map((fact) => fact.textContent));

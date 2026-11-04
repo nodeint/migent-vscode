@@ -82,8 +82,8 @@
   }
 
   function banner(isError) {
-    const node = el('div', null, 'metrics-banner' + (isError ? ' metrics-banner--error' : ''));
-    const mark = el('span', null, isError ? 'mg-error' : 'mg-warn');
+    const node = el('div', null, 'mg-banner mg-banner--' + (isError ? 'error' : 'warn'));
+    const mark = el('span', null, 'mg-banner__icon');
     mark.append(icon(isError ? 'error' : 'warning'));
     const body = el('div');
     node.append(mark, body);

@@ -6,21 +6,20 @@
   const { el, details, connect, trackFooter, sessionHeader, icon } = window.MigentPage;
   const root = document.getElementById('root');
   const CONTEXT_CLAMP_LENGTH = 240;
-  const WARN_STATES = ['rejected', 'unconfirmed', 'stale', 'answered-elsewhere', 'unavailable', 'recorded-waiting'];
-  // Icon, tone and text per state. Icons and tones are the session vocabulary (MigentPage.sessionStates): waiting
-  // for the user is the yellow question bubble, work in progress the blue sync, recorded the green check.
-  const STATES = {
-    editing: { icon: 'comment-discussion', tone: 'warn', text: 'Answering' },
-    sending: { icon: 'sync', tone: 'info', spin: true, text: 'Sending' },
-    recorded: { icon: 'pass', tone: 'ok', text: 'Recorded' },
-    continuing: { icon: 'sync', tone: 'info', spin: true, text: 'Continuing' },
-    'recorded-waiting': { icon: 'warning', tone: 'warn', text: 'Recorded, not continued' },
-    rejected: { icon: 'error', tone: 'error', text: 'Rejected' },
-    unconfirmed: { icon: 'warning', tone: 'warn', text: 'Not confirmed' },
-    stale: { icon: 'warning', tone: 'warn', text: 'Out of date' },
-    'answered-elsewhere': { icon: 'warning', tone: 'warn', text: 'Answered elsewhere' },
-    unavailable: { icon: 'error', tone: 'error', text: 'Unavailable' },
+  // The tone of the banner for the batch's state. Anything else is plain information.
+  const BANNER_TONES = {
+    recorded: 'ok',
+    continuing: 'ok',
+    rejected: 'error',
+    unavailable: 'error',
+    unconfirmed: 'warn',
+    stale: 'warn',
+    'answered-elsewhere': 'warn',
+    'recorded-waiting': 'warn',
   };
+  const BANNER_ICONS = { ok: 'pass', info: 'info', warn: 'warning', error: 'error' };
+  // Shown while the batch can still be answered or is being sent; afterwards the banner says what happened.
+  const ANSWERING_STATES = ['editing', 'rejected', 'sending'];
   let model = null;
   // Context blocks the reader expanded; kept across re-renders.
   const expandedContext = new Set();
@@ -43,7 +42,7 @@
     updateChrome();
   }
 
-  // Live counter only; the host revalidates and decides whether Send is allowed.
+  // Live completeness only; the host revalidates and decides whether Send is allowed.
   function completeness() {
     return model.questions.map((q) => {
       const d = draftOf(q.id);
@@ -58,13 +57,6 @@
   function updateChrome() {
     const done = completeness();
     const count = done.filter(Boolean).length;
-    const counter = document.getElementById('counter');
-    if (counter) counter.textContent = counterText();
-    const bar = document.getElementById('progress-bar');
-    if (bar) {
-      bar.max = model.questions.length;
-      bar.value = count;
-    }
     model.questions.forEach((q, index) => {
       const jump = document.getElementById('jump-' + q.id);
       if (jump) {
@@ -74,16 +66,23 @@
       }
       const chip = document.getElementById('qs-' + q.id);
       if (chip) {
-        chip.replaceChildren(icon(done[index] ? 'pass' : 'circle'), done[index] ? 'Answered' : 'Unanswered');
-        chip.className = 'q-state mg-status mg-status--' + (done[index] ? 'ok' : 'muted');
+        const isRecorded = isRecordedCard(q);
+        const isDone = isRecorded || done[index];
+        chip.replaceChildren(icon(isDone ? 'pass' : 'circle'), isRecorded ? 'Sent' : isDone ? 'Answered' : 'Not answered');
+        chip.className = 'q-state mg-status mg-status--' + (isDone ? 'ok' : 'muted');
       }
     });
     const submitButton = document.getElementById('submit');
-    if (submitButton) {
+    if (submitButton && model.state !== 'sending') {
       submitButton.disabled = !canSend(count);
       const left = model.questions.length - count;
-      submitButton.textContent = left > 0 ? 'Submit & continue (' + left + ' left)' : 'Submit & continue session';
+      submitButton.textContent = left > 0 ? 'Send answers · ' + left + ' left' : 'Send answers';
     }
+  }
+
+  // Once the answers are recorded the card is a read-only record: the question and what was recorded.
+  function isRecordedCard(q) {
+    return !model.editable && Boolean(model.recorded) && model.recorded[q.id] !== undefined;
   }
 
   function optionRow(q, option) {
@@ -129,7 +128,7 @@
     ctx.id = 'ctx-' + q.id;
     wrapper.append(ctx);
     if (isLong) {
-      const toggle = el('button', isOpen ? 'Show less context' : 'Show more context', 'mg-btn mg-btn--link');
+      const toggle = el('button', isOpen ? 'Show less' : 'Show more', 'mg-btn mg-btn--link');
       toggle.id = 'ctxbtn-' + q.id;
       toggle.type = 'button';
       toggle.setAttribute('aria-controls', ctx.id);
@@ -139,7 +138,7 @@
         else expandedContext.add(q.id);
         const open = expandedContext.has(q.id);
         ctx.classList.toggle('q-context--clamped', !open);
-        toggle.textContent = open ? 'Show less context' : 'Show more context';
+        toggle.textContent = open ? 'Show less' : 'Show more';
         toggle.setAttribute('aria-expanded', String(open));
       });
       wrapper.append(toggle);
@@ -177,13 +176,19 @@
     box.setAttribute('role', 'group');
     box.setAttribute('aria-labelledby', 'qt-' + q.id);
     const top = el('div', null, 'q-top');
-    top.append(el('span', 'Question ' + q.id + ' · ' + (q.selection === 'single' ? 'Choose one' : 'Choose one or more'), 'q-eyebrow'));
+    top.append(el('span', 'Question ' + q.id + ' of ' + model.questions.length + ' · ' + (q.selection === 'single' ? 'Pick one' : 'Pick one or more'), 'q-eyebrow'));
     const state = el('span', null, 'q-state mg-status mg-status--muted');
     state.id = 'qs-' + q.id;
     top.append(state);
     const title = el('h2', q.question, 'q-title');
     title.id = 'qt-' + q.id;
     box.append(top, title);
+    if (isRecordedCard(q)) {
+      const recorded = el('div', null, 'q-recorded');
+      recorded.append(icon('pass'), ' ' + model.recorded[q.id]);
+      box.append(recorded);
+      return box;
+    }
     if (q.context) box.append(contextBlock(q));
     const options = el('div', null, 'q-options');
     for (const option of q.options) options.append(optionRow(q, option));
@@ -192,7 +197,7 @@
     if (d.mode === 'text') {
       const area = el('textarea', null, 'mg-input q-text');
       area.id = 'text' + q.id;
-      area.placeholder = 'Write your answer';
+      area.placeholder = 'Type your own answer';
       area.setAttribute('aria-label', 'Your answer to question ' + q.id);
       area.disabled = !model.editable;
       area.value = d.text;
@@ -213,7 +218,7 @@
       box.append(area);
       if (model.ambiguous.includes(q.id)) {
         const warning = el('p', null, 'mg-alert mg-warn');
-        warning.append(icon('warning'), ' This text equals an option letter, so the CLI will read it as that option.');
+        warning.append(icon('warning'), ' This answer is just an option letter, so it will be read as that option. Add a word to make it your own answer.');
         warning.setAttribute('role', 'status');
         box.append(warning);
       }
@@ -224,11 +229,6 @@
       box.append(recorded);
     }
     return box;
-  }
-
-  function counterText() {
-    const count = completeness().filter(Boolean).length;
-    return count + '/' + model.questions.length + ' answered';
   }
 
   function header() {
@@ -247,46 +247,35 @@
     });
   }
 
+  // The state message and block reason, as one banner whose tone follows the batch state. Sending has its own sign
+  // of life on the button, so it gets no banner.
   function note() {
-    if (!model.message && !model.blockReason) return null;
-    const isWarning = WARN_STATES.includes(model.state);
-    const node = el('p', model.message || model.blockReason, 'mg-alert' + (isWarning ? ' mg-warn' : ''));
+    if (model.state === 'sending' || (!model.message && !model.blockReason)) return null;
+    const tone = BANNER_TONES[model.state] || 'info';
+    const node = el('div', null, 'mg-banner mg-banner--' + tone);
     node.setAttribute('role', 'status');
-    if (model.message && model.blockReason && model.editable) node.append(el('div', model.blockReason));
+    const mark = el('span', null, 'mg-banner__icon');
+    mark.append(icon(BANNER_ICONS[tone]));
+    const body = el('div');
+    if (model.message) body.append(el('p', model.message));
+    if (model.blockReason && (model.editable || !model.message)) body.append(el('p', model.blockReason, model.message ? 'mg-muted' : ''));
+    node.append(mark, body);
     return node;
   }
 
-  // The batch's own state is the page's, not the session's: progress, and the state once it is not Answering.
-  function progressChip() {
-    const known = STATES[model.state] || { icon: 'question', tone: 'muted', text: model.state };
-    const chip = el('span', null, 'q-progress');
-    const count = el('span', counterText());
-    count.id = 'counter';
-    const bar = el('progress', null, 'q-bar');
-    bar.id = 'progress-bar';
-    bar.setAttribute('aria-hidden', 'true');
-    chip.append(icon('checklist'), count, bar);
-    if (model.state !== 'editing') {
-      const state = el('span', null, 'mg-status mg-status--' + known.tone);
-      state.append(icon(known.icon, known.spin), el('span', known.text));
-      chip.append(state);
-    }
-    return chip;
-  }
-
+  // Jump chips while the batch can be answered; with the answers sent the page is a record, not a form.
   function jumps() {
+    if (!ANSWERING_STATES.includes(model.state)) return null;
     const nav = el('nav', null, 'q-jumps');
     nav.setAttribute('aria-label', 'Questions');
-    const chips = el('span', null, 'q-chips');
     for (const q of model.questions) {
       const jump = el('button', q.id, 'q-jump');
       jump.type = 'button';
       jump.id = 'jump-' + q.id;
       jump.title = q.question;
       jump.addEventListener('click', () => document.getElementById('card-' + q.id).scrollIntoView());
-      chips.append(jump);
+      nav.append(jump);
     }
-    nav.append(chips, progressChip());
     return nav;
   }
 
@@ -314,7 +303,7 @@
   }
 
   function archivedSection() {
-    const box = details('archived', 'Previous draft (read-only)');
+    const box = details('archived', 'Your previous draft (read-only)');
     box.querySelector('summary').id = 'archived-summary';
     for (const item of model.archived) {
       box.append(el('p', item.id + '. ' + item.question + ' — ' + (item.answer || 'no answer'), 'q-archived'));
@@ -331,20 +320,30 @@
       node.addEventListener('click', () => page.post({ type }));
       bar.append(node);
     };
-    if (model.state === 'stale') add('Load current questions', 'reload', 'primary');
-    if (model.state === 'unconfirmed') add('Recheck', 'recheck', 'primary');
-    if (model.state === 'recorded-waiting') add('Continue', 'continue', 'primary');
+    if (model.state === 'stale') add('Load the new questions', 'reload', 'primary');
+    if (model.state === 'unconfirmed') add('Check again', 'recheck', 'primary');
+    if (model.state === 'recorded-waiting') add('Continue the stage', 'continue', 'primary');
     if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add('View log', 'viewLog');
     if (model.editable || model.state === 'stale') add('Discard draft', 'discard');
     if (model.editable && model.state !== 'unconfirmed') {
-      const submitButton = el('button', 'Submit & continue session', 'mg-btn mg-btn--primary');
+      const submitButton = el('button', 'Send answers', 'mg-btn mg-btn--primary');
       submitButton.type = 'button';
       submitButton.id = 'submit';
       submitButton.disabled = true;
       submitButton.addEventListener('click', submit);
       bar.append(submitButton);
     }
-    return bar;
+    if (model.state === 'sending') {
+      // The send is in flight: the button stays where it was and says so, until the state moves on.
+      const sending = el('button', null, 'mg-btn mg-btn--primary');
+      sending.type = 'button';
+      sending.id = 'submit';
+      sending.disabled = true;
+      sending.setAttribute('aria-busy', 'true');
+      sending.append(icon('sync', true), ' Sending…');
+      bar.append(sending);
+    }
+    return bar.children.length > 0 ? bar : null;
   }
 
   function submit() {
@@ -362,10 +361,12 @@
     root.replaceChildren(header());
     const status = note();
     if (status) root.append(status);
-    root.append(jumps());
+    const strip = jumps();
+    if (strip) root.append(strip);
     for (const q of model.questions) root.append(question(q));
     if (model.archived) root.append(archivedSection());
-    root.append(footer());
+    const actions = footer();
+    if (actions) root.append(actions);
     updateChrome();
     watchView();
     const wanted = pendingFocus || focusId;

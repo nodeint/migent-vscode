@@ -463,6 +463,57 @@ button.mg-row:hover {
   overflow-wrap: anywhere;
 }
 
+/* Banner: a message about the page or the session, with an icon and a left edge in the tone of the message. */
+.mg-banner {
+  display: flex;
+  gap: var(--mg-space-2);
+  align-items: flex-start;
+  margin: 0 0 var(--mg-space-2);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  border: 1px solid var(--mg-border);
+  border-left: 3px solid var(--mg-info);
+  border-radius: var(--mg-radius);
+  background: var(--mg-surface);
+  overflow-wrap: anywhere;
+}
+
+.mg-banner--ok {
+  border-left-color: var(--mg-ok);
+}
+
+.mg-banner--warn {
+  border-left-color: var(--mg-warn);
+}
+
+.mg-banner--error {
+  border-left-color: var(--mg-error);
+}
+
+.mg-banner__icon {
+  flex: none;
+  color: var(--mg-info);
+}
+
+.mg-banner--ok .mg-banner__icon {
+  color: var(--mg-ok);
+}
+
+.mg-banner--warn .mg-banner__icon {
+  color: var(--mg-warn);
+}
+
+.mg-banner--error .mg-banner__icon {
+  color: var(--mg-error);
+}
+
+.mg-banner p {
+  margin: 0;
+}
+
+.mg-banner p + p {
+  margin-top: var(--mg-space-1);
+}
+
 /* Text field: a single-line input or a text area. */
 .mg-input {
   box-sizing: border-box;

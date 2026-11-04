@@ -9,43 +9,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--mg-space-2) var(--mg-space-4);
+  gap: var(--mg-space-1);
   margin: 0;
   padding: var(--mg-space-2) 0;
   background: var(--vscode-editor-background);
   border-bottom: 1px solid var(--mg-border);
-}
-
-.q-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--mg-space-1);
-}
-
-.q-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--mg-space-2);
-  color: var(--mg-muted);
-}
-
-.q-bar {
-  width: 96px;
-  height: 4px;
-  appearance: none;
-  border: 0;
-  border-radius: 2px;
-  background: var(--mg-border);
-  overflow: hidden;
-}
-
-.q-bar::-webkit-progress-bar {
-  background: var(--mg-border);
-}
-
-.q-bar::-webkit-progress-value {
-  background: var(--mg-ok);
 }
 
 .q-jump {
