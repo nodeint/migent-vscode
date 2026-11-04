@@ -9,6 +9,7 @@ alongside the HTML files.
 | Session controls, tasks, replies and notifications | [03-control-ui.html](./03-control-ui.html) |
 | Human question batches | [human-questions-ui.html](./human-questions-ui.html) |
 | Results suggestions and separate downstream Next step | [downstream-handoff-ui.html](./downstream-handoff-ui.html) |
+| Per-session metrics dashboard for a completed session | [session-metrics-ui.html](./session-metrics-ui.html) |
 
 These are interaction prototypes with sample data. They do not run Migent or read/write project session files.
 Browser storage emulates drafts and selected demo session state; YAML edits change in-memory sample content.

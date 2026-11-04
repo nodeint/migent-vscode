@@ -97,6 +97,73 @@ const completedEvents = events(
 );
 
 // --- completed -----------------------------------------------------------------
+// metrics.json as migent writes it for a completed workflow session. argv, agent_id, cli_version and the git
+// fields are machine-specific and must never reach the Session Metrics page; the fixture keeps them to prove it.
+const usage = (cost, input = 0) => ({ input_tokens: input, output_tokens: 10, reasoning_tokens: null, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: cost });
+const missing = (cost) => ({ input_tokens: 0, output_tokens: 0, reasoning_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: cost });
+const metricsExecution = (order, stage, attempt, role, provider, model, decision, cost) => ({
+  execution_id: `000${order}-${stage}--attempt-0${attempt}`,
+  execution_order: order,
+  stage_id: stage,
+  stage_attempt: attempt,
+  role,
+  provider,
+  model,
+  cli_version: "9.9.9 (Test CLI)",
+  argv: [provider, "-C", "D:\\secret\\project", "--session-id", "agent-secret"],
+  agent_id: "agent-secret",
+  resumes_execution_id: null,
+  routed_from: null,
+  git_head: "0123456789abcdef",
+  git_dirty: true,
+  status: "completed",
+  outcome_status: "complete",
+  decision,
+  created_at: order === 1 ? T0 : T1,
+  completed_at: order === 1 ? T1 : T2,
+  wall_seconds: 600,
+  verify_seconds: 0,
+  turns: 1,
+  uncaptured_turns: 0,
+  usage: usage(cost, 100 * order),
+  usage_missing: missing(cost === null ? 1 : 0),
+  verify: null,
+  skip: null,
+});
+const completedMetrics = {
+  session_id: "00000000-0000-4000-8000-000000000001",
+  workflow_id: "plan",
+  status: "completed",
+  created_at: T0,
+  updated_at: T2,
+  totals: {
+    executions: 2,
+    skipped: 0,
+    wall_seconds: 1200,
+    active_seconds: 1200,
+    verify_seconds: 0,
+    turns: 2,
+    uncaptured_turns: 0,
+    usage: usage(0.5, 300),
+    usage_missing: missing(1),
+    cost_partial: true,
+    failed_executions: 0,
+    blocked: 0,
+    cancelled: 0,
+    verify_red: 0,
+    revisions: 1,
+    revisions_reset: 0,
+  },
+  stages: {
+    plan: { executions: 1, skipped: 0, revisions: 1, failed: 0, blocked: 0 },
+    review_plan: { executions: 1, skipped: 0, revisions: 0, failed: 0, blocked: 0 },
+  },
+  executions: [
+    metricsExecution(1, "plan", 1, "planner", "claude", "opus", null, 0.5),
+    metricsExecution(2, "review_plan", 1, "reviewer", "codex", "gpt-test", "approved", null),
+  ],
+};
+
 session("completed", {
   "manifest.yaml": manifest(),
   "status.json": status({
@@ -108,6 +175,7 @@ session("completed", {
   }),
   "events.jsonl": completedEvents,
   "executions/0001-plan--attempt-01/execution.json": execution(),
+  "metrics.json": JSON.stringify(completedMetrics, null, 2),
 });
 
 // --- active-stopped (active, no lock, last execution not failed) ---------------

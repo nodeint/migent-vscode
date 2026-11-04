@@ -40,6 +40,27 @@ test('integration failure report preserves case names, suites, and error details
       { type: 'watcher probe', suite: 'monitoring', name: 'second case', message: 'second reason' },
     ]);
     assert.match(result.failures[0].stack, /first reason/);
+    const located = new Error('located reason');
+    located.stack = [
+      'Error: located reason',
+      '    at waitFor (D:\\a\\repo\\src\\integration\\harness.ts:30:10)',
+      '    at run (D:\\a\\repo\\src\\integration\\control.integration.test.ts:70:9)',
+    ].join('\n');
+    recorder.recordFailure('scenario', 'third case', located);
+    const third = JSON.parse(readFileSync(report, 'utf8')).failures[2];
+    assert.equal(third.location, 'src/integration/control.integration.test.ts:70:9');
+    assert.equal(
+      recorder.formatFailures(),
+      [
+        '1) [monitoring] first case',
+        '   first reason',
+        '2) [monitoring] second case',
+        '   second reason',
+        '3) [monitoring] third case',
+        '   located reason',
+        '   at src/integration/control.integration.test.ts:70:9',
+      ].join('\n'),
+    );
   } finally {
     if (previous === undefined) delete process.env.MIGENT_IT_FAILURE_REPORT;
     else process.env.MIGENT_IT_FAILURE_REPORT = previous;

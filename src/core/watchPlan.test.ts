@@ -53,7 +53,7 @@ describe('desiredWatches', () => {
     expect(watches.find((watch) => watch.folder === migent)?.pattern).toBe('{config.yaml,sessions,workflows}');
     expect(watches.find((watch) => watch.folder === sessions)?.pattern).toBe('*');
     expect(watches.find((watch) => watch.folder === path.join(sessions, 's1'))?.pattern).toBe(
-      '{manifest.yaml,status.json,session.lock,cancel.requested,questions.json,next.json,workflow.frozen.yaml,events.jsonl,executions,outputs}',
+      '{manifest.yaml,status.json,session.lock,cancel.requested,questions.json,next.json,workflow.frozen.yaml,metrics.json,events.jsonl,executions,outputs}',
     );
     expect(watches.find((watch) => watch.folder === path.join(migent, 'workflows'))?.pattern).toBe('*.{yaml,yml}');
   });
@@ -167,6 +167,8 @@ describe('classifyPath', () => {
     expect(at('sessions', 's1', 'next.json')).toMatchObject({ target: { kind: 'next' } });
     expect(at('sessions', 's1', 'workflow.frozen.yaml')).toMatchObject({ target: { kind: 'next' } });
     expect(at('sessions', 's1', 'events.jsonl')).toMatchObject({ target: { kind: 'events' } });
+    expect(at('sessions', 's1', 'metrics.json')).toEqual({ kind: 'session-files', sessionId: 's1', target: { kind: 'metrics' } });
+    expect(at('sessions', 's1', 'metrics.json', 'deeper')).toBeNull();
     expect(at('sessions', 's1', 'outputs')).toMatchObject({ target: { kind: 'outputs' } });
     expect(at('sessions', 's1', 'outputs', 'note.md')).toMatchObject({ target: { kind: 'outputs' } });
   });

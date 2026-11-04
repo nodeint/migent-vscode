@@ -13,6 +13,7 @@
   --mg-warn: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
   --mg-error: var(--vscode-errorForeground, var(--vscode-foreground));
   --mg-info: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --mg-bar: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
   --mg-radius: 4px;
   --mg-space-1: 4px;
   --mg-space-2: 8px;

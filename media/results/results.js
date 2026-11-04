@@ -64,6 +64,7 @@
     actions.append(
       action('Open result', sessionAction('openResult'), 'primary'),
       action('Task', sessionAction('openTask'), 'secondary'),
+      action('Metrics', sessionAction('openMetrics'), 'secondary'),
       action('View log', sessionAction('showLog'), 'secondary'),
       menuButton({
         label: '⋯',

@@ -14,6 +14,7 @@ export const QUESTIONS_FILENAME = 'questions.json';
 export const NEXT_FILENAME = 'next.json';
 export const FROZEN_WORKFLOW_FILENAME = 'workflow.frozen.yaml';
 export const TASK_FILENAME = 'task.md';
+export const METRICS_FILENAME = 'metrics.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
 export const CONFIG_FILENAME = 'config.yaml';
 
@@ -71,6 +72,10 @@ export function frozenWorkflowPath(projectRoot: string, sessionId: string): stri
 
 export function taskPath(projectRoot: string, sessionId: string): string {
   return path.join(sessionDir(projectRoot, sessionId), TASK_FILENAME);
+}
+
+export function metricsPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), METRICS_FILENAME);
 }
 
 export function cancelRequestPath(projectRoot: string, sessionId: string): string {
