@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import { runLong, type RunResult } from '../cli/runner';
+import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
 import type { SessionSnapshot } from '../core/model';
@@ -250,8 +251,8 @@ export class ReplyService implements vscode.Disposable {
     const run = runLong(runtime.launch, args, { cwd: context.root, env: runtime.env, onStderrLine: runtime.log });
     // The CLI runs the whole stage and exits only when it is done. The reply is received once the blocked execution
     // is resumed, which shows within moments, so that is when the send settles; the process carries on.
-    const early = await this.#untilReceivedOrExited(input, run.result);
-    if (early.kind === 'received') return this.#receive(input, handle, { seen: early.seen, exit: run.result });
+    const early = await untilReceivedOrExited(run.result, () => this.#probe(input), RECONCILE_DELAY_MS);
+    if (early.kind === 'received') return this.#receive(input, handle, { seen: early.value, exit: run.result });
     const { result } = early;
     if (result.kind === 'spawn-failed') {
       handle.release();
@@ -280,24 +281,6 @@ export class ReplyService implements vscode.Disposable {
     return { kind: 'sent', hasKeptEdits: false };
   }
 
-  /** Waits for the blocked execution to be resumed or for the process to exit, whichever comes first. */
-  async #untilReceivedOrExited(
-    input: SendInput,
-    exit: Promise<RunResult>,
-  ): Promise<{ kind: 'received'; seen: 'consumed' | 'resumed' } | { kind: 'exited'; result: RunResult }> {
-    let result: RunResult | undefined;
-    void exit.then((value) => {
-      result = value;
-    });
-    for (;;) {
-      await Promise.race([exit, sleep(RECONCILE_DELAY_MS)]);
-      if (result !== undefined) return { kind: 'exited', result };
-      input.context.store.refreshSession(input.meta.sessionId);
-      const seen = this.#seen(input);
-      if (seen !== 'none') return { kind: 'received', seen };
-    }
-  }
-
   async #settle(input: SendInput, result: ExitedRun, handle: { release: () => void }): Promise<SendResult> {
     input.onPhase('Waiting for the stage to resume…');
     const seen = await this.#awaitResumed(input);
@@ -324,6 +307,13 @@ export class ReplyService implements vscode.Disposable {
   #recheck(meta: DraftMeta): string | null {
     const again = this.#validate(meta);
     return typeof again === 'string' ? again : this.#control.answerBlock(again.context, again.snapshot, true);
+  }
+
+  /** The evidence that the reply was received, refreshed from disk, or null while the session shows none. */
+  #probe(input: SendInput): 'consumed' | 'resumed' | null {
+    input.context.store.refreshSession(input.meta.sessionId);
+    const seen = this.#seen(input);
+    return seen === 'none' ? null : seen;
   }
 
   /** What the session shows now: this reply used, the blocked execution resumed some other way, or neither. */
