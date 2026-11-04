@@ -157,6 +157,11 @@ body {
   text-decoration: underline;
 }
 
+.mg-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 body.vscode-high-contrast .mg-btn,
 body.vscode-high-contrast-light .mg-btn {
   border-color: var(--mg-border);

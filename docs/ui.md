@@ -1,7 +1,7 @@
 # Webview UI
 
 This page defines how Migent webview pages are built: the shared page foundation, the design vocabulary and the
-rules every page keeps. Results and Session Metrics are on the foundation today; see [Not shared yet](#not-shared-yet).
+rules every page keeps. Results, Session Metrics and Next step are on the foundation today; see [Not shared yet](#not-shared-yet).
 For module ownership see [Architecture](architecture.md); for how to verify UI changes see [Testing](testing.md).
 
 ## Page architecture
@@ -23,9 +23,9 @@ The helper never takes HTML fragments or user data, so a page cannot weaken the 
   The page script depends on the global `MigentPage` that the shared script defines.
 - **Roots.** `localResourceRoots` is derived from the same descriptor and allows `media/shared` and the page's own
   folder only. Both folders are already packaged (`!media/**` in `.vscodeignore`); no build step is involved.
-- **Model.** The host posts `{ type: 'model', revision, identity, model }` only when the model changed and answers
-  the page's `ready` message with the current one. The page ignores a revision it has already shown and records
-  `identity` with `setState` so a serializer can restore the panel.
+- **Model.** The host posts `{ type: 'model', revision, identity, model }`, plus an optional `transient`, only when
+  the model changed and answers the page's `ready` message with the current one. The page ignores a revision it
+  has already shown and records `identity` with `setState` so a serializer can restore the panel.
 - **Intents.** The page sends `{ type: 'intent', intent, ... }` with identity only: a key, a name, a session id or a
   member of a closed action set. The host validates the shape in `src/core`, revalidates against fresh data and
   resolves any path or command itself. A page never sends a path, a command id or argv.
@@ -40,7 +40,7 @@ The helper never takes HTML fragments or user data, so a page cannot weaken the 
 | :--- | :--- |
 | `el(tag, text, className)` | Create an element; `text` goes in with `textContent` |
 | `section(title, className)` | A `<section>` with an `<h2>` |
-| `connect({ render })` | Own the VS Code API handle, the revision guard, `setState` and the `ready` handshake. Returns `{ send }`; `send(intent)` adds the current revision |
+| `connect({ render })` | Own the VS Code API handle, the revision guard, `setState` and the `ready` handshake. Calls `render(model, transient)`, where `transient` is the message's optional host state (undefined when the host posts none) and never part of the model. Returns `{ send }`; `send(intent)` adds the current revision |
 | `details(key, summary, className, isOpenByDefault)` | A `<details>` whose open state survives a model re-render, keyed by `key` and held in memory only. It starts closed unless `isOpenByDefault` is true and the reader has not toggled it |
 | `menuButton({ label, ariaLabel, items })` | A menu button; `items` is a list of `{ label, onSelect }` |
 
@@ -68,7 +68,7 @@ each with a fallback; never hard-code a color.
 | :--- | :--- | :--- |
 | Page header | `mg-header`, `mg-title`, `mg-subtitle`, `mg-actions` | Status, title, one-line subtitle and the page's actions |
 | Status indicator | `mg-status`, `mg-status--ok` / `--warn` / `--error` | The state of the thing the page describes. Always an icon plus text plus color |
-| Buttons | `mg-btn` with `--primary`, `--secondary`, `--link` | One primary action per page. Secondary for other actions. Link for an inline reference |
+| Buttons | `mg-btn` with `--primary`, `--secondary`, `--link` | One primary action per page. Secondary for other actions. Link for an inline reference. A `disabled` button is dimmed |
 | Menu button | `mg-menu`, `mg-menu-list`, `mg-menu-item` | Less common actions; built with `menuButton` |
 | List row | `mg-list`, `mg-row`, `mg-row-main`, `mg-row-meta` | One item with a label and trailing metadata. A `<button>` row is clickable; a `<div>` row is not |
 | Card | `mg-card`, `mg-card-title`, `mg-card-body`, `mg-tags` | A whole-card action with a short summary. Never put another control inside it |
@@ -120,11 +120,12 @@ themes. The page script is not driven by automated tests; record the manual pass
 | :--- | :--- | :--- |
 | Results | [media/results](../media/results) | Header actions, outputs, next-step suggestions, child sessions |
 | Session Metrics | [media/sessionmetrics](../media/sessionmetrics) | Read-only metrics of one completed session: header, partial-cost warning, summary, stages, usage, executions (one expandable row each, the last open), details. `missing`, `invalid` and `unreadable` files get an explanation instead of zeros; a skipped execution shows its reason and no token or cost story. Reached from the Results **Metrics** button and the Sessions context menu, never from the Command Palette |
+| Next step | [media/nextstep](../media/nextstep) | Edit the task and launch a suggested workflow: header with a launch status (Ready, Starting, Blocked), alerts for the launch blocker and the last error (always visible), task field, context rows, target workflow with Recheck, child sessions, and a sticky footer with Back, Prepare and Run. It reads the host's `transient` state (`pending`, `error`) through `connect`. Only the task field and the footer are page-local styles. A re-render keeps the task text, focus and selection while the field has focus |
 
 ## Not shared yet
 
-Next step ([media/nextstep](../media/nextstep), [panels.ts](../src/vscode/nextStep/panels.ts)) and Questions
-([media/questions](../media/questions), [page.ts](../src/vscode/questions/page.ts)) keep their own `html()`,
-stylesheet and script. To migrate one, switch its `html()` and `localResourceRoots` to the helper, replace the
+Questions ([media/questions](../media/questions), [page.ts](../src/vscode/questions/page.ts)) keeps its own `html()`,
+stylesheet and script. To migrate it, switch its `html()` and `localResourceRoots` to the helper, replace the
 duplicated scaffold in its script with `MigentPage`, move repeated rules to the shared components, and re-check its
-forms, drafts and footer by hand.
+forms, drafts and footer by hand. The text field and sticky action footer that Next step styles in its own
+stylesheet are the first candidates to share once Questions migrates, since a component needs two pages.

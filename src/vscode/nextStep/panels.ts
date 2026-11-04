@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 import * as vscode from 'vscode';
@@ -22,6 +21,7 @@ import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { ResultsPanels } from '../results/panels';
+import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -29,7 +29,12 @@ export const NEXT_STEP_VIEW_TYPE = 'migent.nextStep';
 
 const TITLE_MAX = 40;
 const SESSION_TITLE_MAX = 60;
-const NONCE_BYTES = 16;
+const PAGE: PageDescriptor = {
+  folder: 'nextstep',
+  styles: ['nextstep.css'],
+  scripts: ['nextstep.js'],
+  title: 'Next step',
+};
 const OVERRIDE_PREFIX = 'migent.nextStep.task';
 
 /** The page's identity: the source session and the target workflow it prepares. */
@@ -49,27 +54,6 @@ export function isNextStepIdentity(value: unknown): value is NextStepIdentity {
   if (typeof value !== 'object' || value === null) return false;
   const { project, sessionId, workflow } = value as Partial<NextStepIdentity>;
   return [project, sessionId, workflow].every((part) => typeof part === 'string' && part !== '');
-}
-
-function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const nonce = randomBytes(NONCE_BYTES).toString('base64');
-  const asset = (name: string): string =>
-    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'nextstep', name)).toString();
-  const csp = `default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';`;
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="${csp}">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="${asset('nextstep.css')}">
-<title>Next step</title>
-</head>
-<body>
-<main id="root"></main>
-<script nonce="${nonce}" src="${asset('nextstep.js')}"></script>
-</body>
-</html>`;
 }
 
 function titleOf(text: string): string {
@@ -337,7 +321,7 @@ export class NextStepPanels implements vscode.Disposable {
     return {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.#extensionUri, 'media', 'nextstep')],
+      localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
     };
   }
 
@@ -357,7 +341,7 @@ export class NextStepPanels implements vscode.Disposable {
     const key = keyOf(identity);
     this.#entries.set(key, entry);
     const { webview } = panel;
-    webview.html = html(webview, this.#extensionUri);
+    webview.html = renderPage(webview, this.#extensionUri, PAGE);
     webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(identity, raw);
     });

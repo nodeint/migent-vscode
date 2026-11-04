@@ -19,7 +19,8 @@
 
   /**
    * Connect a page to the extension: one `acquireVsCodeApi` handle, the revision guard, `setState(identity)`
-   * and the `ready` handshake. `render(model)` is called for each newer model message.
+   * and the `ready` handshake. `render(model, transient)` is called for each newer model message; `transient` is
+   * the message's optional host state (undefined when the host posts none) and is not part of the model.
    * Returns `{ send, button }`; `send` always carries the current revision.
    */
   function connect(options) {
@@ -44,7 +45,7 @@
       if (message.revision <= revision) return;
       revision = message.revision;
       vscode.setState(message.identity);
-      options.render(message.model);
+      options.render(message.model, message.transient);
     });
 
     vscode.postMessage({ type: 'ready' });
