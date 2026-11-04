@@ -5,7 +5,13 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { SessionSnapshot } from './model';
-import { buildResultsModel, resolveHandoffPath, resolveOutputPath,type ResultsInput } from './resultsModel';
+import {
+  buildResultsModel,
+  resolveHandoffPath,
+  resolveOutputPath,
+  type ResultsInput,
+  resultsPanelTitle,
+} from './resultsModel';
 import { capturedDir, snapshotFromDir } from './testHelpers';
 import type { WorkflowEntry } from './workflows';
 
@@ -67,6 +73,7 @@ describe('buildResultsModel', () => {
       state: 'Completed',
       workflowId: 'probe-source',
       completedAt: '2026-11-01T11:17:52.960+00:00',
+      durationMs: 5610,
       source: null,
     });
     // The captured sample does not include outputs/note.md.
@@ -81,7 +88,9 @@ describe('buildResultsModel', () => {
         artifacts: [{ name: 'context_note', output: 'note', path: 'outputs/note.md', availability: 'missing' }],
       },
     ]);
-    expect(model.children).toEqual([{ sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed' }]);
+    expect(model.children).toEqual([
+      { sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed', task: null },
+    ]);
     expect(JSON.stringify(model)).not.toContain('argv');
   });
 
@@ -177,6 +186,66 @@ describe('buildResultsModel', () => {
       workflows: [],
     });
     expect(model.source).toMatchObject({ sessionId: SOURCE, provenance: { state: 'invalid' } });
+  });
+});
+
+const NL = String.fromCharCode(10);
+const BLANK_TASK = ['   ', '', ''].join(NL);
+const LONG_TASK = ['', '# Heading', '', 'Do the thing.', '  second line  ', '', ''].join(NL);
+
+describe('duration and child task', () => {
+  const withStatus = (patch: { createdAt?: string | null; updatedAt?: string | null }): ResultsInput => {
+    const input = sourceInput();
+    const source = captured('handoff-source');
+    const status = source.status && { ...source.status, ...patch };
+    return { ...input, snapshots: [{ ...source, status }, captured('handoff-target')] };
+  };
+
+  it('computes the duration only for a Completed session with ordered, parseable timestamps', () => {
+    expect(buildResultsModel(withStatus({})).durationMs).toBe(5610);
+    expect(buildResultsModel(withStatus({ createdAt: null })).durationMs).toBeNull();
+    expect(buildResultsModel(withStatus({ updatedAt: 'not a date' })).durationMs).toBeNull();
+    expect(buildResultsModel(withStatus({ updatedAt: '2026-11-01T11:00:00.000+00:00' })).durationMs).toBeNull();
+    expect(buildResultsModel(withStatus({ updatedAt: '2026-11-01T11:17:47.350+00:00' })).durationMs).toBe(0);
+    expect(buildResultsModel({ ...sourceInput(), snapshots: [], sessionId: 'gone' }).durationMs).toBeNull();
+    const running = captured('handoff-source');
+    const notCompleted = { ...running, displayState: { ...running.displayState, state: 'running' as const } };
+    expect(buildResultsModel({ ...sourceInput(), snapshots: [notCompleted] }).durationMs).toBeNull();
+  });
+
+  it('returns the whole child task.md trimmed, and null when it is missing or blank', () => {
+    const root = tempDir();
+    const sourceDir = path.join(root, SOURCE);
+    cpSync(capturedDir('handoff-source'), sourceDir, { recursive: true });
+    const input: ResultsInput = { ...sourceInput(), sessionDirPath: sourceDir };
+    const childTask = (): string | null | undefined => buildResultsModel(input).children[0]?.task;
+    expect(childTask()).toBeNull();
+    const targetDir = path.join(root, TARGET);
+    mkdirSync(targetDir);
+    writeFileSync(path.join(targetDir, 'task.md'), BLANK_TASK);
+    expect(childTask()).toBeNull();
+    writeFileSync(path.join(targetDir, 'task.md'), LONG_TASK);
+    expect(childTask()).toBe(LONG_TASK.trim());
+  });
+});
+
+describe('resultsPanelTitle', () => {
+  it('shows a check for Completed and the workflow id, then Results', () => {
+    expect(resultsPanelTitle(buildResultsModel(sourceInput()))).toBe('✓ probe-source · Results');
+  });
+
+  it('has no glyph for another state and falls back to the shortened title without a workflow id', () => {
+    const model = buildResultsModel(sourceInput());
+    const long = 'x'.repeat(80);
+    const title = resultsPanelTitle({ ...model, state: 'Failed', workflowId: null, title: long });
+    expect(title.endsWith(' · Results')).toBe(true);
+    expect(title.startsWith('x')).toBe(true);
+    expect(title.length).toBeLessThan(long.length);
+    expect(resultsPanelTitle({ ...model, state: 'Running' })).toBe('probe-source · Results');
+  });
+
+  it('is neutral for an unavailable session', () => {
+    expect(resultsPanelTitle(buildResultsModel({ ...sourceInput(), snapshots: [], sessionId: 'gone' }))).toBe('Results');
   });
 });
 

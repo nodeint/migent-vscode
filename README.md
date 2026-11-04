@@ -47,7 +47,7 @@ Running multi-stage AI workflows from a terminal often leads to constant context
 - **Project & Workflow Catalog**: View available workflow definitions and project configuration (`config.yaml`)
   with instant validation for syntax and schema errors.
 - **Results View**: Open a comprehensive overview for completed sessions to inspect final outcomes, outputs,
-  and downstream workflow suggestions.
+  and downstream workflow suggestions, with the main actions in the page header.
 - **Session Controls**: Run or prepare workflows, start, continue, stop, and repair sessions, or run the next stage once.
 - **Human Input**: Answer questions and reply to blocked sessions with drafts preserved across reloads. Notifications
   cover questions, blocked and failed sessions, quota waits, and completed sessions.

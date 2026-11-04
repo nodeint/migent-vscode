@@ -12,6 +12,7 @@ stop when they cover the task. For work that crosses areas, follow the union of 
 | Runtime boundaries, data flow, or module ownership | [architecture.md](architecture.md) | Follow the relevant module group and contract references |
 | Session state, locks, file readers, store refresh, or event tail behavior | [core.md](core.md) | Follow the behavior section and its linked implementation/tests |
 | Selecting test cases or verifying behavior changes | [testing.md](testing.md) | Follow the testing rules and relevant verification procedures |
+| Creating or changing a webview page, its styles or components | [ui.md](ui.md) | Follow the page architecture and component sections; also follow the architecture route for ownership |
 | Contribution setup, Git branches/hooks, issues, PRs, CI, or extension releases | [CONTRIBUTING.md](../CONTRIBUTING.md) | Follow the relevant setup, verification, PR, or release section |
 
 Standards and guides have separate roles: standards define requirements; guides describe procedures.

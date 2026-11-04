@@ -1,0 +1,344 @@
+/* Shared webview styles: tokens and components. Colors come only from VS Code theme variables (see docs/ui.md).
+   Selectors here are page-independent; page stylesheets add layout only. */
+
+:root {
+  --mg-fg: var(--vscode-foreground);
+  --mg-muted: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --mg-link: var(--vscode-textLink-foreground, var(--vscode-foreground));
+  --mg-border: var(--vscode-panelSection-border, var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)));
+  --mg-focus: var(--vscode-focusBorder, var(--vscode-foreground));
+  --mg-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --mg-hover: var(--vscode-list-hoverBackground, transparent);
+  --mg-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
+  --mg-warn: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+  --mg-error: var(--vscode-errorForeground, var(--vscode-foreground));
+  --mg-info: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --mg-radius: 4px;
+  --mg-space-1: 4px;
+  --mg-space-2: 8px;
+  --mg-space-3: 12px;
+  --mg-space-4: 16px;
+  --mg-space-5: 24px;
+  --mg-font: var(--vscode-font-family);
+  --mg-font-size: var(--vscode-font-size);
+  --mg-mono: var(--vscode-editor-font-family, monospace);
+}
+
+/* High contrast: borders and focus use the contrast variables. */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --mg-border: var(--vscode-contrastBorder, var(--vscode-foreground));
+  --mg-focus: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, var(--vscode-foreground)));
+}
+
+body {
+  font-family: var(--mg-font);
+  font-size: var(--mg-font-size);
+  color: var(--mg-fg);
+  padding: 0 20px 24px;
+  max-width: 960px;
+}
+
+/* Text helpers */
+.mg-muted {
+  color: var(--mg-muted);
+}
+
+.mg-warn {
+  color: var(--mg-warn);
+}
+
+.mg-error {
+  color: var(--mg-error);
+}
+
+.mg-mono {
+  font-family: var(--mg-mono);
+  overflow-wrap: anywhere;
+}
+
+/* Page and header */
+.mg-header {
+  margin: var(--mg-space-4) 0 var(--mg-space-5);
+}
+
+.mg-title {
+  font-size: 1.6em;
+  font-weight: 600;
+  margin: var(--mg-space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+.mg-subtitle {
+  color: var(--mg-muted);
+  margin: 0 0 var(--mg-space-3);
+  overflow-wrap: anywhere;
+}
+
+.mg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+}
+
+.mg-section {
+  margin: var(--mg-space-5) 0 0;
+}
+
+.mg-section > h2 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0 0 var(--mg-space-2);
+}
+
+.mg-section > h3 {
+  font-size: 1em;
+  margin: var(--mg-space-3) 0 var(--mg-space-1);
+}
+
+/* Status indicator: icon + text + theme color, so status is never color alone. */
+.mg-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  font-weight: 600;
+  color: var(--mg-info);
+}
+
+.mg-status--ok {
+  color: var(--mg-ok);
+}
+
+.mg-status--warn {
+  color: var(--mg-warn);
+}
+
+.mg-status--error {
+  color: var(--mg-error);
+}
+
+/* Buttons */
+.mg-btn {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.mg-btn--primary {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.mg-btn--primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.mg-btn--secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+.mg-btn--secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.mg-btn--link {
+  color: var(--mg-link);
+  background: none;
+  border-color: transparent;
+  padding: 0;
+  text-decoration: underline;
+}
+
+body.vscode-high-contrast .mg-btn,
+body.vscode-high-contrast-light .mg-btn {
+  border-color: var(--mg-border);
+}
+
+/* Menu button and menu */
+.mg-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.mg-menu-list {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  margin-top: var(--mg-space-1);
+  min-width: 180px;
+  padding: var(--mg-space-1) 0;
+  color: var(--vscode-menu-foreground, var(--mg-fg));
+  background: var(--vscode-menu-background, var(--mg-surface));
+  border: 1px solid var(--vscode-menu-border, var(--mg-border));
+  border-radius: var(--mg-radius);
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+}
+
+.mg-menu-list[hidden] {
+  display: none;
+}
+
+.mg-menu-item {
+  font: inherit;
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  padding: var(--mg-space-1) var(--mg-space-3);
+  cursor: pointer;
+}
+
+.mg-menu-item:hover,
+.mg-menu-item:focus-visible {
+  color: var(--vscode-menu-selectionForeground, inherit);
+  background: var(--vscode-menu-selectionBackground, var(--mg-hover));
+}
+
+/* List rows with trailing metadata */
+.mg-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.mg-list > li {
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.mg-list > li:last-child {
+  border-bottom: 0;
+}
+
+.mg-row {
+  font: inherit;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mg-space-3);
+  width: 100%;
+  padding: var(--mg-space-2) var(--mg-space-1);
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--mg-radius);
+  box-sizing: border-box;
+}
+
+button.mg-row {
+  cursor: pointer;
+}
+
+button.mg-row:hover {
+  background: var(--mg-hover);
+}
+
+.mg-row-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mg-row-main--action {
+  color: var(--mg-link);
+  text-decoration: underline;
+}
+
+.mg-row-meta {
+  flex: none;
+  max-width: 55%;
+  color: var(--mg-muted);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Clickable card */
+.mg-card {
+  font: inherit;
+  display: block;
+  width: 100%;
+  margin: var(--mg-space-2) 0 0;
+  padding: var(--mg-space-3);
+  color: inherit;
+  text-align: left;
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.mg-card:hover {
+  background: var(--mg-hover);
+}
+
+.mg-card-title {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mg-card-body {
+  display: block;
+  margin-top: var(--mg-space-1);
+  overflow-wrap: anywhere;
+}
+
+.mg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mg-space-1);
+  margin-top: var(--mg-space-2);
+}
+
+/* Pill */
+.mg-pill {
+  display: inline-block;
+  padding: 0 var(--mg-space-2);
+  font-size: 0.9em;
+  line-height: 1.6;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* Collapsible details */
+.mg-details {
+  margin: var(--mg-space-2) 0 0;
+}
+
+.mg-details > summary {
+  cursor: pointer;
+  color: var(--mg-muted);
+  user-select: none;
+}
+
+.mg-details[open] > summary {
+  margin-bottom: var(--mg-space-2);
+}
+
+/* Keyboard focus */
+.mg-btn:focus-visible,
+.mg-row:focus-visible,
+.mg-card:focus-visible,
+.mg-menu-item:focus-visible,
+.mg-details > summary:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+}
+
+.mg-details h3 {
+  font-size: 1em;
+  margin: var(--mg-space-3) 0 var(--mg-space-1);
+}

@@ -646,22 +646,22 @@
       "editor/title": [
         {
           "command": "migent.session.openOutput",
-          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
+          "when": "activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@1"
         },
         {
           "command": "migent.session.openTask",
-          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
+          "when": "activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@2"
         },
         {
           "command": "migent.session.showLog",
-          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
+          "when": "activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@3"
         },
         {
           "submenu": "migent.results.more",
-          "when": "activeWebviewPanelId == 'migent.results' || activeWebviewPanelId == 'migent.nextStep'",
+          "when": "activeWebviewPanelId == 'migent.nextStep'",
           "group": "navigation@4"
         },
         {

@@ -43,6 +43,23 @@ describe('parseResultsMessage', () => {
     });
   });
 
+  it('accepts each of the six header actions and nothing else', () => {
+    for (const action of ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions']) {
+      expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action })).toEqual({
+        type: 'intent',
+        value: { intent: 'sessionAction', action },
+      });
+    }
+    expect(
+      parseResultsMessage({ type: 'intent', intent: 'sessionAction', action: 'openTask', command: 'x', path: 'C:/x' }),
+    ).toEqual({ type: 'intent', value: { intent: 'sessionAction', action: 'openTask' } });
+    expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action: 'migent.session.openTask' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action: 'deleteSession' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action: 7 })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action: ['openTask'] })).toBeNull();
+  });
+
   it('drops extra fields such as paths and commands', () => {
     expect(
       parseResultsMessage({ type: 'intent', intent: 'openOutput', name: 'note', path: 'C:/x', command: 'rm' }),
