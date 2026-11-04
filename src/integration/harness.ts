@@ -124,23 +124,67 @@ async function cleanMigent(root: string): Promise<void> {
  * Wait until the removed project is demoted. VS Code 1.90 occasionally delivers the anchor delete event
  * late; the product's recovery path for a dropped event is Refresh, so use it once before failing.
  */
-async function waitForCleanStart(env: Env): Promise<void> {
+async function waitForCleanStart(env: Env, previous: string): Promise<void> {
   try {
     await waitFor('clean start', () => env.project() === undefined);
   } catch {
     console.log('NOTE anchor delete event not seen within the wait; recovering with migent.refresh');
-    env.api.registry.refresh();
-    await waitFor('clean start after refresh', () => env.project() === undefined);
+    try {
+      await removeUntilDemoted(env);
+    } catch (error) {
+      if (process.env.CI) console.log(describeMigentDir(env.root, previous));
+      throw error;
+    }
   }
+}
+
+/**
+ * Refresh reconciles against the disk, so a project that survives it means `.migent` is still (or again) there:
+ * a previous scenario's fake CLI can recreate folders after the first removal, and on Windows a folder held by a
+ * watcher stays until its handle closes. Remove it again and refresh until the project is demoted.
+ */
+async function removeUntilDemoted(env: Env): Promise<void> {
+  const deadline = Date.now() + WAIT_MS;
+  for (;;) {
+    try {
+      removeMigent(env.root);
+    } catch {
+      // still held; retried below
+    }
+    env.api.registry.refresh();
+    if (env.project() === undefined) return;
+    if (Date.now() >= deadline) break;
+    await sleep(SETTLE_MS);
+  }
+  assert.ok(env.project() === undefined, 'timed out waiting for: clean start after refresh');
+}
+
+/** Diagnostics for a project that outlives its `.migent` removal: recreated, or only reported present? */
+function describeMigentDir(root: string, previous: string): string {
+  const dir = migentPath(root);
+  const lines = [`DIAG previous scenario: ${previous}`];
+  try {
+    lines.push(`DIAG stat isDirectory=${fs.statSync(dir).isDirectory()}`);
+  } catch (error) {
+    lines.push(`DIAG stat failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    lines.push(`DIAG entries: ${JSON.stringify(fs.readdirSync(dir, { recursive: true }))}`);
+  } catch (error) {
+    lines.push(`DIAG readdir failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return lines.join('\n');
 }
 
 /** Run scenarios one by one, each from a clean workspace; returns the number that failed. */
 export async function runScenarios(scenarios: readonly Scenario[]): Promise<number> {
   const env = await environment();
   let failed = 0;
+  let previous = '(none)';
   for (const scenario of scenarios) {
     await cleanMigent(env.root);
-    await waitForCleanStart(env);
+    await waitForCleanStart(env, previous);
+    previous = scenario.name;
     await sleep(SETTLE_MS);
     env.changes.length = 0;
     try {

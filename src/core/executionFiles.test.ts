@@ -28,6 +28,7 @@ describe('listExecutionFiles', () => {
   it('lists the execution questions.json of the captured question-pending sample, and omits absent files', () => {
     const dir = path.join(capturedDir('question-pending'), 'executions', '0001-planner--attempt-01');
     const listing = listExecutionFiles(dir);
+    expect(listing.hasArtifacts).toBe(false);
     expect(listing.state).toBe('ok');
     // execution.json is the summary source, not a listed file; no prompt/response exist in the sample.
     expect(listing.files.map((file) => [file.kind, file.relativePath])).toEqual([['questions', 'questions.json']]);
@@ -45,6 +46,7 @@ describe('listExecutionFiles', () => {
       'artifacts/a.txt': 'a',
     });
     const listing = listExecutionFiles(dir);
+    expect(listing.hasArtifacts).toBe(true);
     expect(listing.files.map((file) => [file.kind, file.relativePath, file.turn])).toEqual([
       ['prompt', 'prompt.md', null],
       ['response', 'response.md', null],
@@ -59,6 +61,8 @@ describe('listExecutionFiles', () => {
   it('distinguishes a missing execution directory; an absent artifacts directory is normal', () => {
     expect(listExecutionFiles(path.join(os.tmpdir(), 'migent-vscode-no-such-dir')).state).toBe('missing');
     const dir = tempExecution({ 'prompt.md': 'p' });
-    expect(listExecutionFiles(dir)).toMatchObject({ state: 'ok', artifactsError: null });
+    expect(listExecutionFiles(dir)).toMatchObject({ state: 'ok', hasArtifacts: false, artifactsError: null });
+    mkdirSync(path.join(dir, 'artifacts'));
+    expect(listExecutionFiles(dir).hasArtifacts).toBe(true);
   });
 });

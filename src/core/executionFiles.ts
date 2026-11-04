@@ -18,6 +18,8 @@ export interface ExecutionFileListing {
   /** `missing` when the execution directory is absent, `unreadable` when it cannot be listed. */
   state: 'ok' | 'missing' | 'unreadable';
   files: ExecutionFile[];
+  /** Whether the execution contains an artifacts directory. */
+  hasArtifacts: boolean;
   /** Error code when `artifacts/` exists but cannot be listed; null otherwise. */
   artifactsError: string | null;
 }
@@ -42,12 +44,13 @@ function isFile(absolute: string): boolean {
   }
 }
 
-function listDir(absolute: string): { names: string[]; files: string[] } | { error: string } {
+function listDir(absolute: string): { names: string[]; files: string[]; directories: string[] } | { error: string } {
   try {
     const entries = readdirSync(absolute, { withFileTypes: true });
     return {
       names: entries.map((entry) => entry.name),
       files: entries.filter((entry) => entry.isFile()).map((entry) => entry.name),
+      directories: entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
     };
   } catch (error) {
     return { error: code(error) };
@@ -98,7 +101,7 @@ export function listExecutionFiles(executionDirPath: string): ExecutionFileListi
   const top = listDir(executionDirPath);
   if ('error' in top) {
     const state = top.error === 'ENOENT' || top.error === 'ENOTDIR' ? 'missing' : 'unreadable';
-    return { state, files: [], artifactsError: null };
+    return { state, files: [], hasArtifacts: false, artifactsError: null };
   }
   const fixed: ExecutionFile[] = FIXED_FILES.filter(({ name }) => top.files.includes(name)).map(({ name, kind }) => ({
     kind,
@@ -110,6 +113,7 @@ export function listExecutionFiles(executionDirPath: string): ExecutionFileListi
   return {
     state: 'ok',
     files: [...fixed, ...verifyFiles(executionDirPath), ...artifacts.files],
+    hasArtifacts: top.directories.includes('artifacts'),
     artifactsError: artifacts.error,
   };
 }

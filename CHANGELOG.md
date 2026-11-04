@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Browse session files in their directory structure with the active file icon theme.
 - Simplify commands and notifications, group recent sessions by date, and allow deleting a session from its context menu.
 
 ## 0.1.0

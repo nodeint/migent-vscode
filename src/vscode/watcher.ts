@@ -71,6 +71,7 @@ function listDirectories(absolute: string): string[] {
 export class ProjectWatcher {
   readonly #options: ProjectWatcherOptions;
   readonly #live = new Map<string, { pattern: string; handle: Releasable }>();
+  readonly #directoryWatches = new Set<Releasable>();
   readonly #retained = new Map<string, { target: WatchTarget; count: number }>();
   readonly #unsubscribe: (() => void)[] = [];
   readonly #coalescer: Coalescer<Pending>;
@@ -92,7 +93,18 @@ export class ProjectWatcher {
 
   /** Number of live watchers (for tests and diagnostics). */
   public get watchCount(): number {
-    return this.#live.size;
+    return this.#live.size + this.#directoryWatches.size;
+  }
+
+  /** Watch one expanded directory in the session Files tree. */
+  public watchDirectory(folder: string, onChange: () => void): Releasable {
+    const watch = this.#options.backend.create({ id: folder, folder, pattern: '*' }, onChange);
+    const handle: Releasable = { dispose: () => {
+      if (!this.#directoryWatches.delete(handle)) return;
+      watch.dispose();
+    } };
+    this.#directoryWatches.add(handle);
+    return handle;
   }
 
   /** Subscribe to the store and catalog so scan changes keep the watcher set current. Call after the first `sync()`. */
@@ -158,6 +170,7 @@ export class ProjectWatcher {
     this.#isDisposed = true;
     if (this.#releaseTimer !== null) clearTimeout(this.#releaseTimer);
     this.#coalescer.dispose();
+    for (const handle of this.#directoryWatches) handle.dispose();
     for (const unsubscribe of this.#unsubscribe.splice(0)) unsubscribe();
     for (const { handle } of this.#live.values()) handle.dispose();
     this.#live.clear();

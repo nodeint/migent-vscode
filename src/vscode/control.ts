@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -12,9 +11,6 @@ import {
   cancelArgs,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
-  doctorArgs,
-  doctorLines,
-  parseDoctorOutput,
   parsePrepared,
   prepareArgs,
   regenerateNextArgs,
@@ -26,11 +22,11 @@ import {
 } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
 import { type GateHandle, type GateKey, OperationGate } from '../core/operationGate';
-import { frozenWorkflowPath, workflowsDir } from '../core/paths';
 import { isRecord } from '../core/record';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
+import { runDoctor, workflowChange } from './controlHelpers';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
 const INFO_MESSAGE_MS = 5000;
@@ -51,18 +47,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-function normalizeYaml(text: string): string {
-  return text.replaceAll('\r\n', '\n').replace(/[ \t]+$/gm, '').trim();
-}
-
-function readText(file: string): string | undefined {
-  try {
-    return readFileSync(file, 'utf8');
-  } catch {
-    return undefined;
-  }
 }
 
 /** The CLI launch, environment and log sinks for one project. */
@@ -328,20 +312,9 @@ export class ControlService implements vscode.Disposable {
    * Undefined when either side is unavailable: the session version then simply continues.
    */
   public workflowChange(
-    context: ProjectContext,
-    snapshot: SessionSnapshot,
+    context: ProjectContext, snapshot: SessionSnapshot,
   ): { frozen: string; current: string } | undefined {
-    const workflowId = snapshot.manifest?.workflowId;
-    if (workflowId === null || workflowId === undefined) return undefined;
-    const {entries} = context.catalog.workflows();
-    const entry = entries.find((candidate) => candidate.id === workflowId && !candidate.duplicate);
-    if (entry === undefined) return undefined;
-    const frozen = frozenWorkflowPath(context.root, snapshot.sessionId);
-    const frozenText = readText(frozen);
-    const current = path.join(workflowsDir(context.root), entry.file);
-    const currentText = readText(current);
-    if (frozenText === undefined || currentText === undefined) return undefined;
-    return normalizeYaml(frozenText) === normalizeYaml(currentText) ? undefined : { frozen, current };
+    return workflowChange(context, snapshot);
   }
 
   /** `session prepare`, then (optionally) the user's task text. Returns the real `task.md` path. */
@@ -435,22 +408,9 @@ export class ControlService implements vscode.Disposable {
     if (!(await this.ensureWritable(context))) return;
     const launch = this.#launch(context);
     if (launch === undefined) return;
-    const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
-    const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'Running Migent doctor' },
-      () => invokeText(launch, doctorArgs(), options),
-    );
-    const checks = parseDoctorOutput(result.kind === 'ok' ? result.value : (result.error.stdout ?? ''));
-    if (checks === null) {
-      const detail = result.kind === 'error' ? result.error.stderr.trim() || result.error.detail : 'unexpected output';
-      this.#output.error(`doctor failed: ${detail}`);
-      const picked = await vscode.window.showErrorMessage(`Doctor could not run: ${detail}`, 'View log');
-      if (picked === 'View log') this.showLog();
-      return;
-    }
-    this.#output.appendLine(`doctor (${context.folder.name}):`);
-    for (const line of doctorLines(checks)) this.#output.appendLine(line);
-    this.showLog();
+    await runDoctor(context, {
+      launch, env: this.#env(context), output: this.#output, showLog: () => { this.showLog(); },
+    });
   }
 
   /** Ask the session's runner to stop. Cancelled is shown only once persisted state agrees. */
