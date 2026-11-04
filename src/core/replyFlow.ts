@@ -154,9 +154,13 @@ export function replyText(content: string): string {
 const CRLF = '\r\n';
 const LF = '\n';
 
-/** The user turn the CLI records for a reply (`buildStageReplyPrompt`), without any appended contract. */
-function replyTurn(reply: string): string {
-  return `Reply:${LF}${reply.replaceAll(CRLF, LF).trim()}`;
+/**
+ * The user turns the CLI records for a reply (`buildStageReplyPrompt`), without any appended contract: the
+ * `## Human reply` heading of current CLIs, and the `Reply:` label older ones used.
+ */
+function replyTurns(reply: string): string[] {
+  const text = reply.replaceAll(CRLF, LF).trim();
+  return [`## Human reply${LF}${LF}${text}`, `Reply:${LF}${text}`];
 }
 
 /**
@@ -173,17 +177,34 @@ function countReplyTurns(executionDir: string, reply: string): number | null {
   }
   const history: unknown = isRecord(record) ? record.history : undefined;
   if (!Array.isArray(history)) return null;
-  const wanted = replyTurn(reply);
+  const wanted = replyTurns(reply);
   return history.filter((item: unknown) => {
     if (!isRecord(item) || item.role !== 'user' || typeof item.content !== 'string') return false;
-    return item.content.replaceAll(CRLF, LF).trim() === wanted;
+    return wanted.includes(item.content.replaceAll(CRLF, LF).trim());
   }).length;
+}
+
+/**
+ * Whether the blocked execution has been resumed: a later execution of the same stage names it in
+ * `resumes_execution_id`. It says nothing about the text, so it holds whatever the CLI renders into its prompt.
+ * Once it holds, the target is no longer blocked at that execution and a second reply cannot be sent to it.
+ */
+export function replyResumed(sessionDir: string, blocked: BlockedTarget): boolean {
+  const blockedOrder = parseExecutionId(blocked.executionId)?.order ?? 0;
+  const executions = path.join(sessionDir, EXECUTIONS_DIRNAME);
+  return listExecutions(sessionDir).some(
+    (execution) =>
+      execution.stage === blocked.stageId &&
+      execution.order > blockedOrder &&
+      readExecution(path.join(executions, execution.id))?.resumes_execution_id === blocked.executionId,
+  );
 }
 
 /**
  * Evidence that a reply was consumed: a later execution that resumes the blocked execution
  * (`resumes_execution_id`) and whose recorded conversation holds one more user turn exactly equal to
- * `Reply:` + the text than the blocked execution's did (an identical earlier reply does not count again). A
+ * the reply turn (`## Human reply` and the text, or `Reply:` and the text for older CLIs) than the blocked
+ * execution's did (an identical earlier reply does not count again). A
  * superseded execution alone, or a prompt that merely contains the same words, is not acknowledgment.
  */
 export function replyConsumed(sessionDir: string, blocked: BlockedTarget, reply: string): boolean {

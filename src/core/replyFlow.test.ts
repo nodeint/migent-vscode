@@ -13,6 +13,7 @@ import {
   quotaWait,
   replyConsumed,
   replyHeader,
+  replyResumed,
   replyText,
 } from './replyFlow';
 import { parseStatus } from './statusReader';
@@ -131,22 +132,53 @@ describe('reply editor text', () => {
   });
 });
 
-describe('replyConsumed', () => {
-  type Turn = [role: string, content: string];
-  /** Each execution: the user/assistant turns of its conversation.json and the execution it resumes. */
-  function sessionWith(executions: Record<string, [history: Turn[], resumes: string | null]>): string {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-reply-'));
-    for (const [id, [history, resumes]] of Object.entries(executions)) {
-      const root = path.join(dir, 'executions', id);
-      mkdirSync(root, { recursive: true });
-      writeFileSync(path.join(root, 'execution.json'), JSON.stringify({ resumes_execution_id: resumes }));
-      writeFileSync(
-        path.join(root, 'conversation.json'),
-        JSON.stringify({ history: history.map(([role, content]) => ({ role, content })) }),
-      );
-    }
-    return dir;
+type Turn = [role: string, content: string];
+/** Each execution: the user/assistant turns of its conversation.json and the execution it resumes. */
+function sessionWith(executions: Record<string, [history: Turn[], resumes: string | null]>): string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-reply-'));
+  for (const [id, [history, resumes]] of Object.entries(executions)) {
+    const root = path.join(dir, 'executions', id);
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(root, 'execution.json'), JSON.stringify({ resumes_execution_id: resumes }));
+    writeFileSync(
+      path.join(root, 'conversation.json'),
+      JSON.stringify({ history: history.map(([role, content]) => ({ role, content })) }),
+    );
   }
+  return dir;
+}
+
+describe('replyResumed', () => {
+  const blocked = { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1 };
+  const first: Turn[] = [['user', 'Read the task.']];
+  const resumes = '0001-plan--attempt-01';
+
+  it('holds for a resuming execution of the same stage whatever text its prompt carries', () => {
+    const dir = sessionWith({
+      '0001-plan--attempt-01': [first, null],
+      '0002-plan--attempt-02': [[...first, ['user', 'a wording no client knows']], resumes],
+    });
+    expect(replyResumed(dir, blocked)).toBe(true);
+  });
+
+  it('does not hold before anything resumed it, for another stage, or for another execution', () => {
+    expect(replyResumed(sessionWith({ '0001-plan--attempt-01': [first, null] }), blocked)).toBe(false);
+    expect(
+      replyResumed(
+        sessionWith({ '0001-plan--attempt-01': [first, null], '0002-review--attempt-01': [first, resumes] }),
+        blocked,
+      ),
+    ).toBe(false);
+    expect(
+      replyResumed(
+        sessionWith({ '0001-plan--attempt-01': [first, null], '0002-plan--attempt-02': [first, '0000-plan--attempt-00'] }),
+        blocked,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('replyConsumed', () => {
   const blocked = { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1 };
   const first: Turn[] = [
     ['user', 'Read the task.'],
@@ -161,6 +193,15 @@ describe('replyConsumed', () => {
     });
     expect(replyConsumed(dir, blocked, 'Use option B.')).toBe(true);
     expect(replyConsumed(dir, blocked, '  Use option B.\r\n')).toBe(true);
+  });
+
+  it('is acknowledged by the `## Human reply` turn that current CLIs record', () => {
+    const dir = sessionWith({
+      '0001-plan--attempt-01': [first, null],
+      '0002-plan--attempt-02': [[...first, ['user', '## Human reply\n\nhỏi thêm đi']], resumes],
+    });
+    expect(replyConsumed(dir, blocked, 'hỏi thêm đi')).toBe(true);
+    expect(replyConsumed(dir, blocked, 'hỏi')).toBe(false);
   });
 
   it('is acknowledged when the provider history is replayed, because the turn is its own history entry', () => {

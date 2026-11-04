@@ -96,7 +96,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'Reply: a superseding execution without the reply is not acknowledgment',
+    name: 'Reply: a resuming execution without the reply releases the gate but keeps the draft',
     async run(env) {
       const { file, meta } = await openDraft(env, 'r3');
       fs.appendFileSync(file, 'Use Postgres.\n');
@@ -105,27 +105,23 @@ const scenarios: Scenario[] = [
         assert.equal(result.kind, 'unconfirmed');
       });
       assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/, 'the draft is kept');
-      assert.ok(env.api.control.gate.current(meta.project, 'r3'), 'the gate stays held so nothing is sent twice');
+      assert.equal(env.api.control.gate.current(meta.project, 'r3'), undefined, 'the blocked execution moved on, so the gate is released');
     },
   },
   {
-    name: 'Reply: evidence that arrives after the timeout releases the gate and settles the draft',
+    name: 'Reply: a resume seen after the timeout releases the gate, and the reply turn settles the draft',
     async run(env) {
       const { file, meta } = await openDraft(env, 'r8');
       fs.appendFileSync(file, 'Use Postgres.\n');
       await withReplyMode('ignore', async () => {
         assert.equal((await env.api.replies.send(meta)).kind, 'unconfirmed');
       });
-      assert.ok(env.api.control.gate.current(meta.project, 'r8'), 'held while unconfirmed');
-      const late = '0003-plan--attempt-03';
-      const history = [{ role: 'user', content: 'Reply:\nUse Postgres.' }];
-      // The execution appears first, without its conversation; the service starts watching that directory.
-      write(migentPath(env.root, 'sessions', 'r8', 'executions', late, 'execution.json'), JSON.stringify({ stage_id: 'plan', resumes_execution_id: EXECUTION }));
-      await sleep(1500);
-      assert.ok(env.api.control.gate.current(meta.project, 'r8'), 'still held without the evidence');
-      // Then only conversation.json arrives in the existing execution directory.
-      write(migentPath(env.root, 'sessions', 'r8', 'executions', late, 'conversation.json'), JSON.stringify({ history }));
-      await waitFor('gate released', () => env.api.control.gate.current(meta.project, 'r8') === undefined);
+      // The ignoring CLI resumed the blocked execution (0002) with a turn that is not this reply.
+      assert.equal(env.api.control.gate.current(meta.project, 'r8'), undefined, 'released: the blocked execution moved on');
+      assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/, 'the draft is kept without the reply turn');
+      const history = [{ role: 'user', content: '## Human reply\n\nUse Postgres.' }];
+      // The reply turn then shows up in that execution's conversation.json.
+      write(migentPath(env.root, 'sessions', 'r8', 'executions', '0002-plan--attempt-02', 'conversation.json'), JSON.stringify({ history }));
       await waitFor('draft settled', () => !fs.existsSync(file));
     },
   },

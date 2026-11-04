@@ -84,8 +84,8 @@ function replyBlocker(id) {
   fs.mkdirSync(dir, { recursive: true });
   const blockedBy = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8')).blocked_by_execution_ids?.[0] ?? null;
   fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: blockedBy }));
-  // The real CLI records the reply as its own user turn in the execution's conversation.json history.
-  const turn = mode === 'ignore' ? 'Continue.' : `Reply:\n${text}`;
+  // The real CLI records the reply as its own user turn (`## Human reply`) in the execution's conversation.json history.
+  const turn = mode === 'ignore' ? 'Continue.' : `## Human reply\n\n${text.trim()}`;
   fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
 }
 

@@ -9,6 +9,7 @@ import { runLong, type RunResult } from '../cli/runner';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
 import type { SessionSnapshot } from '../core/model';
+import type { GateHandle } from '../core/operationGate';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../core/paths';
 import { isRecord } from '../core/record';
 import {
@@ -19,6 +20,7 @@ import {
   replyDraftKey,
   replyHeader,
   type ReplyIdentity,
+  replyResumed,
   replyText,
 } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
@@ -75,6 +77,8 @@ interface SendInput {
   /** The raw draft content that was submitted, to tell later edits apart. */
   content: string;
   replyFile: string;
+  /** Tells the progress notification what the send is doing now. */
+  onPhase: (message: string) => void;
 }
 
 export type SendResult =
@@ -95,6 +99,10 @@ export class ReplyService implements vscode.Disposable {
   readonly #dir: string;
   /** Late-confirmation watchers still waiting; each stops its subscription and watchers when called. */
   readonly #late = new Set<() => void>();
+  /** Reply files of sends that settled while the CLI still runs: removed once it exits, not before. */
+  readonly #keptFiles = new Set<string>();
+  /** Sessions whose reply was sent but whose gate is still held while the stage is awaited, by session. */
+  readonly #following = new Map<string, { stop: () => void; release: () => void }>();
 
   constructor(registry: ProjectRegistry, control: ControlService, storageDir: string) {
     this.#registry = registry;
@@ -189,7 +197,7 @@ export class ReplyService implements vscode.Disposable {
    * Send the draft of `meta`. The gate is taken first, the target is validated again immediately before dispatch,
    * and acceptance is decided only by persisted evidence (a later execution whose prompt carries the reply).
    */
-  public async send(meta: DraftMeta): Promise<SendResult> {
+  public async send(meta: DraftMeta, onPhase: (message: string) => void = () => undefined): Promise<SendResult> {
     const content = await this.#savedContent(this.draftPath(meta));
     if (content === undefined) return { kind: 'blocked', reason: 'The reply was not saved, so it was not sent.' };
     const text = replyText(content);
@@ -197,23 +205,29 @@ export class ReplyService implements vscode.Disposable {
     const checked = this.#validate(meta);
     if (typeof checked === 'string') return { kind: 'blocked', reason: checked };
     const { context, snapshot, target } = checked;
-    const handle = this.#control.gate.tryAcquire(this.#control.sessionKey(context.key, meta.sessionId), 'Sending reply');
-    if (handle === null) return { kind: 'blocked', reason: 'Another operation on this session is in progress.' };
-    const blocked = this.#control.answerBlock(context, snapshot, true);
-    if (blocked !== null) {
-      handle.release();
-      return { kind: 'blocked', reason: blocked };
-    }
+    const handle = this.#acquire(context, snapshot, meta);
+    if (typeof handle === 'string') return { kind: 'blocked', reason: handle };
     const replyFile = path.join(this.#dir, `send-${randomUUID()}.txt`);
+    const input: SendInput = { context, meta, target, text, content, replyFile, onPhase };
     try {
       await writeFile(replyFile, text, { encoding: 'utf8', flag: 'wx' });
-      return await this.#dispatch({ context, meta, target, text, content, replyFile }, handle);
+      return await this.#dispatch(input, handle);
     } catch (error) {
       handle.release();
       return { kind: 'failed', detail: error instanceof Error ? error.message : String(error) };
     } finally {
-      await rm(replyFile, { force: true });
+      if (!this.#keptFiles.delete(replyFile)) await rm(replyFile, { force: true });
     }
+  }
+
+  /** The session gate once the send is allowed, or the reason it is not. */
+  #acquire(context: ProjectContext, snapshot: SessionSnapshot, meta: DraftMeta): GateHandle | string {
+    const handle = this.#control.gate.tryAcquire(this.#control.sessionKey(context.key, meta.sessionId), 'Sending reply');
+    if (handle === null) return 'Another operation on this session is in progress.';
+    const blocked = this.#control.answerBlock(context, snapshot, true);
+    if (blocked === null) return handle;
+    handle.release();
+    return blocked;
   }
 
   async #dispatch(input: SendInput, handle: { release: () => void }): Promise<SendResult> {
@@ -231,9 +245,14 @@ export class ReplyService implements vscode.Disposable {
       return { kind: 'blocked', reason: refused };
     }
     const args = answerArgs({ sessionId: meta.sessionId, stageId: target.stageId, replyFile });
+    input.onPhase('Migent is applying the reply…');
     // No await between this validation and the spawn.
     const run = runLong(runtime.launch, args, { cwd: context.root, env: runtime.env, onStderrLine: runtime.log });
-    const result = await run.result;
+    // The CLI runs the whole stage and exits only when it is done. The reply is received once the blocked execution
+    // is resumed, which shows within moments, so that is when the send settles; the process carries on.
+    const early = await this.#untilReceivedOrExited(input, run.result);
+    if (early.kind === 'received') return this.#receive(input, handle, { seen: early.seen, exit: run.result });
+    const { result } = early;
     if (result.kind === 'spawn-failed') {
       handle.release();
       runtime.logError(`spawn failed: ${result.detail}`);
@@ -242,19 +261,62 @@ export class ReplyService implements vscode.Disposable {
     return this.#settle(input, result, handle);
   }
 
-  async #settle(input: SendInput, result: ExitedRun, handle: { release: () => void }): Promise<SendResult> {
-    if (await this.#awaitConsumed(input)) {
-      handle.release();
-      return { kind: 'sent', hasKeptEdits: await this.#settleDraft(input.meta, input.content) };
+  /** The send settles while the CLI still runs the stage: release the gate and settle the draft as evidence allows. */
+  async #receive(
+    input: SendInput,
+    handle: { release: () => void },
+    received: { seen: 'consumed' | 'resumed'; exit: Promise<RunResult> },
+  ): Promise<SendResult> {
+    this.#keptFiles.add(input.replyFile);
+    void received.exit.then(() => {
+      this.#keptFiles.delete(input.replyFile);
+      return rm(input.replyFile, { force: true });
+    });
+    input.onPhase('Reply received');
+    handle.release();
+    if (received.seen === 'consumed') return { kind: 'sent', hasKeptEdits: await this.#settleDraft(input.meta, input.content) };
+    // Resumed, but its conversation does not show this text (yet): the draft is settled if it appears.
+    this.#followReply(input, handle);
+    return { kind: 'sent', hasKeptEdits: false };
+  }
+
+  /** Waits for the blocked execution to be resumed or for the process to exit, whichever comes first. */
+  async #untilReceivedOrExited(
+    input: SendInput,
+    exit: Promise<RunResult>,
+  ): Promise<{ kind: 'received'; seen: 'consumed' | 'resumed' } | { kind: 'exited'; result: RunResult }> {
+    let result: RunResult | undefined;
+    void exit.then((value) => {
+      result = value;
+    });
+    for (;;) {
+      await Promise.race([exit, sleep(RECONCILE_DELAY_MS)]);
+      if (result !== undefined) return { kind: 'exited', result };
+      input.context.store.refreshSession(input.meta.sessionId);
+      const seen = this.#seen(input);
+      if (seen !== 'none') return { kind: 'received', seen };
     }
-    // A rejection ended the command without consuming the reply: the draft stays and the user may send again.
-    // Otherwise the gate stays held until a later refresh shows the effect, so nothing is sent twice.
+  }
+
+  async #settle(input: SendInput, result: ExitedRun, handle: { release: () => void }): Promise<SendResult> {
+    input.onPhase('Waiting for the stage to resume…');
+    const seen = await this.#awaitResumed(input);
+    if (seen !== 'none') {
+      // The blocked execution moved on, so it cannot be answered again: the gate has done its job.
+      handle.release();
+      if (seen === 'consumed') return { kind: 'sent', hasKeptEdits: await this.#settleDraft(input.meta, input.content) };
+      // Resumed, but its conversation does not show this text (yet): the draft is kept, and settled if it appears.
+      this.#followReply(input, handle);
+      return { kind: 'unconfirmed' };
+    }
+    // A rejection ended the command without resuming anything: the draft stays and the user may send again.
+    // Otherwise the gate stays held until a later refresh shows the stage moved on, so nothing is sent twice.
     if (result.outcome === 'ConfigError' || result.outcome === 'Unknown') {
       handle.release();
       const detail = result.stderrTail.at(-1) ?? `Migent exited with code ${result.exitCode ?? 'unknown'}.`;
       return { kind: 'failed', detail };
     }
-    this.#releaseWhenConsumed(input, handle);
+    this.#followReply(input, handle);
     return { kind: 'unconfirmed' };
   }
 
@@ -264,34 +326,66 @@ export class ReplyService implements vscode.Disposable {
     return typeof again === 'string' ? again : this.#control.answerBlock(again.context, again.snapshot, true);
   }
 
-  async #awaitConsumed({ context, meta, target, text }: SendInput): Promise<boolean> {
+  /** What the session shows now: this reply used, the blocked execution resumed some other way, or neither. */
+  #seen({ context, meta, target, text }: SendInput): 'consumed' | 'resumed' | 'none' {
     const dir = sessionDir(context.root, meta.sessionId);
+    if (!replyResumed(dir, target)) return 'none';
+    return replyConsumed(dir, target, text) ? 'consumed' : 'resumed';
+  }
+
+  async #awaitResumed(input: SendInput): Promise<'consumed' | 'resumed' | 'none'> {
     for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt += 1) {
-      context.store.refreshSession(meta.sessionId);
-      if (replyConsumed(dir, target, text)) return true;
+      input.context.store.refreshSession(input.meta.sessionId);
+      const seen = this.#seen(input);
+      if (seen !== 'none') return seen;
       await sleep(RECONCILE_DELAY_MS);
     }
-    return false;
+    return 'none';
   }
 
   /**
-   * After the wait timed out, keep looking for the evidence: watch the session's executions (and every later
-   * execution, whose files hold the evidence), recheck on any change and on Refresh, and check once right after
-   * subscribing so nothing written in between is missed. The gate stays held until then.
+   * After the wait timed out, keep looking at the session's executions (and every later execution, whose files
+   * hold the evidence): recheck on any change and on Refresh, and once right after subscribing so nothing written
+   * in between is missed. The gate is released as soon as the blocked execution is resumed, whatever its
+   * conversation holds. The draft is settled only when the conversation shows this reply, which can arrive later.
    */
-  #releaseWhenConsumed(input: SendInput, handle: { release: () => void }): void {
-    const stop = this.#watchConsumption(input, () => {
+  #followReply(input: SendInput, handle: { release: () => void }): void {
+    const key = this.#followKey(input.meta);
+    const stop = this.#watchResumed(input, (seen) => {
+      handle.release();
+      if (seen !== 'consumed') return;
       stop();
       this.#late.delete(stop);
-      handle.release();
+      this.#following.delete(key);
       // Late confirmation settles the draft exactly like an immediate one, keeping newer edits.
       void this.#settleDraft(input.meta, input.content);
     });
     this.#late.add(stop);
+    this.#following.set(key, { stop, release: () => handle.release() });
   }
 
-  /** Calls `onConsumed` once the evidence exists; the returned function stops the subscription and watchers. */
-  #watchConsumption({ context, meta, target, text }: SendInput, onConsumed: () => void): () => void {
+  #followKey(meta: DraftMeta): string {
+    return `${meta.project}\u0000${meta.sessionId}`;
+  }
+
+  /**
+   * Give up waiting for a sent reply: stop watching and release the session. The reply may already have been sent,
+   * so this is the user's call; the draft stays and Refresh shows what happened.
+   */
+  public stopWaiting(meta: DraftMeta): void {
+    const key = this.#followKey(meta);
+    const following = this.#following.get(key);
+    if (following === undefined) return;
+    following.stop();
+    this.#late.delete(following.stop);
+    following.release();
+    this.#following.delete(key);
+    vscode.window.setStatusBarMessage('Stopped waiting. The reply may already have been sent; Refresh to check.', INFO_MESSAGE_MS);
+  }
+
+  /** Calls `onSeen` once the blocked execution was resumed; the returned function stops the watchers. */
+  #watchResumed(input: SendInput, onSeen: (seen: 'consumed' | 'resumed') => void): () => void {
+    const { context, meta, target } = input;
     const dir = sessionDir(context.root, meta.sessionId);
     const blockedOrder = parseExecutionId(target.executionId)?.order ?? 0;
     const held = new Map<string, vscode.Disposable>();
@@ -304,7 +398,8 @@ export class ReplyService implements vscode.Disposable {
         const executionId = execution.id;
         held.set(executionId, context.watcher.retain({ kind: 'execution', sessionId: meta.sessionId, executionId }));
       }
-      if (replyConsumed(dir, target, text)) onConsumed();
+      const seen = this.#seen(input);
+      if (seen !== 'none') onSeen(seen);
     };
     const subscription = this.#registry.onDidChange((change) => {
       const isSession = 'sessionId' in change && change.sessionId === meta.sessionId;
@@ -355,8 +450,10 @@ export class ReplyService implements vscode.Disposable {
     const file = this.draftPath(meta);
     if (existsSync(file)) await this.#show(file);
     if (result.kind === 'unconfirmed') {
-      const picked = await vscode.window.showWarningMessage('Status not confirmed. Your draft was kept.', 'Refresh', 'View log');
+      const actions = this.#following.has(this.#followKey(meta)) ? ['Refresh', 'Stop waiting', 'View log'] : ['Refresh', 'View log'];
+      const picked = await vscode.window.showWarningMessage('Status not confirmed. Your draft was kept.', ...actions);
       if (picked === 'Refresh') await vscode.commands.executeCommand('migent.refresh');
+      else if (picked === 'Stop waiting') this.stopWaiting(meta);
       else if (picked === 'View log') this.#control.showLog();
       return;
     }

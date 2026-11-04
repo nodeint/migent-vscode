@@ -4,6 +4,8 @@
 
 - Give Results, Session Metrics and Questions one session header (state, workflow, title, session facts, page tabs),
   one set of VS Code icons shared with the Sessions view, and colored editor-tab icons that follow the session state.
+- Release the session after a reply once the blocked execution is resumed, instead of waiting for the reply text in
+  the conversation, so a changed CLI prompt no longer leaves Submit disabled until the window is reloaded.
 - Remove the `migent.cli.path` setting and the Open CLI Settings command. The extension now finds `migent` on `PATH`,
   including the npm and pnpm `.cmd` launchers on Windows, whose JavaScript entry it runs with `node`.
 - Redesign the Results page with an in-page header (Results and Metrics buttons, more actions), output rows,
