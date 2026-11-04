@@ -5,7 +5,8 @@ import { childrenOf, type HandoffArtifact, readHandoff } from './handoff';
 import type { SessionSnapshot } from './model';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
 import { listOutputs, type OutputFileState } from './outputs';
-import { sessionTitle } from './sessionPresentation';
+import { sessionTitle, truncate } from './sessionPresentation';
+import { readSessionTask } from './sessionTask';
 import type { WorkflowEntry } from './workflows';
 
 /**
@@ -74,6 +75,8 @@ export interface ResultsChild {
   sessionId: string;
   title: string;
   state: string;
+  /** Full text of the child's `task.md`, trimmed of surrounding whitespace; null when missing, unreadable or blank. */
+  task: string | null;
 }
 
 export interface ResultsModel {
@@ -84,6 +87,8 @@ export interface ResultsModel {
   state: string;
   workflowId: string | null;
   completedAt: string | null;
+  /** Milliseconds from creation to the last update; only for a Completed session with valid timestamps. */
+  durationMs: number | null;
   outputs: { rows: ResultsOutput[]; directoryError: string | null };
   next: ResultsNext;
   source: ResultsSource | null;
@@ -116,6 +121,18 @@ function isFile(absolute: string | null): boolean {
   } catch {
     return false;
   }
+}
+
+const TITLE_MAX = 40;
+
+/** State glyph in the panel title: a check for Completed only, nothing for any other state. */
+const COMPLETED_GLYPH = '✓';
+
+/** The editor tab title: `<glyph> <workflow id or shortened title> · Results`. */
+export function resultsPanelTitle(model: ResultsModel): string {
+  if (model.availability === 'unavailable') return 'Results';
+  const glyph = model.state === 'Completed' ? `${COMPLETED_GLYPH} ` : '';
+  return `${glyph}${model.workflowId ?? truncate(model.title, TITLE_MAX)} · Results`;
 }
 
 export function targetState(workflow: string, workflows: readonly WorkflowEntry[]): TargetWorkflowState {
@@ -193,6 +210,14 @@ function sourceModel(input: ResultsInput, snapshot: SessionSnapshot): ResultsSou
   };
 }
 
+function durationOf(snapshot: SessionSnapshot): number | null {
+  if (snapshot.displayState.state !== 'completed') return null;
+  const created = Date.parse(snapshot.status?.createdAt ?? '');
+  const updated = Date.parse(snapshot.status?.updatedAt ?? '');
+  if (Number.isNaN(created) || Number.isNaN(updated) || updated < created) return null;
+  return updated - created;
+}
+
 function unavailable(sessionId: string): ResultsModel {
   return {
     availability: 'unavailable',
@@ -201,6 +226,7 @@ function unavailable(sessionId: string): ResultsModel {
     state: 'Unavailable',
     workflowId: null,
     completedAt: null,
+    durationMs: null,
     outputs: { rows: [], directoryError: null },
     next: { state: 'missing', detail: null, frozen: 'absent', canReload: false, suggestions: [] },
     source: null,
@@ -221,6 +247,7 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
     state: titleCase(snapshot.displayState.state),
     workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
     completedAt: isCompleted ? (snapshot.status?.updatedAt ?? null) : null,
+    durationMs: durationOf(snapshot),
     outputs: {
       rows: listing.rows.map((row) => ({
         key: outputKey(row),
@@ -236,6 +263,7 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
       sessionId: child.sessionId,
       title: sessionTitle(child),
       state: titleCase(child.displayState.state),
+      task: readSessionTask(path.join(path.dirname(input.sessionDirPath), child.sessionId)),
     })),
   };
 }

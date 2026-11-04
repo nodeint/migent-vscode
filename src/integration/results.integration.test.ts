@@ -84,7 +84,7 @@ async function closeAll(env: Env): Promise<void> {
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC10: a Completed row opens one reused Results panel; the header commands target its session',
+    name: 'AC10: a Completed row opens one reused Results panel; a palette-style command targets its session',
     async run(env) {
       await handoffProject(env);
       const id = identity(env, SOURCE);
@@ -151,11 +151,19 @@ const scenarios: Scenario[] = [
       await expectOpens('next.json opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'next.json'));
       await env.api.results.handle(source, { type: 'intent', intent: 'openTargetWorkflow', workflow: 'probe-target' });
       await expectOpens('workflow opened', path.join(env.root, '.migent', 'workflows', 'probe-target.yaml'));
+      // Header actions run the existing session command for this panel's own session, never the active panel's.
+      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
+      await expectOpens('task.md of the panel session opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md'));
+      await env.api.results.handle(target, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
+      await expectOpens('task.md of the other panel session opened', path.join(env.root, '.migent', 'sessions', TARGET, 'task.md'));
 
       const before = activeFile();
       await env.api.results.handle(source, { type: 'intent', intent: 'openOutput', name: 'path:../../../etc/passwd' });
       await env.api.results.handle(source, { type: 'intent', intent: 'run', command: 'migent' });
       await env.api.results.handle(source, { type: 'intent', intent: 'openOutput', path: 'C:/x', name: 7 });
+      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'deleteSession' });
+      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openOutput' });
+      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction' });
       await sleep(SETTLE_MS);
       assert.equal(activeFile(), before, 'invalid intents open nothing');
 

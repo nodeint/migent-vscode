@@ -1,31 +1,31 @@
-import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
 import { manifestPath, nextPath, sessionDir, workflowsDir } from '../../core/paths';
-import { parseResultsMessage, type ResultsIntent } from '../../core/resultsIntent';
+import { parseResultsMessage, type ResultsIntent, type SessionAction } from '../../core/resultsIntent';
 import {
   buildResultsModel,
   resolveHandoffPath,
   resolveOutputPath,
   type ResultsInput,
   type ResultsModel,
+  resultsPanelTitle,
 } from '../../core/resultsModel';
-import { truncate } from '../../core/sessionPresentation';
 import type { WorkflowEntry } from '../../core/workflows';
 import type { MigentChange, ProjectKey } from '../changes';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { Releasable } from '../watchBackend';
+import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
 
 const INFO_MESSAGE_MS = 5000;
 
 export const RESULTS_VIEW_TYPE = 'migent.results';
 
-const TITLE_MAX = 40;
-const NONCE_BYTES = 16;
+
+const PAGE: PageDescriptor = { folder: 'results', styles: ['results.css'], scripts: ['results.js'], title: 'Result' };
 
 export interface Identity {
   project: ProjectKey;
@@ -47,26 +47,18 @@ function isIdentity(value: unknown): value is Identity {
   return typeof project === 'string' && typeof sessionId === 'string' && project !== '' && sessionId !== '';
 }
 
-function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const nonce = randomBytes(NONCE_BYTES).toString('base64');
-  const asset = (name: string): string =>
-    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'results', name)).toString();
-  const csp = `default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';`;
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="${csp}">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="${asset('results.css')}">
-<title>Result</title>
-</head>
-<body>
-<main id="root"></main>
-<script nonce="${nonce}" src="${asset('results.js')}"></script>
-</body>
-</html>`;
-}
+/**
+ * Header actions and the existing session command each one runs. The command always receives the panel's
+ * own `{ project, sessionId }`, so it never falls back to the active panel or a picker.
+ */
+const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
+  openResult: 'migent.session.openOutput',
+  openTask: 'migent.session.openTask',
+  showLog: 'migent.session.showLog',
+  copyId: 'migent.session.copyId',
+  revealInExplorer: 'migent.session.revealInExplorer',
+  openQuestions: 'migent.session.openQuestions',
+};
 
 /** Actions the overview delegates to the Next step feature; set once by the extension. */
 export interface ResultsActions {
@@ -114,7 +106,7 @@ class Entry {
     this.#lastJson = json;
     this.lastModel = model;
     this.revision += 1;
-    this.panel.title = `Result: ${truncate(model.title, TITLE_MAX)}`;
+    this.panel.title = resultsPanelTitle(model);
     void this.panel.webview.postMessage({
       type: 'model',
       revision: this.revision,
@@ -194,7 +186,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
     }
     const panel = vscode.window.createWebviewPanel(
       RESULTS_VIEW_TYPE,
-      'Result',
+      'Results',
       vscode.ViewColumn.Active,
       this.#webviewOptions(),
     );
@@ -222,7 +214,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
   #webviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
     return {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.#extensionUri, 'media', 'results')],
+      localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
     };
   }
 
@@ -241,7 +233,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
     const key = keyOf(identity);
     this.#entries.set(key, entry);
     const { webview } = panel;
-    webview.html = html(webview, this.#extensionUri);
+    webview.html = renderPage(webview, this.#extensionUri, PAGE);
     webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(identity, raw);
     });
@@ -353,6 +345,12 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         return;
       case 'openTargetWorkflow':
         await this.#openWorkflow(context, intent.workflow);
+        return;
+      case 'sessionAction':
+        await vscode.commands.executeCommand(SESSION_ACTION_COMMANDS[intent.action], {
+          project: identity.project,
+          sessionId: identity.sessionId,
+        });
         return;
       case 'openSession':
         if (context.store.snapshot(intent.sessionId) === undefined) {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Redesign the Results page with an in-page header (Open result, Task, View log, more actions), output rows, next-step cards and a collapsed Details block.
+
 ## 0.1.1
 
 - Browse session files in their directory structure with the active file icon theme.
