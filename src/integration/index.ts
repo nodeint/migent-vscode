@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import { runCapabilityScenarios } from './capability.integration.test';
 import { runControlScenarios } from './control.integration.test';
-import { recordFailure, setFailureSuite } from './failureReport';
+import { failureCount, formatFailures, recordFailure, setFailureSuite } from './failureReport';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runNextStepScenarios } from './nextStep.integration.test';
 import { runQuestionScenarios } from './questions.integration.test';
@@ -15,6 +15,14 @@ import { runStatusBarScenarios } from './statusBar.integration.test';
 import { runTimelineScenarios } from './timeline.integration.test';
 import { runWatcherProbe } from './watcherProbe.integration.test';
 import { runWorkflowsProjectScenarios } from './workflowsProject.integration.test';
+
+class CasesFailedError extends Error {}
+
+/** A failed run reports its failed cases; the stack of the summary error itself says nothing useful. */
+function describe(error: unknown): string {
+  if (error instanceof CasesFailedError) return error.message;
+  return error instanceof Error ? (error.stack ?? error.message) : String(error);
+}
 
 /** Entry point loaded by VS Code (`extensionTestsPath`). Rejects when a required case fails. */
 export async function run(): Promise<void> {
@@ -47,15 +55,15 @@ export async function run(): Promise<void> {
     }
     const failed = probeFailed + scenariosFailed;
     if (failed > 0) {
-      throw new Error(`${failed} required integration case(s) failed`);
+      throw new CasesFailedError(`${failed} required integration case(s) failed:\n${formatFailures()}`);
     }
   } catch (error) {
-    if (!(error instanceof Error && /^\d+ required integration case\(s\) failed$/.test(error.message))) {
+    if (!(error instanceof CasesFailedError)) {
       recordFailure('setup', 'integration run interrupted', error);
     }
-    const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
-    console.error('INTEGRATION ERROR:', text);
+    const text = describe(error);
+    console.error(`INTEGRATION ERROR (${failureCount()} failure(s)):\n${text}`);
     fs.writeFileSync(process.env.MIGENT_IT_ERROR_PATH ?? path.resolve(__dirname, '..', 'last-error.txt'), text);
-    throw error;
+    throw error instanceof CasesFailedError ? new Error(error.message) : error;
   }
 }

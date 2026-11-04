@@ -15,8 +15,10 @@ import { createProject, type Env, migentPath, runScenarios, type Scenario, waitF
 /** The fixture workspace's own `migent.cli.path` (a workspace-relative node script). */
 const FIXTURE_CLI = './fake-migent.js';
 
-async function setting(key: string, value: string | undefined): Promise<void> {
-  await vscode.workspace.getConfiguration('migent').update(key, value, vscode.ConfigurationTarget.Workspace);
+async function setting(env: Env, key: string, value: string | undefined): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('migent', vscode.Uri.file(env.root))
+    .update(key, value, vscode.ConfigurationTarget.WorkspaceFolder);
 }
 
 function kindOf(env: Env): CapabilityKind | undefined {
@@ -39,12 +41,12 @@ async function withSetting(
   expected: CapabilityKind,
   check: () => void,
 ): Promise<void> {
-  await setting(key, value);
+  await setting(env, key, value);
   try {
     await waitFor(`capability ${expected}`, () => kindOf(env) === expected);
     check();
   } finally {
-    await setting(key, key === 'cli.path' ? FIXTURE_CLI : undefined);
+    await setting(env, key, key === 'cli.path' ? FIXTURE_CLI : undefined);
     await waitFor('capability restored', () => kindOf(env) === 'ok');
   }
 }

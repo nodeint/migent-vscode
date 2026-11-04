@@ -50,10 +50,23 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 
 `pnpm test:integration` builds the extension and `src/integration/` with esbuild, downloads VS Code
 through `@vscode/test-electron`, and runs the suite concurrently against the minimum
-supported version (`engines.vscode`) and the latest stable in separate workspaces and profiles. Files named
-`*.integration.test.ts` are excluded from Vitest. Each run copies
-`src/integration/fixtures/workspace/` to a temporary folder; it sets
-`.gitignore` ignoring `.migent`. Pass `--versions a,b` to choose versions and
+supported version (`engines.vscode`) and the latest stable in separate scratch trees and profiles. Files named
+`*.integration.test.ts` are excluded from Vitest. Each run opens VS Code from a `.code-workspace` file whose only
+folder is an empty anchor, so the window is multi-root from the start (adding a folder to a single-folder window
+restarts the extension host on 1.90). Every scenario and every watcher probe case gets its own folder, copied from
+`src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
+`updateWorkspaceFolders` and handed over once a sentinel file proves its watcher is live. Nothing is shared between
+cases, so no case waits for a previous case's `.migent/` to disappear. Folders are removed from the workspace after
+each case but deleted only when the run ends, because deleting a directory VS Code is still unwatching caused
+`EPERM`/`EBUSY` storms on Windows. `fake-migent.js` records the pid of every process it starts in
+`fake-pids.log`; a case fails if any of them is still alive after it, and a case that does not finish within two
+minutes fails by name.
+
+When a case fails, the run reports every failed case as `[suite] case name`, the message and the
+`src/...:line:column` of the failing test line (bundle frames are mapped through the source map by
+`failureReport.ts`). The same list is in the thrown error, the runner output, `dist-test/integration-failure-<version>.json`
+and, on GitHub Actions, as error annotations. Each case also logs `RUN`, `PASS` or `FAIL` with its duration in the
+VS Code log. Pass `--versions a,b` to choose versions and
 `--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
 delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to

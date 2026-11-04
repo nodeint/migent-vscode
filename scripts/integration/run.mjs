@@ -8,14 +8,13 @@
  * Every version runs even if an earlier one fails; the exit code is non-zero if any failed.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, createWriteStream, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { finished } from 'node:stream/promises';
 
 import { downloadAndUnzipVSCode, runTests } from '@vscode/test-electron';
-
-import { copyFixtureWorkspace } from './fixtureWorkspace.mjs';
 
 // Locally, keep successful runs quiet and replay runner output if anything fails.
 // CI prints the runner output and each version's VS Code log for diagnosis.
@@ -93,24 +92,35 @@ async function runVersion(version, executable, downloadError) {
   const logPath = join(outputDir, `integration-${label}.log`);
   rmSync(reportPath, { force: true });
   const log = createWriteStream(logPath);
-  const workspace = copyFixtureWorkspace(join(root, 'src', 'integration', 'fixtures', 'workspace'));
+  // One scratch tree per run: `anchor` is the only folder the window opens with (it never holds `.migent`), `template`
+  // is copied into a fresh folder for every scenario, and the VS Code profile lives outside every workspace folder.
+  const scratch = mkdtempSync(join(tmpdir(), 'migent-it-'));
+  const anchor = join(scratch, 'anchor');
+  const template = join(scratch, 'template');
+  mkdirSync(anchor);
+  mkdirSync(join(scratch, 'cases'));
+  cpSync(join(root, 'src', 'integration', 'fixtures', 'workspace'), template, { recursive: true });
+  // Opening from a .code-workspace file makes the window multi-root from the start. Adding a folder to a plain
+  // single-folder window restarts the extension host on VS Code 1.90.
+  const workspace = join(scratch, 'integration.code-workspace');
+  writeFileSync(workspace, JSON.stringify({ folders: [{ path: anchor }] }, null, 2));
   if (isExclude) {
     writeFileSync(
-      join(workspace, '.vscode', 'settings.json'),
+      join(template, '.vscode', 'settings.json'),
       JSON.stringify({ 'files.watcherExclude': { '**/.migent/**': true } }, null, 2) + '\n',
     );
   }
-  console.log(`\n=== VS Code ${version} (workspace ${workspace}) ===`);
+  console.log(`\n=== VS Code ${version} (scratch ${scratch}) ===`);
   try {
     if (downloadError) throw downloadError;
     await runTests({
       vscodeExecutablePath: executable,
       extensionDevelopmentPath: root,
       extensionTestsPath: join(root, 'dist-test', 'integration', 'index.js'),
-      launchArgs: [workspace, `--user-data-dir=${join(workspace, '.vscode-user')}`, `--extensions-dir=${join(workspace, '.vscode-extensions')}`, '--disable-workspace-trust'],
+      launchArgs: [workspace, `--user-data-dir=${join(scratch, 'vscode-user')}`, `--extensions-dir=${join(scratch, 'vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { MIGENT_IT_WORKSPACE: workspace, MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
+      extensionTestsEnv: { MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
     });
     return 0;
   } catch (error) {
@@ -118,7 +128,14 @@ async function runVersion(version, executable, downloadError) {
     try {
       const report = JSON.parse(readFileSync(reportPath, 'utf8'));
       for (const failure of report.failures) {
-        console.error(`FAIL [${failure.suite}] ${failure.name}\n  ${failure.message}`);
+        const where = failure.location ? `\n  at ${failure.location}` : '';
+        console.error(`FAIL [${failure.suite}] ${failure.name}\n  ${failure.message.replaceAll('\n', '\n  ')}${where}`);
+        if (process.env.GITHUB_ACTIONS) {
+          const [file, line] = String(failure.location ?? '').split(':');
+          const properties = file ? `file=${file},line=${line},` : '';
+          const title = `VS Code ${version}: ${failure.name}`.replaceAll(/[\r\n:,]/g, ' ');
+          console.error(`::error ${properties}title=${title}::${failure.message.replaceAll('\n', '%0A')}`);
+        }
       }
       console.error(`Failure report: ${reportPath}`);
     } catch {
@@ -135,7 +152,7 @@ async function runVersion(version, executable, downloadError) {
     if (process.env.CI) {
       console.log(`\n=== VS Code ${version} full log ===\n${readFileSync(logPath, 'utf8')}`);
     }
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 }
 }

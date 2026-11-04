@@ -15,6 +15,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const args = process.argv.slice(2);
+// The harness reads this to prove no fake CLI process outlives its scenario.
+fs.appendFileSync(path.join(process.cwd(), 'fake-pids.log'), `${process.pid}\n`);
 const RUN_MS = Number(process.env.MIGENT_FAKE_RUN_MS ?? 1500);
 const TICK_MS = 50;
 const CANCEL_WAIT_MS = 5000;
