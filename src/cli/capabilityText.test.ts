@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { describeCapability } from './capabilityText';
 import type { CapabilityState } from './version';
 
-const base: CapabilityState = { kind: 'ok', configured: 'migent', required: '0.3.1' };
+const base: CapabilityState = { kind: 'ok', required: '0.3.1' };
 
 describe('describeCapability', () => {
   it('has no diagnostic while checking or ok', () => {

@@ -1,6 +1,7 @@
 /**
- * S7 CLI capability scenarios (plans/02-monitoring.md §8: AC13). The fixture workspace points
- * `migent.cli.path` at `fake-migent.js` (run with node), so the default state is `ok`.
+ * S7 CLI capability scenarios (plans/02-monitoring.md §8: AC13). The runner puts a `migent` launcher for
+ * `fake-migent.js` first on `PATH` (as `npm install -g` would), so the default state is `ok`. A scenario
+ * changes `PATH` for the extension host and runs Recheck, then restores it.
  */
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -11,15 +12,6 @@ import * as vscode from 'vscode';
 import { type CapabilityKind, MINIMUM_CLI_VERSION } from '../cli/version';
 import type { TreeNode } from '../vscode/views/nodes';
 import { createProject, type Env, migentPath, runScenarios, type Scenario, waitFor, write } from './harness';
-
-/** The fixture workspace's own `migent.cli.path` (a workspace-relative node script). */
-const FIXTURE_CLI = './fake-migent.js';
-
-async function setting(env: Env, key: string, value: string | undefined): Promise<void> {
-  await vscode.workspace
-    .getConfiguration('migent', vscode.Uri.file(env.root))
-    .update(key, value, vscode.ConfigurationTarget.WorkspaceFolder);
-}
 
 function kindOf(env: Env): CapabilityKind | undefined {
   const project = env.project();
@@ -33,20 +25,36 @@ function diagnostic(env: Env): vscode.TreeItem | undefined {
   return node === undefined ? undefined : env.api.sessionsTree.getTreeItem(node);
 }
 
-/** Change a setting, wait for the new capability kind, and always restore the fixture setting. */
-async function withSetting(
+/** A launcher directory for `script` as the platform's package manager would write it, put first on PATH. */
+function launcherDirectory(env: Env, name: string, script: string, cmdBody?: string): string {
+  const directory = path.join(env.root, name);
+  fs.mkdirSync(directory, { recursive: true });
+  if (process.platform === 'win32') {
+    const body = cmdBody ?? `@node "%~dp0\\${path.basename(script)}" %*\r\n`;
+    write(path.join(directory, 'migent.cmd'), body);
+  } else {
+    write(path.join(directory, 'migent'), `#!/bin/sh\nexec node "$(dirname "$0")/${path.basename(script)}" "$@"\n`);
+    fs.chmodSync(path.join(directory, 'migent'), 0o755);
+  }
+  return directory;
+}
+
+/** Run `check` with PATH replaced, after Recheck reaches `expected`; always restore PATH and Recheck. */
+async function withPath(
   env: Env,
-  key: string,
-  value: string,
+  value: (original: string) => string,
   expected: CapabilityKind,
   check: () => void,
 ): Promise<void> {
-  await setting(env, key, value);
+  const original = process.env.PATH ?? '';
+  process.env.PATH = value(original);
   try {
+    await vscode.commands.executeCommand('migent.cli.recheck');
     await waitFor(`capability ${expected}`, () => kindOf(env) === expected);
     check();
   } finally {
-    await setting(env, key, key === 'cli.path' ? FIXTURE_CLI : undefined);
+    process.env.PATH = original;
+    await vscode.commands.executeCommand('migent.cli.recheck');
     await waitFor('capability restored', () => kindOf(env) === 'ok');
   }
 }
@@ -59,7 +67,9 @@ const scenarios: Scenario[] = [
       write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');
-      await withSetting(env, 'cli.path', 'no-such-migent-cli', 'missing', () => {
+      const empty = path.join(env.root, 'empty-path');
+      fs.mkdirSync(empty, { recursive: true });
+      await withPath(env, () => empty, 'missing', () => {
         const item = diagnostic(env);
         assert.ok(item, 'diagnostic node exists');
         assert.match(String(item.label), /not found/);
@@ -67,17 +77,18 @@ const scenarios: Scenario[] = [
         assert.equal(env.api.capability.aggregate(), 'missing');
         assert.ok(children(env).some((node) => node.kind === 'group'), 'sessions stay visible');
       });
-      await vscode.commands.executeCommand('migent.cli.recheck');
       assert.equal(kindOf(env), 'ok');
       assert.equal(diagnostic(env), undefined);
     },
   },
   {
-    name: 'AC13: a .cmd launcher is unsupported',
+    name: 'AC13: a .cmd launcher without a JavaScript entry is unsupported (Windows)',
     async run(env) {
+      if (process.platform !== 'win32') return;
       await createProject(env);
-      fs.writeFileSync(path.join(env.root, 'migent.cmd'), '@echo off\r\n');
-      await withSetting(env, 'cli.path', './migent.cmd', 'unsupported', () => {
+      await waitFor('capability ok', () => kindOf(env) === 'ok');
+      const directory = launcherDirectory(env, 'bad-launcher', 'none.js', '@echo off\r\n');
+      await withPath(env, (original) => `${directory}${path.delimiter}${original}`, 'unsupported', () => {
         assert.match(String(diagnostic(env)?.tooltip), /\.cmd launcher/);
       });
     },
@@ -87,8 +98,9 @@ const scenarios: Scenario[] = [
     async run(env) {
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');
-      fs.writeFileSync(path.join(env.root, 'old-migent.js'), "console.log('migent 0.2.0');");
-      await withSetting(env, 'cli.path', './old-migent.js', 'old', () => {
+      const directory = launcherDirectory(env, 'old-launcher', 'old-migent.js');
+      fs.writeFileSync(path.join(directory, 'old-migent.js'), "console.log('migent 0.2.0');");
+      await withPath(env, (original) => `${directory}${path.delimiter}${original}`, 'old', () => {
         const project = env.project();
         const state = project === undefined ? undefined : env.api.capability.state(project.key);
         assert.equal(state?.detected, '0.2.0');

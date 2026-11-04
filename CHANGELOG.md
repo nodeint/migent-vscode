@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the `migent.cli.path` setting and the Open CLI Settings command. The extension now finds `migent` on `PATH`,
+  including the npm and pnpm `.cmd` launchers on Windows, whose JavaScript entry it runs with `node`.
 - Redesign the Results page with an in-page header (Open result, Task, View log, more actions), output rows, next-step cards and a collapsed Details block.
 - Show a read-only Session Metrics page for a completed session, with timing, token usage, cost caveats,
   stage and execution details, opened from Results or the Sessions view.

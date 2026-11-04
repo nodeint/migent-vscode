@@ -35,12 +35,10 @@ describe('parseSemver and compareSemver', () => {
 });
 
 describe('probeCapability', () => {
-  const locate = (configured: string): LocateOptions => ({
-    configured,
+  const locate = (): LocateOptions => ({
     platform: 'linux',
     env: { PATH: '/bin' },
-    workspaceRoot: '/work',
-    probes: { isFile: (file) => file === '/bin/migent', isExecutable: () => true },
+    probes: { isFile: (file) => file === '/bin/migent', isExecutable: () => true, readText: () => null },
   });
   const outputting =
     (output: VersionOutput): RunVersion =>
@@ -49,7 +47,7 @@ describe('probeCapability', () => {
 
   it('is ok when the detected version meets the minimum', async () => {
     const state = await probeCapability({
-      locate: locate('migent'),
+      locate: locate(),
       run: outputting({ kind: 'output', stdout: '0.3.1\n' }),
     });
     expect(state).toMatchObject({ kind: 'ok', detected: '0.3.1', required: '0.3.1', resolvedPath: '/bin/migent' });
@@ -57,7 +55,7 @@ describe('probeCapability', () => {
 
   it('is old when below the effective minimum, even if above the constant', async () => {
     const state = await probeCapability({
-      locate: locate('migent'),
+      locate: locate(),
       required: '0.5.0',
       run: outputting({ kind: 'output', stdout: '0.4.0' }),
     });
@@ -66,7 +64,7 @@ describe('probeCapability', () => {
 
   it('is old against the built-in minimum when no minimum is injected', async () => {
     const state = await probeCapability({
-      locate: locate('migent'),
+      locate: locate(),
       run: outputting({ kind: 'output', stdout: '0.2.0' }),
     });
     expect(state).toMatchObject({ kind: 'old', detected: '0.2.0', required: MINIMUM_CLI_VERSION });
@@ -74,7 +72,7 @@ describe('probeCapability', () => {
 
   it('is unparsable when --version prints no version', async () => {
     const state = await probeCapability({
-      locate: locate('migent'),
+      locate: locate(),
       run: outputting({ kind: 'output', stdout: 'hello' }),
     });
     expect(state.kind).toBe('unparsable');
@@ -82,7 +80,7 @@ describe('probeCapability', () => {
 
   it('is error when --version fails', async () => {
     const state = await probeCapability({
-      locate: locate('migent'),
+      locate: locate(),
       run: outputting({ kind: 'failed', detail: 'timed out' }),
     });
     expect(state.kind).toBe('error');
@@ -92,7 +90,7 @@ describe('probeCapability', () => {
   it('is missing and runs nothing when the CLI is not found', async () => {
     let calls = 0;
     const state = await probeCapability({
-      locate: locate('nothing'),
+      locate: { ...locate(), env: { PATH: '/empty' } },
       run: () => {
         calls += 1;
         return Promise.resolve({ kind: 'output', stdout: '' });
@@ -109,8 +107,8 @@ describe('probeCapability', () => {
       calls += 1;
       return Promise.resolve({ kind: 'output', stdout: '0.3.1' });
     };
-    await probeCapability({ locate: locate('migent'), run, cache });
-    await probeCapability({ locate: locate('/bin/migent'), run, cache });
+    await probeCapability({ locate: locate(), run, cache });
+    await probeCapability({ locate: locate(), run, cache });
     expect(calls).toBe(1);
   });
 });

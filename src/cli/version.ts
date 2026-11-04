@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 
-import { type LaunchSpec, locateCli, type LocateOptions } from './locate';
+import { CLI_COMMAND, type LaunchSpec, locateCli, type LocateOptions } from './locate';
 
 /**
  * Oldest CLI the readers are written for (captured samples are 0.3.1). It belongs to the extension
@@ -65,7 +65,6 @@ export type CapabilityKind = 'checking' | 'ok' | 'missing' | 'unsupported' | 'ol
 
 export interface CapabilityState {
   kind: CapabilityKind;
-  configured: string;
   launch?: LaunchSpec;
   resolvedPath?: string;
   detected?: string;
@@ -110,7 +109,7 @@ const OUTPUT_EXCERPT_LENGTH = 120;
 
 /** Runs `--version` once per executable (when a cache is given) and compares it with `required`. */
 async function versionState(
-  base: Pick<CapabilityState, 'configured' | 'required' | 'resolvedPath'> & { launch: LaunchSpec },
+  base: Pick<CapabilityState, 'required' | 'resolvedPath'> & { launch: LaunchSpec },
   input: CapabilityInput,
 ): Promise<CapabilityState> {
   const run = input.run ?? runWithExecFile;
@@ -137,14 +136,13 @@ async function versionState(
 /** Locate the CLI, run `--version` and compare with the required minimum. Never throws. */
 export async function probeCapability(input: CapabilityInput): Promise<CapabilityState> {
   const required = input.required ?? MINIMUM_CLI_VERSION;
-  const configured = input.locate.configured.trim();
   const located = locateCli(input.locate);
   if (located.kind === 'missing') {
-    return { kind: 'missing', configured, required, detail: `"${configured}" was not found.` };
+    return { kind: 'missing', required, detail: `"${CLI_COMMAND}" was not found on PATH.` };
   }
   if (located.kind === 'unsupported') {
-    return { kind: 'unsupported', configured, required, resolvedPath: located.resolvedPath, detail: located.detail };
+    return { kind: 'unsupported', required, resolvedPath: located.resolvedPath, detail: located.detail };
   }
-  const base = { configured, required, launch: located.launch, resolvedPath: located.resolvedPath };
+  const base = { required, launch: located.launch, resolvedPath: located.resolvedPath };
   return versionState(base, input);
 }

@@ -140,12 +140,6 @@
         "category": "Migent"
       },
       {
-        "command": "migent.openSettings",
-        "title": "Open CLI Settings",
-        "category": "Migent",
-        "icon": "$(settings-gear)"
-      },
-      {
         "command": "migent.cli.recheck",
         "title": "Recheck CLI",
         "category": "Migent",
@@ -263,12 +257,6 @@
     "configuration": {
       "title": "Migent",
       "properties": {
-        "migent.cli.path": {
-          "type": "string",
-          "default": "migent",
-          "scope": "resource",
-          "markdownDescription": "Path or name of the Migent CLI. Use a native `migent.exe` or the CLI's JavaScript entry (`.js`, `.mjs`, `.cjs`, run with `node` from `PATH`). `.cmd`, `.bat` and `.ps1` launchers (such as an npm shim) are not supported."
-        },
         "migent.notifications.blocked": {
           "type": "boolean",
           "default": true,
@@ -363,7 +351,7 @@
       },
       {
         "view": "migent.sessions",
-        "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Open CLI Settings](command:migent.openSettings)\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
+        "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
         "when": "migent.hasProjects && migent.cliState =~ /^(missing|unsupported|old|unparsable|error)$/"
       },
       {
@@ -412,14 +400,9 @@
           "group": "9_delete"
         },
         {
-          "command": "migent.openSettings",
-          "when": "view == migent.sessions && viewItem == diag.cli",
-          "group": "inline@1"
-        },
-        {
           "command": "migent.cli.recheck",
           "when": "view == migent.sessions && viewItem == diag.cli",
-          "group": "inline@2"
+          "group": "inline@1"
         },
         {
           "command": "migent.session.answerQuestions",

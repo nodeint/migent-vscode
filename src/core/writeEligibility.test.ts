@@ -15,9 +15,9 @@ function snapshotWith(lock: SessionSnapshot['lock']): SessionSnapshot {
 }
 
 describe('checkWrite', () => {
-  it('blocks every write while the CLI is not ok, with a recovery that matches the cause', () => {
-    expect(checkWrite({ capability: 'missing' })).toMatchObject({ ok: false, reason: 'cli', recovery: 'settings' });
-    expect(checkWrite({ capability: 'old' })).toMatchObject({ recovery: 'settings' });
+  it('blocks every write while the CLI is not ok, with Recheck as the recovery', () => {
+    expect(checkWrite({ capability: 'missing' })).toMatchObject({ ok: false, reason: 'cli', recovery: 'recheck' });
+    expect(checkWrite({ capability: 'old' })).toMatchObject({ recovery: 'recheck' });
     expect(checkWrite({ capability: 'error' })).toMatchObject({ recovery: 'recheck' });
     expect(checkWrite({ capability: 'checking' })).toMatchObject({ ok: false, recovery: 'recheck' });
   });

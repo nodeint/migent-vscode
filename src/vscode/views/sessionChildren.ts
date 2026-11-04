@@ -74,7 +74,7 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
         color: 'list.warningForeground',
         contextValue: 'diag.cli',
         tooltip: cli.tooltip,
-        command: { command: 'migent.openSettings', title: 'Open Settings', arguments: [] },
+        command: { command: 'migent.cli.recheck', title: 'Recheck CLI', arguments: [] },
       }),
     );
   }

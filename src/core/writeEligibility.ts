@@ -3,13 +3,11 @@ import type { SessionSnapshot } from './model';
 
 /** Why a write command is unavailable, and what the user can do about it (plans/03-control.md §2). */
 export type WriteBlock =
-  | { reason: 'cli'; kind: Exclude<CapabilityKind, 'ok'>; recovery: 'settings' | 'recheck' }
+  | { reason: 'cli'; kind: Exclude<CapabilityKind, 'ok'>; recovery: 'recheck' }
   | { reason: 'foreign-lock'; host: string | null; pid: number | null; heartbeatAt: string | null; recovery: 'refresh' }
   | { reason: 'busy'; phase: string; recovery: 'none' };
 
 export type WriteCheck = { ok: true } | ({ ok: false } & WriteBlock);
-
-const SETTINGS_KINDS: ReadonlySet<CapabilityKind> = new Set(['missing', 'unsupported', 'old']);
 
 export interface WriteInput {
   capability: CapabilityKind;
@@ -25,8 +23,7 @@ export interface WriteInput {
  */
 export function checkWrite(input: WriteInput): WriteCheck {
   if (input.capability !== 'ok') {
-    const recovery = SETTINGS_KINDS.has(input.capability) ? 'settings' : 'recheck';
-    return { ok: false, reason: 'cli', kind: input.capability, recovery };
+    return { ok: false, reason: 'cli', kind: input.capability, recovery: 'recheck' };
   }
   if (input.pendingPhase !== undefined) return { ok: false, reason: 'busy', phase: input.pendingPhase, recovery: 'none' };
   const lock = input.snapshot?.lock;

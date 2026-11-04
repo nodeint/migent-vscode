@@ -8,9 +8,9 @@
  * Every version runs even if an earlier one fails; the exit code is non-zero if any failed.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, createWriteStream, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, createWriteStream, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { finished } from 'node:stream/promises';
 
@@ -110,6 +110,9 @@ async function runVersion(version, executable, downloadError) {
       JSON.stringify({ 'files.watcherExclude': { '**/.migent/**': true } }, null, 2) + '\n',
     );
   }
+  // The extension finds the CLI on PATH only, so a `migent` launcher for the fake CLI goes first, as `npm install -g` would.
+  const bin = writeFakeCliLauncher(scratch, join(template, 'fake-migent.js'));
+  const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
   console.log(`\n=== VS Code ${version} (scratch ${scratch}) ===`);
   try {
     if (downloadError) throw downloadError;
@@ -120,7 +123,7 @@ async function runVersion(version, executable, downloadError) {
       launchArgs: [workspace, `--user-data-dir=${join(scratch, 'vscode-user')}`, `--extensions-dir=${join(scratch, 'vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
+      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
     });
     return 0;
   } catch (error) {
@@ -155,4 +158,18 @@ async function runVersion(version, executable, downloadError) {
     rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 }
+}
+
+/** A directory whose `migent` runs `fakeCli` with node: a `.cmd` shim on Windows, a `#!/bin/sh` wrapper elsewhere. */
+function writeFakeCliLauncher(scratch, fakeCli) {
+  const bin = join(scratch, 'bin');
+  mkdirSync(bin);
+  copyFileSync(fakeCli, join(bin, 'fake-migent.js'));
+  if (process.platform === 'win32') {
+    writeFileSync(join(bin, 'migent.cmd'), '@node "%~dp0\\fake-migent.js" %*\r\n');
+  } else {
+    writeFileSync(join(bin, 'migent'), '#!/bin/sh\nexec node "$(dirname "$0")/fake-migent.js" "$@"\n');
+    chmodSync(join(bin, 'migent'), 0o755);
+  }
+  return bin;
 }

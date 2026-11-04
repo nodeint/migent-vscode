@@ -90,9 +90,9 @@ config edits, retained execution watchers, and `migent.refresh`. The scenarios i
 `sessionsTree.integration.test.ts` read the Sessions provider as VS Code would
 (groups, icons, Unknown reasons, badge, questions and history, execution files,
 selection and active editor staying put, Show more, commands). The scenarios in
-`capability.integration.test.ts` change `migent.cli.*` settings and check the diagnostic node, the
-capability states and Recheck; the fixture workspace points `migent.cli.path` at
-`fake-migent.js` (run with `node`), so they do not depend on an installed CLI. The scenarios in
+`capability.integration.test.ts` change the extension host's `PATH` and check the diagnostic node, the
+capability states and Recheck; `scripts/integration/run.mjs` puts a `migent` launcher for
+`fake-migent.js` (run with `node`) first on `PATH`, so they do not depend on an installed CLI. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
 text and hidden state; `results.integration.test.ts` opens Results panels from a Completed row, checks that
