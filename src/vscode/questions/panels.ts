@@ -43,7 +43,7 @@ const PAGE: PageDescriptor = {
   scripts: ['questions.js'],
   title: 'Questions',
 };
-const WAITING = 'Waiting for the project to load.';
+const WAITING = 'Loading the project…';
 
 /** Pending records of one batch, in stored order. */
 export function pendingBatch(snapshot: SessionSnapshot | undefined, id: BatchIdentity): PendingQuestion[] {
@@ -204,7 +204,7 @@ export class AnswerPanels implements vscode.Disposable {
     const reply = this.#submitter.pending(batchKeyOf(entry.identity));
     if (reply === null) return;
     entry.setSubmitted(reply);
-    entry.move({ state: 'unconfirmed', message: 'Status not confirmed. Recheck before sending again.' });
+    entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
   }
 
   #adopt(panel: vscode.WebviewPanel, identity: BatchIdentity): void {
@@ -322,7 +322,7 @@ export class AnswerPanels implements vscode.Disposable {
         draft: old.draft,
       });
     } catch (error) {
-      entry.setMessage(`The previous draft could not be archived (${describeError(error)}); nothing was replaced.`);
+      entry.setMessage(`The old draft could not be archived (${describeError(error)}), so the questions were not replaced.`);
       this.#publish(entry, true);
       return;
     }
@@ -344,7 +344,7 @@ export class AnswerPanels implements vscode.Disposable {
     try {
       await this.#drafts.delete(entry.identity);
     } catch (error) {
-      entry.setMessage(`The saved draft could not be removed: ${describeError(error)}`);
+      entry.setMessage(`The draft could not be deleted: ${describeError(error)}`);
     }
     this.#publish(entry, true);
   }
@@ -411,7 +411,7 @@ export class AnswerPanels implements vscode.Disposable {
     const reply = serializeAnswers(entry.questions, entry.draft);
     const reason = this.#blockReason(entry, resolved);
     if (reply === null || reason !== null || resolved === undefined) {
-      entry.setMessage(reason ?? 'Answer every question before sending.');
+      entry.setMessage(reason ?? 'Answer every question to send.');
       return null;
     }
     return { context: resolved.context, reply };
@@ -421,7 +421,7 @@ export class AnswerPanels implements vscode.Disposable {
   async #isDraftSaved(entry: Entry): Promise<boolean> {
     const unsaved = await entry.flush();
     if (unsaved === null) return true;
-    entry.setMessage(`The draft could not be saved (${unsaved}). Nothing was sent.`);
+    entry.setMessage(`Your draft could not be saved (${unsaved}), so nothing was sent.`);
     return false;
   }
 
@@ -429,7 +429,7 @@ export class AnswerPanels implements vscode.Disposable {
     const before = { state: entry.state };
     if (before.state !== 'editing' && before.state !== 'rejected') return;
     // The sending state is set before the first await, so a second Submit cannot start a competing call.
-    entry.move({ state: 'sending', message: 'Sending answers…' });
+    entry.move({ state: 'sending', message: 'Sending your answers…' });
     this.#publish(entry, true);
     const prepared = (await this.#isDraftSaved(entry)) ? this.#prepareSubmit(entry) : null;
     if (prepared === null) {
@@ -455,18 +455,18 @@ export class AnswerPanels implements vscode.Disposable {
   #apply(entry: Entry, settled: Settled): void {
     const { reconciliation: outcome, stderrLast, cleanupError } = settled;
     if (outcome.kind === 'recorded') {
-      const note = cleanupError === null ? '' : ` The saved submission could not be removed (${cleanupError}); reopen the panel and press Recheck to retry.`;
-      entry.move({ state: 'recorded', message: `Answers recorded.${note}` });
+      const note = cleanupError === null ? '' : ` A saved copy could not be removed (${cleanupError}). Reopen this page and press Check again to retry.`;
+      entry.move({ state: 'recorded', message: `Answers sent.${note}` });
       // The exact submitted snapshot is archived; later edits would belong to a new batch.
       void this.#drafts.delete(entry.identity).catch(() => undefined);
       this.#sync(entry);
     } else if (outcome.kind === 'pending') {
       const detail = stderrLast === null ? '' : ` ${stderrLast}`;
-      entry.move({ state: 'rejected', message: `The answers were not recorded.${detail}` });
+      entry.move({ state: 'rejected', message: `Your answers were not accepted.${detail}` });
     } else if (outcome.kind === 'answered-elsewhere') {
-      entry.move({ state: 'answered-elsewhere', message: 'These questions were answered by another client.' });
+      entry.move({ state: 'answered-elsewhere', message: 'These questions were already answered somewhere else.' });
     } else {
-      entry.move({ state: 'unconfirmed', message: 'Status not confirmed. Recheck before sending again.' });
+      entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
     }
     if (outcome.kind !== 'unconfirmed') entry.setSubmitted(null);
     this.#publish(entry, true);

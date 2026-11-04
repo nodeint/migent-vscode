@@ -38,8 +38,8 @@ function hasContinued(input: BatchStateInput): boolean {
 
 function continuation(input: BatchStateInput): StateUpdate {
   return hasContinued(input)
-    ? { state: 'continuing', message: 'Answers recorded. The stage is continuing.' }
-    : { state: 'recorded-waiting', message: 'Answers recorded, but continuation has not started.' };
+    ? { state: 'continuing', message: 'Answers sent. The stage is continuing.' }
+    : { state: 'recorded-waiting', message: 'Answers saved, but the stage has not continued yet.' };
 }
 
 function noLongerPending(input: BatchStateInput): StateUpdate {
@@ -48,8 +48,8 @@ function noLongerPending(input: BatchStateInput): StateUpdate {
     (record) => record.executionId === executionId && record.stageId === stageId && record.status === 'answered',
   );
   return isAnswered
-    ? { state: 'answered-elsewhere', message: 'These questions were answered. The recorded answers are shown.' }
-    : { state: 'unavailable', message: 'These questions are no longer pending.' };
+    ? { state: 'answered-elsewhere', message: 'These questions were already answered. The answers are shown below.' }
+    : { state: 'unavailable', message: 'These questions are no longer waiting for an answer.' };
 }
 
 /**
@@ -61,7 +61,7 @@ export function refreshBatchState(input: BatchStateInput): StateUpdate | null {
   if (FROZEN.has(input.state)) return null;
   if (input.current.length === 0) return noLongerPending(input);
   if (batchFingerprint(input.current) !== input.fingerprint) {
-    return { state: 'stale', message: 'The questions changed. Your draft is kept as a reference.' };
+    return { state: 'stale', message: 'The questions have changed since you opened this page. Your draft is kept for reference.' };
   }
   const isRecoverable = input.state === 'stale' || input.state === 'unavailable';
   return isRecoverable ? { state: 'editing', message: null } : null;

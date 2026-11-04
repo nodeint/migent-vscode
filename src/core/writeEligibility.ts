@@ -53,6 +53,6 @@ export function describeBlock(block: WriteBlock): string {
       return `Another process holds this session (${owner || 'unknown'}${beat}).`;
     }
     case 'busy':
-      return `${block.phase}…`;
+      return `Another operation on this session is still running (${block.phase.toLowerCase()}).`;
   }
 }
