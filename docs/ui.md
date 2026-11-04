@@ -67,7 +67,7 @@ each with a fallback; never hard-code a color.
 
 | Component | Classes | Use |
 | :--- | :--- | :--- |
-| Page header | `mg-header`, `mg-title`, `mg-subtitle`, `mg-actions` | Status, title, one-line subtitle and the page's actions |
+| Page header | `mg-header`, `mg-title`, `mg-subtitle`, `mg-actions` | Status, title, one-line subtitle and the page's actions. Results and Session Metrics share `sessionHeader`: Results and Metrics buttons (the current page's is disabled) and a more menu |
 | Alert | `mg-alert` with `mg-warn` / `mg-error` | A problem or explanation that stays visible, wrapped inside the page width |
 | Text field | `mg-input` | A single-line input or a text area |
 | Action footer | `mg-footer` | Sticky bar of buttons that wraps at narrow widths and takes its own space, so it never covers content |

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const { el, section, connect, details, menuButton } = window.MigentPage;
+  const { el, section, connect, details, sessionHeader } = window.MigentPage;
   const root = document.getElementById('root');
 
   /** A native button that sends `intent`. `kind` is a base.css button modifier. */
@@ -20,14 +20,6 @@
   }
 
   const FILE_STATE = { ok: '', missing: ' (file missing)', rejected: ' (path outside the session)' };
-
-  // Status icon and tone per session state. The text is always shown too, so color is never the only signal.
-  const STATUS = {
-    completed: { icon: '✓', tone: 'ok' },
-    failed: { icon: '✗', tone: 'error' },
-    running: { icon: '●', tone: 'info' },
-    stopped: { icon: '■', tone: 'warn' },
-  };
 
   const MS_PER_SECOND = 1000;
   const SECONDS_PER_MINUTE = 60;
@@ -45,39 +37,15 @@
     return seconds + 's';
   }
 
-  function statusIndicator(state) {
-    const known = STATUS[state.toLowerCase()] || { icon: '○', tone: 'info' };
-    const node = el('span', null, 'mg-status mg-status--' + known.tone);
-    const icon = el('span', known.icon);
-    icon.setAttribute('aria-hidden', 'true');
-    node.append(icon, el('span', state));
-    return node;
-  }
-
   function renderHeader(model) {
-    const header = el('header', null, 'mg-header');
-    header.append(statusIndicator(model.state));
-    header.append(el('h1', model.title, 'mg-title'));
-    const subtitle = [model.workflowId, model.sessionId, model.durationMs === null ? null : formatDuration(model.durationMs)];
-    header.append(el('p', subtitle.filter((part) => part).join(' · '), 'mg-subtitle'));
-    const actions = el('div', null, 'mg-actions');
-    actions.append(
-      action('Open result', sessionAction('openResult'), 'primary'),
-      action('Task', sessionAction('openTask'), 'secondary'),
-      action('Metrics', sessionAction('openMetrics'), 'secondary'),
-      action('View log', sessionAction('showLog'), 'secondary'),
-      menuButton({
-        label: '⋯',
-        ariaLabel: 'More actions',
-        items: [
-          { label: 'Copy session ID', onSelect: () => page.send(sessionAction('copyId')) },
-          { label: 'Reveal in Explorer', onSelect: () => page.send(sessionAction('revealInExplorer')) },
-          { label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) },
-        ],
-      }),
-    );
-    header.append(actions);
-    return header;
+    return sessionHeader(page, {
+      state: model.state,
+      title: model.title,
+      subtitle: [model.workflowId, model.sessionId, model.durationMs === null ? null : formatDuration(model.durationMs)],
+      current: 'results',
+      openMetrics: sessionAction('openMetrics'),
+      menuItems: [{ label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) }],
+    });
   }
 
   function outputRow(row) {

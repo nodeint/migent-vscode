@@ -194,5 +194,66 @@
     return wrapper;
   }
 
-  window.MigentPage = { el, section, connect, details, menuButton, trackFooter };
+  // Status icon and tone per session state. The text is always shown too, so color is never the only signal.
+  const STATUS = {
+    completed: { icon: '✓', tone: 'ok' },
+    failed: { icon: '✗', tone: 'error' },
+    running: { icon: '●', tone: 'info' },
+    stopped: { icon: '■', tone: 'warn' },
+  };
+
+  function statusIndicator(state) {
+    const known = STATUS[state.toLowerCase()] || { icon: '○', tone: 'info' };
+    const node = el('span', null, 'mg-status mg-status--' + known.tone);
+    const icon = el('span', known.icon);
+    icon.setAttribute('aria-hidden', 'true');
+    node.append(icon, el('span', state));
+    return node;
+  }
+
+  function sessionAction(name) {
+    return { intent: 'sessionAction', action: name };
+  }
+
+  /**
+   * The header shared by the Results and Session Metrics pages: status, title, subtitle, two page buttons
+   * (Results, Metrics) and a more menu (Open task, View log, Copy session ID, Reveal in Explorer, then
+   * `options.menuItems`). `options.current` is 'results' or 'metrics'; that page's button is disabled and needs
+   * no intent. `options.openResults` and `options.openMetrics` are the intents of the other button.
+   */
+  function sessionHeader(page, options) {
+    const header = el('header', null, 'mg-header');
+    header.append(statusIndicator(options.state), el('h1', options.title, 'mg-title'));
+    header.append(el('p', options.subtitle.filter((part) => part).join(' · '), 'mg-subtitle'));
+    const actions = el('div', null, 'mg-actions');
+    for (const tab of [
+      { key: 'results', label: 'Results', intent: options.openResults },
+      { key: 'metrics', label: 'Metrics', intent: options.openMetrics },
+    ]) {
+      const node = page.button(tab.label, tab.intent, 'mg-btn mg-btn--secondary');
+      if (tab.key === options.current) {
+        node.disabled = true;
+        node.setAttribute('aria-current', 'page');
+      }
+      actions.append(node);
+    }
+    const send = (name) => () => page.send(sessionAction(name));
+    actions.append(
+      menuButton({
+        label: '⋯',
+        ariaLabel: 'More actions',
+        items: [
+          { label: 'Open task', onSelect: send('openTask') },
+          { label: 'View log', onSelect: send('showLog') },
+          { label: 'Copy session ID', onSelect: send('copyId') },
+          { label: 'Reveal in Explorer', onSelect: send('revealInExplorer') },
+          ...options.menuItems,
+        ],
+      }),
+    );
+    header.append(actions);
+    return header;
+  }
+
+  window.MigentPage = { el, section, connect, details, menuButton, trackFooter, sessionHeader };
 })();
