@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const { el, section, connect } = window.MigentPage;
+  const { el, section, connect, statusIndicator: indicator } = window.MigentPage;
   const root = document.getElementById('root');
   const NO_TRANSIENT = { pending: null, error: null };
 
@@ -21,14 +21,10 @@
 
   // Launch status: icon, tone and text, so color is never the only signal.
   function statusIndicator(model, transient) {
-    let known = { icon: '✓', tone: 'ok', text: 'Ready' };
-    if (transient.pending) known = { icon: '●', tone: 'info', text: transient.pending };
-    else if (model.launchBlock) known = { icon: '⚠', tone: 'warn', text: 'Blocked' };
-    const node = el('span', null, 'mg-status mg-status--' + known.tone);
-    const icon = el('span', known.icon);
-    icon.setAttribute('aria-hidden', 'true');
-    node.append(icon, el('span', known.text));
-    return node;
+    let known = { icon: 'pass', tone: 'ok', text: 'Ready' };
+    if (transient.pending) known = { icon: 'sync', tone: 'info', spin: true, text: transient.pending };
+    else if (model.launchBlock) known = { icon: 'warning', tone: 'warn', text: 'Blocked' };
+    return indicator(known);
   }
 
   function renderHeader(model, transient) {

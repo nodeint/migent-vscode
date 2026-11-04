@@ -12,6 +12,27 @@ export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayStateName, string>> = {
   unknown: 'question',
 };
 
+/** The tone of each state: the color of its icon in the Sessions view, the badge and the editor tab. */
+export type StateTone = 'info' | 'ok' | 'warn' | 'error' | 'muted';
+
+export const DISPLAY_STATE_TONES: Readonly<Record<DisplayStateName, StateTone>> = {
+  prepared: 'muted',
+  running: 'info',
+  blocked: 'warn',
+  question: 'warn',
+  failed: 'error',
+  stopped: 'muted',
+  cancelled: 'muted',
+  completed: 'ok',
+  unknown: 'muted',
+};
+
+/** The tone of a state by name in any letter case; anything that is not a display state is `muted`. */
+export function stateTone(state: string): StateTone {
+  const key = state.toLowerCase();
+  return Object.entries(DISPLAY_STATE_TONES).find(([name]) => name === key)?.[1] ?? 'muted';
+}
+
 export interface DisplayStatusInput {
   /** Parsed status.json, or null when missing or unreadable. */
   status: SessionStatus | null;

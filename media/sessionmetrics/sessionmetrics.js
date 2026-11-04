@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const { el, section, connect, details, sessionHeader } = window.MigentPage;
+  const { el, section, connect, details, sessionHeader, icon } = window.MigentPage;
   const root = document.getElementById('root');
   const numberFormat = new Intl.NumberFormat('en-US');
   const NONE = '—';
@@ -21,7 +21,6 @@
   const SECONDS_PER_MINUTE = 60;
   const SECONDS_PER_HOUR = 3600;
   const PERCENT = 100;
-  const MS_PER_SECOND = 1000;
 
   function isNumber(value) {
     return typeof value === 'number';
@@ -64,36 +63,30 @@
     return date === null ? null : date.toLocaleTimeString();
   }
 
-  /** Session wall time: from the metrics when recorded, else the status timestamps. */
-  function wallSeconds(model) {
-    if (model.metrics.kind === 'ok' && isNumber(model.metrics.totals.wallSeconds)) return model.metrics.totals.wallSeconds;
-    return isNumber(model.durationMs) ? model.durationMs / MS_PER_SECOND : null;
-  }
-
   function renderHeader(model) {
-    const completed = formatDateTime(model.completedAt);
-    const wall = wallSeconds(model);
     return sessionHeader(page, {
       state: model.state,
       title: model.title,
-      subtitle: [
-        model.workflowId,
-        model.sessionId,
-        completed === null ? null : 'completed ' + completed,
-        wall === null ? null : formatSeconds(wall),
-      ],
+      workflowId: model.workflowId,
+      meta: model.meta,
       current: 'metrics',
-      openResults: { intent: 'openResults' },
+      tabs: [
+        ...(model.meta.pendingQuestions > 0
+          ? [{ key: 'questions', label: 'Questions', onSelect: () => page.send({ intent: 'sessionAction', action: 'answerQuestions' }) }]
+          : []),
+        { key: 'results', label: 'Results', onSelect: () => page.send({ intent: 'openResults' }) },
+        { key: 'metrics', label: 'Metrics' },
+      ],
       menuItems: [{ label: 'Open metrics.json', onSelect: () => page.send({ intent: 'openMetricsFile' }) }],
     });
   }
 
   function banner(isError) {
     const node = el('div', null, 'metrics-banner' + (isError ? ' metrics-banner--error' : ''));
-    const icon = el('span', isError ? '✗' : '⚠', isError ? 'mg-error' : 'mg-warn');
-    icon.setAttribute('aria-hidden', 'true');
+    const mark = el('span', null, isError ? 'mg-error' : 'mg-warn');
+    mark.append(icon(isError ? 'error' : 'warning'));
     const body = el('div');
-    node.append(icon, body);
+    node.append(mark, body);
     return { node, body };
   }
 

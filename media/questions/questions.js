@@ -3,22 +3,23 @@
 (function () {
   'use strict';
 
-  const { el, details, connect, trackFooter } = window.MigentPage;
+  const { el, details, connect, trackFooter, sessionHeader, icon } = window.MigentPage;
   const root = document.getElementById('root');
   const CONTEXT_CLAMP_LENGTH = 240;
   const WARN_STATES = ['rejected', 'unconfirmed', 'stale', 'answered-elsewhere', 'unavailable', 'recorded-waiting'];
-  // Icon, tone and text per state, so status is never color alone.
+  // Icon, tone and text per state. Icons and tones are the session vocabulary (MigentPage.sessionStates): waiting
+  // for the user is the yellow question bubble, work in progress the blue sync, recorded the green check.
   const STATES = {
-    editing: { icon: '●', tone: 'info', text: 'Answering' },
-    sending: { icon: '●', tone: 'info', text: 'Sending' },
-    recorded: { icon: '✓', tone: 'ok', text: 'Recorded' },
-    continuing: { icon: '●', tone: 'info', text: 'Continuing' },
-    'recorded-waiting': { icon: '⚠', tone: 'warn', text: 'Recorded, not continued' },
-    rejected: { icon: '✕', tone: 'error', text: 'Rejected' },
-    unconfirmed: { icon: '⚠', tone: 'warn', text: 'Not confirmed' },
-    stale: { icon: '⚠', tone: 'warn', text: 'Out of date' },
-    'answered-elsewhere': { icon: '⚠', tone: 'warn', text: 'Answered elsewhere' },
-    unavailable: { icon: '✕', tone: 'error', text: 'Unavailable' },
+    editing: { icon: 'comment-discussion', tone: 'warn', text: 'Answering' },
+    sending: { icon: 'sync', tone: 'info', spin: true, text: 'Sending' },
+    recorded: { icon: 'pass', tone: 'ok', text: 'Recorded' },
+    continuing: { icon: 'sync', tone: 'info', spin: true, text: 'Continuing' },
+    'recorded-waiting': { icon: 'warning', tone: 'warn', text: 'Recorded, not continued' },
+    rejected: { icon: 'error', tone: 'error', text: 'Rejected' },
+    unconfirmed: { icon: 'warning', tone: 'warn', text: 'Not confirmed' },
+    stale: { icon: 'warning', tone: 'warn', text: 'Out of date' },
+    'answered-elsewhere': { icon: 'warning', tone: 'warn', text: 'Answered elsewhere' },
+    unavailable: { icon: 'error', tone: 'error', text: 'Unavailable' },
   };
   let model = null;
   // Context blocks the reader expanded; kept across re-renders.
@@ -52,11 +53,11 @@
     const done = completeness();
     const count = done.filter(Boolean).length;
     const counter = document.getElementById('counter');
-    if (counter) counter.textContent = (count === model.questions.length ? '✓ ' : '') + count + '/' + model.questions.length + ' answered';
+    if (counter) counter.textContent = counterText();
     model.questions.forEach((q, index) => {
       const jump = document.getElementById('jump-' + q.id);
       if (!jump) return;
-      jump.textContent = (done[index] ? '✓ ' : '') + q.id;
+      jump.replaceChildren(...(done[index] ? [icon('pass')] : []), q.id);
       jump.setAttribute('aria-label', 'Go to question ' + q.id + (done[index] ? ' (answered)' : ' (not answered)'));
     });
     const submitButton = document.getElementById('submit');
@@ -153,33 +154,39 @@
       area.addEventListener('input', (event) => edit(q.id, { text: event.target.value }));
       box.append(area);
       if (model.ambiguous.includes(q.id)) {
-        const warning = el('p', '⚠ This text equals an option letter, so the CLI will read it as that option.', 'mg-alert mg-warn');
+        const warning = el('p', null, 'mg-alert mg-warn');
+        warning.append(icon('warning'), ' This text equals an option letter, so the CLI will read it as that option.');
         warning.setAttribute('role', 'status');
         box.append(warning);
       }
     }
     if (model.recorded && model.recorded[q.id] !== undefined) {
-      box.append(el('div', '✓ Recorded: ' + model.recorded[q.id], 'q-recorded'));
+      const recorded = el('div', null, 'q-recorded');
+      recorded.append(icon('pass'), ' Recorded: ' + model.recorded[q.id]);
+      box.append(recorded);
     }
     return box;
   }
 
-  function statusIndicator() {
-    const known = STATES[model.state] || { icon: '●', tone: 'info', text: model.state };
-    const node = el('span', null, 'mg-status mg-status--' + known.tone);
-    const icon = el('span', known.icon);
-    icon.setAttribute('aria-hidden', 'true');
-    node.append(icon, el('span', known.text));
-    return node;
+  function counterText() {
+    const count = completeness().filter(Boolean).length;
+    return count + '/' + model.questions.length + ' answered';
   }
 
   function header() {
-    const node = el('header', null, 'mg-header');
-    node.append(statusIndicator(), el('h1', model.title, 'mg-title'), el('p', model.crumb, 'mg-subtitle'));
-    const counter = el('p', null, 'q-progress');
-    counter.id = 'counter';
-    node.append(counter);
-    return node;
+    return sessionHeader(page, {
+      state: model.sessionState,
+      title: model.title,
+      workflowId: model.workflowId,
+      meta: model.meta,
+      current: 'questions',
+      tabs: [
+        { key: 'questions', label: 'Questions' },
+        { key: 'results', label: 'Results', onSelect: () => page.post({ type: 'openResults' }) },
+        { key: 'metrics', label: 'Metrics', onSelect: () => page.post({ type: 'openMetrics' }) },
+      ],
+      sendAction: (action) => page.post({ type: 'sessionAction', action }),
+    });
   }
 
   function note() {
@@ -191,11 +198,27 @@
     return node;
   }
 
+  // The batch's own state is the page's, not the session's: progress, and the state once it is not Answering.
+  function progressChip() {
+    const known = STATES[model.state] || { icon: 'question', tone: 'muted', text: model.state };
+    const chip = el('span', null, 'q-progress');
+    const count = el('span', counterText());
+    count.id = 'counter';
+    chip.append(icon('checklist'), count);
+    if (model.state !== 'editing') {
+      const state = el('span', null, 'mg-status mg-status--' + known.tone);
+      state.append(icon(known.icon, known.spin), el('span', known.text));
+      chip.append(state);
+    }
+    return chip;
+  }
+
   function jumps() {
-    const nav = el('nav', null, 'mg-actions q-jumps');
+    const nav = el('nav', null, 'q-jumps');
     nav.setAttribute('aria-label', 'Questions');
+    nav.append(progressChip());
     for (const q of model.questions) {
-      const jump = el('button', q.id, 'mg-btn mg-btn--secondary');
+      const jump = el('button', q.id, 'q-jump');
       jump.type = 'button';
       jump.id = 'jump-' + q.id;
       jump.addEventListener('click', () => document.getElementById('card-' + q.id).scrollIntoView());

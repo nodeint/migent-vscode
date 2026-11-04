@@ -125,6 +125,10 @@ class FakeDocument {
     return new FakeElement(tag.toUpperCase(), this);
   }
 
+  public createElementNS(_namespace: string, tag: string): FakeElement {
+    return this.createElement(tag);
+  }
+
   public getElementById(id: string): FakeElement | null {
     return id === 'root' ? this.root : (this.root.descendants().find((node) => node.id === id) ?? null);
   }
@@ -159,7 +163,15 @@ function model(revision: number, overrides: Record<string, unknown> = {}) {
     generation: 1,
     fingerprint: 'f1',
     title: 'Questions',
-    crumb: 'a › b',
+    workflowId: 'implement',
+    sessionState: 'Question',
+    meta: {
+      stageId: 'plan',
+      createdAt: '2026-11-01T10:00:00.000+00:00',
+      updatedAt: '2026-11-01T10:09:48.000+00:00',
+      isRunning: false,
+      pendingQuestions: 3,
+    },
     state: 'editing',
     message: null,
     questions: [question('1'), question('2')],
@@ -220,7 +232,7 @@ function load() {
     }),
   });
   const media = path.join(__dirname, '../../../media');
-  for (const file of ['shared/page.js', 'questions/questions.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
+  for (const file of ['shared/icons.js', 'shared/page.js', 'questions/questions.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   const deliver = (revision: number, next: Record<string, unknown>): void => {
     for (const handler of windowListeners.message ?? []) handler({ data: { type: 'model', revision, identity: { a: 1 }, model: next } });
   };
@@ -250,6 +262,34 @@ describe('Questions page', () => {
     page.deliver(2, model(2, { draft: {} }));
     expect(page.byId('q1A').checked).toBe(true);
     expect(page.byId('counter').textContent).toBe('1/2 answered');
+  });
+
+  it('shows the shared session header with Questions, Results and Metrics tabs', () => {
+    const page = load();
+    page.deliver(1, model(1));
+    const tabs = page.doc.root.descendants().filter((node) => node.className === 'mg-tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Results', 'Metrics']);
+    expect(tabs[0]?.attrs['aria-current']).toBe('page');
+    tabs[1]?.click();
+    tabs[2]?.click();
+    expect(page.posted.slice(-2)).toEqual([{ type: 'openResults' }, { type: 'openMetrics' }]);
+    expect(page.doc.root.descendants().some((node) => node.textContent === 'implement')).toBe(true);
+    const badge = page.doc.root.descendants().find((node) => node.className.startsWith('mg-status '));
+    expect(badge?.textContent).toBe('Question');
+    const facts = page.doc.root.descendants().filter((node) => node.className.includes('mg-meta-item'));
+    expect(facts.map((fact) => fact.textContent)).toEqual([
+      'plan',
+      '9m 48s',
+      expect.stringMatching(/ ago$/),
+      '3 pending',
+    ]);
+    expect(page.byId('counter').textContent).toBe('0/2 answered');
+    expect(page.doc.root.descendants().some((node) => node.textContent === 'Recorded')).toBe(false);
+    page.deliver(2, model(2, { state: 'recorded', editable: false, canSubmit: false }));
+    expect(page.doc.root.descendants().some((node) => node.textContent === 'Recorded')).toBe(true);
+    // The session facts do not depend on the page's own state.
+    const again = page.doc.root.descendants().filter((node) => node.className.includes('mg-meta-item'));
+    expect(again.map((fact) => fact.textContent)).toEqual(facts.map((fact) => fact.textContent));
   });
 
   it('replaces the draft when the host changes the generation or the batch', () => {

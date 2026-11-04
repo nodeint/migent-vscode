@@ -14,13 +14,16 @@ import {
   verifyBatch,
 } from '../../core/questionAnswers';
 import { type QuestionRecord, type QuestionsRead, readQuestions } from '../../core/questions';
-import { sessionLabel, truncate } from '../../core/sessionPresentation';
+import { titleCase } from '../../core/resultsModel';
+import { buildSessionMeta } from '../../core/sessionMeta';
+import { sessionTitle, truncate } from '../../core/sessionPresentation';
 import type { AnswerRequest, AnswerSubmitter } from '../answers';
 import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
-import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import { SESSION_ACTION_COMMANDS } from '../results/panels';
+import { type PageDescriptor, pageResourceRoots, renderPage, tabIcon } from '../webview/page';
 import { DraftStore } from './drafts';
 import { type BatchIdentity, batchKeyOf, Entry, isBatchIdentity } from './entry';
 
@@ -28,9 +31,12 @@ export type { BatchIdentity } from './entry';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
+  snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null;
+
 export const ANSWER_VIEW_TYPE = 'migent.answerQuestions';
 
-const TITLE_MAX = 40;
+const TITLE_MAX = 32;
 const PAGE: PageDescriptor = {
   folder: 'questions',
   styles: ['questions.css'],
@@ -237,6 +243,9 @@ export class AnswerPanels implements vscode.Disposable {
         if (message.revision === entry.revision && message.fingerprint === entry.fingerprint) await this.#submit(entry);
         else this.#publish(entry, true);
         return;
+      case 'sessionAction':
+        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS[message.action]);
+        return;
       default:
         await this.#command(entry, message.type);
     }
@@ -265,9 +274,21 @@ export class AnswerPanels implements vscode.Disposable {
       case 'later':
         entry.panel.dispose();
         return;
+      case 'openResults':
+        await this.#runSessionCommand(entry, 'migent.session.openResult');
+        return;
+      case 'openMetrics':
+        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS.openMetrics);
+        return;
       default:
         this.#publish(entry, true);
     }
+  }
+
+  /** A session command always receives this panel's own session, never the active panel or a picker. */
+  async #runSessionCommand(entry: Entry, command: string): Promise<void> {
+    const { project, sessionId } = entry.identity;
+    await vscode.commands.executeCommand(command, { project, sessionId });
   }
 
   async #openQuestions(entry: Entry): Promise<void> {
@@ -500,14 +521,14 @@ export class AnswerPanels implements vscode.Disposable {
 
   #buildModel(entry: Entry): AnswerModel {
     const resolved = this.#resolve(entry.identity);
-    const label = resolved?.snapshot === undefined ? entry.identity.sessionId : sessionLabel(resolved.snapshot);
-    const project = resolved?.context.folder.name ?? entry.identity.project;
     return buildAnswerModel({
       revision: entry.revision + 1,
       generation: entry.generation,
       fingerprint: entry.fingerprint,
-      title: `Questions — ${entry.identity.stageId ?? 'Role session'}`,
-      crumb: `${project} › ${label} › ${entry.identity.executionId}`,
+      title: resolved?.snapshot === undefined ? entry.identity.sessionId : sessionTitle(resolved.snapshot),
+      workflowId: workflowIdOf(resolved?.snapshot),
+      meta: buildSessionMeta(resolved?.snapshot),
+      sessionState: titleCase(resolved?.snapshot?.displayState.state ?? 'unavailable'),
       state: entry.state,
       message: entry.message ?? (entry.saveError === null ? null : `Draft not saved: ${entry.saveError}`),
       questions: entry.questions,
@@ -523,7 +544,10 @@ export class AnswerPanels implements vscode.Disposable {
     const withoutRevision = (value: AnswerModel): string => JSON.stringify({ ...value, revision: 0 });
     if (!isForced && entry.lastModel !== null && withoutRevision(entry.lastModel) === withoutRevision(model)) return;
     entry.accept(model);
-    entry.setTitle(`Questions: ${truncate(entry.identity.stageId ?? 'Role session', TITLE_MAX)}`);
+    entry.setTitle(truncate(model.title, TITLE_MAX));
+    entry.setIcon(
+      tabIcon(this.#context.extensionUri, 'questions', this.#resolve(entry.identity)?.snapshot?.displayState.state ?? ''),
+    );
     void entry.panel.webview.postMessage({ type: 'model', revision: model.revision, identity: entry.identity, model });
   }
 

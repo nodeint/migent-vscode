@@ -10,9 +10,9 @@
   --mg-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
   --mg-hover: var(--vscode-list-hoverBackground, transparent);
   --mg-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
-  --mg-warn: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
-  --mg-error: var(--vscode-errorForeground, var(--vscode-foreground));
-  --mg-info: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --mg-warn: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, var(--vscode-foreground)));
+  --mg-error: var(--vscode-list-errorForeground, var(--vscode-errorForeground, var(--vscode-foreground)));
+  --mg-info: var(--vscode-charts-blue, var(--vscode-textLink-foreground, var(--vscode-foreground)));
   --mg-bar: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
   --mg-radius: 4px;
   --mg-space-1: 4px;
@@ -81,6 +81,120 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* Session header: status + workflow, title, metadata, then tabs and the more menu on one row. */
+.mg-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--mg-space-3);
+}
+
+.mg-header--session > * + * {
+  margin-top: var(--mg-space-2);
+}
+
+.mg-header--session > .mg-tabbar {
+  margin-top: var(--mg-space-4);
+}
+
+.mg-workflow {
+  color: var(--mg-muted);
+  overflow-wrap: anywhere;
+}
+
+.mg-title--clamp {
+  font-size: 1.3em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.mg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mg-space-1) var(--mg-space-4);
+  margin-bottom: 0;
+}
+
+.mg-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+}
+
+.mg-icon {
+  vertical-align: text-bottom;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mg-icon--spin {
+    animation: mg-spin 1.5s linear infinite;
+  }
+}
+
+@keyframes mg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mg-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  border-bottom: 1px solid var(--vscode-panel-border, var(--mg-border));
+}
+
+.mg-tabs {
+  display: flex;
+  gap: var(--mg-space-1);
+}
+
+.mg-tabbar .mg-menu > .mg-btn {
+  color: var(--vscode-panelTitle-inactiveForeground, var(--mg-muted));
+  background: none;
+  border-color: transparent;
+}
+
+.mg-tabbar .mg-menu > .mg-btn:hover {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+}
+
+.mg-tab {
+  color: var(--vscode-panelTitle-inactiveForeground, var(--mg-muted));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: var(--mg-space-1) var(--mg-space-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mg-tab:hover {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+}
+
+.mg-tab[aria-current='page'] {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+  border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--mg-focus));
+  cursor: default;
+}
+
+.mg-tab:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+body.vscode-high-contrast .mg-tab[aria-current='page'],
+body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
+  border-bottom-color: var(--mg-focus);
+}
+
 .mg-actions {
   display: flex;
   flex-wrap: wrap;
@@ -110,6 +224,10 @@ body {
   gap: var(--mg-space-1);
   font-weight: 600;
   color: var(--mg-info);
+}
+
+.mg-status--muted {
+  color: var(--mg-muted);
 }
 
 .mg-status--ok {

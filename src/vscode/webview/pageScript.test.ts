@@ -1,8 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
+
+import { DISPLAY_STATE_ICONS, DISPLAY_STATE_TONES, stateTone } from '../../core/displayState';
 
 type Listener = (event: { data: unknown }) => void;
 
@@ -27,10 +29,14 @@ function load() {
       setState: (state: unknown) => states.push(state),
     }),
   });
-  const source = readFileSync(path.join(__dirname, '../../../media/shared/page.js'), 'utf8');
-  vm.runInContext(source, context);
-  const page = window.MigentPage as { connect: (options: { render: (...args: unknown[]) => void }) => Connected };
-  return { page, listeners, posted, states };
+  for (const file of ['icons.js', 'page.js']) {
+    vm.runInContext(readFileSync(path.join(__dirname, '../../../media/shared', file), 'utf8'), context);
+  }
+  const page = window.MigentPage as {
+    sessionStates: Record<string, { icon: string; tone: string }>;
+    connect: (options: { render: (...args: unknown[]) => void }) => Connected;
+  };
+  return { page, listeners, posted, states, icons: window.MigentIcons as Record<string, unknown[]> };
 }
 
 describe('MigentPage.connect', () => {
@@ -65,5 +71,43 @@ describe('MigentPage.connect', () => {
 
     connected.post({ type: 'edit', fingerprint: 'f' });
     expect(posted.at(-1)).toEqual({ type: 'edit', fingerprint: 'f' });
+  });
+});
+
+describe('icon vocabulary', () => {
+  it('draws every session state with the icon the Sessions view uses', () => {
+    const { page, icons } = load();
+    const states = Object.entries(page.sessionStates);
+    const fromPage = Object.fromEntries(states.map(([state, known]) => [state, known.icon]));
+    const fromView = Object.fromEntries(
+      Object.entries(DISPLAY_STATE_ICONS).map(([state, id]) => [
+        state,
+        id === 'circle-outline' ? 'circle' : id.replace('~spin', ''),
+      ]),
+    );
+    expect(fromPage).toEqual(fromView);
+    for (const id of Object.values(fromPage)) expect(icons[id]?.length, id).toBeGreaterThan(0);
+  });
+
+  it('colors every session state with the tone the tab icons use', () => {
+    const { page } = load();
+    const states = Object.entries(page.sessionStates);
+    const fromPage = Object.fromEntries(states.map(([state, known]) => [state, known.tone]));
+    expect(fromPage).toEqual(DISPLAY_STATE_TONES);
+  });
+
+  it('has a tab icon file per page, tone and theme, and treats other names as muted', () => {
+    const tones = new Set(Object.values(DISPLAY_STATE_TONES));
+    for (const page of ['questions', 'results', 'metrics']) {
+      for (const tone of tones) {
+        for (const theme of ['light', 'dark']) {
+          const file = path.join(__dirname, '../../../media/tab-icons', `${page}-${tone}-${theme}.svg`);
+          expect(existsSync(file), file).toBe(true);
+        }
+      }
+    }
+    expect(stateTone('Completed')).toBe('ok');
+    expect(stateTone('Unavailable')).toBe('muted');
+    expect(stateTone('')).toBe('muted');
   });
 });

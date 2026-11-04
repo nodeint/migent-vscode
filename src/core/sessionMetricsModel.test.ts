@@ -37,7 +37,7 @@ describe('buildSessionMetricsModel', () => {
       state: 'Completed',
       workflowId: 'plan',
       completedAt: '2026-10-26T09:20:00.000+00:00',
-      durationMs: 20 * 60 * 1000,
+      meta: { isRunning: false, pendingQuestions: 0 },
     });
     expect(model.metrics.kind).toBe('ok');
     if (model.metrics.kind !== 'ok') return;
@@ -86,7 +86,7 @@ describe('buildSessionMetricsModel', () => {
       state: 'Unavailable',
       workflowId: null,
       completedAt: null,
-      durationMs: null,
+      meta: { stageId: null, createdAt: null, updatedAt: null, isRunning: false, pendingQuestions: 0 },
       metrics: { kind: 'missing' },
     });
   });
@@ -100,25 +100,22 @@ describe('buildSessionMetricsModel', () => {
     });
     expect(model.state).toBe('Failed');
     expect(model.completedAt).toBeNull();
-    expect(model.durationMs).toBeNull();
   });
 });
 
 describe('sessionMetricsPanelTitle', () => {
-  it('uses the workflow id for a Completed session', () => {
-    expect(sessionMetricsPanelTitle(build(FIXTURE))).toBe('✓ plan · Metrics');
+  it('is the session title, whatever the state', () => {
+    const base = build(FIXTURE);
+    expect(sessionMetricsPanelTitle(base)).toBe(base.title);
+    expect(sessionMetricsPanelTitle({ ...base, state: 'Running' })).toBe(base.title);
   });
 
-  it('shortens the title only when there is no workflow id', () => {
+  it('shortens a long title', () => {
     const base = build(FIXTURE);
-    const long = 'x'.repeat(60);
-    expect(sessionMetricsPanelTitle({ ...base, workflowId: null, title: long })).toBe(`✓ ${'x'.repeat(39)}… · Metrics`);
-    expect(sessionMetricsPanelTitle({ ...base, workflowId: long })).toBe(`✓ ${long} · Metrics`);
+    expect(sessionMetricsPanelTitle({ ...base, title: 'x'.repeat(60) })).toBe(`${'x'.repeat(31)}…`);
   });
 
-  it('is plain "Metrics" for an unavailable or not Completed session', () => {
-    const base = build(FIXTURE);
-    expect(sessionMetricsPanelTitle({ ...base, availability: 'unavailable' })).toBe('Metrics');
-    expect(sessionMetricsPanelTitle({ ...base, state: 'Running' })).toBe('Metrics');
+  it('is plain "Metrics" for an unavailable session', () => {
+    expect(sessionMetricsPanelTitle({ ...build(FIXTURE), availability: 'unavailable' })).toBe('Metrics');
   });
 });

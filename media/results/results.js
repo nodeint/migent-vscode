@@ -21,29 +21,20 @@
 
   const FILE_STATE = { ok: '', missing: ' (file missing)', rejected: ' (path outside the session)' };
 
-  const MS_PER_SECOND = 1000;
-  const SECONDS_PER_MINUTE = 60;
-  const MINUTES_PER_HOUR = 60;
-  const HOURS_PER_DAY = 24;
-
-  function formatDuration(ms) {
-    const seconds = Math.max(0, Math.floor(ms / MS_PER_SECOND));
-    const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
-    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
-    const days = Math.floor(hours / HOURS_PER_DAY);
-    if (days > 0) return days + 'd ' + (hours % HOURS_PER_DAY) + 'h';
-    if (hours > 0) return hours + 'h ' + (minutes % MINUTES_PER_HOUR) + 'm';
-    if (minutes > 0) return minutes + 'm ' + (seconds % SECONDS_PER_MINUTE) + 's';
-    return seconds + 's';
-  }
-
   function renderHeader(model) {
     return sessionHeader(page, {
       state: model.state,
       title: model.title,
-      subtitle: [model.workflowId, model.sessionId, model.durationMs === null ? null : formatDuration(model.durationMs)],
+      workflowId: model.workflowId,
+      meta: model.meta,
       current: 'results',
-      openMetrics: sessionAction('openMetrics'),
+      tabs: [
+        ...(model.meta.pendingQuestions > 0
+          ? [{ key: 'questions', label: 'Questions', onSelect: () => page.send(sessionAction('answerQuestions')) }]
+          : []),
+        { key: 'results', label: 'Results' },
+        { key: 'metrics', label: 'Metrics', onSelect: () => page.send(sessionAction('openMetrics')) },
+      ],
       menuItems: [{ label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) }],
     });
   }

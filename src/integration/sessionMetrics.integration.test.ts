@@ -80,7 +80,11 @@ const scenarios: Scenario[] = [
       assert.equal(model.availability, 'ok');
       assert.equal(model.state, 'Completed');
       assert.equal(model.workflowId, 'plan');
-      assert.equal(env.api.sessionMetrics.title(id), '✓ plan · Metrics', 'a Completed session titles its tab');
+      assert.equal(
+        env.api.sessionMetrics.title(id),
+        env.api.sessionMetrics.lastModel(id)?.title,
+        'a session titles its tab with the session title',
+      );
       assert.equal(model.metrics.kind, 'ok');
       if (model.metrics.kind !== 'ok') return;
       assert.equal(model.metrics.totals.costPartial, true);
@@ -109,7 +113,7 @@ const scenarios: Scenario[] = [
       await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id) !== null);
       assert.deepEqual(env.api.sessionMetrics.lastModel(id)?.metrics, { kind: 'missing' });
       assert.equal(env.api.sessionMetrics.lastModel(id)?.state, 'Completed');
-      assert.equal(env.api.sessionMetrics.title(id), '✓ plan · Metrics');
+      assert.equal(env.api.sessionMetrics.title(id), env.api.sessionMetrics.lastModel(id)?.title);
 
       const taskFile = sessionFile(env, 'task.md');
       await vscode.window.showTextDocument(vscode.Uri.file(taskFile), { preview: false });
@@ -218,7 +222,11 @@ const scenarios: Scenario[] = [
       env.api.sessionMetrics.restore(create(), id);
       assert.ok(env.api.sessionMetrics.has(id), 'the stored identity restores the panel');
       await waitFor('restored model posted', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
-      assert.equal(env.api.sessionMetrics.title(id), '✓ plan · Metrics', 'the restored panel is titled again');
+      assert.equal(
+        env.api.sessionMetrics.title(id),
+        env.api.sessionMetrics.lastModel(id)?.title,
+        'the restored panel is titled again',
+      );
       env.api.sessionMetrics.restore(create(), id);
       env.api.sessionMetrics.restore(create(), { project: '', sessionId: '' });
       env.api.sessionMetrics.restore(create(), 'garbage');
