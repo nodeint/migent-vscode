@@ -8,31 +8,36 @@ export interface LaunchSpec {
   via: 'native' | 'node-script';
 }
 
-export type UnsupportedReason = 'script-shim' | 'unknown-type' | 'not-executable' | 'node-missing';
+export type UnsupportedReason = 'script-shim' | 'unknown-type' | 'node-missing';
 
 export type LocateResult =
   | { kind: 'ok'; launch: LaunchSpec; resolvedPath: string }
-  | { kind: 'missing'; configured: string }
+  | { kind: 'missing' }
   | { kind: 'unsupported'; reason: UnsupportedReason; resolvedPath: string; detail: string };
 
 /** File-system probes, injected so resolution is a pure function on every platform. */
 export interface LocateProbes {
   isFile: (file: string) => boolean;
   isExecutable: (file: string) => boolean;
+  /** File text, or null when it cannot be read. */
+  readText: (file: string) => string | null;
 }
 
 export interface LocateOptions {
-  configured: string;
   platform: NodeJS.Platform;
   env: Readonly<Record<string, string | undefined>>;
-  /** Base for a workspace-relative `configured` path. */
-  workspaceRoot: string;
   probes: LocateProbes;
 }
 
-const SCRIPT_SHIM_EXTENSIONS = new Set(['.cmd', '.bat', '.ps1']);
-const JS_ENTRY_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+/** The command name npm installs for the `@nodeint/migent` package (its `bin`). */
+export const CLI_COMMAND = 'migent';
+
 const DEFAULT_PATHEXT = '.COM;.EXE;.BAT;.CMD';
+const CMD_SHIM_EXTENSIONS = new Set(['.cmd', '.bat']);
+/** A quoted JavaScript path in a package-manager `.cmd` shim, such as `"%dp0%\node_modules\...\index.js"`. */
+const SHIM_ENTRY_PATTERN = /"([^"\r\n]*\.(?:js|mjs|cjs))"/gi;
+/** `%dp0%` (npm) or `%~dp0` (pnpm): the directory of the shim, with a trailing separator. */
+const SHIM_DIRECTORY_PATTERN = /%(?:~dp0|dp0%)/i;
 
 export const nodeProbes: LocateProbes = {
   isFile: (file) => {
@@ -48,6 +53,13 @@ export const nodeProbes: LocateProbes = {
       return true;
     } catch {
       return false;
+    }
+  },
+  readText: (file) => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
     }
   },
 };
@@ -76,20 +88,11 @@ function pathExtensions(options: LocateOptions): string[] {
 /** Candidate file names for `name` in one directory, in lookup order. */
 function candidates(options: LocateOptions, name: string): string[] {
   const extensions = pathExtensions(options);
-  if (extensions.length === 0) return [name];
-  const lower = name.toLowerCase();
-  const hasKnownExtension = extensions.some((extension) => lower.endsWith(extension));
-  const variants = extensions.map((extension) => name + extension);
-  return hasKnownExtension ? [name, ...variants] : variants;
+  return extensions.length === 0 ? [name] : extensions.map((extension) => name + extension);
 }
 
-/** On PATH a POSIX file must be executable (like a shell lookup); an explicit path is reported either way. */
-function isUsable(options: LocateOptions, file: string, isOnPath: boolean): boolean {
-  if (!options.probes.isFile(file)) return false;
-  return !isOnPath || options.platform === 'win32' || options.probes.isExecutable(file);
-}
-
-function resolveBareName(options: LocateOptions, name: string): string | null {
+/** Like a shell lookup: the first PATH directory holding a file; on POSIX that file must be executable. */
+function resolveOnPath(options: LocateOptions, name: string): string | null {
   const api = pathApi(options.platform);
   const directories = envValue(options, 'PATH')
     .split(api.delimiter)
@@ -97,74 +100,75 @@ function resolveBareName(options: LocateOptions, name: string): string | null {
   for (const directory of directories) {
     for (const candidate of candidates(options, name)) {
       const file = api.join(directory, candidate);
-      if (isUsable(options, file, true)) return file;
+      if (!options.probes.isFile(file)) continue;
+      if (options.platform === 'win32' || options.probes.isExecutable(file)) return file;
     }
   }
   return null;
 }
 
-function resolveExplicitPath(options: LocateOptions, configured: string): string | null {
-  const api = pathApi(options.platform);
-  const base = api.isAbsolute(configured) ? configured : api.resolve(options.workspaceRoot, configured);
-  // An explicit path is used exactly as given: no PATHEXT variant is tried.
-  return isUsable(options, base, false) ? base : null;
+/**
+ * The JavaScript entry a Windows `.cmd` shim runs. npm and pnpm shims quote it relative to the shim's own
+ * directory, but the layout differs between global, local and pnpm installs, so the shim is read, not guessed.
+ */
+function shimEntry(options: LocateOptions, shim: string): string | null {
+  const text = options.probes.readText(shim);
+  if (text === null) return null;
+  const directory = path.win32.dirname(shim);
+  for (const match of text.matchAll(SHIM_ENTRY_PATTERN)) {
+    const [, quoted] = match;
+    if (!SHIM_DIRECTORY_PATTERN.test(quoted)) continue;
+    const relative = quoted.replace(SHIM_DIRECTORY_PATTERN, '');
+    const entry = path.win32.resolve(directory, relative.replace(/^[\\/]+/, ''));
+    if (options.probes.isFile(entry)) return entry;
+  }
+  return null;
 }
 
-function isBareName(configured: string): boolean {
-  return !configured.includes('/') && !configured.includes('\\');
+/** `node.exe` next to the shim (as the shim itself prefers), otherwise `node` from `PATH`. */
+function resolveNode(options: LocateOptions, shimDirectory: string): string | null {
+  const beside = pathApi(options.platform).join(shimDirectory, 'node.exe');
+  return options.probes.isFile(beside) ? beside : resolveOnPath(options, 'node');
 }
 
-function classify(options: LocateOptions, resolvedPath: string, isBare: boolean): LocateResult {
-  const api = pathApi(options.platform);
-  const extension = api.extname(resolvedPath).toLowerCase();
-  const instruction = 'Set migent.cli.path to migent.exe or to the CLI JavaScript entry.';
-  if (SCRIPT_SHIM_EXTENSIONS.has(extension)) {
-    const shimHint = isBare ? ' A bare "migent" resolved to an npm shim (a script wrapper), which is not launched.' : '';
-    return {
-      kind: 'unsupported',
-      reason: 'script-shim',
-      resolvedPath,
-      detail: `${resolvedPath} is a ${extension} launcher, which the extension does not run.${shimHint} ${instruction}`,
-    };
+function classify(options: LocateOptions, resolvedPath: string): LocateResult {
+  const extension = pathApi(options.platform).extname(resolvedPath).toLowerCase();
+  if (options.platform !== 'win32') {
+    // npm links `migent` to the script (or pnpm writes a `#!/bin/sh` wrapper); both start without a shell.
+    return { kind: 'ok', resolvedPath, launch: { command: resolvedPath, prefixArgs: [], via: 'native' } };
   }
-  if (JS_ENTRY_EXTENSIONS.has(extension)) {
-    const node = resolveBareName(options, 'node');
-    if (node === null) {
-      return {
-        kind: 'unsupported',
-        reason: 'node-missing',
-        resolvedPath,
-        detail: `${resolvedPath} is a JavaScript entry but "node" was not found on PATH.`,
-      };
-    }
-    return { kind: 'ok', resolvedPath, launch: { command: node, prefixArgs: [resolvedPath], via: 'node-script' } };
-  }
-  if (options.platform === 'win32') {
-    if (extension === '.exe') return { kind: 'ok', resolvedPath, launch: { command: resolvedPath, prefixArgs: [], via: 'native' } };
+  if (extension === '.exe') return { kind: 'ok', resolvedPath, launch: { command: resolvedPath, prefixArgs: [], via: 'native' } };
+  if (!CMD_SHIM_EXTENSIONS.has(extension)) {
     return {
       kind: 'unsupported',
       reason: 'unknown-type',
       resolvedPath,
-      detail: `${resolvedPath} is not a native executable (.exe) or a JavaScript entry. ${instruction}`,
+      detail: `${resolvedPath} is neither a native executable (.exe) nor an npm launcher (.cmd).`,
     };
   }
-  if (!options.probes.isExecutable(resolvedPath)) {
+  const entry = shimEntry(options, resolvedPath);
+  if (entry === null) {
     return {
       kind: 'unsupported',
-      reason: 'not-executable',
+      reason: 'script-shim',
       resolvedPath,
-      detail: `${resolvedPath} is not executable. ${instruction}`,
+      detail: `${resolvedPath} is a ${extension} launcher whose JavaScript entry could not be found in it. Reinstall with "npm install -g @nodeint/migent".`,
     };
   }
-  return { kind: 'ok', resolvedPath, launch: { command: resolvedPath, prefixArgs: [], via: 'native' } };
+  const node = resolveNode(options, path.win32.dirname(resolvedPath));
+  if (node === null) {
+    return {
+      kind: 'unsupported',
+      reason: 'node-missing',
+      resolvedPath: entry,
+      detail: `${entry} is a JavaScript entry but "node" was not found on PATH.`,
+    };
+  }
+  return { kind: 'ok', resolvedPath: entry, launch: { command: node, prefixArgs: [entry], via: 'node-script' } };
 }
 
-/** Resolve `migent.cli.path` to a shell-free launch spec. Nothing is spawned here. */
+/** Find the Migent CLI on `PATH` and resolve it to a shell-free launch spec. Nothing is spawned here. */
 export function locateCli(options: LocateOptions): LocateResult {
-  const configured = options.configured.trim();
-  if (configured.length === 0) return { kind: 'missing', configured };
-  const isBare = isBareName(configured);
-  const resolved = isBare ? resolveBareName(options, configured) : resolveExplicitPath(options, configured);
-  if (resolved === null) return { kind: 'missing', configured };
-  return classify(options, resolved, isBare);
+  const resolved = resolveOnPath(options, CLI_COMMAND);
+  return resolved === null ? { kind: 'missing' } : classify(options, resolved);
 }

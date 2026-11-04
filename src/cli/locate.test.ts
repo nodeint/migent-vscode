@@ -1,29 +1,61 @@
 import { describe, expect, it } from 'vitest';
 
-import { locateCli,type LocateOptions } from './locate';
+import { locateCli, type LocateOptions } from './locate';
 
-/** `files` exist; `executable` lists those with the POSIX execute bit (default: all). */
+/**
+ * `files` maps a path to its text (empty for a binary); `executable` lists those with the POSIX execute bit
+ * (default: all).
+ */
 function options(
-  configured: string,
   platform: NodeJS.Platform,
-  files: string[],
+  files: Record<string, string>,
   env: Record<string, string>,
-  executable: string[] = files,
+  executable: string[] = Object.keys(files),
 ): LocateOptions {
   return {
-    configured,
     platform,
     env,
-    workspaceRoot: platform === 'win32' ? 'C:\\work' : '/work',
-    probes: { isFile: (file) => files.includes(file), isExecutable: (file) => executable.includes(file) },
+    probes: {
+      isFile: (file) => file in files,
+      isExecutable: (file) => executable.includes(file),
+      readText: (file) => files[file] ?? null,
+    },
   };
 }
 
 const WIN_ENV = { Path: 'C:\\npm;C:\\tools', PATHEXT: '.COM;.EXE;.BAT;.CMD' };
 
+const NPM_GLOBAL_SHIM = [
+  '@ECHO off',
+  'GOTO start',
+  ':find_dp0',
+  'SET dp0=%~dp0',
+  'EXIT /b',
+  ':start',
+  'SETLOCAL',
+  'CALL :find_dp0',
+  'IF EXIST "%dp0%\\node.exe" (',
+  '  SET "_prog=%dp0%\\node.exe"',
+  ') ELSE (',
+  '  SET "_prog=node"',
+  ')',
+  'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@nodeint\\migent\\dist\\index.js" %*',
+].join('\r\n');
+
+const PNPM_SHIM = [
+  '@SETLOCAL',
+  '@IF EXIST "%~dp0\\node.exe" (',
+  '  "%~dp0\\node.exe"  "%~dp0\\..\\@nodeint\\migent\\dist\\index.js" %*',
+  ') ELSE (',
+  '  node  "%~dp0\\..\\@nodeint\\migent\\dist\\index.js" %*',
+  ')',
+].join('\r\n');
+
+const NPM_ENTRY = 'C:\\npm\\node_modules\\@nodeint\\migent\\dist\\index.js';
+
 describe('locateCli on Windows', () => {
-  it('resolves a bare name to a native migent.exe through PATHEXT', () => {
-    const result = locateCli(options('migent', 'win32', ['C:\\tools\\migent.exe'], WIN_ENV));
+  it('resolves a native migent.exe through PATHEXT', () => {
+    const result = locateCli(options('win32', { 'C:\\tools\\migent.exe': '' }, WIN_ENV));
     expect(result).toEqual({
       kind: 'ok',
       resolvedPath: 'C:\\tools\\migent.exe',
@@ -32,66 +64,62 @@ describe('locateCli on Windows', () => {
   });
 
   it('prefers the earlier PATHEXT entry within one directory', () => {
-    const result = locateCli(options('migent', 'win32', ['C:\\npm\\migent.cmd', 'C:\\npm\\migent.exe'], WIN_ENV));
-    expect(result).toMatchObject({ kind: 'ok', resolvedPath: 'C:\\npm\\migent.exe' });
+    const files = { 'C:\\npm\\migent.cmd': NPM_GLOBAL_SHIM, 'C:\\npm\\migent.exe': '' };
+    expect(locateCli(options('win32', files, WIN_ENV))).toMatchObject({ kind: 'ok', resolvedPath: 'C:\\npm\\migent.exe' });
   });
 
-  it('reports an npm shim found by a bare name as unsupported and names that case', () => {
-    const result = locateCli(options('migent', 'win32', ['C:\\npm\\migent.cmd'], WIN_ENV));
-    expect(result).toMatchObject({ kind: 'unsupported', reason: 'script-shim', resolvedPath: 'C:\\npm\\migent.cmd' });
-    expect(result.kind === 'unsupported' && result.detail).toContain('npm shim');
-  });
-
-  it('reports Windows script targets as unsupported', () => {
-    for (const extension of ['.cmd', '.bat', '.ps1']) {
-      const file = `C:\\x\\migent${extension}`;
-      expect(locateCli(options(file, 'win32', [file], WIN_ENV))).toMatchObject({
-        kind: 'unsupported',
-        reason: 'script-shim',
-      });
-    }
-  });
-
-  it('runs a JavaScript entry through node found on PATH', () => {
-    const files = ['C:\\cli\\migent.js', 'C:\\tools\\node.exe'];
-    expect(locateCli(options('C:\\cli\\migent.js', 'win32', files, WIN_ENV))).toEqual({
+  it('runs the entry of an npm global shim with the node.exe beside it', () => {
+    const files = {
+      'C:\\npm\\migent.cmd': NPM_GLOBAL_SHIM,
+      [NPM_ENTRY]: '',
+      'C:\\npm\\node.exe': '',
+      'C:\\tools\\node.exe': '',
+    };
+    expect(locateCli(options('win32', files, WIN_ENV))).toEqual({
       kind: 'ok',
-      resolvedPath: 'C:\\cli\\migent.js',
-      launch: { command: 'C:\\tools\\node.exe', prefixArgs: ['C:\\cli\\migent.js'], via: 'node-script' },
+      resolvedPath: NPM_ENTRY,
+      launch: { command: 'C:\\npm\\node.exe', prefixArgs: [NPM_ENTRY], via: 'node-script' },
     });
   });
 
-  it('reports a JavaScript entry without node as unsupported', () => {
-    const result = locateCli(options('C:\\cli\\migent.mjs', 'win32', ['C:\\cli\\migent.mjs'], WIN_ENV));
-    expect(result).toMatchObject({ kind: 'unsupported', reason: 'node-missing' });
-  });
-
-  it('uses an explicit path as given and never a PATHEXT variant of it', () => {
-    const files = ['C:\\cli\\migent.js', 'C:\\cli\\migent.js.exe', 'C:\\tools\\node.exe'];
-    expect(locateCli(options('C:\\cli\\migent.js', 'win32', files, WIN_ENV))).toMatchObject({
+  it('reads the pnpm shim layout and falls back to node from PATH', () => {
+    // The shim lives in C:\npm, so its "..\@nodeint" resolves beside that folder.
+    const entry = 'C:\\@nodeint\\migent\\dist\\index.js';
+    const files = { 'C:\\npm\\migent.cmd': PNPM_SHIM, [entry]: '', 'C:\\tools\\node.exe': '' };
+    expect(locateCli(options('win32', files, WIN_ENV))).toMatchObject({
       kind: 'ok',
-      resolvedPath: 'C:\\cli\\migent.js',
-      launch: { via: 'node-script' },
-    });
-    expect(locateCli(options('C:\\cli\\migent', 'win32', ['C:\\cli\\migent.exe'], WIN_ENV))).toEqual({
-      kind: 'missing',
-      configured: 'C:\\cli\\migent',
+      resolvedPath: entry,
+      launch: { command: 'C:\\tools\\node.exe', prefixArgs: [entry], via: 'node-script' },
     });
   });
 
-  it('resolves a workspace-relative path against the workspace root', () => {
-    const result = locateCli(options('bin\\migent.exe', 'win32', ['C:\\work\\bin\\migent.exe'], WIN_ENV));
-    expect(result).toMatchObject({ kind: 'ok', resolvedPath: 'C:\\work\\bin\\migent.exe' });
+  it('reports a shim without a readable entry as unsupported', () => {
+    const files = { 'C:\\npm\\migent.cmd': '@echo off\r\n' };
+    expect(locateCli(options('win32', files, WIN_ENV))).toMatchObject({
+      kind: 'unsupported',
+      reason: 'script-shim',
+      resolvedPath: 'C:\\npm\\migent.cmd',
+    });
+  });
+
+  it('reports a shim whose entry file is gone as unsupported', () => {
+    const files = { 'C:\\npm\\migent.cmd': NPM_GLOBAL_SHIM };
+    expect(locateCli(options('win32', files, WIN_ENV))).toMatchObject({ kind: 'unsupported', reason: 'script-shim' });
+  });
+
+  it('reports an entry without node as unsupported', () => {
+    const files = { 'C:\\npm\\migent.cmd': NPM_GLOBAL_SHIM, [NPM_ENTRY]: '' };
+    expect(locateCli(options('win32', files, WIN_ENV))).toMatchObject({ kind: 'unsupported', reason: 'node-missing' });
   });
 
   it('reports an unknown file type as unsupported', () => {
-    const result = locateCli(options('C:\\x\\migent.com', 'win32', ['C:\\x\\migent.com'], WIN_ENV));
+    const env = { ...WIN_ENV, PATHEXT: '.COM' };
+    const result = locateCli(options('win32', { 'C:\\npm\\migent.com': '' }, env));
     expect(result).toMatchObject({ kind: 'unsupported', reason: 'unknown-type' });
   });
 
-  it('reports missing when nothing matches or the setting is blank', () => {
-    expect(locateCli(options('migent', 'win32', [], WIN_ENV))).toEqual({ kind: 'missing', configured: 'migent' });
-    expect(locateCli(options('  ', 'win32', [], WIN_ENV))).toEqual({ kind: 'missing', configured: '' });
+  it('reports missing when nothing is on PATH', () => {
+    expect(locateCli(options('win32', {}, WIN_ENV))).toEqual({ kind: 'missing' });
   });
 });
 
@@ -99,7 +127,7 @@ describe('locateCli on POSIX', () => {
   const env = { PATH: '/usr/local/bin:/usr/bin' };
 
   it('runs an executable found on PATH directly, including an npm symlink to a node script', () => {
-    expect(locateCli(options('migent', 'linux', ['/usr/local/bin/migent'], env))).toEqual({
+    expect(locateCli(options('linux', { '/usr/local/bin/migent': '' }, env))).toEqual({
       kind: 'ok',
       resolvedPath: '/usr/local/bin/migent',
       launch: { command: '/usr/local/bin/migent', prefixArgs: [], via: 'native' },
@@ -107,22 +135,12 @@ describe('locateCli on POSIX', () => {
   });
 
   it('skips a non-executable file on PATH', () => {
-    const files = ['/usr/local/bin/migent', '/usr/bin/migent'];
-    const result = locateCli(options('migent', 'linux', files, env, ['/usr/bin/migent']));
+    const files = { '/usr/local/bin/migent': '', '/usr/bin/migent': '' };
+    const result = locateCli(options('linux', files, env, ['/usr/bin/migent']));
     expect(result).toMatchObject({ kind: 'ok', resolvedPath: '/usr/bin/migent' });
   });
 
-  it('reports a non-executable explicit path as unsupported', () => {
-    const result = locateCli(options('/opt/migent', 'linux', ['/opt/migent'], env, []));
-    expect(result).toMatchObject({ kind: 'unsupported', reason: 'not-executable' });
-  });
-
-  it('runs a JavaScript entry through node', () => {
-    const files = ['/opt/cli/migent.cjs', '/usr/bin/node'];
-    const result = locateCli(options('/opt/cli/migent.cjs', 'linux', files, env, ['/usr/bin/node']));
-    expect(result).toMatchObject({
-      kind: 'ok',
-      launch: { command: '/usr/bin/node', prefixArgs: ['/opt/cli/migent.cjs'], via: 'node-script' },
-    });
+  it('reports missing when only a non-executable file exists', () => {
+    expect(locateCli(options('linux', { '/usr/bin/migent': '' }, env, []))).toEqual({ kind: 'missing' });
   });
 });

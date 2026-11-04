@@ -62,18 +62,16 @@ async function locateForFolder(folder: vscode.WorkspaceFolder): Promise<InitTarg
   const config = vscode.workspace.getConfiguration('migent', folder.uri);
   const state = await probeCapability({
     locate: {
-      configured: config.get<string>('cli.path', 'migent'),
       platform: process.platform,
       env: process.env,
-      workspaceRoot: folder.uri.fsPath,
       probes: nodeProbes,
     },
   });
   if (state.kind === 'ok' && state.launch !== undefined) {
     return { folder, launch: state.launch, env: { ...process.env, ...config.get<Record<string, string>>('env', {}) } };
   }
-  const picked = await vscode.window.showWarningMessage(`The Migent CLI is unavailable (${state.kind}).`, 'Open Settings');
-  if (picked === 'Open Settings') await vscode.commands.executeCommand('migent.openSettings');
+  const picked = await vscode.window.showWarningMessage(`The Migent CLI is unavailable (${state.kind}).`, 'Recheck');
+  if (picked === 'Recheck') await vscode.commands.executeCommand('migent.cli.recheck');
   return undefined;
 }
 

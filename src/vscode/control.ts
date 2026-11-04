@@ -129,9 +129,8 @@ export class ControlService implements vscode.Disposable {
       vscode.window.setStatusBarMessage(text, INFO_MESSAGE_MS);
       return;
     }
-    const action = { settings: 'Open Settings', recheck: 'Recheck', refresh: 'Refresh' }[block.recovery];
+    const action = { recheck: 'Recheck', refresh: 'Refresh' }[block.recovery];
     const command = {
-      settings: 'migent.openSettings',
       recheck: 'migent.cli.recheck',
       refresh: 'migent.refresh',
     }[block.recovery];
@@ -595,9 +594,8 @@ export class ControlService implements vscode.Disposable {
         ? 'Migent reported a configuration error.'
         : `Migent exited with code ${result.exitCode ?? 'unknown'}.`;
     const message = last === undefined ? text : `${text} ${last}`;
-    void vscode.window.showErrorMessage(message, 'Open Settings', 'View log').then((picked) => {
-      if (picked === 'Open Settings') void vscode.commands.executeCommand('migent.openSettings');
-      else if (picked === 'View log') this.showLog();
+    void vscode.window.showErrorMessage(message, 'View log').then((picked) => {
+      if (picked === 'View log') this.showLog();
     });
   }
 

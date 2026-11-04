@@ -12,9 +12,6 @@ import {
 import type { ProjectKey } from './changes';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
-export const CLI_PATH_SETTING = 'migent.cli.path';
-const DEFAULT_CLI_PATH = 'migent';
-
 /** Problem kinds, most actionable first; used to pick the aggregate state. */
 const WORST_FIRST: readonly CapabilityKind[] = ['missing', 'unsupported', 'unparsable', 'error', 'old', 'checking', 'ok'];
 
@@ -26,9 +23,8 @@ export function aggregateCapability(kinds: readonly CapabilityKind[]): Aggregate
 }
 
 /**
- * Per-project CLI capability (`migent.cli.path` is resource scoped). Checks run once per trigger:
- * a project appearing, a change of `migent.cli.*`, or Recheck. Capability never hides disk data;
- * it is the gate that phase 3 write commands consult.
+ * Per-project CLI capability. Checks run once per trigger: a project appearing or Recheck. Capability never
+ * hides disk data; it is the gate that phase 3 write commands consult.
  */
 export class CapabilityService implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
@@ -45,12 +41,6 @@ export class CapabilityService implements vscode.Disposable {
       registry.onDidChange((change) => {
         if (change.type === 'projects') this.#syncProjects();
       }),
-      vscode.workspace.onDidChangeConfiguration((event) => {
-        if (!event.affectsConfiguration('migent.cli')) return;
-        for (const context of registry.projects()) {
-          if (event.affectsConfiguration('migent.cli', context.folder.uri)) void this.#check(context);
-        }
-      }),
     );
     this.#syncProjects();
   }
@@ -59,8 +49,7 @@ export class CapabilityService implements vscode.Disposable {
   public state(key: ProjectKey): CapabilityState {
     const known = this.#states.get(key);
     if (known !== undefined) return known;
-    const context = this.#registry.project(key);
-    return context === undefined ? this.#checking('') : this.#checking(this.#configured(context));
+    return this.#checking();
   }
 
   public aggregate(): AggregateCapability {
@@ -88,27 +77,20 @@ export class CapabilityService implements vscode.Disposable {
     }
   }
 
-  #configured(context: ProjectContext): string {
-    return vscode.workspace.getConfiguration('migent', context.folder.uri).get<string>('cli.path', DEFAULT_CLI_PATH);
-  }
-
-  #checking(configured: string): CapabilityState {
-    return { kind: 'checking', configured, required: MINIMUM_CLI_VERSION };
+  #checking(): CapabilityState {
+    return { kind: 'checking', required: MINIMUM_CLI_VERSION };
   }
 
   async #check(context: ProjectContext): Promise<void> {
     const { key } = context;
     const generation = (this.#generation.get(key) ?? 0) + 1;
     this.#generation.set(key, generation);
-    const configured = this.#configured(context);
-    this.#states.set(key, this.#checking(configured));
+    this.#states.set(key, this.#checking());
     this.#registry.announce({ type: 'capability', project: key });
     const state = await probeCapability({
       locate: {
-        configured,
         platform: process.platform,
         env: process.env,
-        workspaceRoot: context.root,
         probes: nodeProbes,
       },
       run: this.#run,

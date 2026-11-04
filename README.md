@@ -66,8 +66,8 @@ Running multi-stage AI workflows from a terminal often leads to constant context
 - A workspace containing a `.migent/` project directory.
 - *(Optional for monitoring, required for CLI execution)* [Migent CLI](https://github.com/nodeint/migent#readme)
   v0.3.1 or newer.
-  - Supported launchers: native binary (`migent.exe`) or Node script entry (`.js`, `.mjs`, `.cjs` via `node` on `PATH`).
-  - Shell wrapper scripts (`.cmd`, `.bat`, `.ps1`) are not supported.
+  - Install it with `npm install -g @nodeint/migent`. The extension finds `migent` on `PATH` and runs the package's
+    JavaScript entry with `node`; restart VS Code after installing so it sees the new `PATH`.
 
 ## Extension Settings
 
@@ -75,7 +75,6 @@ Configure the extension via VS Code settings (`Ctrl+,` or `Cmd+,`):
 
 | Setting | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `migent.cli.path` | `string` | `"migent"` | Path or name of the Migent CLI binary or Node script entry. |
 | `migent.sessions.limit` | `number` | `50` | Maximum number of recent sessions to display in the Sessions view. |
 
 ## Commands
@@ -89,7 +88,6 @@ Access these commands through the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P
 | `migent.session.showLog` | `Migent: Show Session Log` | Stream live logs for the selected session. |
 | `migent.session.openResult` | `Migent: Open Result` | Open the read-only Results page for a completed session. |
 | `migent.openConfig` | `Migent: Open Project Config` | Open the project `config.yaml` in the editor. |
-| `migent.openSettings` | `Migent: Open CLI Settings` | Open VS Code settings for Migent. |
 | `migent.cli.recheck` | `Migent: Recheck CLI` | Validate CLI installation and version compatibility. |
 
 ## Troubleshooting

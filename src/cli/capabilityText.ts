@@ -20,7 +20,7 @@ export function describeCapability(state: CapabilityState): CapabilityDiagnostic
       return null;
     case 'missing':
       label = 'Migent CLI not found';
-      lines.push(`migent.cli.path is "${state.configured}".`, 'Install the Migent CLI or set migent.cli.path.');
+      lines.push('Install it with "npm install -g @nodeint/migent", then restart VS Code if it was installed just now.');
       versions();
       break;
     case 'unsupported':
@@ -42,6 +42,6 @@ export function describeCapability(state: CapabilityState): CapabilityDiagnostic
   }
   if (state.resolvedPath !== undefined) lines.push(`Executable: ${state.resolvedPath}`);
   if (state.detail !== undefined) lines.push(state.detail);
-  lines.push('Sessions on disk stay visible. Select to open settings; use the Recheck action after fixing it.');
+  lines.push('Sessions on disk stay visible. Use the Recheck action after fixing it.');
   return { label, tooltip: lines.join('\n') };
 }
