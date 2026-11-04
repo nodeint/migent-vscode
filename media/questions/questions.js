@@ -25,6 +25,12 @@
   // Context blocks the reader expanded; kept across re-renders.
   const expandedContext = new Set();
   let page = null;
+  let pendingFocus = null;
+  // True between compositionstart and compositionend (IME input such as Telex or VNI). Replacing the text area
+  // in that window cancels the composition, so a model that arrives meanwhile waits until it ends.
+  let isComposing = false;
+  let deferred = null;
+  let viewObserver = null;
 
   function draftOf(id) {
     return model.draft[id] || { mode: 'choice', selected: [], text: '' };
@@ -54,14 +60,30 @@
     const count = done.filter(Boolean).length;
     const counter = document.getElementById('counter');
     if (counter) counter.textContent = counterText();
+    const bar = document.getElementById('progress-bar');
+    if (bar) {
+      bar.max = model.questions.length;
+      bar.value = count;
+    }
     model.questions.forEach((q, index) => {
       const jump = document.getElementById('jump-' + q.id);
-      if (!jump) return;
-      jump.replaceChildren(...(done[index] ? [icon('pass')] : []), q.id);
-      jump.setAttribute('aria-label', 'Go to question ' + q.id + (done[index] ? ' (answered)' : ' (not answered)'));
+      if (jump) {
+        jump.replaceChildren(q.id, ...(done[index] ? [icon('check')] : []));
+        jump.classList.toggle('q-jump--done', done[index]);
+        jump.setAttribute('aria-label', 'Go to question ' + q.id + (done[index] ? ' (answered)' : ' (not answered)'));
+      }
+      const chip = document.getElementById('qs-' + q.id);
+      if (chip) {
+        chip.replaceChildren(icon(done[index] ? 'pass' : 'circle'), done[index] ? 'Answered' : 'Unanswered');
+        chip.className = 'q-state mg-status mg-status--' + (done[index] ? 'ok' : 'muted');
+      }
     });
     const submitButton = document.getElementById('submit');
-    if (submitButton) submitButton.disabled = !canSend(count);
+    if (submitButton) {
+      submitButton.disabled = !canSend(count);
+      const left = model.questions.length - count;
+      submitButton.textContent = left > 0 ? 'Submit & continue (' + left + ' left)' : 'Submit & continue session';
+    }
   }
 
   function optionRow(q, option) {
@@ -71,25 +93,31 @@
     input.name = 'q' + q.id;
     input.id = 'q' + q.id + option.id;
     input.checked = d.mode === 'choice' && d.selected.includes(option.id);
-    input.disabled = !model.editable || d.mode === 'text';
+    input.disabled = !model.editable;
     if (option.description) input.setAttribute('aria-describedby', 'd' + q.id + option.id);
     input.addEventListener('change', (event) => {
-      const current = draftOf(q.id).selected;
+      const was = draftOf(q.id);
+      const current = was.mode === 'choice' ? was.selected : [];
       let selected;
       if (q.selection === 'single') selected = [option.id];
       else if (event.target.checked) selected = q.options.map((o) => o.id).filter((id) => id === option.id || current.includes(id));
       else selected = current.filter((id) => id !== option.id);
-      edit(q.id, { selected });
+      edit(q.id, { mode: 'choice', selected });
+      if (was.mode === 'text') rerender();
     });
     const label = el('label', null, 'q-option');
     label.htmlFor = input.id;
-    label.append(input, ' ' + option.id + '. ' + option.label);
-    if (q.recommended.includes(option.id)) label.append(el('span', 'Recommended', 'mg-pill'));
+    const body = el('span', null, 'q-option-body');
+    const head = el('span', null, 'q-option-head');
+    head.append(el('span', option.label, 'q-option-label'));
+    if (q.recommended.includes(option.id)) head.append(el('span', 'Recommended', 'mg-pill'));
+    body.append(head);
     if (option.description) {
       const desc = el('span', option.description, 'q-option-desc mg-muted');
       desc.id = 'd' + q.id + option.id;
-      label.append(desc);
+      body.append(desc);
     }
+    label.append(input, el('span', option.id, 'q-letter'), body);
     return label;
   }
 
@@ -97,7 +125,7 @@
     const wrapper = el('div');
     const isLong = q.context.length > CONTEXT_CLAMP_LENGTH;
     const isOpen = expandedContext.has(q.id);
-    const ctx = el('div', q.context, 'q-context mg-muted' + (isLong && !isOpen ? ' q-context--clamped' : ''));
+    const ctx = el('div', q.context, 'q-context' + (isLong && !isOpen ? ' q-context--clamped' : ''));
     ctx.id = 'ctx-' + q.id;
     wrapper.append(ctx);
     if (isLong) {
@@ -121,37 +149,67 @@
 
   function otherRow(q, d) {
     const other = el('input');
-    other.type = 'checkbox';
+    other.type = q.selection === 'single' ? 'radio' : 'checkbox';
+    other.name = 'q' + q.id;
     other.id = 'other' + q.id;
     other.checked = d.mode === 'text';
     other.disabled = !model.editable;
     other.addEventListener('change', (event) => {
       edit(q.id, { mode: event.target.checked ? 'text' : 'choice' });
+      if (event.target.checked) pendingFocus = 'text' + q.id;
       rerender();
     });
-    const label = el('label', null, 'q-option');
+    const label = el('label', null, 'q-option q-option--other');
     label.htmlFor = other.id;
-    label.append(other, ' Other — write an answer');
+    const body = el('span', null, 'q-option-body');
+    const head = el('span', null, 'q-option-head');
+    head.append(el('span', 'Other', 'q-option-label'));
+    head.append(el('span', 'write your own answer', 'q-option-desc mg-muted'));
+    body.append(head);
+    label.append(other, el('span', '…', 'q-letter'), body);
     return label;
   }
 
   function question(q) {
     const d = draftOf(q.id);
-    const legend = el('legend', q.id + '. ' + q.question);
-    legend.append(el('span', q.selection === 'single' ? 'Choose one' : 'Choose one or more', 'q-mode mg-muted'));
-    const box = el('fieldset', null, 'q-question');
+    const box = el('section', null, 'q-question');
     box.id = 'card-' + q.id;
-    box.append(legend);
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-labelledby', 'qt-' + q.id);
+    const top = el('div', null, 'q-top');
+    top.append(el('span', 'Question ' + q.id + ' · ' + (q.selection === 'single' ? 'Choose one' : 'Choose one or more'), 'q-eyebrow'));
+    const state = el('span', null, 'q-state mg-status mg-status--muted');
+    state.id = 'qs-' + q.id;
+    top.append(state);
+    const title = el('h2', q.question, 'q-title');
+    title.id = 'qt-' + q.id;
+    box.append(top, title);
     if (q.context) box.append(contextBlock(q));
-    for (const option of q.options) box.append(optionRow(q, option));
-    box.append(otherRow(q, d));
+    const options = el('div', null, 'q-options');
+    for (const option of q.options) options.append(optionRow(q, option));
+    options.append(otherRow(q, d));
+    box.append(options);
     if (d.mode === 'text') {
       const area = el('textarea', null, 'mg-input q-text');
       area.id = 'text' + q.id;
+      area.placeholder = 'Write your answer';
       area.setAttribute('aria-label', 'Your answer to question ' + q.id);
       area.disabled = !model.editable;
       area.value = d.text;
       area.addEventListener('input', (event) => edit(q.id, { text: event.target.value }));
+      area.addEventListener('compositionstart', () => {
+        isComposing = true;
+      });
+      area.addEventListener('compositionend', () => {
+        isComposing = false;
+        // The last input event of a composition can follow compositionend, so apply the waiting model afterwards.
+        setTimeout(() => {
+          if (isComposing || deferred === null) return;
+          const waiting = deferred;
+          deferred = null;
+          render(waiting);
+        }, 0);
+      });
       box.append(area);
       if (model.ambiguous.includes(q.id)) {
         const warning = el('p', null, 'mg-alert mg-warn');
@@ -204,7 +262,10 @@
     const chip = el('span', null, 'q-progress');
     const count = el('span', counterText());
     count.id = 'counter';
-    chip.append(icon('checklist'), count);
+    const bar = el('progress', null, 'q-bar');
+    bar.id = 'progress-bar';
+    bar.setAttribute('aria-hidden', 'true');
+    chip.append(icon('checklist'), count, bar);
     if (model.state !== 'editing') {
       const state = el('span', null, 'mg-status mg-status--' + known.tone);
       state.append(icon(known.icon, known.spin), el('span', known.text));
@@ -216,15 +277,40 @@
   function jumps() {
     const nav = el('nav', null, 'q-jumps');
     nav.setAttribute('aria-label', 'Questions');
-    nav.append(progressChip());
+    const chips = el('span', null, 'q-chips');
     for (const q of model.questions) {
       const jump = el('button', q.id, 'q-jump');
       jump.type = 'button';
       jump.id = 'jump-' + q.id;
+      jump.title = q.question;
       jump.addEventListener('click', () => document.getElementById('card-' + q.id).scrollIntoView());
-      nav.append(jump);
+      chips.append(jump);
     }
+    nav.append(chips, progressChip());
     return nav;
+  }
+
+  // Marks the chip of the question in view. Skipped where IntersectionObserver is missing.
+  function watchView() {
+    if (viewObserver) viewObserver.disconnect();
+    viewObserver = null;
+    if (typeof IntersectionObserver === 'undefined') return;
+    viewObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        for (const q of model.questions) {
+          const jump = document.getElementById('jump-' + q.id);
+          if (jump) {
+            if ('card-' + q.id === entry.target.id) jump.setAttribute('aria-current', 'true');
+            else jump.removeAttribute('aria-current');
+          }
+        }
+      }
+    }, { rootMargin: '-20% 0px -60% 0px' });
+    for (const q of model.questions) {
+      const card = document.getElementById('card-' + q.id);
+      if (card) viewObserver.observe(card);
+    }
   }
 
   function archivedSection() {
@@ -250,8 +336,6 @@
     if (model.state === 'recorded-waiting') add('Continue', 'continue', 'primary');
     if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add('View log', 'viewLog');
     if (model.editable || model.state === 'stale') add('Discard draft', 'discard');
-    add('Questions file', 'openQuestions');
-    add('Later', 'later');
     if (model.editable && model.state !== 'unconfirmed') {
       const submitButton = el('button', 'Submit & continue session', 'mg-btn mg-btn--primary');
       submitButton.type = 'button';
@@ -283,8 +367,11 @@
     if (model.archived) root.append(archivedSection());
     root.append(footer());
     updateChrome();
-    if (focusId) {
-      const node = document.getElementById(focusId);
+    watchView();
+    const wanted = pendingFocus || focusId;
+    pendingFocus = null;
+    if (wanted) {
+      const node = document.getElementById(wanted);
       if (node) {
         node.focus({ preventScroll: true });
         if (caret && node.tagName === 'TEXTAREA') {
@@ -298,16 +385,32 @@
     trackFooter();
   }
 
+  // What the page draws, without what the local draft already decides: revision, validation of the draft and the
+  // submit flag. A model that differs only there is the host echoing an edit, and nothing needs redrawing.
+  const DRAFT_DERIVED = ['revision', 'draft', 'issues', 'answered', 'canSubmit'];
+
+  function drawnSignature(value) {
+    return JSON.stringify(value, (key, item) => (DRAFT_DERIVED.includes(key) ? undefined : item));
+  }
+
   function render(next) {
     if (!next) return;
+    if (isComposing) {
+      deferred = next;
+      return;
+    }
     const previous = model;
     model = next;
     // The local draft is newer than the host's echo of it, until the host replaces the draft (new generation) or
     // the batch changes (new fingerprint).
-    if (previous && previous.generation === model.generation && previous.fingerprint === model.fingerprint) {
-      model.draft = previous.draft;
+    const isSameBatch = previous && previous.generation === model.generation && previous.fingerprint === model.fingerprint;
+    if (isSameBatch) model.draft = previous.draft;
+    // An echo of an edit keeps the DOM, so typing never replaces the control being typed in.
+    if (isSameBatch && drawnSignature(previous) === drawnSignature(model)) {
+      updateChrome();
+      return;
     }
-    // State, diagnostics and controls always apply; rerender keeps the focus, caret and scroll position.
+    // State, diagnostics and controls otherwise apply; rerender keeps the focus, caret and scroll position.
     rerender();
   }
 

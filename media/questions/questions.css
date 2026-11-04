@@ -1,68 +1,126 @@
 /* Answer-questions page layout only. Tokens and components live in media/shared/base.css. */
 
-/* Progress and batch state, first in the row of jump links. */
-.q-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--mg-space-1);
-  margin-right: var(--mg-space-3);
-  color: var(--mg-muted);
-}
-
-.q-progress .mg-status {
-  margin-left: var(--mg-space-2);
-}
-
-/* Jump links to a question: navigation within the page, so small outlined chips rather than action buttons. */
+/* Progress strip: jump chips on the left, progress on the right. Sticks under the scroll so position and
+   completeness stay visible in a long form. */
 .q-jumps {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mg-space-2) var(--mg-space-4);
+  margin: 0;
+  padding: var(--mg-space-2) 0;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.q-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--mg-space-1);
-  margin: 0 0 var(--mg-space-3);
+}
+
+.q-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-2);
+  color: var(--mg-muted);
+}
+
+.q-bar {
+  width: 96px;
+  height: 4px;
+  appearance: none;
+  border: 0;
+  border-radius: 2px;
+  background: var(--mg-border);
+  overflow: hidden;
+}
+
+.q-bar::-webkit-progress-bar {
+  background: var(--mg-border);
+}
+
+.q-bar::-webkit-progress-value {
+  background: var(--mg-ok);
 }
 
 .q-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  min-width: 24px;
+  min-height: 24px;
+  justify-content: center;
   color: var(--mg-muted);
   background: none;
   border: 1px solid var(--mg-border);
   border-radius: 999px;
-  padding: 0 var(--mg-space-3);
+  padding: 0 var(--mg-space-2);
   font: inherit;
   cursor: pointer;
 }
 
-.q-jump:hover {
+.q-jump--done {
+  color: var(--mg-ok);
+}
+
+.q-jump:hover,
+.q-jump[aria-current='true'] {
   color: var(--mg-fg);
+  background: var(--mg-hover);
+}
+
+.q-jump[aria-current='true'] {
+  border-color: var(--mg-focus);
 }
 
 .q-jump:focus-visible {
   outline: 1px solid var(--mg-focus);
 }
 
-/* A question is a form group, not a clickable card: it holds controls. */
+/* A question is a card: eyebrow and state, the question as a heading, context, then the options. */
 .q-question {
   min-width: 0;
-  margin: var(--mg-space-3) 0 0;
-  padding: var(--mg-space-3) var(--mg-space-4);
+  margin: var(--mg-space-4) 0 0;
+  padding: var(--mg-space-4);
   background: var(--mg-surface);
   border: 1px solid var(--mg-border);
   border-radius: var(--mg-radius);
-  scroll-margin-top: var(--mg-space-3);
+  scroll-margin-top: 48px;
 }
 
-.q-question > legend {
-  padding: 0 var(--mg-space-1);
+.q-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mg-space-2);
+}
+
+.q-eyebrow {
+  color: var(--mg-muted);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.q-title {
+  margin: var(--mg-space-1) 0 var(--mg-space-3);
+  font-size: 1.15em;
   font-weight: 600;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.q-mode {
-  margin-left: var(--mg-space-2);
-  font-weight: normal;
-}
-
 .q-context {
-  margin: var(--mg-space-1) 0 var(--mg-space-2);
+  margin: 0 0 var(--mg-space-3);
+  padding: var(--mg-space-1) var(--mg-space-3);
+  color: var(--mg-muted);
+  background: var(--vscode-textBlockQuote-background, transparent);
+  border-left: 3px solid var(--vscode-textBlockQuote-border, var(--mg-border));
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -72,20 +130,91 @@
   overflow: hidden;
 }
 
+.q-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mg-space-2);
+}
+
+/* The whole row is the control: hover, selected and focus states live on the row. */
 .q-option {
-  display: block;
-  margin: var(--mg-space-2) 0;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mg-space-3);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  cursor: pointer;
   overflow-wrap: anywhere;
+}
+
+.q-option:hover {
+  background: var(--mg-hover);
+}
+
+.q-option:has(input:checked) {
+  border-color: var(--mg-focus);
+  background: var(--vscode-list-inactiveSelectionBackground, var(--mg-hover));
+}
+
+.q-option:has(input:focus-visible) {
+  outline: 1px solid var(--mg-focus);
+}
+
+.q-option:has(input:disabled) {
+  cursor: default;
+}
+
+/* The native input stays for keyboard, screen readers and form semantics; the letter badge is its marker. */
+.q-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.q-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.q-option-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--mg-space-1) var(--mg-space-2);
+}
+
+.q-letter {
+  flex: none;
+  min-width: 1.8em;
+  line-height: 1.6;
+  padding: 0 var(--mg-space-1);
+  text-align: center;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--mg-muted);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+}
+
+.q-option:has(input:checked) .q-letter {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.q-option-label {
+  font-weight: 500;
 }
 
 .q-option-desc {
-  display: block;
-  margin-left: var(--mg-space-5);
   overflow-wrap: anywhere;
-}
-
-.q-option .mg-pill {
-  margin-left: var(--mg-space-2);
 }
 
 .q-text {

@@ -310,6 +310,16 @@ describe('Questions page', () => {
     expect(page.byId('root').querySelector('h1')?.textContent).toBe('Questions');
   });
 
+  it('treats Other as one more choice: picking an option leaves it, picking Other focuses the text', () => {
+    const page = load();
+    page.deliver(1, model(1));
+    page.byId('other1').change(true);
+    expect(page.doc.activeElement).toBe(page.byId('text1'));
+    page.byId('q1A').change(true);
+    expect(page.byId('q1A').checked).toBe(true);
+    expect(page.byId('other1').checked).toBe(false);
+  });
+
   it('keeps focus, selection and scroll of the text area through a background update', () => {
     const page = load();
     page.deliver(1, model(1));
@@ -342,11 +352,12 @@ describe('Questions page', () => {
     };
     let revision = 1;
     page.deliver(revision, model(revision, shown));
-    for (const id of ['act-later', 'act-openQuestions', 'act-discard', 'ctxbtn-1', 'archived-summary', 'jump-1']) {
+    for (const id of ['act-discard', 'ctxbtn-1', 'archived-summary', 'jump-1']) {
       const before = page.byId(id);
       before.focus();
       revision += 1;
-      page.deliver(revision, model(revision, shown));
+      // A changed message forces a redraw; a model that only echoes an edit is not redrawn.
+      page.deliver(revision, model(revision, { ...shown, message: `Update ${revision}` }));
       const after = page.byId(id);
       expect(after).not.toBe(before);
       expect(page.doc.activeElement).toBe(after);
@@ -405,9 +416,9 @@ describe('Questions page', () => {
   it('offers one primary action and the recovery actions for each state', () => {
     const page = load();
     const cases: [string, string, string[]][] = [
-      ['stale', 'act-reload', ['act-discard', 'act-openQuestions', 'act-later']],
+      ['stale', 'act-reload', ['act-discard']],
       ['unconfirmed', 'act-recheck', ['act-viewLog', 'act-discard']],
-      ['recorded-waiting', 'act-continue', ['act-viewLog', 'act-openQuestions']],
+      ['recorded-waiting', 'act-continue', ['act-viewLog']],
     ];
     let revision = 1;
     for (const [state, primary, others] of cases) {
