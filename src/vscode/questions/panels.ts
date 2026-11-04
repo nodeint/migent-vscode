@@ -20,9 +20,9 @@ import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
+import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
 import { DraftStore } from './drafts';
 import { type BatchIdentity, batchKeyOf, Entry, isBatchIdentity } from './entry';
-import { html } from './page';
 
 export type { BatchIdentity } from './entry';
 
@@ -31,6 +31,12 @@ const describeError = (error: unknown): string => (error instanceof Error ? erro
 export const ANSWER_VIEW_TYPE = 'migent.answerQuestions';
 
 const TITLE_MAX = 40;
+const PAGE: PageDescriptor = {
+  folder: 'questions',
+  styles: ['questions.css'],
+  scripts: ['questions.js'],
+  title: 'Questions',
+};
 const WAITING = 'Waiting for the project to load.';
 
 /** Pending records of one batch, in stored order. */
@@ -136,7 +142,7 @@ export class AnswerPanels implements vscode.Disposable {
   #webviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
     return {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.#context.extensionUri, 'media', 'questions')],
+      localResourceRoots: pageResourceRoots(this.#context.extensionUri, PAGE),
     };
   }
 
@@ -200,7 +206,7 @@ export class AnswerPanels implements vscode.Disposable {
     const key = batchKeyOf(identity);
     this.#entries.set(key, entry);
     // eslint-disable-next-line no-param-reassign -- the panel is created by this host and owned by the entry
-    panel.webview.html = html(panel.webview, this.#context.extensionUri);
+    panel.webview.html = renderPage(panel.webview, this.#context.extensionUri, PAGE);
     panel.webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(identity, raw);
     });
@@ -518,7 +524,7 @@ export class AnswerPanels implements vscode.Disposable {
     if (!isForced && entry.lastModel !== null && withoutRevision(entry.lastModel) === withoutRevision(model)) return;
     entry.accept(model);
     entry.setTitle(`Questions: ${truncate(entry.identity.stageId ?? 'Role session', TITLE_MAX)}`);
-    void entry.panel.webview.postMessage({ type: 'model', identity: entry.identity, model });
+    void entry.panel.webview.postMessage({ type: 'model', revision: model.revision, identity: entry.identity, model });
   }
 
   #onChange(change: MigentChange): void {

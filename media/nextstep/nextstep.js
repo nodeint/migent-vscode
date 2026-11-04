@@ -44,9 +44,9 @@
   /** A problem the reader must notice stays visible, never inside details. */
   function renderAlerts(model, transient) {
     const alerts = [];
-    if (model.launchBlock) alerts.push(el('p', 'Cannot start: ' + model.launchBlock, 'next-alert mg-warn'));
+    if (model.launchBlock) alerts.push(el('p', 'Cannot start: ' + model.launchBlock, 'mg-alert mg-warn'));
     if (transient.error) {
-      const error = el('p', transient.error, 'next-alert mg-error');
+      const error = el('p', transient.error, 'mg-alert mg-error');
       error.setAttribute('role', 'alert');
       alerts.push(error);
     }
@@ -57,7 +57,7 @@
     const node = section('Task', 'mg-section');
     input.type = 'text';
     input.id = 'task';
-    input.className = 'next-input';
+    input.className = 'mg-input';
     input.value = model.task;
     input.setAttribute('aria-label', 'Task');
     input.addEventListener('input', () => page.send({ intent: 'setTask', task: input.value }));
@@ -145,7 +145,7 @@
   }
 
   function renderFooter(model, transient, input) {
-    const footer = el('footer', null, 'mg-actions next-footer');
+    const footer = el('footer', null, 'mg-footer');
     const isBlocked = Boolean(model.launchBlock) || Boolean(transient.pending);
     const hasActive = model.children.some((child) => child.isActive);
     const task = () => input.value;

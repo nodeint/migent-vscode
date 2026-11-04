@@ -32,6 +32,11 @@ body.vscode-high-contrast-light {
   --mg-focus: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, var(--vscode-foreground)));
 }
 
+html {
+  /* Set by page.js to the sticky footer's height, so focus and scrolling stop above it. */
+  scroll-padding-bottom: var(--mg-footer-height, 0px);
+}
+
 body {
   font-family: var(--mg-font);
   font-size: var(--mg-font-size);
@@ -332,6 +337,51 @@ button.mg-row:hover {
 
 .mg-details[open] > summary {
   margin-bottom: var(--mg-space-2);
+}
+
+/* Alert: a problem or warning that stays visible, with text wrapped inside the page width. */
+.mg-alert {
+  margin: 0 0 var(--mg-space-2);
+  overflow-wrap: anywhere;
+}
+
+/* Text field: a single-line input or a text area. */
+.mg-input {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--mg-border));
+  padding: var(--mg-space-1) var(--mg-space-2);
+}
+
+.mg-input:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+/* Sticky action footer: stays reachable while the page scrolls, wraps at narrow widths and takes its own
+   space in the flow, so it never covers content. */
+.mg-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+  margin-top: var(--mg-space-5);
+  padding: var(--mg-space-3) 0;
+  background: var(--vscode-editor-background);
+  border-top: 1px solid var(--mg-border);
+}
+
+.mg-footer .mg-btn {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 /* Keyboard focus */

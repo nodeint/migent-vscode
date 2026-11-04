@@ -1,24 +1,78 @@
-body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 0 16px 72px; }
-header { padding: 12px 0 4px; }
-h1 { font-size: 1.2em; margin: 0; }
-.crumb { color: var(--vscode-descriptionForeground); margin: 2px 0 8px; }
-.status { padding: 6px 10px; border-left: 3px solid var(--vscode-focusBorder); background: var(--vscode-editorWidget-background); margin: 8px 0; }
-.status.warn { border-left-color: var(--vscode-editorWarning-foreground); }
-.jumps { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
-.jumps button.done { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-button { font: inherit; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-contrastBorder, transparent); padding: 3px 10px; cursor: pointer; }
-button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-button:disabled { opacity: 0.5; cursor: default; }
-button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-fieldset.card { border: 1px solid var(--vscode-panel-border); margin: 12px 0; padding: 10px 14px; }
-fieldset.card legend { font-weight: 600; padding: 0 4px; }
-.mode { color: var(--vscode-descriptionForeground); font-weight: normal; margin-left: 6px; }
-.context { white-space: pre-wrap; color: var(--vscode-descriptionForeground); margin: 4px 0 8px; max-height: 6em; overflow: hidden; }
-.context.open { max-height: none; }
-.opt { display: block; margin: 6px 0; }
-.opt .desc { display: block; margin-left: 22px; color: var(--vscode-descriptionForeground); }
-.badge { margin-left: 6px; font-size: 0.85em; padding: 0 5px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-textarea { width: 100%; min-height: 4em; box-sizing: border-box; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); }
-.recorded { margin: 6px 0; padding: 4px 8px; background: var(--vscode-textBlockQuote-background); white-space: pre-wrap; }
-footer { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 8px 16px; background: var(--vscode-editor-background); border-top: 1px solid var(--vscode-panel-border); }
-footer .spacer { flex: 1; }
+/* Answer-questions page layout only. Tokens and components live in media/shared/base.css. */
+
+.q-progress {
+  margin: 0 0 var(--mg-space-3);
+}
+
+.q-jumps {
+  margin: 0 0 var(--mg-space-3);
+}
+
+/* A question is a form group, not a clickable card: it holds controls. */
+.q-question {
+  min-width: 0;
+  margin: var(--mg-space-3) 0 0;
+  padding: var(--mg-space-3) var(--mg-space-4);
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  scroll-margin-top: var(--mg-space-3);
+}
+
+.q-question > legend {
+  padding: 0 var(--mg-space-1);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.q-mode {
+  margin-left: var(--mg-space-2);
+  font-weight: normal;
+}
+
+.q-context {
+  margin: var(--mg-space-1) 0 var(--mg-space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.q-context--clamped {
+  max-height: 6em;
+  overflow: hidden;
+}
+
+.q-option {
+  display: block;
+  margin: var(--mg-space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+.q-option-desc {
+  display: block;
+  margin-left: var(--mg-space-5);
+  overflow-wrap: anywhere;
+}
+
+.q-option .mg-pill {
+  margin-left: var(--mg-space-2);
+}
+
+.q-text {
+  min-height: 5em;
+  margin-top: var(--mg-space-2);
+  resize: vertical;
+}
+
+.q-recorded {
+  margin: var(--mg-space-2) 0 0;
+  padding: var(--mg-space-1) var(--mg-space-2);
+  background: var(--vscode-textBlockQuote-background, transparent);
+  border-left: 3px solid var(--mg-ok);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.q-archived {
+  margin: var(--mg-space-1) 0;
+  overflow-wrap: anywhere;
+}

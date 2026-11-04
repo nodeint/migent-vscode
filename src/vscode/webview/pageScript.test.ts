@@ -8,6 +8,7 @@ type Listener = (event: { data: unknown }) => void;
 
 interface Connected {
   send: (intent: Record<string, unknown>) => void;
+  post: (message: Record<string, unknown>) => void;
 }
 
 /** Run `media/shared/page.js` against a minimal browser stub and return what the page would see. */
@@ -20,7 +21,7 @@ function load() {
   };
   const context = vm.createContext({
     window,
-    document: {},
+    document: { querySelector: () => null, documentElement: { style: { setProperty: () => undefined } } },
     acquireVsCodeApi: () => ({
       postMessage: (message: unknown) => posted.push(message),
       setState: (state: unknown) => states.push(state),
@@ -49,5 +50,20 @@ describe('MigentPage.connect', () => {
     expect(states).toHaveLength(2);
     connected.send({ intent: 'x' });
     expect(posted.at(-1)).toEqual({ intent: 'x', type: 'intent', revision: 3 });
+  });
+
+  it('posts a page-typed message unchanged and still guards on the top-level revision', () => {
+    const { page, listeners, posted } = load();
+    const renders: unknown[][] = [];
+    const connected = page.connect({ render: (...args) => renders.push(args) });
+    const identity = { sessionId: 's' };
+    // A revision only inside the model is not a revision: the message is ignored.
+    listeners[0]({ data: { type: 'model', identity, model: { revision: 9 } } });
+    listeners[0]({ data: { type: 'model', revision: 4, identity, model: { revision: 4 } } });
+    listeners[0]({ data: { type: 'model', revision: 4, identity, model: { revision: 4, other: true } } });
+    expect(renders).toEqual([[{ revision: 4 }, undefined]]);
+
+    connected.post({ type: 'edit', fingerprint: 'f' });
+    expect(posted.at(-1)).toEqual({ type: 'edit', fingerprint: 'f' });
   });
 });

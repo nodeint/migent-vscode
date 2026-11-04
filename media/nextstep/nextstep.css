@@ -1,25 +1,5 @@
 /* Next step page layout only. Tokens and components live in media/shared/base.css. */
 
-.next-alert {
-  margin: 0 0 var(--mg-space-2);
-  overflow-wrap: anywhere;
-}
-
-.next-input {
-  box-sizing: border-box;
-  width: 100%;
-  font: inherit;
-  color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, var(--mg-border));
-  padding: var(--mg-space-1) var(--mg-space-2);
-}
-
-.next-input:focus-visible {
-  outline: 1px solid var(--mg-focus);
-  outline-offset: -1px;
-}
-
 .next-task-notes {
   margin-top: var(--mg-space-2);
 }
@@ -30,16 +10,6 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--mg-space-2);
-}
-
-/* The launch actions stay reachable while the page scrolls. */
-.next-footer {
-  position: sticky;
-  bottom: 0;
-  margin-top: var(--mg-space-5);
-  padding: var(--mg-space-3) 0;
-  background: var(--vscode-editor-background);
-  border-top: 1px solid var(--mg-border);
 }
 
 /* Long workflow, file and session names wrap inside the available width instead of overflowing it. */

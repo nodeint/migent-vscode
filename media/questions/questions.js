@@ -1,35 +1,38 @@
 // Answer-questions page. All content is rendered with textContent; the host validates every message again.
+// The shared helpers in media/shared/page.js load first (see docs/ui.md).
 (function () {
   'use strict';
-  const vscode = acquireVsCodeApi();
-  const root = document.getElementById('root');
-  let model = null;
 
-  function el(tag, attrs, children) {
-    const node = document.createElement(tag);
-    for (const [key, value] of Object.entries(attrs || {})) {
-      if (key === 'text') node.textContent = value;
-      else if (key === 'class') node.className = value;
-      else if (key === 'on') for (const [evt, fn] of Object.entries(value)) node.addEventListener(evt, fn);
-      else if (value === true) node.setAttribute(key, '');
-      else if (value !== false && value !== null && value !== undefined) node.setAttribute(key, String(value));
-    }
-    for (const child of children || []) node.append(child);
-    return node;
-  }
+  const { el, details, connect, trackFooter } = window.MigentPage;
+  const root = document.getElementById('root');
+  const CONTEXT_CLAMP_LENGTH = 240;
+  const WARN_STATES = ['rejected', 'unconfirmed', 'stale', 'answered-elsewhere', 'unavailable', 'recorded-waiting'];
+  // Icon, tone and text per state, so status is never color alone.
+  const STATES = {
+    editing: { icon: '●', tone: 'info', text: 'Answering' },
+    sending: { icon: '●', tone: 'info', text: 'Sending' },
+    recorded: { icon: '✓', tone: 'ok', text: 'Recorded' },
+    continuing: { icon: '●', tone: 'info', text: 'Continuing' },
+    'recorded-waiting': { icon: '⚠', tone: 'warn', text: 'Recorded, not continued' },
+    rejected: { icon: '✕', tone: 'error', text: 'Rejected' },
+    unconfirmed: { icon: '⚠', tone: 'warn', text: 'Not confirmed' },
+    stale: { icon: '⚠', tone: 'warn', text: 'Out of date' },
+    'answered-elsewhere': { icon: '⚠', tone: 'warn', text: 'Answered elsewhere' },
+    unavailable: { icon: '✕', tone: 'error', text: 'Unavailable' },
+  };
+  let model = null;
+  // Context blocks the reader expanded; kept across re-renders.
+  const expandedContext = new Set();
+  let page = null;
 
   function draftOf(id) {
     return model.draft[id] || { mode: 'choice', selected: [], text: '' };
   }
 
-  function send(type, extra) {
-    vscode.postMessage(Object.assign({ type }, extra || {}));
-  }
-
   function edit(id, patch) {
     const next = Object.assign({}, draftOf(id), patch);
     model.draft[id] = next;
-    send('edit', { generation: model.generation, fingerprint: model.fingerprint, questionId: id, draft: next });
+    page.post({ type: 'edit', generation: model.generation, fingerprint: model.fingerprint, questionId: id, draft: next });
     updateChrome();
   }
 
@@ -41,112 +44,184 @@
     });
   }
 
+  function canSend(count) {
+    return model.canSubmit && count === model.questions.length;
+  }
+
   function updateChrome() {
     const done = completeness();
     const count = done.filter(Boolean).length;
     const counter = document.getElementById('counter');
-    if (counter) counter.textContent = count + '/' + model.questions.length + ' answered';
+    if (counter) counter.textContent = (count === model.questions.length ? '✓ ' : '') + count + '/' + model.questions.length + ' answered';
     model.questions.forEach((q, index) => {
       const jump = document.getElementById('jump-' + q.id);
-      if (jump) jump.className = done[index] ? 'done' : '';
+      if (!jump) return;
+      jump.textContent = (done[index] ? '✓ ' : '') + q.id;
+      jump.setAttribute('aria-label', 'Go to question ' + q.id + (done[index] ? ' (answered)' : ' (not answered)'));
     });
     const submitButton = document.getElementById('submit');
-    if (submitButton) submitButton.disabled = !(model.canSubmit && count === model.questions.length);
+    if (submitButton) submitButton.disabled = !canSend(count);
   }
 
   function optionRow(q, option) {
     const d = draftOf(q.id);
-    const input = el('input', {
-      type: q.selection === 'single' ? 'radio' : 'checkbox',
-      name: 'q' + q.id,
-      id: 'q' + q.id + option.id,
-      checked: d.mode === 'choice' && d.selected.includes(option.id),
-      disabled: !model.editable || d.mode === 'text',
-      'aria-describedby': option.description ? 'd' + q.id + option.id : null,
-      on: {
-        change: (event) => {
-          const current = draftOf(q.id).selected;
-          let selected;
-          if (q.selection === 'single') selected = [option.id];
-          else if (event.target.checked) selected = q.options.map((o) => o.id).filter((id) => id === option.id || current.includes(id));
-          else selected = current.filter((id) => id !== option.id);
-          edit(q.id, { selected });
-        },
-      },
+    const input = el('input');
+    input.type = q.selection === 'single' ? 'radio' : 'checkbox';
+    input.name = 'q' + q.id;
+    input.id = 'q' + q.id + option.id;
+    input.checked = d.mode === 'choice' && d.selected.includes(option.id);
+    input.disabled = !model.editable || d.mode === 'text';
+    if (option.description) input.setAttribute('aria-describedby', 'd' + q.id + option.id);
+    input.addEventListener('change', (event) => {
+      const current = draftOf(q.id).selected;
+      let selected;
+      if (q.selection === 'single') selected = [option.id];
+      else if (event.target.checked) selected = q.options.map((o) => o.id).filter((id) => id === option.id || current.includes(id));
+      else selected = current.filter((id) => id !== option.id);
+      edit(q.id, { selected });
     });
-    const label = el('label', { class: 'opt', for: input.id }, [input, document.createTextNode(' ' + option.id + '. ' + option.label)]);
-    if (q.recommended.includes(option.id)) label.append(el('span', { class: 'badge', text: 'Recommended' }));
-    if (option.description) label.append(el('span', { class: 'desc', id: 'd' + q.id + option.id, text: option.description }));
+    const label = el('label', null, 'q-option');
+    label.htmlFor = input.id;
+    label.append(input, ' ' + option.id + '. ' + option.label);
+    if (q.recommended.includes(option.id)) label.append(el('span', 'Recommended', 'mg-pill'));
+    if (option.description) {
+      const desc = el('span', option.description, 'q-option-desc mg-muted');
+      desc.id = 'd' + q.id + option.id;
+      label.append(desc);
+    }
     return label;
   }
 
-  function card(q) {
-    const d = draftOf(q.id);
-    const legend = el('legend', {}, [
-      document.createTextNode(q.id + '. ' + q.question),
-      el('span', { class: 'mode', text: q.selection === 'single' ? 'Choose one' : 'Choose one or more' }),
-    ]);
-    const box = el('fieldset', { class: 'card', id: 'card-' + q.id }, [legend]);
-    if (q.context) {
-      const ctx = el('div', { class: 'context', text: q.context });
-      box.append(ctx);
-      if (q.context.length > 240) {
-        box.append(el('button', { type: 'button', text: 'Show more context', on: { click: () => ctx.classList.toggle('open') } }));
-      }
-    }
-    for (const option of q.options) box.append(optionRow(q, option));
-    const other = el('input', {
-      type: 'checkbox',
-      id: 'other' + q.id,
-      checked: d.mode === 'text',
-      disabled: !model.editable,
-      on: {
-        change: (event) => {
-          edit(q.id, { mode: event.target.checked ? 'text' : 'choice' });
-          rerender();
-        },
-      },
-    });
-    box.append(el('label', { class: 'opt', for: other.id }, [other, document.createTextNode(' Other — write an answer')]));
-    if (d.mode === 'text') {
-      const area = el('textarea', {
-        id: 'text' + q.id,
-        'aria-label': 'Your answer to question ' + q.id,
-        disabled: !model.editable,
-        on: { input: (event) => edit(q.id, { text: event.target.value }) },
+  function contextBlock(q) {
+    const wrapper = el('div');
+    const isLong = q.context.length > CONTEXT_CLAMP_LENGTH;
+    const isOpen = expandedContext.has(q.id);
+    const ctx = el('div', q.context, 'q-context mg-muted' + (isLong && !isOpen ? ' q-context--clamped' : ''));
+    ctx.id = 'ctx-' + q.id;
+    wrapper.append(ctx);
+    if (isLong) {
+      const toggle = el('button', isOpen ? 'Show less context' : 'Show more context', 'mg-btn mg-btn--link');
+      toggle.id = 'ctxbtn-' + q.id;
+      toggle.type = 'button';
+      toggle.setAttribute('aria-controls', ctx.id);
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      toggle.addEventListener('click', () => {
+        if (expandedContext.has(q.id)) expandedContext.delete(q.id);
+        else expandedContext.add(q.id);
+        const open = expandedContext.has(q.id);
+        ctx.classList.toggle('q-context--clamped', !open);
+        toggle.textContent = open ? 'Show less context' : 'Show more context';
+        toggle.setAttribute('aria-expanded', String(open));
       });
+      wrapper.append(toggle);
+    }
+    return wrapper;
+  }
+
+  function otherRow(q, d) {
+    const other = el('input');
+    other.type = 'checkbox';
+    other.id = 'other' + q.id;
+    other.checked = d.mode === 'text';
+    other.disabled = !model.editable;
+    other.addEventListener('change', (event) => {
+      edit(q.id, { mode: event.target.checked ? 'text' : 'choice' });
+      rerender();
+    });
+    const label = el('label', null, 'q-option');
+    label.htmlFor = other.id;
+    label.append(other, ' Other — write an answer');
+    return label;
+  }
+
+  function question(q) {
+    const d = draftOf(q.id);
+    const legend = el('legend', q.id + '. ' + q.question);
+    legend.append(el('span', q.selection === 'single' ? 'Choose one' : 'Choose one or more', 'q-mode mg-muted'));
+    const box = el('fieldset', null, 'q-question');
+    box.id = 'card-' + q.id;
+    box.append(legend);
+    if (q.context) box.append(contextBlock(q));
+    for (const option of q.options) box.append(optionRow(q, option));
+    box.append(otherRow(q, d));
+    if (d.mode === 'text') {
+      const area = el('textarea', null, 'mg-input q-text');
+      area.id = 'text' + q.id;
+      area.setAttribute('aria-label', 'Your answer to question ' + q.id);
+      area.disabled = !model.editable;
       area.value = d.text;
+      area.addEventListener('input', (event) => edit(q.id, { text: event.target.value }));
       box.append(area);
       if (model.ambiguous.includes(q.id)) {
-        box.append(el('div', { class: 'status warn', role: 'status', text: 'This text equals an option letter, so the CLI will read it as that option.' }));
+        const warning = el('p', '⚠ This text equals an option letter, so the CLI will read it as that option.', 'mg-alert mg-warn');
+        warning.setAttribute('role', 'status');
+        box.append(warning);
       }
     }
     if (model.recorded && model.recorded[q.id] !== undefined) {
-      box.append(el('div', { class: 'recorded', text: 'Recorded: ' + model.recorded[q.id] }));
+      box.append(el('div', '✓ Recorded: ' + model.recorded[q.id], 'q-recorded'));
     }
     return box;
   }
 
-  function note() {
-    if (!model.message && !model.blockReason) return null;
-    const warn = ['rejected', 'unconfirmed', 'stale', 'answered-elsewhere', 'unavailable', 'recorded-waiting'].includes(model.state);
-    const node = el('div', { class: 'status' + (warn ? ' warn' : ''), role: 'status', text: model.message || model.blockReason });
-    if (model.message && model.blockReason && model.editable) node.append(el('div', { text: model.blockReason }));
+  function statusIndicator() {
+    const known = STATES[model.state] || { icon: '●', tone: 'info', text: model.state };
+    const node = el('span', null, 'mg-status mg-status--' + known.tone);
+    const icon = el('span', known.icon);
+    icon.setAttribute('aria-hidden', 'true');
+    node.append(icon, el('span', known.text));
     return node;
   }
 
+  function header() {
+    const node = el('header', null, 'mg-header');
+    node.append(statusIndicator(), el('h1', model.title, 'mg-title'), el('p', model.crumb, 'mg-subtitle'));
+    const counter = el('p', null, 'q-progress');
+    counter.id = 'counter';
+    node.append(counter);
+    return node;
+  }
+
+  function note() {
+    if (!model.message && !model.blockReason) return null;
+    const isWarning = WARN_STATES.includes(model.state);
+    const node = el('p', model.message || model.blockReason, 'mg-alert' + (isWarning ? ' mg-warn' : ''));
+    node.setAttribute('role', 'status');
+    if (model.message && model.blockReason && model.editable) node.append(el('div', model.blockReason));
+    return node;
+  }
+
+  function jumps() {
+    const nav = el('nav', null, 'mg-actions q-jumps');
+    nav.setAttribute('aria-label', 'Questions');
+    for (const q of model.questions) {
+      const jump = el('button', q.id, 'mg-btn mg-btn--secondary');
+      jump.type = 'button';
+      jump.id = 'jump-' + q.id;
+      jump.addEventListener('click', () => document.getElementById('card-' + q.id).scrollIntoView());
+      nav.append(jump);
+    }
+    return nav;
+  }
+
   function archivedSection() {
-    const box = el('details', { class: 'card' }, [el('summary', { text: 'Previous draft (read-only)' })]);
+    const box = details('archived', 'Previous draft (read-only)');
+    box.querySelector('summary').id = 'archived-summary';
     for (const item of model.archived) {
-      box.append(el('p', { text: item.id + '. ' + item.question + ' � ' + (item.answer || 'no answer') }));
+      box.append(el('p', item.id + '. ' + item.question + ' — ' + (item.answer || 'no answer'), 'q-archived'));
     }
     return box;
   }
 
   function footer() {
-    const bar = el('footer', {}, [el('span', { id: 'counter' }), el('span', { class: 'spacer' })]);
-    const add = (label, type, cls) =>
-      bar.append(el('button', { type: 'button', text: label, class: cls || '', on: { click: () => send(type) } }));
+    const bar = el('footer', null, 'mg-footer');
+    const add = (label, type, kind) => {
+      const node = el('button', label, 'mg-btn mg-btn--' + (kind || 'secondary'));
+      node.type = 'button';
+      node.id = 'act-' + type;
+      node.addEventListener('click', () => page.post({ type }));
+      bar.append(node);
+    };
     if (model.state === 'stale') add('Load current questions', 'reload', 'primary');
     if (model.state === 'unconfirmed') add('Recheck', 'recheck', 'primary');
     if (model.state === 'recorded-waiting') add('Continue', 'continue', 'primary');
@@ -155,65 +230,67 @@
     add('Questions file', 'openQuestions');
     add('Later', 'later');
     if (model.editable && model.state !== 'unconfirmed') {
-      bar.append(el('button', { type: 'button', id: 'submit', class: 'primary', text: 'Submit & continue session', disabled: true, on: { click: submit } }));
+      const submitButton = el('button', 'Submit & continue session', 'mg-btn mg-btn--primary');
+      submitButton.type = 'button';
+      submitButton.id = 'submit';
+      submitButton.disabled = true;
+      submitButton.addEventListener('click', submit);
+      bar.append(submitButton);
     }
     return bar;
   }
 
   function submit() {
-    if (model.canSubmit) send('submit', { revision: model.revision, fingerprint: model.fingerprint });
+    const count = completeness().filter(Boolean).length;
+    if (canSend(count)) page.post({ type: 'submit', revision: model.revision, fingerprint: model.fingerprint });
   }
 
   function rerender() {
     if (!model) return;
     const active = document.activeElement;
     const focusId = active && active.id;
-    const caret = active && active.tagName === 'TEXTAREA' ? [active.selectionStart, active.selectionEnd] : null;
+    const area = active && active.tagName === 'TEXTAREA' ? active : null;
+    const caret = area ? [area.selectionStart, area.selectionEnd, area.selectionDirection, area.scrollTop] : null;
     const scroll = window.scrollY;
-    root.replaceChildren();
-    root.append(el('header', {}, [el('h1', { text: model.title }), el('div', { class: 'crumb', text: model.crumb })]));
+    root.replaceChildren(header());
     const status = note();
     if (status) root.append(status);
-    const jumps = el('nav', { class: 'jumps', 'aria-label': 'Questions' });
-    for (const q of model.questions) {
-      jumps.append(el('button', {
-        type: 'button', id: 'jump-' + q.id, text: q.id, 'aria-label': 'Go to question ' + q.id,
-        on: { click: () => document.getElementById('card-' + q.id).scrollIntoView() },
-      }));
-    }
-    root.append(jumps);
-    for (const q of model.questions) root.append(card(q));
+    root.append(jumps());
+    for (const q of model.questions) root.append(question(q));
     if (model.archived) root.append(archivedSection());
     root.append(footer());
     updateChrome();
-    window.scrollTo(0, scroll);
     if (focusId) {
       const node = document.getElementById(focusId);
       if (node) {
-        node.focus();
-        if (caret && node.tagName === 'TEXTAREA') node.setSelectionRange(caret[0], caret[1]);
+        node.focus({ preventScroll: true });
+        if (caret && node.tagName === 'TEXTAREA') {
+          node.setSelectionRange(caret[0], caret[1], caret[2]);
+          node.scrollTop = caret[3];
+        }
       }
     }
+    window.scrollTo(0, scroll);
+    // Local renders (the Other toggle) replace the footer too.
+    trackFooter();
   }
 
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    if (!message || message.type !== 'model' || !message.model) return;
-    if (model && message.model.revision <= model.revision) return;
+  function render(next) {
+    if (!next) return;
     const previous = model;
-    model = message.model;
-    if (message.identity) vscode.setState(message.identity);
-    // The local draft is newer than the host's echo of it, until the host replaces the draft (new generation).
+    model = next;
+    // The local draft is newer than the host's echo of it, until the host replaces the draft (new generation) or
+    // the batch changes (new fingerprint).
     if (previous && previous.generation === model.generation && previous.fingerprint === model.fingerprint) {
       model.draft = previous.draft;
     }
     // State, diagnostics and controls always apply; rerender keeps the focus, caret and scroll position.
     rerender();
-  });
+  }
 
   window.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && model && model.editable) submit();
   });
 
-  vscode.postMessage({ type: 'ready' });
+  page = connect({ render });
 })();
