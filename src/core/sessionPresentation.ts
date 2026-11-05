@@ -81,7 +81,7 @@ function questionsText(count: number): string {
   return `${count} ${count === 1 ? 'question' : 'questions'}`;
 }
 
-function stageOf(snapshot: SessionSnapshot): string | null {
+export function stageOf(snapshot: SessionSnapshot): string | null {
   const { status } = snapshot;
   if (snapshot.displayState.state === 'running') return status?.runningStages[0]?.stageId ?? status?.latestStageId ?? null;
   return status?.latestStageId ?? null;

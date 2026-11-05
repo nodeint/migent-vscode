@@ -12,7 +12,7 @@ import { sessionLabel } from '../../core/sessionPresentation';
 import type { ControlService } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
-import type { ReplyService } from '../reply';
+import type { ReplyService, SendResult } from '../reply';
 import { chooseWorkflow, CONTINUABLE } from './controlCommands';
 import { initializeProject } from './initCommand';
 import { type CommandHost, resolveWith } from './sessionCommands';
@@ -79,7 +79,13 @@ async function sendReply(replies: ReplyService, arg: unknown): Promise<void> {
     vscode.window.setStatusBarMessage('Open a Migent reply draft to send it.', INFO_MESSAGE_MS);
     return;
   }
-  const result = await replies.send(meta);
+  // The click has no other sign of life: a notification names what the send is doing until it settles. It is not
+  // cancellable, because once the CLI is running a reply cannot be taken back.
+  const run = async (progress: vscode.Progress<{ message?: string }>): Promise<SendResult> => {
+    const onPhase = (message: string): void => progress.report({ message });
+    return replies.send(meta, onPhase);
+  };
+  const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Sending reply' }, run);
   await replies.report(meta, undefined, result);
 }
 

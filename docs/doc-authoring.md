@@ -78,6 +78,10 @@ For documentation-only edits:
 3. Check the load map and remove stale or duplicate guidance.
 4. Run `git diff --check` and review the final content, including newly added files.
 
+`pnpm lint:md:links` requires Git and skips Git-ignored files, including local session data and downloaded
+VS Code installations. Both Markdown checks exclude the four captured CLI `task.md` samples listed in
+`.markdownlint-cli2.jsonc` to preserve their original task text.
+
 Follow the [testing guide](testing.md) when deciding whether to add tests.
 Runtime tests, build, or packaging are
 needed when the change also affects executable behavior, tooling, or packaged

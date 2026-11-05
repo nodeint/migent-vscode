@@ -12,7 +12,7 @@ import type { MigentChange, ProjectKey } from '../changes';
 import { openFile } from '../openFile';
 import type { ProjectRegistry } from '../projects';
 import { SESSION_ACTION_COMMANDS } from '../results/panels';
-import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import { type PageDescriptor, pageResourceRoots, renderPage, tabIcon } from '../webview/page';
 
 export const SESSION_METRICS_VIEW_TYPE = 'migent.sessionMetrics';
 
@@ -214,6 +214,7 @@ export class SessionMetricsPanels implements vscode.Disposable {
     const model = buildSessionMetricsModel(
       this.#input(identity)?.input ?? { sessionId: identity.sessionId, sessionDirPath: '', snapshots: [] },
     );
+    entry.panel.iconPath = tabIcon(this.#extensionUri, 'metrics', model.state);
     entry.publish(model, isForced);
   }
 

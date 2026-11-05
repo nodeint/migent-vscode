@@ -1,6 +1,7 @@
 import { type MetricsExecution, type MetricsStage, type MetricsTotals, readMetrics } from './metrics';
 import type { SessionSnapshot } from './model';
-import { durationOf, titleCase } from './resultsModel';
+import { titleCase } from './resultsModel';
+import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
 import { sessionTitle, truncate } from './sessionPresentation';
 
 /**
@@ -23,8 +24,8 @@ export interface SessionMetricsModel {
   state: string;
   workflowId: string | null;
   completedAt: string | null;
-  /** Milliseconds from creation to the last update; only for a Completed session with valid timestamps. */
-  durationMs: number | null;
+  /** What the header says about the session, the same on every session page. */
+  meta: SessionMeta;
   metrics: SessionMetricsView;
 }
 
@@ -35,13 +36,11 @@ export interface SessionMetricsInput {
   snapshots: readonly SessionSnapshot[];
 }
 
-const TITLE_MAX = 40;
-const COMPLETED_GLYPH = '✓';
+const TITLE_MAX = 32;
 
-/** The editor tab title: `✓ <workflow id or shortened title> · Metrics` for a Completed session, else `Metrics`. */
+/** The editor tab title: the shortened session title, or `Metrics` when unavailable. The tab icon names the page. */
 export function sessionMetricsPanelTitle(model: SessionMetricsModel): string {
-  if (model.availability === 'unavailable' || model.state !== 'Completed') return 'Metrics';
-  return `${COMPLETED_GLYPH} ${model.workflowId ?? truncate(model.title, TITLE_MAX)} · Metrics`;
+  return model.availability === 'unavailable' ? 'Metrics' : truncate(model.title, TITLE_MAX);
 }
 
 function unavailable(sessionId: string): SessionMetricsModel {
@@ -52,7 +51,7 @@ function unavailable(sessionId: string): SessionMetricsModel {
     state: 'Unavailable',
     workflowId: null,
     completedAt: null,
-    durationMs: null,
+    meta: NO_SESSION_META,
     metrics: { kind: 'missing' },
   };
 }
@@ -82,7 +81,7 @@ export function buildSessionMetricsModel(input: SessionMetricsInput): SessionMet
     state: titleCase(snapshot.displayState.state),
     workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
     completedAt: snapshot.displayState.state === 'completed' ? (snapshot.status?.updatedAt ?? null) : null,
-    durationMs: durationOf(snapshot),
+    meta: buildSessionMeta(snapshot),
     metrics,
   };
 }

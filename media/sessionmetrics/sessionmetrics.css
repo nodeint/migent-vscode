@@ -1,29 +1,5 @@
 /* Session Metrics page layout only. Tokens and components live in media/shared/base.css. */
 
-.metrics-banner {
-  display: flex;
-  gap: var(--mg-space-2);
-  align-items: flex-start;
-  margin: 0 0 var(--mg-space-2);
-  padding: var(--mg-space-2) var(--mg-space-3);
-  border: 1px solid var(--mg-border);
-  border-left: 3px solid var(--mg-warn);
-  border-radius: var(--mg-radius);
-  background: var(--mg-surface);
-}
-
-.metrics-banner--error {
-  border-left-color: var(--mg-error);
-}
-
-.metrics-banner p {
-  margin: 0;
-}
-
-.metrics-banner p + p {
-  margin-top: var(--mg-space-1);
-}
-
 .metrics-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

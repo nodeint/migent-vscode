@@ -108,6 +108,10 @@ export class Entry {
     this.panel.title = title;
   }
 
+  public setIcon(icon: vscode.WebviewPanel['iconPath']): void {
+    this.panel.iconPath = icon;
+  }
+
   public setDraft(questionId: string, value: AnswerDraft): void {
     this.draft = { ...this.draft, [questionId]: value };
     this.#draftRevision += 1;

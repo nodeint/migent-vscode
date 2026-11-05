@@ -10,9 +10,9 @@
   --mg-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
   --mg-hover: var(--vscode-list-hoverBackground, transparent);
   --mg-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
-  --mg-warn: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
-  --mg-error: var(--vscode-errorForeground, var(--vscode-foreground));
-  --mg-info: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  --mg-warn: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, var(--vscode-foreground)));
+  --mg-error: var(--vscode-list-errorForeground, var(--vscode-errorForeground, var(--vscode-foreground)));
+  --mg-info: var(--vscode-charts-blue, var(--vscode-textLink-foreground, var(--vscode-foreground)));
   --mg-bar: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
   --mg-radius: 4px;
   --mg-space-1: 4px;
@@ -30,6 +30,11 @@ body.vscode-high-contrast,
 body.vscode-high-contrast-light {
   --mg-border: var(--vscode-contrastBorder, var(--vscode-foreground));
   --mg-focus: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, var(--vscode-foreground)));
+}
+
+html {
+  /* Set by page.js to the sticky footer's height, so focus and scrolling stop above it. */
+  scroll-padding-bottom: var(--mg-footer-height, 0px);
 }
 
 body {
@@ -76,6 +81,120 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* Session header: status + workflow, title, metadata, then tabs and the more menu on one row. */
+.mg-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--mg-space-3);
+}
+
+.mg-header--session > * + * {
+  margin-top: var(--mg-space-2);
+}
+
+.mg-header--session > .mg-tabbar {
+  margin-top: var(--mg-space-4);
+}
+
+.mg-workflow {
+  color: var(--mg-muted);
+  overflow-wrap: anywhere;
+}
+
+.mg-title--clamp {
+  font-size: 1.3em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.mg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mg-space-1) var(--mg-space-4);
+  margin-bottom: 0;
+}
+
+.mg-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+}
+
+.mg-icon {
+  vertical-align: text-bottom;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mg-icon--spin {
+    animation: mg-spin 1.5s linear infinite;
+  }
+}
+
+@keyframes mg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mg-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  border-bottom: 1px solid var(--vscode-panel-border, var(--mg-border));
+}
+
+.mg-tabs {
+  display: flex;
+  gap: var(--mg-space-1);
+}
+
+.mg-tabbar .mg-menu > .mg-btn {
+  color: var(--vscode-panelTitle-inactiveForeground, var(--mg-muted));
+  background: none;
+  border-color: transparent;
+}
+
+.mg-tabbar .mg-menu > .mg-btn:hover {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+}
+
+.mg-tab {
+  color: var(--vscode-panelTitle-inactiveForeground, var(--mg-muted));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: var(--mg-space-1) var(--mg-space-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mg-tab:hover {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+}
+
+.mg-tab[aria-current='page'] {
+  color: var(--vscode-panelTitle-activeForeground, var(--mg-fg));
+  border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--mg-focus));
+  cursor: default;
+}
+
+.mg-tab:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+body.vscode-high-contrast .mg-tab[aria-current='page'],
+body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
+  border-bottom-color: var(--mg-focus);
+}
+
 .mg-actions {
   display: flex;
   flex-wrap: wrap;
@@ -105,6 +224,10 @@ body {
   gap: var(--mg-space-1);
   font-weight: 600;
   color: var(--mg-info);
+}
+
+.mg-status--muted {
+  color: var(--mg-muted);
 }
 
 .mg-status--ok {
@@ -155,6 +278,11 @@ body {
   border-color: transparent;
   padding: 0;
   text-decoration: underline;
+}
+
+.mg-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 body.vscode-high-contrast .mg-btn,
@@ -327,6 +455,102 @@ button.mg-row:hover {
 
 .mg-details[open] > summary {
   margin-bottom: var(--mg-space-2);
+}
+
+/* Alert: a problem or warning that stays visible, with text wrapped inside the page width. */
+.mg-alert {
+  margin: 0 0 var(--mg-space-2);
+  overflow-wrap: anywhere;
+}
+
+/* Banner: a message about the page or the session, with an icon and a left edge in the tone of the message. */
+.mg-banner {
+  display: flex;
+  gap: var(--mg-space-2);
+  align-items: flex-start;
+  margin: 0 0 var(--mg-space-2);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  border: 1px solid var(--mg-border);
+  border-left: 3px solid var(--mg-info);
+  border-radius: var(--mg-radius);
+  background: var(--mg-surface);
+  overflow-wrap: anywhere;
+}
+
+.mg-banner--ok {
+  border-left-color: var(--mg-ok);
+}
+
+.mg-banner--warn {
+  border-left-color: var(--mg-warn);
+}
+
+.mg-banner--error {
+  border-left-color: var(--mg-error);
+}
+
+.mg-banner__icon {
+  flex: none;
+  color: var(--mg-info);
+}
+
+.mg-banner--ok .mg-banner__icon {
+  color: var(--mg-ok);
+}
+
+.mg-banner--warn .mg-banner__icon {
+  color: var(--mg-warn);
+}
+
+.mg-banner--error .mg-banner__icon {
+  color: var(--mg-error);
+}
+
+.mg-banner p {
+  margin: 0;
+}
+
+.mg-banner p + p {
+  margin-top: var(--mg-space-1);
+}
+
+/* Text field: a single-line input or a text area. */
+.mg-input {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--mg-border));
+  padding: var(--mg-space-1) var(--mg-space-2);
+}
+
+.mg-input:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+/* Sticky action footer: stays reachable while the page scrolls, wraps at narrow widths and takes its own
+   space in the flow, so it never covers content. */
+.mg-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+  margin-top: var(--mg-space-5);
+  padding: var(--mg-space-3) 0;
+  background: var(--vscode-editor-background);
+  border-top: 1px solid var(--mg-border);
+}
+
+.mg-footer .mg-btn {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 /* Keyboard focus */

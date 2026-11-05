@@ -72,8 +72,6 @@ describe('buildResultsModel', () => {
       title: 'Probe: handoff fixture source',
       state: 'Completed',
       workflowId: 'probe-source',
-      completedAt: '2026-11-01T11:17:52.960+00:00',
-      durationMs: 5610,
       source: null,
     });
     // The captured sample does not include outputs/note.md.
@@ -193,7 +191,7 @@ const NL = String.fromCharCode(10);
 const BLANK_TASK = ['   ', '', ''].join(NL);
 const LONG_TASK = ['', '# Heading', '', 'Do the thing.', '  second line  ', '', ''].join(NL);
 
-describe('duration and child task', () => {
+describe('session meta and child task', () => {
   const withStatus = (patch: { createdAt?: string | null; updatedAt?: string | null }): ResultsInput => {
     const input = sourceInput();
     const source = captured('handoff-source');
@@ -201,16 +199,17 @@ describe('duration and child task', () => {
     return { ...input, snapshots: [{ ...source, status }, captured('handoff-target')] };
   };
 
-  it('computes the duration only for a Completed session with ordered, parseable timestamps', () => {
-    expect(buildResultsModel(withStatus({})).durationMs).toBe(5610);
-    expect(buildResultsModel(withStatus({ createdAt: null })).durationMs).toBeNull();
-    expect(buildResultsModel(withStatus({ updatedAt: 'not a date' })).durationMs).toBeNull();
-    expect(buildResultsModel(withStatus({ updatedAt: '2026-11-01T11:00:00.000+00:00' })).durationMs).toBeNull();
-    expect(buildResultsModel(withStatus({ updatedAt: '2026-11-01T11:17:47.350+00:00' })).durationMs).toBe(0);
-    expect(buildResultsModel({ ...sourceInput(), snapshots: [], sessionId: 'gone' }).durationMs).toBeNull();
+  it('carries the session meta the header shows, for any state', () => {
+    expect(buildResultsModel(withStatus({})).meta).toMatchObject({
+      createdAt: '2026-11-01T11:17:47.350+00:00',
+      updatedAt: '2026-11-01T11:17:52.960+00:00',
+      isRunning: false,
+      pendingQuestions: 0,
+    });
+    expect(buildResultsModel({ ...sourceInput(), snapshots: [], sessionId: 'gone' }).meta.updatedAt).toBeNull();
     const running = captured('handoff-source');
-    const notCompleted = { ...running, displayState: { ...running.displayState, state: 'running' as const } };
-    expect(buildResultsModel({ ...sourceInput(), snapshots: [notCompleted] }).durationMs).toBeNull();
+    const live = { ...running, displayState: { ...running.displayState, state: 'running' as const } };
+    expect(buildResultsModel({ ...sourceInput(), snapshots: [live] }).meta.isRunning).toBe(true);
   });
 
   it('returns the whole child task.md trimmed, and null when it is missing or blank', () => {
@@ -230,18 +229,18 @@ describe('duration and child task', () => {
 });
 
 describe('resultsPanelTitle', () => {
-  it('shows a check for Completed and the workflow id, then Results', () => {
-    expect(resultsPanelTitle(buildResultsModel(sourceInput()))).toBe('✓ probe-source · Results');
+  it('is the session title, whatever the state', () => {
+    const model = buildResultsModel(sourceInput());
+    expect(resultsPanelTitle(model)).toBe(model.title);
+    expect(resultsPanelTitle({ ...model, state: 'Running' })).toBe(model.title);
   });
 
-  it('has no glyph for another state and falls back to the shortened title without a workflow id', () => {
+  it('shortens a long title', () => {
     const model = buildResultsModel(sourceInput());
-    const long = 'x'.repeat(80);
-    const title = resultsPanelTitle({ ...model, state: 'Failed', workflowId: null, title: long });
-    expect(title.endsWith(' · Results')).toBe(true);
+    const title = resultsPanelTitle({ ...model, title: 'x'.repeat(80) });
     expect(title.startsWith('x')).toBe(true);
-    expect(title.length).toBeLessThan(long.length);
-    expect(resultsPanelTitle({ ...model, state: 'Running' })).toBe('probe-source · Results');
+    expect(title.endsWith('…')).toBe(true);
+    expect(title.length).toBeLessThan(80);
   });
 
   it('is neutral for an unavailable session', () => {

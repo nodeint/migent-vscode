@@ -1,146 +1,23 @@
-body {
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  color: var(--vscode-foreground);
-  padding: 0 20px 24px;
-  max-width: 960px;
+/* Next step page layout only. Tokens and components live in media/shared/base.css. */
+
+.next-task-notes {
+  margin-top: var(--mg-space-2);
 }
 
-h1 {
-  font-size: 1.5em;
-  margin: 16px 0 4px;
+.next-child-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mg-space-2);
+}
+
+/* Long workflow, file and session names wrap inside the available width instead of overflowing it. */
+#root .mg-btn,
+#root .mg-actions > * {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
   overflow-wrap: anywhere;
-}
-
-h2 {
-  font-size: 1.15em;
-  margin: 24px 0 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--vscode-panelSection-border, var(--vscode-widget-border, transparent));
-}
-
-h3 {
-  font-size: 1em;
-  margin: 12px 0 4px;
-}
-
-.meta {
-  color: var(--vscode-descriptionForeground);
-  margin: 0;
-}
-
-.state {
-  font-weight: 600;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-li {
-  padding: 4px 0;
-  overflow-wrap: anywhere;
-}
-
-.card {
-  border: 1px solid var(--vscode-widget-border, var(--vscode-panelSection-border, transparent));
-  border-radius: 4px;
-  padding: 8px 12px;
-  margin: 8px 0;
-}
-
-.muted {
-  color: var(--vscode-descriptionForeground);
-}
-
-.warn {
-  color: var(--vscode-editorWarning-foreground);
-}
-
-.error {
-  color: var(--vscode-errorForeground);
-}
-
-.mono {
-  font-family: var(--vscode-editor-font-family);
-  overflow-wrap: anywhere;
-}
-
-button {
-  font: inherit;
-  color: var(--vscode-button-secondaryForeground);
-  background: var(--vscode-button-secondaryBackground);
-  border: 1px solid transparent;
-  border-radius: 2px;
-  padding: 2px 8px;
-  margin: 2px 6px 2px 0;
-  cursor: pointer;
-}
-
-button:hover {
-  background: var(--vscode-button-secondaryHoverBackground);
-}
-
-button:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
-}
-
-button.link {
-  color: var(--vscode-textLink-foreground);
-  background: none;
-  padding: 0;
-  text-decoration: underline;
-}
-
-input[type='text'] {
-  box-sizing: border-box;
-  width: 100%;
-  font: inherit;
-  color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent);
-  padding: 4px 6px;
-}
-
-input[type='text']:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th,
-td {
   text-align: left;
-  padding: 4px 8px 4px 0;
-  overflow-wrap: anywhere;
-}
-
-button.primary {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-}
-
-button.primary:hover {
-  background: var(--vscode-button-hoverBackground);
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-footer {
-  position: sticky;
-  bottom: 0;
-  padding: 12px 0;
-  margin-top: 24px;
-  background: var(--vscode-editor-background);
-  border-top: 1px solid var(--vscode-panelSection-border, var(--vscode-widget-border, transparent));
 }

@@ -14,24 +14,36 @@ import {
   verifyBatch,
 } from '../../core/questionAnswers';
 import { type QuestionRecord, type QuestionsRead, readQuestions } from '../../core/questions';
-import { sessionLabel, truncate } from '../../core/sessionPresentation';
+import { titleCase } from '../../core/resultsModel';
+import { buildSessionMeta } from '../../core/sessionMeta';
+import { sessionTitle, truncate } from '../../core/sessionPresentation';
 import type { AnswerRequest, AnswerSubmitter } from '../answers';
 import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
+import { SESSION_ACTION_COMMANDS } from '../results/panels';
+import { type PageDescriptor, pageResourceRoots, renderPage, tabIcon } from '../webview/page';
 import { DraftStore } from './drafts';
 import { type BatchIdentity, batchKeyOf, Entry, isBatchIdentity } from './entry';
-import { html } from './page';
 
 export type { BatchIdentity } from './entry';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
+  snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null;
+
 export const ANSWER_VIEW_TYPE = 'migent.answerQuestions';
 
-const TITLE_MAX = 40;
-const WAITING = 'Waiting for the project to load.';
+const TITLE_MAX = 32;
+const PAGE: PageDescriptor = {
+  folder: 'questions',
+  styles: ['questions.css'],
+  scripts: ['questions.js'],
+  title: 'Questions',
+};
+const WAITING = 'Loading the project…';
 
 /** Pending records of one batch, in stored order. */
 export function pendingBatch(snapshot: SessionSnapshot | undefined, id: BatchIdentity): PendingQuestion[] {
@@ -136,7 +148,7 @@ export class AnswerPanels implements vscode.Disposable {
   #webviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
     return {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.#context.extensionUri, 'media', 'questions')],
+      localResourceRoots: pageResourceRoots(this.#context.extensionUri, PAGE),
     };
   }
 
@@ -192,7 +204,7 @@ export class AnswerPanels implements vscode.Disposable {
     const reply = this.#submitter.pending(batchKeyOf(entry.identity));
     if (reply === null) return;
     entry.setSubmitted(reply);
-    entry.move({ state: 'unconfirmed', message: 'Status not confirmed. Recheck before sending again.' });
+    entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
   }
 
   #adopt(panel: vscode.WebviewPanel, identity: BatchIdentity): void {
@@ -200,7 +212,7 @@ export class AnswerPanels implements vscode.Disposable {
     const key = batchKeyOf(identity);
     this.#entries.set(key, entry);
     // eslint-disable-next-line no-param-reassign -- the panel is created by this host and owned by the entry
-    panel.webview.html = html(panel.webview, this.#context.extensionUri);
+    panel.webview.html = renderPage(panel.webview, this.#context.extensionUri, PAGE);
     panel.webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(identity, raw);
     });
@@ -231,6 +243,9 @@ export class AnswerPanels implements vscode.Disposable {
         if (message.revision === entry.revision && message.fingerprint === entry.fingerprint) await this.#submit(entry);
         else this.#publish(entry, true);
         return;
+      case 'sessionAction':
+        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS[message.action]);
+        return;
       default:
         await this.#command(entry, message.type);
     }
@@ -259,9 +274,21 @@ export class AnswerPanels implements vscode.Disposable {
       case 'later':
         entry.panel.dispose();
         return;
+      case 'openResults':
+        await this.#runSessionCommand(entry, 'migent.session.openResult');
+        return;
+      case 'openMetrics':
+        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS.openMetrics);
+        return;
       default:
         this.#publish(entry, true);
     }
+  }
+
+  /** A session command always receives this panel's own session, never the active panel or a picker. */
+  async #runSessionCommand(entry: Entry, command: string): Promise<void> {
+    const { project, sessionId } = entry.identity;
+    await vscode.commands.executeCommand(command, { project, sessionId });
   }
 
   async #openQuestions(entry: Entry): Promise<void> {
@@ -295,7 +322,7 @@ export class AnswerPanels implements vscode.Disposable {
         draft: old.draft,
       });
     } catch (error) {
-      entry.setMessage(`The previous draft could not be archived (${describeError(error)}); nothing was replaced.`);
+      entry.setMessage(`The old draft could not be archived (${describeError(error)}), so the questions were not replaced.`);
       this.#publish(entry, true);
       return;
     }
@@ -317,7 +344,7 @@ export class AnswerPanels implements vscode.Disposable {
     try {
       await this.#drafts.delete(entry.identity);
     } catch (error) {
-      entry.setMessage(`The saved draft could not be removed: ${describeError(error)}`);
+      entry.setMessage(`The draft could not be deleted: ${describeError(error)}`);
     }
     this.#publish(entry, true);
   }
@@ -384,7 +411,7 @@ export class AnswerPanels implements vscode.Disposable {
     const reply = serializeAnswers(entry.questions, entry.draft);
     const reason = this.#blockReason(entry, resolved);
     if (reply === null || reason !== null || resolved === undefined) {
-      entry.setMessage(reason ?? 'Answer every question before sending.');
+      entry.setMessage(reason ?? 'Answer every question to send.');
       return null;
     }
     return { context: resolved.context, reply };
@@ -394,7 +421,7 @@ export class AnswerPanels implements vscode.Disposable {
   async #isDraftSaved(entry: Entry): Promise<boolean> {
     const unsaved = await entry.flush();
     if (unsaved === null) return true;
-    entry.setMessage(`The draft could not be saved (${unsaved}). Nothing was sent.`);
+    entry.setMessage(`Your draft could not be saved (${unsaved}), so nothing was sent.`);
     return false;
   }
 
@@ -402,7 +429,7 @@ export class AnswerPanels implements vscode.Disposable {
     const before = { state: entry.state };
     if (before.state !== 'editing' && before.state !== 'rejected') return;
     // The sending state is set before the first await, so a second Submit cannot start a competing call.
-    entry.move({ state: 'sending', message: 'Sending answers…' });
+    entry.move({ state: 'sending', message: 'Sending your answers…' });
     this.#publish(entry, true);
     const prepared = (await this.#isDraftSaved(entry)) ? this.#prepareSubmit(entry) : null;
     if (prepared === null) {
@@ -428,18 +455,18 @@ export class AnswerPanels implements vscode.Disposable {
   #apply(entry: Entry, settled: Settled): void {
     const { reconciliation: outcome, stderrLast, cleanupError } = settled;
     if (outcome.kind === 'recorded') {
-      const note = cleanupError === null ? '' : ` The saved submission could not be removed (${cleanupError}); reopen the panel and press Recheck to retry.`;
-      entry.move({ state: 'recorded', message: `Answers recorded.${note}` });
+      const note = cleanupError === null ? '' : ` A saved copy could not be removed (${cleanupError}). Reopen this page and press Check again to retry.`;
+      entry.move({ state: 'recorded', message: `Answers sent.${note}` });
       // The exact submitted snapshot is archived; later edits would belong to a new batch.
       void this.#drafts.delete(entry.identity).catch(() => undefined);
       this.#sync(entry);
     } else if (outcome.kind === 'pending') {
       const detail = stderrLast === null ? '' : ` ${stderrLast}`;
-      entry.move({ state: 'rejected', message: `The answers were not recorded.${detail}` });
+      entry.move({ state: 'rejected', message: `Your answers were not accepted.${detail}` });
     } else if (outcome.kind === 'answered-elsewhere') {
-      entry.move({ state: 'answered-elsewhere', message: 'These questions were answered by another client.' });
+      entry.move({ state: 'answered-elsewhere', message: 'These questions were already answered somewhere else.' });
     } else {
-      entry.move({ state: 'unconfirmed', message: 'Status not confirmed. Recheck before sending again.' });
+      entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
     }
     if (outcome.kind !== 'unconfirmed') entry.setSubmitted(null);
     this.#publish(entry, true);
@@ -494,14 +521,14 @@ export class AnswerPanels implements vscode.Disposable {
 
   #buildModel(entry: Entry): AnswerModel {
     const resolved = this.#resolve(entry.identity);
-    const label = resolved?.snapshot === undefined ? entry.identity.sessionId : sessionLabel(resolved.snapshot);
-    const project = resolved?.context.folder.name ?? entry.identity.project;
     return buildAnswerModel({
       revision: entry.revision + 1,
       generation: entry.generation,
       fingerprint: entry.fingerprint,
-      title: `Questions — ${entry.identity.stageId ?? 'Role session'}`,
-      crumb: `${project} › ${label} › ${entry.identity.executionId}`,
+      title: resolved?.snapshot === undefined ? entry.identity.sessionId : sessionTitle(resolved.snapshot),
+      workflowId: workflowIdOf(resolved?.snapshot),
+      meta: buildSessionMeta(resolved?.snapshot),
+      sessionState: titleCase(resolved?.snapshot?.displayState.state ?? 'unavailable'),
       state: entry.state,
       message: entry.message ?? (entry.saveError === null ? null : `Draft not saved: ${entry.saveError}`),
       questions: entry.questions,
@@ -517,8 +544,11 @@ export class AnswerPanels implements vscode.Disposable {
     const withoutRevision = (value: AnswerModel): string => JSON.stringify({ ...value, revision: 0 });
     if (!isForced && entry.lastModel !== null && withoutRevision(entry.lastModel) === withoutRevision(model)) return;
     entry.accept(model);
-    entry.setTitle(`Questions: ${truncate(entry.identity.stageId ?? 'Role session', TITLE_MAX)}`);
-    void entry.panel.webview.postMessage({ type: 'model', identity: entry.identity, model });
+    entry.setTitle(truncate(model.title, TITLE_MAX));
+    entry.setIcon(
+      tabIcon(this.#context.extensionUri, 'questions', this.#resolve(entry.identity)?.snapshot?.displayState.state ?? ''),
+    );
+    void entry.panel.webview.postMessage({ type: 'model', revision: model.revision, identity: entry.identity, model });
   }
 
   #onChange(change: MigentChange): void {

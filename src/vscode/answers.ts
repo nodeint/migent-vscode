@@ -4,6 +4,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { runLong, type RunResult } from '../cli/runner';
+import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import type { GateHandle } from '../core/operationGate';
 import { sessionDir } from '../core/paths';
@@ -306,18 +307,43 @@ export class AnswerSubmitter {
     const args = answerArgs({ sessionId, stageId: request.cliStage, replyFile });
     this.#live.add(batchKey);
     const run = runLong(runtime.launch, args, { cwd: context.root, env: runtime.env, onStderrLine: runtime.log });
-    const saved = run.pid === undefined ? Promise.resolve() : this.#saveRecord(request, replyFile, run.pid);
+    const saved = this.#savePid(request, replyFile, run.pid);
     try {
-      const result = await run.result;
-      try {
-        await saved;
-      } catch {
-        // The pid is only a liveness hint; the record without it is still valid.
-      }
-      return await this.#settle(request, result);
+      // The CLI runs the whole stage and exits only when it is done. The answers are received once the question
+      // records show them, which is within moments, so that settles the send and the process carries on.
+      const early = await untilReceivedOrExited(run.result, () => this.#receivedOutcome(request), RECONCILE_DELAY_MS);
+      await saved;
+      if (early.kind === 'received') return await this.#finish(request, early.value, null);
+      return await this.#settle(request, early.result);
     } finally {
       this.#live.delete(batchKey);
     }
+  }
+
+  /** The pid is only a liveness hint; the record without it is still valid. */
+  async #savePid(request: AnswerRequest, replyFile: string, pid: number | undefined): Promise<void> {
+    if (pid === undefined) return;
+    try {
+      await this.#saveRecord(request, replyFile, pid);
+    } catch {
+      // Kept as it is.
+    }
+  }
+
+  /** The decided outcome while the records already show it, or null: only a decision ends the wait early. */
+  #receivedOutcome(request: AnswerRequest): Reconciliation | null {
+    const outcome = this.#reconcile(request);
+    return outcome.kind === 'recorded' || outcome.kind === 'answered-elsewhere' ? outcome : null;
+  }
+
+  /** Release the session, delete the saved files and report a decided outcome. */
+  async #finish(
+    request: AnswerRequest,
+    reconciliation: Reconciliation,
+    stderrLast: string | null,
+  ): Promise<AnswerSubmission> {
+    const cleanupError = await this.#clearRecord(request.context.key, request.sessionId, request.batchKey);
+    return { kind: 'done', reconciliation, stderrLast, cleanupError };
   }
 
   async #discard(request: AnswerRequest, replyFile: string): Promise<void> {
@@ -335,10 +361,10 @@ export class AnswerSubmitter {
       return { kind: 'failed', detail: result.detail };
     }
     const reconciliation = await this.#reconcileWithRetry(request);
+    const stderrLast = result.stderrTail.at(-1) ?? null;
     // An unconfirmed result keeps its record, reply file and gate until Recheck.
-    const cleanupError =
-      reconciliation.kind === 'unconfirmed' ? null : await this.#clearRecord(context.key, sessionId, batchKey);
-    return { kind: 'done', reconciliation, stderrLast: result.stderrTail.at(-1) ?? null, cleanupError };
+    if (reconciliation.kind === 'unconfirmed') return { kind: 'done', reconciliation, stderrLast, cleanupError: null };
+    return this.#finish(request, reconciliation, stderrLast);
   }
 
   #reconcile(request: AnswerRequest): Reconciliation {

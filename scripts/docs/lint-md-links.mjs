@@ -13,7 +13,7 @@
  *   node scripts/docs/lint-md-links.mjs --self-test
  *
  * Default: walk the repo, check local targets, exit 1 when findings > 0.
- * Skips every path in the `ignores` list of `.markdownlint-cli2.jsonc`.
+ * Skips Git-ignored files and paths in the `ignores` list of `.markdownlint-cli2.jsonc`.
  * `--http` also HEAD/GET `http(s):` URLs (slow; network).
  * A link whose text is one backticked identifier (`Name` or `Owner.member`) to a code file
  * must find that name (the last segment) as a whole word in the file, or it is a `missing-symbol`.
@@ -24,6 +24,7 @@ import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 import { REPO_ROOT } from '../lib/repo.mjs';
 
@@ -572,7 +573,7 @@ async function scan(opts) {
   const { root, walkFrom, checkFragments, checkSymbols, checkHttp: wantHttp } = opts;
   const requestedRels = walkFrom.map((start) => posixRel(root, start) || '.');
   /** @type {string[]} */
-  const files = [];
+  let files = [];
   for (const start of walkFrom) {
     const st = await pathStat(start);
     if (!st) continue;
@@ -581,6 +582,20 @@ async function scan(opts) {
       continue;
     }
     await walkMarkdown(start, root, files, requestedRels);
+  }
+
+  if (files.length > 0) {
+    const result = spawnSync('git', ['check-ignore', '-z', '--stdin'], {
+      cwd: root,
+      input: files.map((file) => posixRel(root, file)).join('\0') + '\0',
+      encoding: 'utf8',
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0 && result.status !== 1) {
+      throw new Error(`git check-ignore failed: ${result.stderr}`);
+    }
+    const ignored = new Set(result.stdout.split('\0').filter(Boolean));
+    files = files.filter((file) => !ignored.has(posixRel(root, file)));
   }
 
   /** @type {Array<{ file: string, line: number, text: string, href: string, kind: string, target: string, detail: string }>} */
@@ -737,7 +752,14 @@ async function runSelfTest() {
   const dir = await mkdtemp(join(tmpdir(), 'md-links-'));
   const errors = [];
   try {
+    const init = spawnSync('git', ['init', '--quiet'], { cwd: dir, encoding: 'utf8' });
+    if (init.error) throw init.error;
+    if (init.status !== 0) throw new Error(init.stderr);
+    writeFileSync(join(dir, '.gitignore'), 'ignored.md\n');
+    writeFileSync(join(dir, 'ignored.md'), '[ignored](./ignored-missing.md)\n');
     mkdirSync(join(dir, 'sub'));
+    writeFileSync(join(dir, 'sub', '.gitignore'), '*.md\n!README.md\n');
+    writeFileSync(join(dir, 'sub', 'ignored.md'), '[nested](./nested-missing.md)\n');
     writeFileSync(join(dir, 'ok.md'), '# Hello world\n\n## Dup\n\n## Dup\n');
     writeFileSync(join(dir, 'windows.md'), '# Windows heading\r\n\r\n## Windows child\r\n');
     writeFileSync(join(dir, 'sub', 'README.md'), '# Sub home\n');
@@ -790,6 +812,9 @@ async function runSelfTest() {
     });
 
     const kinds = result.findings.map((f) => `${f.kind}:${f.href}`).sort();
+    expect(result.files === 4, `expected 4 non-ignored Markdown files, got ${result.files}`, errors);
+    expect(!kinds.some((kind) => kind.includes('ignored-missing') || kind.includes('nested-missing')),
+      'Git-ignored files must not contribute findings', errors);
     expect(
       kinds.includes('missing-file:./nope.md'),
       `expected missing-file ./nope.md, got ${kinds.join(', ')}`,

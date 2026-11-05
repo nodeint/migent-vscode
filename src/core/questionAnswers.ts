@@ -270,17 +270,17 @@ export function verifyBatch(input: VerifyInput): Verified {
   }
   const summary = input.summary.filter(isTarget);
   const records = history.questions.filter((record) => isTarget(record) && record.status === 'pending');
-  if (summary.length === 0 || records.length === 0) return { kind: 'changed', reason: 'These questions are no longer pending.' };
+  if (summary.length === 0 || records.length === 0) return { kind: 'changed', reason: 'These questions are no longer waiting for an answer.' };
   if (!sameIds(summary, records)) {
-    return { kind: 'unsupported', reason: 'status.json and questions.json disagree about this batch.' };
+    return { kind: 'unsupported', reason: 'The session files disagree about these questions, so they cannot be answered safely.' };
   }
   if (records.some((record) => record.recipient !== HUMAN_RECIPIENT)) {
-    return { kind: 'unsupported', reason: 'These questions are not addressed to a person.' };
+    return { kind: 'unsupported', reason: 'These questions are not meant for a person, so they cannot be answered here.' };
   }
   const problem = checkBatch(records);
   if (problem !== null) return { kind: 'unsupported', reason: describeBatchProblem(problem) };
   if (batchFingerprint(records) !== input.fingerprint) {
-    return { kind: 'changed', reason: 'The questions changed after you opened them.' };
+    return { kind: 'changed', reason: 'The questions have changed since you opened this page.' };
   }
   return { kind: 'ok', questions: records };
 }

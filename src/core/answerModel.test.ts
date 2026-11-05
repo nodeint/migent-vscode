@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { type AnswerModelInput, buildAnswerModel, describeDraft, parseAnswerMessage } from './answerModel';
 import type { PendingQuestion } from './model';
+import { NO_SESSION_META } from './sessionMeta';
 
 const question = (id: string, selection: string): PendingQuestion => ({
   id,
@@ -26,7 +27,9 @@ function input(overrides: Partial<AnswerModelInput> = {}): AnswerModelInput {
     archive: null,
     fingerprint: 'f',
     title: 't',
-    crumb: 'c',
+    workflowId: 'wf',
+    sessionState: 'Question',
+    meta: NO_SESSION_META,
     state: 'editing',
     message: null,
     questions: [question('1', 'single'), question('2', 'multiple')],
@@ -73,6 +76,13 @@ describe('parseAnswerMessage', () => {
     });
     expect(parseAnswerMessage({ type: 'submit', revision: 2, fingerprint: 'f' })).toMatchObject({ type: 'submit' });
     expect(parseAnswerMessage({ type: 'later' })).toEqual({ type: 'later' });
+    expect(parseAnswerMessage({ type: 'openResults' })).toEqual({ type: 'openResults' });
+    expect(parseAnswerMessage({ type: 'openMetrics' })).toEqual({ type: 'openMetrics' });
+    expect(parseAnswerMessage({ type: 'sessionAction', action: 'showLog' })).toEqual({
+      type: 'sessionAction',
+      action: 'showLog',
+    });
+    expect(parseAnswerMessage({ type: 'sessionAction', action: 'rm -rf' })).toBeNull();
   });
 
   it('drops forged shapes: unknown types, bad modes, non-string options, paths and argv', () => {

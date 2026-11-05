@@ -9,6 +9,8 @@ import {
 } from './questionAnswers';
 import type { QuestionRecord } from './questions';
 import { isRecord } from './record';
+import { SESSION_ACTIONS, type SessionAction } from './resultsIntent';
+import type { SessionMeta } from './sessionMeta';
 
 /**
  * The inert data an answer panel renders, and the validated messages it may send
@@ -44,7 +46,12 @@ export interface AnswerModel {
   generation: number;
   fingerprint: string;
   title: string;
-  crumb: string;
+  /** The session's workflow id, shown beside the status badge. */
+  workflowId: string | null;
+  /** The session's display state as the other session pages show it (`Question`, `Running`, ...). */
+  sessionState: string;
+  /** What the header says about the session, the same on every session page. */
+  meta: SessionMeta;
   state: AnswerState;
   message: string | null;
   questions: QuestionView[];
@@ -75,7 +82,12 @@ export interface AnswerModelInput {
   generation: number;
   fingerprint: string;
   title: string;
-  crumb: string;
+  /** The session's workflow id, shown beside the status badge. */
+  workflowId: string | null;
+  /** The session's display state as the other session pages show it (`Question`, `Running`, ...). */
+  sessionState: string;
+  /** What the header says about the session, the same on every session page. */
+  meta: SessionMeta;
   state: AnswerState;
   message: string | null;
   questions: readonly PendingQuestion[];
@@ -151,7 +163,9 @@ export function buildAnswerModel(input: AnswerModelInput): AnswerModel {
     generation: input.generation,
     fingerprint: input.fingerprint,
     title: input.title,
-    crumb: input.crumb,
+    workflowId: input.workflowId,
+    sessionState: input.sessionState,
+    meta: input.meta,
     state: input.state,
     message: input.message,
     questions,
@@ -177,10 +191,13 @@ export type AnswerMessage =
   | { type: 'openQuestions' }
   | { type: 'later' }
   | { type: 'continue' }
-  | { type: 'viewLog' };
+  | { type: 'viewLog' }
+  | { type: 'openResults' }
+  | { type: 'openMetrics' }
+  | { type: 'sessionAction'; action: SessionAction };
 
 const SIMPLE_MESSAGES = new Map<string, AnswerMessage>(
-  (['ready', 'reload', 'discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog'] as const).map(
+  (['ready', 'reload', 'discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog', 'openResults', 'openMetrics'] as const).map(
     (type) => [type, { type }],
   ),
 );
@@ -204,6 +221,10 @@ export function parseAnswerMessage(raw: unknown): AnswerMessage | null {
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
   const simple = SIMPLE_MESSAGES.get(raw.type);
   if (simple !== undefined) return simple;
+  if (raw.type === 'sessionAction') {
+    const action = SESSION_ACTIONS.find((candidate) => candidate === raw.action);
+    return action === undefined ? null : { type: 'sessionAction', action };
+  }
   if (typeof raw.fingerprint !== 'string') return null;
   if (raw.type === 'submit') {
     return typeof raw.revision === 'number' ? { type: 'submit', revision: raw.revision, fingerprint: raw.fingerprint } : null;

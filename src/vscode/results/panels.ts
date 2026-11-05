@@ -18,7 +18,7 @@ import type { MigentChange, ProjectKey } from '../changes';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { Releasable } from '../watchBackend';
-import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import { type PageDescriptor, pageResourceRoots, renderPage, tabIcon } from '../webview/page';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -59,6 +59,7 @@ export const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
   revealInExplorer: 'migent.session.revealInExplorer',
   openQuestions: 'migent.session.openQuestions',
   openMetrics: 'migent.session.openMetrics',
+  answerQuestions: 'migent.session.answerQuestions',
 };
 
 /** Actions the overview delegates to the Next step feature; set once by the extension. */
@@ -276,6 +277,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         workflows: [],
       },
     );
+    entry.panel.iconPath = tabIcon(this.#extensionUri, 'results', model.state);
     entry.publish(model, isForced);
   }
 

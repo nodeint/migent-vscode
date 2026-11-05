@@ -2,6 +2,8 @@
 
 Monitor and run multi-stage AI workflows and agent sessions directly from your editor.
 
+![Migent session explorer and session metrics in VS Code](https://raw.githubusercontent.com/nodeint/migent-vscode/main/media/screenshot.png)
+
 ---
 
 ## What is Migent?
