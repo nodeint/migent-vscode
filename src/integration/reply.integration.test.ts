@@ -102,7 +102,7 @@ const scenarios: Scenario[] = [
       fs.appendFileSync(file, 'Use Postgres.\n');
       await withReplyMode('ignore', async () => {
         const result = await env.api.replies.send(meta);
-        assert.equal(result.kind, 'unconfirmed');
+        assert.equal(result.kind, 'sent');
       });
       assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/, 'the draft is kept');
       assert.equal(env.api.control.gate.current(meta.project, 'r3'), undefined, 'the blocked execution moved on, so the gate is released');
@@ -114,7 +114,7 @@ const scenarios: Scenario[] = [
       const { file, meta } = await openDraft(env, 'r8');
       fs.appendFileSync(file, 'Use Postgres.\n');
       await withReplyMode('ignore', async () => {
-        assert.equal((await env.api.replies.send(meta)).kind, 'unconfirmed');
+        assert.equal((await env.api.replies.send(meta)).kind, 'sent');
       });
       // The ignoring CLI resumed the blocked execution (0002) with a turn that is not this reply.
       assert.equal(env.api.control.gate.current(meta.project, 'r8'), undefined, 'released: the blocked execution moved on');
