@@ -100,9 +100,6 @@ function createNextStep(
     openNextStep: (identity, workflow) => {
       nextStep.open({ ...identity, workflow });
     },
-    reloadSuggestions: async (project, snapshot) => {
-      await control.regenerateNext(project, snapshot);
-    },
   });
   // Header actions keep targeting the source session from a Results panel or a Next step page.
   const host = { registry, active: { activeTarget: () => results.activeTarget() ?? nextStep.activeTarget() } };

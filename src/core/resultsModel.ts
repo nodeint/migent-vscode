@@ -39,9 +39,6 @@ export interface ResultsNext {
   /** `ok`, or the reason no suggestions are shown. Never affects the session state. */
   state: 'ok' | 'missing' | 'unreadable' | 'invalid' | 'unsupported';
   detail: string | null;
-  frozen: 'ok' | 'absent' | 'unreadable' | 'invalid';
-  /** next.json is not available although the frozen workflow declares downstream targets. */
-  canReload: boolean;
   suggestions: ResultsSuggestion[];
 }
 
@@ -140,9 +137,7 @@ export function targetState(workflow: string, workflows: readonly WorkflowEntry[
 function nextModel(input: ResultsInput): ResultsNext {
   const read = readNext(input.sessionDirPath);
   const frozen = readFrozenDownstream(input.sessionDirPath);
-  const frozenState = frozen.kind;
-  const isDeclaring = frozen.kind === 'ok' && frozen.downstream.length > 0;
-  const base = { frozen: frozenState, canReload: isDeclaring && read.kind !== 'ok', suggestions: [] };
+  const base = { suggestions: [] };
   switch (read.kind) {
     case 'missing':
       return { ...base, state: 'missing', detail: null };
@@ -214,7 +209,7 @@ function unavailable(sessionId: string): ResultsModel {
     workflowId: null,
     meta: NO_SESSION_META,
     outputs: { rows: [], directoryError: null },
-    next: { state: 'missing', detail: null, frozen: 'absent', canReload: false, suggestions: [] },
+    next: { state: 'missing', detail: null, suggestions: [] },
     source: null,
     children: [],
   };

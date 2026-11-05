@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open the Results page when clicking any session in the Sessions view, whatever its state, and offer Open Result in
+  every session's context menu. Remove the Reload suggestions button; existing next-step suggestions are unchanged.
 - Add a New session action to the Sessions view title bar: pick the project and workflow once, then Run now (task
   input with Compose in editor) or Prepare (title input, opens `task.md`).
   The workflow picker no longer lists each workflow's stages, and Prepare Session no longer shows a "Session prepared"

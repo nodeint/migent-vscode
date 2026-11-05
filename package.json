@@ -427,7 +427,7 @@
         },
         {
           "command": "migent.session.openResult",
-          "when": "view == migent.sessions && viewItem =~ /^session.completed/",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "1_open@0"
         },
         {

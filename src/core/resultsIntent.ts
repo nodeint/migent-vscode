@@ -12,7 +12,6 @@ export type SessionAction = (typeof SESSION_ACTIONS)[number];
 export type ResultsIntent =
   | { intent: 'openOutput'; name: string }
   | { intent: 'openNextFile' }
-  | { intent: 'reloadSuggestions' }
   | { intent: 'openNextStep'; workflow: string }
   | { intent: 'openManifest' }
   | { intent: 'openTargetWorkflow'; workflow: string }
@@ -33,7 +32,6 @@ function sessionAction(value: unknown): SessionAction | null {
 function intentWith(message: Record<string, unknown>): ResultsIntent | null {
   switch (message.intent) {
     case 'openNextFile':
-    case 'reloadSuggestions':
     case 'openManifest':
       return { intent: message.intent };
     case 'openOutput':

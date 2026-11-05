@@ -131,7 +131,6 @@
     if (next.state !== 'ok') {
       const text = NEXT_TEXT[next.state] + (next.detail ? ' (' + next.detail + ')' : '');
       node.append(el('p', text, next.state === 'missing' ? 'mg-muted' : 'mg-warn'));
-      if (next.canReload) node.append(action('Reload suggestions', { intent: 'reloadSuggestions' }, 'secondary'));
     } else {
       if (next.suggestions.length === 0) node.append(el('p', 'No suggestions in next.json.', 'mg-muted'));
       for (const suggestion of next.suggestions) node.append(renderSuggestion(suggestion));

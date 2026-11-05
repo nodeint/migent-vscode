@@ -2,7 +2,6 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import type { SessionSnapshot } from '../../core/model';
 import { manifestPath, nextPath, sessionDir, workflowsDir } from '../../core/paths';
 import { parseResultsMessage, type ResultsIntent, type SessionAction } from '../../core/resultsIntent';
 import {
@@ -65,7 +64,6 @@ export const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
 /** Actions the overview delegates to the Next step feature; set once by the extension. */
 export interface ResultsActions {
   openNextStep: (identity: Identity, workflow: string) => void;
-  reloadSuggestions: (context: ProjectContext, snapshot: SessionSnapshot) => Promise<void>;
 }
 
 /** One open panel and what was last posted to it. */
@@ -337,8 +335,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         return;
       }
       case 'openNextStep':
-      case 'reloadSuggestions':
-        await this.#delegate(context, identity, intent);
+        this.#actions?.openNextStep(identity, intent.workflow);
         return;
       case 'openNextFile':
         await openFile(nextPath(context.root, identity.sessionId), 'next.json');
@@ -366,20 +363,6 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         this.open({ project: identity.project, sessionId: intent.sessionId });
         return;
     }
-  }
-
-  /** Next-step actions belong to the Next step feature; the overview only forwards them. */
-  async #delegate(
-    context: ProjectContext,
-    identity: Identity,
-    intent: Extract<ResultsIntent, { intent: 'openNextStep' | 'reloadSuggestions' }>,
-  ): Promise<void> {
-    if (intent.intent === 'openNextStep') {
-      this.#actions?.openNextStep(identity, intent.workflow);
-      return;
-    }
-    const snapshot = context.store.snapshot(identity.sessionId);
-    if (snapshot !== undefined) await this.#actions?.reloadSuggestions(context, snapshot);
   }
 
   async #openWorkflow(context: ProjectContext, workflow: string): Promise<void> {

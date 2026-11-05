@@ -98,7 +98,8 @@ capability states and Recheck; `scripts/integration/run.mjs` puts a `migent` lau
 `fake-migent.js` (run with `node`) first on `PATH`, so they do not depend on an installed CLI. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
-text and hidden state; `results.integration.test.ts` opens Results panels from a Completed row, checks that
+text and hidden state; `results.integration.test.ts` opens Results panels from a session row (Completed, or Running
+until it completes in place), checks that
 reopening reuses the panel, that a `sessionAction` intent runs the session command for the panel's own session
 (and an unknown action nothing), that page intents open real files by identity (and invalid ones nothing),
 lineage navigation, background updates without focus changes, and that closing a panel releases its `outputs/`

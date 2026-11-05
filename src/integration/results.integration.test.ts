@@ -84,7 +84,7 @@ async function closeAll(env: Env): Promise<void> {
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC10: a Completed row opens one reused Results panel; a palette-style command targets its session',
+    name: 'AC10: a session row opens one reused Results panel; a palette-style command targets its session',
     async run(env) {
       await handoffProject(env);
       const id = identity(env, SOURCE);
@@ -97,7 +97,7 @@ const scenarios: Scenario[] = [
       write(migentPath(env.root, 'sessions', 'running', 'status.json'), status('active', { workflow_id: 'plan' }));
       write(migentPath(env.root, 'sessions', 'running', 'session.lock'), freshLock());
       await waitFor('running loaded', () => env.project()?.store.snapshot('running') !== undefined);
-      assert.equal(env.api.sessionsTree.getTreeItem(sessionNode(env, 'running')).command, undefined);
+      assert.equal(env.api.sessionsTree.getTreeItem(sessionNode(env, 'running')).command?.command, 'migent.session.openResult');
 
       await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
       await waitFor('panel opened', () => env.api.results.has(id));
@@ -125,6 +125,44 @@ const scenarios: Scenario[] = [
       await waitFor('task.md of the bound session opened', () =>
         same(activeFile(), path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md')),
       );
+      await closeAll(env);
+    },
+  },
+  {
+    name: 'A non-completed row opens Results for its own session, expandable, reused and updated in place',
+    async run(env) {
+      await handoffProject(env);
+      write(migentPath(env.root, 'sessions', 'running', 'manifest.yaml'), manifest('running'));
+      write(migentPath(env.root, 'sessions', 'running', 'status.json'), status('active', { workflow_id: 'plan' }));
+      write(migentPath(env.root, 'sessions', 'running', 'session.lock'), freshLock());
+      await waitFor('running loaded', () => env.project()?.store.snapshot('running') !== undefined);
+      const id = identity(env, 'running');
+      const node = sessionNode(env, 'running');
+      const item = env.api.sessionsTree.getTreeItem(node);
+      assert.notEqual(item.collapsibleState, vscode.TreeItemCollapsibleState.None, 'the row stays expandable');
+      const { command } = item;
+      assert.ok(command, 'a Running row has a click command');
+      assert.equal(command.command, 'migent.session.openResult');
+      assert.deepEqual(command.arguments, [node]);
+
+      await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+      await waitFor('panel opened', () => env.api.results.has(id));
+      await waitFor('model posted', () => env.api.results.lastModel(id) !== null);
+      const running = env.api.results.lastModel(id);
+      assert.ok(running);
+      assert.equal(running.availability, 'ok');
+      assert.equal(running.sessionId, 'running');
+      assert.equal(running.state, 'Running');
+      assert.deepEqual(running.outputs.rows, []);
+      assert.deepEqual(running.next.suggestions, []);
+
+      await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+      assert.equal(env.api.results.count, 1, 'reopening reuses the panel');
+
+      fs.rmSync(migentPath(env.root, 'sessions', 'running', 'session.lock'));
+      write(migentPath(env.root, 'sessions', 'running', 'status.json'), status('completed', { workflow_id: 'plan' }));
+      await waitFor('panel shows Completed', () => env.api.results.lastModel(id)?.state === 'Completed');
+      assert.equal(env.api.results.count, 1, 'the transition did not open another panel');
       await closeAll(env);
     },
   },
