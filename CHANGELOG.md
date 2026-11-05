@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.3
+
+- Clarify the extension's focus on workflow execution and AI agent orchestration in its description and README,
+  update getting-started instructions, commands and settings, and exclude the README screenshot from the VSIX.
 - Show only Files and the stage attempts under each session in the Sessions view. The Outputs, Questions and History
   branches are gone: outputs stay on Results, questions are answered from the Questions page, the session's Answer
   Questions action and notifications, and `outputs/` and `questions.json` remain browsable under Files.
