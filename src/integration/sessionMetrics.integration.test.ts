@@ -33,6 +33,17 @@ const identity = (env: Env, sessionId: string = SESSION): { project: string; ses
   return { project: project.key, sessionId };
 };
 
+/** What is left of `.migent/` on disk, to tell a project that outlives its deletion from a stuck delete. */
+function describeMigent(root: string): string {
+  const dir = path.join(root, '.migent');
+  try {
+    const entries = fs.readdirSync(dir, { recursive: true }).map(String);
+    return `.migent still on disk (${entries.length} entries: ${entries.slice(0, 10).join(', ')})`;
+  } catch (error) {
+    return `.migent not readable: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 const activeFile = (): string => {
   const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
   return input instanceof vscode.TabInputText ? input.uri.fsPath.toLowerCase() : '';
@@ -254,7 +265,7 @@ const scenarios: Scenario[] = [
         env.api.registry.refresh();
         await sleep(SETTLE_MS);
       }
-      assert.equal(env.project(), undefined, 'the project is gone');
+      assert.equal(env.project(), undefined, `the project is gone; ${describeMigent(env.root)}`);
       await waitFor('project removal shown unavailable', () => env.api.sessionMetrics.lastModel(id)?.availability === 'unavailable');
       assert.ok(env.api.sessionMetrics.has(id), 'the panel stays open');
       assert.equal(env.api.sessionMetrics.title(id), 'Metrics');

@@ -234,10 +234,20 @@ export async function openScenarioFolder(): Promise<ScenarioFolder> {
   };
 }
 
+let selectedScenarios = 0;
+
+/** How many scenarios `runScenarios` has started, so a filter that matches nothing can be reported. */
+export function selectedScenarioCount(): number {
+  return selectedScenarios;
+}
+
 /** Run scenarios one by one, each in its own workspace folder; returns the number that failed. */
 export async function runScenarios(scenarios: readonly Scenario[]): Promise<number> {
   let failed = 0;
+  const wanted = process.env.MIGENT_IT_CASE?.toLowerCase();
   for (const scenario of scenarios) {
+    if (wanted !== undefined && !scenario.name.toLowerCase().includes(wanted)) continue;
+    selectedScenarios += 1;
     failed += await runScenario(scenario);
   }
   return failed;

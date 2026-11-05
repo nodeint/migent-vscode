@@ -1,7 +1,9 @@
 /**
  * Integration test runner (@vscode/test-electron).
  *
- * Usage: node scripts/integration/run.mjs [--versions 1.90.0,stable]
+ * Usage: node scripts/integration/run.mjs [--versions 1.90.0,stable] [--file reply] [--case "empty reply"]
+ * --file and --case narrow the run to matching suites/cases (case-insensitive substrings) for quick verification;
+ * a filter that matches nothing fails the run.
  * Default versions: the minimum supported VS Code (engines.vscode) and the latest stable.
  * Add --exclude to run with files.watcherExclude for .migent (informational: VS Code delivers no watcher
  * events for excluded paths, a known limitation; see docs/testing.md).
@@ -49,6 +51,17 @@ const minimum = String(pkg.engines.vscode).replace(/^[^\d]*/, '');
 const versionsArg = process.argv.indexOf('--versions');
 const versions =
   versionsArg === -1 ? [minimum, 'stable'] : process.argv[versionsArg + 1].split(',').filter(Boolean);
+// --file reply: only suites whose file name contains the text (reply.integration.test.ts, "watcherProbe", ...).
+// --case "empty reply": only cases whose name contains the text. Both are case-insensitive and combine.
+function optionValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith('--')) throw new Error(`${name} needs a value`);
+  return value;
+}
+const fileFilter = optionValue('--file');
+const caseFilter = optionValue('--case');
 const labels = versions.map((version) => version.replace(/[^a-zA-Z0-9._-]/g, '_'));
 if (new Set(labels).size !== labels.length) throw new Error('VS Code versions must have distinct report names');
 
@@ -123,7 +136,7 @@ async function runVersion(version, executable, downloadError) {
       launchArgs: [workspace, `--user-data-dir=${join(scratch, 'vscode-user')}`, `--extensions-dir=${join(scratch, 'vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}) },
+      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}), ...(fileFilter ? { MIGENT_IT_FILE: fileFilter } : {}), ...(caseFilter ? { MIGENT_IT_CASE: caseFilter } : {}) },
     });
     return 0;
   } catch (error) {
