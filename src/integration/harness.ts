@@ -219,6 +219,8 @@ export async function openScenarioFolder(): Promise<ScenarioFolder> {
     root,
     async dispose() {
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      // A scenario may reveal an Output channel; an open panel would otherwise be the active text editor of the next.
+      await vscode.commands.executeCommand('workbench.action.closePanel');
       const index = vscode.workspace.workspaceFolders?.findIndex((folder) => folder.uri.fsPath === uri.fsPath) ?? -1;
       if (index >= 0) {
         const removed = nextFolderChange('removed');
