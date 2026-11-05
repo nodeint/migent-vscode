@@ -38,10 +38,6 @@ function targetOf(arg: unknown): Target | undefined {
   if (!isTreeNode(arg)) return explicitTarget(arg);
   switch (arg.kind) {
     case 'session':
-    case 'outputs':
-    case 'questions':
-    case 'history':
-    case 'questionGroup':
       return { project: arg.project, sessionId: arg.sessionId };
     case 'execution':
       return { project: arg.project, sessionId: arg.sessionId, executionId: arg.executionId };

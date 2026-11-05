@@ -421,11 +421,6 @@
           "group": "inline@3"
         },
         {
-          "command": "migent.session.answerQuestions",
-          "when": "view == migent.sessions && viewItem == questionGroup",
-          "group": "inline@0"
-        },
-        {
           "command": "migent.session.openResult",
           "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "1_open@0"

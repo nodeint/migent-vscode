@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show only Files and the stage attempts under each session in the Sessions view. The Outputs, Questions and History
+  branches are gone: outputs stay on Results, questions are answered from the Questions page, the session's Answer
+  Questions action and notifications, and `outputs/` and `questions.json` remain browsable under Files.
 - Open the Results page when clicking any session in the Sessions view, whatever its state, and offer Open Result in
   every session's context menu. Remove the Reload suggestions button; existing next-step suggestions are unchanged.
 - Add a New session action to the Sessions view title bar: pick the project and workflow once, then Run now (task

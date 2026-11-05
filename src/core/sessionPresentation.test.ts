@@ -163,7 +163,6 @@ describe('nodeIds', () => {
     expect(nodeIds.session('file:///p', 's1')).toBe('session:file:///p#s1');
     expect(nodeIds.group('k', 'running')).toBe('group:k#running');
     expect(nodeIds.execution('k', 's', 'e')).toBe('execution:k#s/e');
-    expect(nodeIds.container('outputs', 'k', 's')).toBe('outputs:k#s');
     expect(nodeIds.more('k')).toBe('more:k');
     expect(nodeIds.diagnostic('k', 'no-sessions')).toBe('diag:k#no-sessions');
   });

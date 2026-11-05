@@ -91,7 +91,7 @@ registry, store and catalog to follow: a project appearing and disappearing, a
 session whose marker arrives late, deleted and recreated folders, workflow and
 config edits, retained execution watchers, and `migent.refresh`. The scenarios in
 `sessionsTree.integration.test.ts` read the Sessions provider as VS Code would
-(groups, icons, Unknown reasons, badge, questions and history, execution files,
+(groups, icons, Unknown reasons, badge, session children limited to Files and stage attempts, execution files,
 selection and active editor staying put, Show more, commands). The scenarios in
 `capability.integration.test.ts` change the extension host's `PATH` and check the diagnostic node, the
 capability states and Recheck; `scripts/integration/run.mjs` puts a `migent` launcher for

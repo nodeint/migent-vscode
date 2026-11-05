@@ -6,28 +6,21 @@ import { describeCapability } from '../../cli/capabilityText';
 import { groupOf, type SessionGroup } from '../../core/attention';
 import { listExecutionFiles } from '../../core/executionFiles';
 import { listExecutions } from '../../core/executions';
-import type { QuestionOption } from '../../core/model';
-import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
-import { groupPendingQuestions, type QuestionRecord, readQuestions } from '../../core/questions';
 import { RECENT_PERIODS,recentPeriod } from '../../core/recentPeriod';
 import {
   executionFileLabel,
   nodeIds,
-  pendingQuestionTotal,
   sessionsDiagnostic,
-  truncate,
 } from '../../core/sessionPresentation';
 import type { WatchTarget } from '../../core/watchPlan';
 import type { CapabilityService } from '../capability';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type {
-  ContainerNode,
   ExecutionNode,
   GroupNode,
   LeafNode,
   LeafView,
-  QuestionGroupNode,
   RecentPeriodNode,
   SessionNode,
   TreeNode,
@@ -145,11 +138,7 @@ export function groupSessions(
     });
 }
 
-function hasQuestionsFile(read: ReturnType<typeof readQuestions>): boolean {
-  return read.kind !== 'missing';
-}
-
-/** Executions, then Outputs and Questions when they have content. Retains `executions/` before reading. */
+/** Files, then the stage attempts. Retains `executions/` before reading. */
 export function sessionChildren(host: ChildHost, context: ProjectContext, node: SessionNode): TreeNode[] {
   const snapshot = context.store.snapshot(node.sessionId);
   if (snapshot === undefined) return [];
@@ -171,23 +160,6 @@ export function sessionChildren(host: ChildHost, context: ProjectContext, node: 
   children.unshift(host.intern({
     kind: 'directory', id: `${node.id}/files`, project: context.key, sessionId: node.sessionId, relativePath: '',
   }, node));
-  const outputs = listOutputs(dir, snapshot.status?.outputs ?? []);
-  if (outputs.rows.length > 0 || outputs.directoryError !== null) {
-    children.push(
-      host.intern<ContainerNode>(
-        { kind: 'outputs', id: nodeIds.container('outputs', context.key, node.sessionId), project: context.key, sessionId: node.sessionId },
-        node,
-      ),
-    );
-  }
-  if (pendingQuestionTotal(snapshot) > 0 || hasQuestionsFile(readQuestions(dir))) {
-    children.push(
-      host.intern<ContainerNode>(
-        { kind: 'questions', id: nodeIds.container('questions', context.key, node.sessionId), project: context.key, sessionId: node.sessionId },
-        node,
-      ),
-    );
-  }
   return children;
 }
 
@@ -223,143 +195,4 @@ export function executionChildren(host: ChildHost, context: ProjectContext, node
     }, node));
   }
   return rows;
-}
-
-export function outputChildren(host: ChildHost, context: ProjectContext, node: ContainerNode): TreeNode[] {
-  const snapshot = context.store.snapshot(node.sessionId);
-  host.retain(context.key, { kind: 'outputs', sessionId: node.sessionId });
-  const listing = listOutputs(sessionDir(context.root, node.sessionId), snapshot?.status?.outputs ?? []);
-  const fields = { project: context.key, sessionId: node.sessionId };
-  const rows = listing.rows.map((row) => {
-    const isOpenable = row.state === 'ok' && row.absolutePath !== null;
-    const uri = isOpenable && row.absolutePath !== null ? vscode.Uri.file(row.absolutePath) : undefined;
-    const id = uri === undefined ? `${node.id}/${row.path}` : nodeIds.file(uri.toString());
-    const stateText = row.state === 'ok' ? '' : ` (${row.state === 'missing' ? 'file missing' : 'path outside the session'})`;
-    return leaf(host, { id: id, parent: node, ...fields }, {
-      label: row.name ?? path.posix.basename(row.path),
-      description: `${row.path}${stateText}`,
-      icon: row.state === 'ok' ? 'package' : 'warning',
-      contextValue: row.state === 'ok' ? 'file.output' : 'file.output-unavailable',
-      tooltip: row.path,
-      uri,
-    });
-  });
-  if (listing.directoryError !== null) {
-    rows.push(
-      leaf(host, { id: `${node.id}/dir-error`, parent: node, ...fields }, {
-        label: `Cannot read outputs/ (${listing.directoryError})`,
-        icon: 'error',
-        color: 'list.errorForeground',
-        contextValue: 'diag.outputs-unreadable',
-      }),
-    );
-  }
-  return rows;
-}
-
-/** Pending groups, then History, then the questions file. */
-export function questionsChildren(host: ChildHost, context: ProjectContext, node: ContainerNode): TreeNode[] {
-  const snapshot = context.store.snapshot(node.sessionId);
-  const dir = sessionDir(context.root, node.sessionId);
-  const children: TreeNode[] = groupPendingQuestions(snapshot?.status?.questions ?? []).map((group) =>
-    host.intern<QuestionGroupNode>(
-      {
-        kind: 'questionGroup',
-        id: `qgroup:${context.key}#${node.sessionId}/${group.executionId ?? group.stageId ?? ''}`,
-        project: context.key,
-        sessionId: node.sessionId,
-        stageId: group.stageId,
-        executionId: group.executionId,
-        count: group.questions.length,
-      },
-      node,
-    ),
-  );
-  children.push(
-    host.intern<ContainerNode>(
-      { kind: 'history', id: nodeIds.container('history', context.key, node.sessionId), project: context.key, sessionId: node.sessionId },
-      node,
-    ),
-  );
-  if (hasQuestionsFile(readQuestions(dir))) {
-    const uri = vscode.Uri.file(path.join(dir, 'questions.json'));
-    children.push(
-      leaf(host, { id: nodeIds.file(uri.toString()), parent: node, project: context.key, sessionId: node.sessionId }, {
-        label: 'questions.json',
-        icon: 'file',
-        contextValue: 'file.questions',
-        uri,
-      }),
-    );
-  }
-  return children;
-}
-
-function optionTooltip(options: readonly QuestionOption[], context: string | null): string {
-  const lines = options.map((option) => `${option.id}. ${option.label}${option.description === null ? '' : ` — ${option.description}`}`);
-  return [context, ...lines].filter((line): line is string => line !== null && line !== '').join('\n');
-}
-
-export function questionGroupChildren(host: ChildHost, context: ProjectContext, node: QuestionGroupNode): TreeNode[] {
-  const snapshot = context.store.snapshot(node.sessionId);
-  const questions = (snapshot?.status?.questions ?? []).filter(
-    (question) => question.stageId === node.stageId && question.executionId === node.executionId,
-  );
-  return questions.map((question) =>
-    leaf(host, { id: `${node.id}/q${question.id}`, parent: node, project: context.key, sessionId: node.sessionId }, {
-      label: truncate(question.question),
-      description: `${question.id} · ${question.selection ?? 'selection unknown'}`,
-      icon: 'comment',
-      contextValue: 'question.pending',
-      tooltip: optionTooltip(question.options, question.context),
-    }),
-  );
-}
-
-const ANSWER_TEXT_MAX = 40;
-
-function optionLabel(options: readonly QuestionOption[], id: string): string {
-  return options.find((option) => option.id === id)?.label ?? id;
-}
-
-function answerText(record: QuestionRecord): string {
-  const { answer } = record;
-  if (answer === null) return record.status;
-  const labels = answer.selected.map((id) => optionLabel(record.options, id));
-  const parts = [...labels, answer.text === null ? null : `"${truncate(answer.text, ANSWER_TEXT_MAX)}"`];
-  return `${record.status} · ${parts.filter((part): part is string => part !== null).join(', ')}`;
-}
-
-/** The structured history, loaded when the History node expands. */
-export function historyChildren(host: ChildHost, context: ProjectContext, node: ContainerNode): TreeNode[] {
-  const read = readQuestions(sessionDir(context.root, node.sessionId));
-  const fields = { project: context.key, sessionId: node.sessionId };
-  const uri = vscode.Uri.file(path.join(sessionDir(context.root, node.sessionId), 'questions.json'));
-  if (read.kind === 'ok') {
-    return read.questions.map((record) =>
-      leaf(host, { id: `${node.id}/q${record.id}-${record.executionId ?? ''}`, parent: node, ...fields }, {
-        label: truncate(record.question),
-        description: answerText(record),
-        icon: record.status === 'answered' ? 'pass' : 'comment',
-        contextValue: `question.${record.status}`,
-        tooltip: optionTooltip(record.options, record.context),
-      }),
-    );
-  }
-  const text: Record<string, string> = {
-    missing: 'No structured history',
-    unreadable: 'questions.json unreadable',
-    invalid: 'questions.json invalid',
-    unsupported: 'questions.json has an unsupported schema version',
-  };
-  const isMissing = read.kind === 'missing';
-  return [
-    leaf(host, { id: `${node.id}/diag`, parent: node, ...fields }, {
-      label: text[read.kind] ?? 'No structured history',
-      icon: isMissing ? 'info' : 'warning',
-      contextValue: `diag.questions-${read.kind}`,
-      uri: isMissing ? undefined : uri,
-      tooltip: isMissing ? undefined : 'Open questions.json',
-    }),
-  ];
 }

@@ -59,21 +59,6 @@ export interface ExecutionNode extends Base {
   execution: ExecutionSnapshot;
 }
 
-export interface ContainerNode extends Base {
-  kind: 'outputs' | 'questions' | 'history';
-  project: ProjectKey;
-  sessionId: string;
-}
-
-export interface QuestionGroupNode extends Base {
-  kind: 'questionGroup';
-  project: ProjectKey;
-  sessionId: string;
-  stageId: string | null;
-  executionId: string | null;
-  count: number;
-}
-
 export interface DirectoryNode extends Base {
   kind: 'directory';
   project: ProjectKey;
@@ -96,8 +81,6 @@ export type TreeNode =
   | RecentPeriodNode
   | SessionNode
   | ExecutionNode
-  | ContainerNode
-  | QuestionGroupNode
   | DirectoryNode
   | LeafNode;
 

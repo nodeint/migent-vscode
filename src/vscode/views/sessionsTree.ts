@@ -25,11 +25,7 @@ import {
   type ChildHost,
   executionChildren,
   groupSessions,
-  historyChildren,
-  outputChildren,
   projectContents,
-  questionGroupChildren,
-  questionsChildren,
   sessionChildren,
 } from './sessionChildren';
 import { SessionFiles } from './sessionFiles';
@@ -131,8 +127,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     } else if (node.kind === 'execution') {
       this.#files.release((candidate) => candidate.id.startsWith(`${node.id}/`));
       this.#releaseKey(node.project, { kind: 'execution', sessionId: node.sessionId, executionId: node.executionId });
-    } else if (node.kind === 'outputs') {
-      this.#releaseKey(node.project, { kind: 'outputs', sessionId: node.sessionId });
     }
   }
 
@@ -167,14 +161,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         return this.#files.children(context, node);
       case 'execution':
         return executionChildren(this.#host, context, node);
-      case 'outputs':
-        return outputChildren(this.#host, context, node);
-      case 'questions':
-        return questionsChildren(this.#host, context, node);
-      case 'history':
-        return historyChildren(this.#host, context, node);
-      case 'questionGroup':
-        return questionGroupChildren(this.#host, context, node);
       case 'leaf':
         return [];
     }
@@ -316,7 +302,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         target.kind === 'execution' && target.executionId !== undefined
           ? this.#nodes.get(nodeIds.execution(project, sessionId, target.executionId))
           : undefined;
-      const isSessionLevel = ['executions', 'questions', 'outputs'].includes(target.kind);
+      const isSessionLevel = target.kind === 'executions';
       const element = execution ?? (isSessionLevel || target.kind === 'execution' ? session : undefined);
       if (element !== undefined) this.#queue(element);
     }
@@ -376,20 +362,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         return this.#files.item(context, node);
       case 'execution':
         return this.#executionItem(node.execution);
-      case 'outputs':
-      case 'questions':
-      case 'history':
-        return this.#containerItem(node.kind, node.sessionId, context);
-      case 'questionGroup': {
-        const item = new vscode.TreeItem(
-          [node.stageId, node.executionId].filter((part) => part !== null).join(' · ') || 'Questions',
-          vscode.TreeItemCollapsibleState.Expanded,
-        );
-        item.description = `${node.count} pending`;
-        item.iconPath = icon('comment-discussion');
-        item.contextValue = 'questionGroup';
-        return item;
-      }
       case 'leaf':
         return this.#leafItem(node);
     }
@@ -423,21 +395,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     item.iconPath = icon(executionIcon(execution));
     item.contextValue = executionContextValue(execution);
     item.tooltip = execution.id;
-    return item;
-  }
-
-  #containerItem(
-    kind: 'outputs' | 'questions' | 'history',
-    sessionId: string,
-    context: ProjectContext | undefined,
-  ): vscode.TreeItem {
-    const labels = { outputs: 'Outputs', questions: 'Questions', history: 'History' } as const;
-    const item = new vscode.TreeItem(labels[kind], vscode.TreeItemCollapsibleState.Collapsed);
-    const snapshot = context?.store.snapshot(sessionId);
-    if (kind === 'outputs') item.description = String(snapshot?.status?.outputs.length ?? 0);
-    if (kind === 'questions') item.description = `${snapshot?.status?.questions.length ?? 0} pending`;
-    item.iconPath = icon({ outputs: 'package', questions: 'comment-discussion', history: 'history' }[kind]);
-    item.contextValue = kind === 'history' ? 'questions.history' : kind;
     return item;
   }
 

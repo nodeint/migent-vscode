@@ -256,7 +256,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'AC8: pending questions show in Question, Blocked and Running sessions, and history shows answers',
+    name: 'AC8: every session lists only Files then its stage attempts, whatever its questions, outputs or history',
     async run(env) {
       const { root } = env;
       copyCaptured(root, 'question-pending', 'asking');
@@ -266,34 +266,42 @@ const scenarios: Scenario[] = [
         fs.cpSync(path.join(synthetic, fixture), migentPath(root, 'sessions', id), { recursive: true });
       }
       write(migentPath(root, 'sessions', 'running-q', 'session.lock'), freshLock());
-      await waitForSessions(env, ['asking', 'answered', 'blocked-q', 'running-q']);
-
-      const questionsOf = (id: string): TreeNode => {
-        const found = children(env, sessionNode(env, id)).find((node) => node.kind === 'questions');
-        assert.ok(found, `${id} has a Questions node`);
-        return found;
-      };
-      for (const id of ['asking', 'blocked-q', 'running-q']) {
-        const groups = children(env, questionsOf(id)).filter((node) => node.kind === 'questionGroup');
-        assert.ok(groups.length > 0, `${id} lists pending question groups`);
+      addSession(root, 'bare', 'completed');
+      addSession(root, 'with-output', 'completed', { outputs: [{ path: 'outputs/report.md', name: 'Report' }] });
+      write(migentPath(root, 'sessions', 'with-output', 'outputs', 'report.md'), 'r');
+      const executionIds = ['0001-plan--attempt-01', '0002-implement--attempt-01'];
+      for (const executionId of executionIds) {
+        write(
+          migentPath(root, 'sessions', 'multi', 'executions', executionId, 'execution.json'),
+          JSON.stringify({ execution_id: executionId, stage_id: executionId.split('--')[0]!.slice(5), status: 'completed' }),
+        );
       }
+      addSession(root, 'multi', 'completed');
+      const ids = ['asking', 'answered', 'blocked-q', 'running-q', 'bare', 'with-output', 'multi'];
+      await waitForSessions(env, ids);
+
+      for (const id of ids) {
+        const kinds = children(env, sessionNode(env, id)).map((node) => node.kind);
+        const executions = kinds.filter((kind) => kind === 'execution').length;
+        assert.deepEqual(kinds, ['directory', ...Array.from({ length: executions }, () => 'execution')], `${id} children`);
+      }
+      assert.deepEqual(
+        labelsOf(env, children(env, sessionNode(env, 'multi'))),
+        ['Files', 'plan · attempt 1', 'implement · attempt 1'],
+      );
+      assert.deepEqual(labelsOf(env, children(env, sessionNode(env, 'bare'))), ['Files']);
+
+      const filesOf = (id: string): TreeNode => children(env, sessionNode(env, id)).find((node) => node.kind === 'directory')!;
+      assert.ok(labelsOf(env, children(env, filesOf('with-output'))).includes('outputs'), 'outputs/ is browsable under Files');
+      const outputs = children(env, filesOf('with-output')).find((node) => text(itemOf(env, node).label) === 'outputs')!;
+      assert.deepEqual(labelsOf(env, children(env, outputs)), ['report.md']);
+      for (const id of ['asking', 'answered']) {
+        assert.ok(labelsOf(env, children(env, filesOf(id))).includes('questions.json'), `${id} questions.json under Files`);
+      }
+
       const runningGroup = children(env).find((node) => itemOf(env, node).contextValue === 'group.running');
       assert.ok(runningGroup && children(env, runningGroup).some((node) => node.kind === 'session' && node.sessionId === 'running-q'));
-
-      const askingGroups = children(env, questionsOf('asking')).filter((node) => node.kind === 'questionGroup');
-      assert.equal(askingGroups.length, 1);
-      assert.equal(itemOf(env, askingGroups[0]!).description, '3 pending');
-      const pending = children(env, askingGroups[0]!);
-      assert.equal(pending.length, 3);
-      assert.match(labelsOf(env, pending)[0] ?? '', /Which editor theme/);
-
-      const history = children(env, questionsOf('answered')).find((node) => node.kind === 'history');
-      assert.ok(history);
-      const records = children(env, history);
-      assert.deepEqual(
-        records.map((node) => itemOf(env, node).description),
-        ['answered · Light', 'answered · Windows, Linux', 'answered · "Either is fine; this is a fixture probe…"'],
-      );
+      assert.match(String(itemOf(env, sessionNode(env, 'asking')).contextValue), /;questions/, 'question indicator stays on the session');
     },
   },
   {
@@ -440,25 +448,23 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'AC21 subset: a questions.json that appears later updates the history without a Refresh',
+    name: 'AC21 subset: a questions.json that appears later shows under Files without a Refresh',
     async run(env) {
       const { root } = env;
-      addSession(root, 's1', 'question', {
-        questions: [{ id: '1', question: 'Proceed?', selection: 'single', options: [{ id: 'A', label: 'Yes' }], execution_id: 'e1', stage_id: 'plan', recipient: 'human' }],
-      });
+      addSession(root, 's1', 'question');
       await waitForSessions(env, ['s1']);
-      const questions = children(env, sessionNode(env, 's1')).find((node) => node.kind === 'questions')!;
-      const history = children(env, questions).find((node) => node.kind === 'history')!;
-      assert.deepEqual(labelsOf(env, children(env, history)), ['No structured history']);
+      const files = children(env, sessionNode(env, 's1')).find((node) => node.kind === 'directory')!;
+      assert.ok(!labelsOf(env, children(env, files)).includes('questions.json'));
 
       const fired: unknown[] = [];
       const subscription = env.api.sessionsTree.onDidChangeTreeData((element) => fired.push(element));
       try {
         const answered = path.join(repoRoot(), 'src', 'core', 'fixtures', 'captured', 'question-answered', 'questions.json');
         write(migentPath(root, 'sessions', 's1', 'questions.json'), fs.readFileSync(answered, 'utf8'));
-        await waitFor('history re-read', () => children(env, history).length === 3);
+        await waitFor('questions.json listed', () => labelsOf(env, children(env, files)).includes('questions.json'));
         await waitFor('the tree was told to refresh', () => fired.length > 0);
       } finally {
+        env.api.sessionsTree.collapse(files);
         subscription.dispose();
       }
     },

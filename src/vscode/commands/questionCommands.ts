@@ -5,7 +5,6 @@ import { groupPendingQuestions,type QuestionGroup } from '../../core/questions';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { type BatchIdentity, isBatchIdentity } from '../questions/entry';
 import type { AnswerPanels } from '../questions/panels';
-import { isTreeNode } from '../views/nodes';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
 const INFO_MESSAGE_MS = 5000;
@@ -33,9 +32,6 @@ async function pickGroup(groups: QuestionGroup[]): Promise<QuestionGroup | undef
 async function resolveBatch(host: CommandHost, arg: unknown): Promise<BatchIdentity | undefined> {
   // A notification passes the exact batch it announced.
   if (isBatchIdentity(arg)) return arg;
-  if (isTreeNode(arg) && arg.kind === 'questionGroup' && arg.executionId !== null) {
-    return { project: arg.project, sessionId: arg.sessionId, stageId: arg.stageId, executionId: arg.executionId };
-  }
   const resolved = await resolveWith(host, arg, { title: 'Answer questions for which session?', isEligible: hasPending });
   if (resolved === undefined) return undefined;
   const { context, snapshot } = resolved;
