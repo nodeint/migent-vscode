@@ -130,8 +130,8 @@ adds a session, not before disk reads. It limits retained snapshots rather than
 the cost of the initial scan.
 
 Retained sessions are the newest `limit` plus every retention-exempt one
-([isRetentionExempt](../src/core/attention.ts)): Running, Question, Blocked, or
-with pending questions. The retained count can therefore exceed the limit.
+([isRetentionExempt](../src/core/attention.ts)): Running, Prepared, Question,
+Blocked, or with pending questions. The retained count can therefore exceed the limit.
 `hiddenCount` is eligible sessions minus retained; pending directories are not
 counted, and a change of the count emits `scan`. The store keeps ids only for
 hidden sessions. `refreshSession` on a hidden id rebuilds its snapshot just to
@@ -141,7 +141,7 @@ changes the effective limit and rescans (same cost as `load()`).
 
 [attention.ts](../src/core/attention.ts) holds the pure grouping: `groupOf`
 (Running; Needs attention for Question, Blocked, Failed, Stopped, Unknown;
-Recent for the rest), `isCounted` (Blocked, Failed, Question or pending
+Prepared; Recent for Completed and Cancelled), `isCounted` (Blocked, Failed, Question or pending
 questions, never Unknown) and `summarize` (unique counts).
 
 [childrenOf](../src/core/handoff.ts) derives lineage children from the retained

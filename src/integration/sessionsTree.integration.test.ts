@@ -210,6 +210,52 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: 'Prepared is its own group after Needs attention: direct children, newest first, outside the limit and the badge, and moves on start',
+    async run(env) {
+      const { root } = env;
+      const configuration = vscode.workspace.getConfiguration('migent', vscode.Uri.file(root));
+      await configuration.update('sessions.limit', 1, vscode.ConfigurationTarget.WorkspaceFolder);
+      try {
+        for (const [id, state, minute] of [
+          ['prep-old', 'prepared', '00'], ['prep-new', 'prepared', '02'], ['done', 'completed', '05'], ['old-done', 'completed', '01'],
+          ['blocked', 'blocked', '04'],
+        ] as const) {
+          write(migentPath(root, 'sessions', id, 'manifest.yaml'), manifest(id, '').replace('10:00', `10:${minute}`));
+          write(
+            migentPath(root, 'sessions', id, 'status.json'),
+            status(state, id === 'blocked' ? { blocked_by_execution_ids: ['0001-plan--attempt-01'] } : {}),
+          );
+        }
+        const project = await createProject(env);
+        await waitFor('sessions loaded', () => project.store.snapshot('prep-old') !== undefined);
+
+        assert.equal(project.store.hiddenCount, 1, 'only the older completed session is hidden');
+        const groups = children(env).filter((node) => node.kind === 'group');
+        assert.deepEqual(labelsOf(env, groups), ['Needs attention', 'Prepared', 'Recent']);
+        const prepared = groups[1]!;
+        const rows = children(env, prepared);
+        assert.deepEqual(rows.map((node) => node.kind === 'session' && node.sessionId), ['prep-new', 'prep-old']);
+        assert.equal(iconId(itemOf(env, rows[0]!)), 'circle-outline');
+        assert.match(itemOf(env, rows[0]!).contextValue ?? '', /^session\.prepared/);
+        assert.equal(project.store.snapshot('prep-old')?.displayState.state, 'prepared', 'old prepared session is outside the limit');
+        // Prepared sessions neither count toward the badge nor toward hidden sessions.
+        await waitFor('badge', () => env.api.sessionsView.badge?.value === 1);
+
+        // Starting a prepared session moves it to Running.
+        write(migentPath(root, 'sessions', 'prep-new', 'status.json'), status('active'));
+        write(migentPath(root, 'sessions', 'prep-new', 'session.lock'), freshLock());
+        await waitFor('moved to Running', () => {
+          const running = children(env).find((node) => itemOf(env, node).contextValue === 'group.running');
+          return running !== undefined && children(env, running).some((node) => node.kind === 'session' && node.sessionId === 'prep-new');
+        });
+        const after = children(env).find((node) => itemOf(env, node).contextValue === 'group.prepared');
+        assert.deepEqual(children(env, after!).map((node) => node.kind === 'session' && node.sessionId), ['prep-old']);
+      } finally {
+        await configuration.update('sessions.limit', undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    },
+  },
+  {
     name: 'AC8: pending questions show in Question, Blocked and Running sessions, and history shows answers',
     async run(env) {
       const { root } = env;

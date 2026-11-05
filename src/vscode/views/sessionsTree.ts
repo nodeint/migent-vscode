@@ -37,6 +37,7 @@ import { SessionFiles } from './sessionFiles';
 const GROUP_LABELS: Readonly<Record<SessionGroup, string>> = {
   running: 'Running',
   attention: 'Needs attention',
+  prepared: 'Prepared',
   recent: 'Recent',
 };
 

@@ -33,7 +33,7 @@ import type {
   TreeNode,
 } from './nodes';
 
-export const GROUP_ORDER: readonly SessionGroup[] = ['running', 'attention', 'recent'];
+export const GROUP_ORDER: readonly SessionGroup[] = ['running', 'attention', 'prepared', 'recent'];
 
 /** What the child builders need from the provider. */
 export interface ChildHost {

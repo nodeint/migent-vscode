@@ -1,6 +1,6 @@
 import type { ScanOutcome, SessionSnapshot } from './model';
 
-export type SessionGroup = 'running' | 'attention' | 'recent';
+export type SessionGroup = 'running' | 'attention' | 'prepared' | 'recent';
 
 /** Placement in the Sessions tree: each session appears in exactly one group. */
 export function groupOf(snapshot: SessionSnapshot): SessionGroup {
@@ -14,9 +14,10 @@ export function groupOf(snapshot: SessionSnapshot): SessionGroup {
     case 'stopped':
     case 'unknown':
       return 'attention';
+    case 'prepared':
+      return 'prepared';
     case 'completed':
     case 'cancelled':
-    case 'prepared':
       return 'recent';
   }
 }
@@ -37,12 +38,13 @@ export function isCounted(snapshot: SessionSnapshot): boolean {
 }
 
 /**
- * Never hidden by the session limit: work that is running or needs a person. Applies
+ * Never hidden by the session limit: work that is running or needs a person, and
+ * prepared sessions that have not been started yet. Applies
  * to Unknown too when it carries pending questions, so a limit cannot bury them.
  */
 export function isRetentionExempt(snapshot: SessionSnapshot): boolean {
   const { state } = snapshot.displayState;
-  return state === 'running' || state === 'question' || state === 'blocked' || pendingQuestionCount(snapshot) > 0;
+  return state === 'running' || state === 'prepared' || state === 'question' || state === 'blocked' || pendingQuestionCount(snapshot) > 0;
 }
 
 /** Aggregate for welcome content across projects: `loading` until the first load finished. */
