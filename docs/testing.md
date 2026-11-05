@@ -144,7 +144,9 @@ and adopts, and a rejected draft releasing the gate so that a corrected draft ru
 `failureText.test.ts` covers the wording of failure messages. Notifications and their buttons are not driven, so check
 them by hand in VS Code:
 
-1. Prepare a session: the notification offers **Open workflow.yaml** and the button opens that session's file.
+1. Prepare a session from the Sessions view or the Command Palette: no notification appears, `task.md` opens, and the
+   session's `workflow.yaml` opens from the session's files in the Sessions tree. The Next step page's Prepare still
+   shows a notification offering **Open workflow.yaml**.
 2. Edit the draft's `id`, then Save & Run: the error names `workflow.yaml`, the session stays prepared, and after
    fixing the `id` Save & Run starts it.
 3. Leave `workflow.yaml` with unsaved edits and use Save & Run: the run is refused with a message. Save & Run saves

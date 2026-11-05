@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a New session action to the Sessions view title bar: pick the project and workflow once, then Run now (task
+  input with Compose in editor) or Prepare (title input, opens `task.md`).
+  The workflow picker no longer lists each workflow's stages, and Prepare Session no longer shows a "Session prepared"
+  notification.
+
 ## 0.1.2
 
 - Support Migent CLI 0.3.5 session drafts: Prepare offers to open the session's `workflow.yaml`, Continue no longer

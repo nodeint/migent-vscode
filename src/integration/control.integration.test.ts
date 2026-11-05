@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../core/model';
 import type { ProjectContext } from '../vscode/projects';
 import { openWorkflowDraft, type PreparedSession } from '../vscode/workflowDraft';
-import { createProject, type Env, freshLock, manifest, migentPath, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';
+import { createProject, type Env, freshLock, manifest, migentPath, openScenarioFolder, repoRoot, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';
 
 const RUN_MS = 'MIGENT_FAKE_RUN_MS';
 
@@ -36,6 +36,127 @@ async function withFake(settings: Record<string, string>, body: () => Promise<vo
     }
   }
 }
+
+interface PickItem {
+  label: string;
+  description?: string;
+}
+
+interface Answers {
+  /** Root of the project to pick; the project picker is cancelled when undefined. */
+  project?: string;
+  workflow?: string;
+  mode?: string;
+  title?: string;
+  /** What is done in the task Input Box, in order; the box is dismissed afterwards. Undefined dismisses at once. */
+  task?: { kind: 'accept' | 'button'; value: string }[];
+}
+
+/** Records the prompts the New session command raises and answers them from `answers`; restores the API after. */
+async function withPrompts(answers: Answers, body: (prompts: string[]) => Promise<void>): Promise<void> {
+  const window = vscode.window as unknown as Record<string, unknown>;
+  const saved = {
+    pick: window.showQuickPick,
+    input: window.showInputBox,
+    box: window.createInputBox,
+    error: window.showErrorMessage,
+  };
+  const prompts: string[] = [];
+  const wanted = (title: string): string | undefined => {
+    if (title === 'Migent project') return answers.project;
+    if (title === 'New session') return answers.workflow;
+    return answers.mode;
+  };
+  window.showQuickPick = (items: PickItem[], options: { title?: string }): Promise<PickItem | undefined> => {
+    const title = options.title ?? '';
+    prompts.push(`pick:${title}`);
+    const key = wanted(title);
+    return Promise.resolve(items.find((item) => item.label === key || item.description === key));
+  };
+  window.showErrorMessage = (message: string): Promise<undefined> => {
+    prompts.push(`error:${message}`);
+    return Promise.resolve(undefined);
+  };
+  window.showInputBox = (options: {
+    title?: string;
+    validateInput?: (value: string) => string | undefined;
+  }): Promise<string | undefined> => {
+    prompts.push(`input:${options.title ?? ''}`);
+    const invalid = answers.title === undefined ? undefined : options.validateInput?.(answers.title);
+    if (invalid !== undefined) prompts.push(`invalid:${invalid}`);
+    return Promise.resolve(invalid === undefined ? answers.title : undefined);
+  };
+  window.createInputBox = () => {
+    const handlers: Record<string, () => void> = {};
+    const box = {
+      value: '',
+      buttons: [],
+      title: '',
+      validationMessage: undefined as string | undefined,
+      onDidAccept: (fn: () => void) => (handlers.accept = fn),
+      onDidTriggerButton: (fn: () => void) => (handlers.button = fn),
+      onDidHide: (fn: () => void) => (handlers.hide = fn),
+      dispose: () => undefined,
+      show: () => {
+        prompts.push(`box:${box.title}`);
+        setTimeout(() => {
+          for (const event of answers.task ?? []) {
+            box.value = event.value;
+            (event.kind === 'accept' ? handlers.accept : handlers.button)?.();
+            if (box.validationMessage !== undefined) prompts.push(`invalid:${box.validationMessage}`);
+            box.validationMessage = undefined;
+          }
+          handlers.hide?.();
+        }, 0);
+      },
+    };
+    return box;
+  };
+  try {
+    await body(prompts);
+  } finally {
+    window.showQuickPick = saved.pick;
+    window.showInputBox = saved.input;
+    window.createInputBox = saved.box;
+    window.showErrorMessage = saved.error;
+  }
+}
+
+const WORKFLOWS = ['plan', 'review'];
+
+async function addWorkflows(project: ProjectContext, root: string): Promise<void> {
+  for (const id of WORKFLOWS) write(migentPath(root, 'workflows', `${id}.yaml`), `id: ${id}\nstages:\n  - id: a\n`);
+  await waitFor(`workflows listed in ${root}`, () => project.catalog.workflows().entries.length === WORKFLOWS.length);
+}
+
+/** A second project in its own workspace folder, with the same workflows; the caller disposes the folder. */
+async function openSecondProject(
+  env: Env,
+): Promise<{ project: ProjectContext; root: string; dispose: () => Promise<void> }> {
+  const folder = await openScenarioFolder();
+  write(migentPath(folder.root, 'config.yaml'), 'schema_version: 1\n');
+  await waitFor('second project appears', () => env.api.registry.projects().length === 2);
+  const project = env.api.registry.projects().find((candidate) => candidate.root === folder.root);
+  assert.ok(project, 'second project is registered');
+  await waitFor('second CLI capability checked', () => env.api.capability.state(project.key).kind !== 'checking');
+  await addWorkflows(project, folder.root);
+  return { project, root: folder.root, dispose: () => folder.dispose() };
+}
+
+const argvAt = (root: string): string[][] => {
+  const file = path.join(root, 'fake-argv.log');
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as string[]);
+};
+
+const sessionsAt = (root: string): string[] => {
+  const dir = migentPath(root, 'sessions');
+  return fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+};
 
 const scenarios: Scenario[] = [
   {
@@ -101,6 +222,131 @@ const scenarios: Scenario[] = [
       const emptyPrepared = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
       assert.ok(emptyPrepared, 'prepare returns task.md');
       assert.equal(fs.readFileSync(emptyPrepared.taskFile, 'utf8'), '');
+    },
+  },
+  {
+    name: 'New session: Prepare in the picked project of two, with the picked workflow, asks each question once and does not start',
+    async run(env) {
+      const first = await createProject(env);
+      await addWorkflows(first, env.root);
+      const second = await openSecondProject(env);
+      try {
+        await withPrompts({ project: second.root, workflow: 'review', mode: 'Prepare', title: ' Draft plan ' }, async (prompts) => {
+          await vscode.commands.executeCommand('migent.session.new');
+          assert.deepEqual(prompts, ['pick:Migent project', 'pick:New session', 'pick:New session · review', 'input:Prepare review']);
+        });
+        await waitFor('prepared session in the second project', () => second.project.store.all().length === 1);
+        const [prepared] = second.project.store.all();
+        assert.equal(prepared.displayState.state, 'prepared');
+        assert.equal(prepared.manifest?.workflowId, 'review');
+        assert.deepEqual(argvAt(second.root).map((line) => line.slice(0, 2)), [['session', 'prepare']]);
+        assert.ok(argvAt(second.root)[0].includes('Draft plan'), 'the trimmed title was sent');
+        assert.ok(argvAt(second.root)[0].includes('review'), 'the picked workflow was sent');
+        assert.deepEqual([argvAt(env.root), sessionsAt(env.root)], [[], []], 'the other project is untouched');
+        assert.ok(vscode.window.activeTextEditor?.document.uri.fsPath.endsWith('task.md'), 'task.md is open');
+      } finally {
+        await second.dispose();
+      }
+    },
+  },
+  {
+    name: 'New session: Run now with Compose in editor keeps the text and prepares the picked workflow; Save & Run then starts it',
+    async run(env) {
+      const project = await createProject(env);
+      await addWorkflows(project, env.root);
+      await withPrompts({ workflow: 'review', mode: 'Run now', task: [{ kind: 'button', value: 'Half written' }] }, async (prompts) => {
+        await vscode.commands.executeCommand('migent.session.new');
+        assert.deepEqual(prompts, ['pick:New session', 'pick:New session · review', 'box:Run review']);
+      });
+      await waitFor('prepared session', () => stateOf(env, 'prepared') !== undefined);
+      const prepared = stateOf(env, 'prepared');
+      assert.ok(prepared);
+      assert.equal(prepared.manifest?.workflowId, 'review');
+      assert.equal(fs.readFileSync(migentPath(env.root, 'sessions', prepared.sessionId, 'task.md'), 'utf8'), 'Half written');
+      assert.deepEqual(argvAt(env.root).map((line) => line[1]), ['prepare'], 'nothing was run');
+      await withFake({ [RUN_MS]: '200' }, async () => {
+        await vscode.commands.executeCommand('migent.session.start');
+        await waitFor('same session completed', () => stateOf(env, 'completed')?.sessionId === prepared.sessionId);
+      });
+      assert.equal(sessions(env).length, 1, 'no replacement session');
+    },
+  },
+  {
+    name: 'New session: Run now with a short task runs the picked workflow with that task, and an empty task is refused',
+    async run(env) {
+      const project = await createProject(env);
+      await addWorkflows(project, env.root);
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        await withPrompts(
+          { workflow: 'review', mode: 'Run now', task: [{ kind: 'accept', value: '   ' }, { kind: 'accept', value: ' Do the thing ' }] },
+          async (prompts) => {
+            await vscode.commands.executeCommand('migent.session.new');
+            assert.equal(prompts.filter((prompt) => prompt.startsWith('invalid:')).length, 1, 'the empty task was refused once');
+          },
+        );
+        await waitFor('session completed', () => stateOf(env, 'completed') !== undefined);
+      });
+      const runs = argvAt(env.root).filter((line) => line[1] === 'run');
+      assert.equal(runs.length, 1, 'exactly one run');
+      assert.ok(runs[0].includes('review') && runs[0].includes('Do the thing'), `workflow and task were sent: ${runs[0].join(' ')}`);
+      assert.equal(stateOf(env, 'completed')?.manifest?.workflowId, 'review');
+    },
+  },
+  {
+    name: 'New session: cancelling or leaving the project, workflow, mode, title or task empty creates and runs nothing',
+    async run(env) {
+      const first = await createProject(env);
+      await addWorkflows(first, env.root);
+      const second = await openSecondProject(env);
+      try {
+        const attempts: Answers[] = [
+          {},
+          { project: env.root },
+          { project: env.root, workflow: 'plan' },
+          { project: second.root, workflow: 'plan', mode: 'Prepare' },
+          { project: second.root, workflow: 'plan', mode: 'Prepare', title: '  ' },
+          { project: second.root, workflow: 'plan', mode: 'Run now' },
+          { project: second.root, workflow: 'plan', mode: 'Run now', task: [{ kind: 'accept', value: '' }] },
+        ];
+        for (const answers of attempts) {
+          await withPrompts(answers, async () => {
+            await vscode.commands.executeCommand('migent.session.new');
+          });
+        }
+        await sleep(300);
+        assert.deepEqual([argvAt(env.root), argvAt(second.root)], [[], []], 'the CLI was never called');
+        assert.deepEqual([sessionsAt(env.root), sessionsAt(second.root)], [[], []], 'no session was created');
+      } finally {
+        await second.dispose();
+      }
+    },
+  },
+  {
+    name: 'New session: the Sessions title bar offers an add-icon action beside Refresh, and the Palette does not',
+    async run() {
+      interface Item {
+        command: string;
+        when?: string;
+        group?: string;
+        icon?: string;
+        title?: string;
+      }
+      const { contributes } = JSON.parse(fs.readFileSync(path.join(repoRoot(), 'package.json'), 'utf8')) as {
+        contributes: { commands: Item[]; menus: Record<string, Item[]> };
+      };
+      const command = contributes.commands.find((item) => item.command === 'migent.session.new');
+      assert.deepEqual([command?.title, command?.icon], ['New session', '$(add)']);
+      const titleBar = contributes.menus['view/title'].filter((item) => item.when?.startsWith('view == migent.sessions'));
+      assert.deepEqual(
+        titleBar.map((item) => [item.command, item.group?.startsWith('navigation')]),
+        [['migent.session.new', true], ['migent.refresh', true]],
+      );
+      assert.ok(!titleBar.some((item) => item.when?.includes('sessionsState')), 'shown for empty and populated lists');
+      assert.deepEqual(
+        contributes.menus.commandPalette.filter((item) => item.command === 'migent.session.new').map((item) => item.when),
+        ['false'],
+      );
+      assert.ok((await vscode.commands.getCommands(true)).includes('migent.session.new'), 'the command is registered');
     },
   },
   {
