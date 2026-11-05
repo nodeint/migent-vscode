@@ -5,7 +5,12 @@
   "ignores": [
     ".agents/skills/**",
     ".claude/**",
-    "plans/**"
+    "plans/**",
+    // Preserve captured CLI task text verbatim.
+    "src/core/fixtures/captured/handoff-source/task.md",
+    "src/core/fixtures/captured/handoff-target/task.md",
+    "src/core/fixtures/captured/question-answered/task.md",
+    "src/core/fixtures/captured/question-pending/task.md"
   ],
   "gitignore": true,
   "config": {
