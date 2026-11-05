@@ -66,7 +66,10 @@ When a case fails, the run reports every failed case as `[suite] case name`, the
 `src/...:line:column` of the failing test line (bundle frames are mapped through the source map by
 `failureReport.ts`). The same list is in the thrown error, the runner output, `dist-test/integration-failure-<version>.json`
 and, on GitHub Actions, as error annotations. Each case also logs `RUN`, `PASS` or `FAIL` with its duration in the
-VS Code log. Pass `--versions a,b` to choose versions and
+VS Code log. Pass `--versions a,b` to choose versions, `--file reply` to run only suites whose
+file name contains the text (`watcherProbe` selects the probe), and `--case "empty reply"` to run only cases whose
+name contains the text (both case-insensitive, combinable; a filter that matches nothing fails, and the watcher probe
+is skipped unless `--file` names it), for example `pnpm test:integration --versions 1.90.0 --file reply`. Pass
 `--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
 delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to
