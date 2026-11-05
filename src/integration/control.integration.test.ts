@@ -133,10 +133,13 @@ async function addWorkflows(project: ProjectContext, root: string): Promise<void
 async function openSecondProject(
   env: Env,
 ): Promise<{ project: ProjectContext; root: string; dispose: () => Promise<void> }> {
+  const knownKeys = new Set(env.api.registry.projects().map((candidate) => candidate.key));
   const folder = await openScenarioFolder();
   write(migentPath(folder.root, 'config.yaml'), 'schema_version: 1\n');
-  await waitFor('second project appears', () => env.api.registry.projects().length === 2);
-  const project = env.api.registry.projects().find((candidate) => candidate.root === folder.root);
+  await waitFor('second project appears', () => env.api.registry.projects().length === knownKeys.size + 1);
+  // Match by identity, not by path text: on Windows the registry's root can differ in spelling (8.3 short names,
+  // drive-letter case) from the path the folder was created under.
+  const project = env.api.registry.projects().find((candidate) => !knownKeys.has(candidate.key));
   assert.ok(project, 'second project is registered');
   await waitFor('second CLI capability checked', () => env.api.capability.state(project.key).kind !== 'checking');
   await addWorkflows(project, folder.root);
@@ -231,7 +234,7 @@ const scenarios: Scenario[] = [
       await addWorkflows(first, env.root);
       const second = await openSecondProject(env);
       try {
-        await withPrompts({ project: second.root, workflow: 'review', mode: 'Prepare', title: ' Draft plan ' }, async (prompts) => {
+        await withPrompts({ project: second.project.root, workflow: 'review', mode: 'Prepare', title: ' Draft plan ' }, async (prompts) => {
           await vscode.commands.executeCommand('migent.session.new');
           assert.deepEqual(prompts, ['pick:Migent project', 'pick:New session', 'pick:New session · review', 'input:Prepare review']);
         });
@@ -303,10 +306,10 @@ const scenarios: Scenario[] = [
           {},
           { project: env.root },
           { project: env.root, workflow: 'plan' },
-          { project: second.root, workflow: 'plan', mode: 'Prepare' },
-          { project: second.root, workflow: 'plan', mode: 'Prepare', title: '  ' },
-          { project: second.root, workflow: 'plan', mode: 'Run now' },
-          { project: second.root, workflow: 'plan', mode: 'Run now', task: [{ kind: 'accept', value: '' }] },
+          { project: second.project.root, workflow: 'plan', mode: 'Prepare' },
+          { project: second.project.root, workflow: 'plan', mode: 'Prepare', title: '  ' },
+          { project: second.project.root, workflow: 'plan', mode: 'Run now' },
+          { project: second.project.root, workflow: 'plan', mode: 'Run now', task: [{ kind: 'accept', value: '' }] },
         ];
         for (const answers of attempts) {
           await withPrompts(answers, async () => {
