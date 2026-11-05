@@ -45,3 +45,31 @@ export function describeCapability(state: CapabilityState): CapabilityDiagnostic
   lines.push('Sessions on disk stay visible. Use the Recheck action after fixing it.');
   return { label, tooltip: lines.join('\n') };
 }
+
+/** Fixed text sent to the user's terminal to install or update the CLI. It never contains user input. */
+export const INSTALL_CLI_COMMAND = 'npm install -g @nodeint/migent@latest';
+
+export type InstallOutcome =
+  | { kind: 'ready'; message: string }
+  | { kind: 'failed'; message: string }
+  | { kind: 'restart'; message: string };
+
+/**
+ * What to tell the user after the install command ended. `exitCode` is undefined when the terminal could not
+ * report it. A non-zero exit is a failure; a zero or unknown exit that still leaves the CLI unusable usually means
+ * the shell and VS Code resolve a different `migent` (PATH, nvm, another package manager).
+ */
+export function describeInstallOutcome(state: CapabilityState, exitCode: number | undefined): InstallOutcome {
+  if (state.kind === 'ok') {
+    return { kind: 'ready', message: `Migent CLI ${state.detected ?? ''} is ready.`.replace('  ', ' ') };
+  }
+  if (exitCode !== undefined && exitCode !== 0) {
+    return { kind: 'failed', message: 'Install failed. See the "Migent: Install CLI" terminal.' };
+  }
+  return {
+    kind: 'restart',
+    message:
+      'The install finished, but VS Code still cannot use the Migent CLI. Your shell may resolve a different "migent" ' +
+      'than VS Code does (PATH, nvm, or another package manager). Restart VS Code, then use Recheck.',
+  };
+}

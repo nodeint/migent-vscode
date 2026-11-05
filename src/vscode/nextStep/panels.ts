@@ -389,6 +389,7 @@ export class NextStepPanels implements vscode.Disposable {
         this.#mark(() => true);
         return;
       case 'capability':
+      case 'cliWindow':
         return;
     }
   }

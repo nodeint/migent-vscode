@@ -17,4 +17,6 @@ export type MigentChange =
   /** Full Refresh finished: re-read everything displayed. */
   | { type: 'refresh' }
   /** Reserved for the CLI capability service. */
-  | { type: 'capability'; project: ProjectKey };
+  | { type: 'capability'; project: ProjectKey }
+  /** The window-level CLI state changed; it has no project because it exists before any project does. */
+  | { type: 'cliWindow' };

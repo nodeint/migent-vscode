@@ -9,6 +9,7 @@ import {
   quotaWait,
 } from '../../core/replyFlow';
 import { sessionLabel } from '../../core/sessionPresentation';
+import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
@@ -186,6 +187,7 @@ interface Deps {
   host: CommandHost;
   control: ControlService;
   replies: ReplyService;
+  capability: CapabilityService;
 }
 
 type Act = (control: ControlService, context: ProjectContext, snapshot: SessionSnapshot) => Promise<void>;
@@ -210,7 +212,7 @@ const SESSION_ACTIONS: readonly SessionAction[] = [
 ];
 
 /** Reply, secondary actions, quota retry and Doctor. Every write goes through `ControlService`'s runner and gate. */
-export function registerReplyCommands({ host, control, replies }: Deps): vscode.Disposable[] {
+export function registerReplyCommands({ host, control, replies, capability }: Deps): vscode.Disposable[] {
   const register = (id: string, run: (arg: unknown) => Promise<void>): vscode.Disposable =>
     vscode.commands.registerCommand(id, run);
   const actions: vscode.Disposable[] = [];
@@ -222,7 +224,7 @@ export function registerReplyCommands({ host, control, replies }: Deps): vscode.
     register('migent.session.sendReply', (arg) => sendReply(replies, arg)),
     register('migent.session.discardReply', (arg) => discardReply(replies, arg)),
     ...actions,
-    register('migent.init', () => initializeProject(control.gate)),
+    register('migent.init', () => initializeProject(control.gate, capability)),
     register('migent.doctor', async () => {
       const context = await pickProject(host.registry);
       if (context !== undefined) await control.doctor(context);

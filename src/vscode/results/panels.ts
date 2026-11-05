@@ -297,6 +297,7 @@ export class ResultsPanels implements vscode.Disposable, ActiveTarget {
         this.#mark(() => true);
         return;
       case 'capability':
+      case 'cliWindow':
         return;
     }
   }

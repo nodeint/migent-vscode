@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Show one onboarding action at a time in the Sessions view when no folder has a Migent project: Install or Update
+  Migent CLI when the CLI is missing or older than required, Initialize project when it is usable. The CLI is now
+  checked for the window, so this works before any project exists.
+- Add Install or Update CLI, which runs `npm install -g @nodeint/migent@latest` in a "Migent: Install CLI" terminal and
+  rechecks the CLI when it ends.
+- Speed up Initialize project: progress shows right after the folder is chosen, the CLI is not probed twice, and one
+  model pick covers every role (or choose per role). The success message offers Run workflow.
+- When the CLI is missing, the Sessions view shows the install onboarding even in a folder that already has `.migent`.
+  While installing, the Install action is replaced by a progress message, and the view updates by itself once the CLI
+  works (the CLI is rechecked every few seconds while the install runs).
+
 ## 0.1.3
 
 - Clarify the extension's focus on workflow execution and AI agent orchestration in its description and README,

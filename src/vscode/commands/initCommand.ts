@@ -3,11 +3,19 @@ import { existsSync } from 'node:fs';
 import * as vscode from 'vscode';
 
 import { invokeJson, invokeText } from '../../cli/invoke';
-import { type LaunchSpec, nodeProbes } from '../../cli/locate';
-import { probeCapability } from '../../cli/version';
-import { initArgs, type InitInput, parseProviders, type ProviderChoice, providersArgs, type RoleModel } from '../../core/controlArgs';
+import type { LaunchSpec } from '../../cli/locate';
+import {
+  initArgs,
+  type InitInput,
+  modelsDefaultFirst,
+  parseProviders,
+  type ProviderChoice,
+  providersArgs,
+  type RoleModel,
+} from '../../core/controlArgs';
 import type { OperationGate } from '../../core/operationGate';
 import { migentDir } from '../../core/paths';
+import type { CapabilityService } from '../capability';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -38,49 +46,77 @@ async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   return picked?.folder;
 }
 
-async function pickModel(role: Role, providers: ProviderChoice[]): Promise<RoleModel | undefined> {
-  const provider = await vscode.window.showQuickPick(
-    providers.map((choice) => ({ label: choice.name, choice })),
-    { title: `Initialize Migent: ${role} provider`, placeHolder: `Provider for the ${role}` },
-  );
-  if (provider === undefined) return undefined;
-  const model = await vscode.window.showQuickPick(provider.choice.models, {
-    title: `Initialize Migent: ${role} model`,
-    placeHolder: `Model for the ${role} (${provider.label})`,
-  });
-  return model === undefined ? undefined : { provider: provider.label, model };
+interface ModelItem extends vscode.QuickPickItem {
+  model?: RoleModel;
 }
 
-interface InitTarget {
-  folder: vscode.WorkspaceFolder;
-  launch: LaunchSpec;
-  env: NodeJS.ProcessEnv;
-}
-
-/** The CLI for a folder that has no project yet, so it is probed directly rather than through the registry. */
-async function locateForFolder(folder: vscode.WorkspaceFolder): Promise<InitTarget | undefined> {
-  const config = vscode.workspace.getConfiguration('migent', folder.uri);
-  const state = await probeCapability({
-    locate: {
-      platform: process.platform,
-      env: process.env,
-      probes: nodeProbes,
-    },
-  });
-  if (state.kind === 'ok' && state.launch !== undefined) {
-    return { folder, launch: state.launch, env: { ...process.env, ...config.get<Record<string, string>>('env', {}) } };
+function modelItems(providers: ProviderChoice[]): ModelItem[] {
+  const items: ModelItem[] = [];
+  for (const choice of providers) {
+    items.push({ label: choice.name, kind: vscode.QuickPickItemKind.Separator });
+    for (const model of modelsDefaultFirst(choice)) {
+      items.push({
+        label: `${choice.name} · ${model}`,
+        description: model === choice.defaultModel ? 'default' : undefined,
+        model: { provider: choice.name, model },
+      });
+    }
   }
-  const picked = await vscode.window.showWarningMessage(`The Migent CLI is unavailable (${state.kind}).`, 'Recheck');
-  if (picked === 'Recheck') await vscode.commands.executeCommand('migent.cli.recheck');
-  return undefined;
+  return items;
 }
 
+interface ModelPick {
+  model: RoleModel;
+  /** The title button was used: this model is for every remaining role. */
+  isForAll: boolean;
+}
+
+const FOR_ALL_BUTTON: vscode.QuickInputButton = {
+  iconPath: new vscode.ThemeIcon('check-all'),
+  tooltip: 'Use this model for all roles',
+};
+
+/** One filterable list; with `canPickAll`, a title button accepts the highlighted model for every role. */
+async function pickModel(
+  title: string,
+  providers: ProviderChoice[],
+  canPickAll: boolean,
+): Promise<ModelPick | undefined> {
+  const input = vscode.window.createQuickPick<ModelItem>();
+  input.title = title;
+  input.placeholder = 'Type to filter by provider or model';
+  input.matchOnDescription = true;
+  input.items = modelItems(providers);
+  if (canPickAll) input.buttons = [FOR_ALL_BUTTON];
+  const subscriptions: vscode.Disposable[] = [];
+  try {
+    return await new Promise<ModelPick | undefined>((resolve) => {
+      const finish = (isForAll: boolean): void => {
+        const model = input.selectedItems[0]?.model ?? input.activeItems[0]?.model;
+        resolve(model === undefined ? undefined : { model, isForAll });
+        input.hide();
+      };
+      subscriptions.push(
+        input.onDidAccept(() => finish(false)),
+        input.onDidTriggerButton(() => finish(true)),
+        input.onDidHide(() => resolve(undefined)),
+      );
+      input.show();
+    });
+  } finally {
+    for (const subscription of subscriptions) subscription.dispose();
+    input.dispose();
+  }
+}
+
+/** One pick for each role (developer first), or one pick in total when the first uses "for all roles". */
 async function pickRoles(providers: ProviderChoice[]): Promise<InitInput | undefined> {
   const chosen: Partial<Record<Role, RoleModel>> = {};
   for (const role of ROLES) {
-    const model = await pickModel(role, providers);
-    if (model === undefined) return undefined;
-    chosen[role] = model;
+    const picked = await pickModel(`Initialize Migent: ${role} model`, providers, role === ROLES[0]);
+    if (picked === undefined) return undefined;
+    if (picked.isForAll) return { developer: picked.model, planner: picked.model, reviewer: picked.model };
+    chosen[role] = picked.model;
   }
   const { developer, planner, reviewer } = chosen;
   return developer === undefined || planner === undefined || reviewer === undefined
@@ -88,17 +124,74 @@ async function pickRoles(providers: ProviderChoice[]): Promise<InitInput | undef
     : { developer, planner, reviewer };
 }
 
+interface InitTarget {
+  folder: vscode.WorkspaceFolder;
+  launch: LaunchSpec;
+  env: NodeJS.ProcessEnv;
+  providers: ProviderChoice[];
+}
+
+/** Resolves with `undefined` as soon as the token is cancelled; the abandoned work finishes on its own. */
+async function untilCancelled<T>(work: Promise<T>, token: vscode.CancellationToken): Promise<T | undefined> {
+  const subscriptions: vscode.Disposable[] = [];
+  try {
+    return await Promise.race([
+      work,
+      new Promise<undefined>((resolve) => {
+        subscriptions.push(token.onCancellationRequested(() => resolve(undefined)));
+      }),
+    ]);
+  } finally {
+    for (const subscription of subscriptions) subscription.dispose();
+  }
+}
+
+async function warnUnavailable(kind: string): Promise<void> {
+  let action = 'Recheck';
+  let command = 'migent.cli.recheck';
+  if (kind === 'missing' || kind === 'old') {
+    action = kind === 'old' ? 'Update Migent CLI' : 'Install Migent CLI';
+    command = 'migent.cli.install';
+  }
+  const picked = await vscode.window.showWarningMessage(`The Migent CLI is unavailable (${kind}).`, action);
+  if (picked !== undefined) await vscode.commands.executeCommand(command);
+}
+
+/**
+ * The CLI and the provider list for a folder that has no project yet. It uses the window CLI state, which does not
+ * depend on the folder, and reads `provider list` once.
+ */
+async function loadTarget(
+  folder: vscode.WorkspaceFolder,
+  capability: CapabilityService,
+  token: vscode.CancellationToken,
+): Promise<InitTarget | undefined> {
+  const state = await untilCancelled(capability.windowReady(), token);
+  if (state === undefined) return undefined;
+  if (state.kind !== 'ok' || state.launch === undefined) {
+    void warnUnavailable(state.kind);
+    return undefined;
+  }
+  const config = vscode.workspace.getConfiguration('migent', folder.uri);
+  const env = { ...process.env, ...config.get<Record<string, string>>('env', {}) };
+  const listed = await untilCancelled(
+    invokeJson(state.launch, providersArgs(), { cwd: folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS }),
+    token,
+  );
+  if (listed === undefined) return undefined;
+  const providers = listed.kind === 'ok' ? parseProviders(listed.value) : [];
+  if (providers.length === 0) {
+    void vscode.window.showErrorMessage('No provider with models is available. Install a provider CLI first.');
+    return undefined;
+  }
+  return { folder, launch: state.launch, env, providers };
+}
+
 /** Run the prompts and `migent init` for a folder whose launch key this call holds. */
 async function initializeFolder(target: InitTarget): Promise<void> {
   const { launch, env } = target;
   const options = { cwd: target.folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS };
-  const listed = await invokeJson(launch, providersArgs(), options);
-  const providers = listed.kind === 'ok' ? parseProviders(listed.value) : [];
-  if (providers.length === 0) {
-    void vscode.window.showErrorMessage('No provider with models is available. Install a provider CLI first.');
-    return;
-  }
-  const roles = await pickRoles(providers);
+  const roles = await pickRoles(target.providers);
   if (roles === undefined) return;
   // The prompts took time: the folder may have been initialized meanwhile, so eligibility is checked again.
   if (existsSync(migentDir(target.folder.uri.fsPath))) {
@@ -106,7 +199,7 @@ async function initializeFolder(target: InitTarget): Promise<void> {
     return;
   }
   const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Window, title: 'Initializing Migent' },
+    { location: vscode.ProgressLocation.Notification, title: 'Initializing Migent' },
     () => invokeText(launch, initArgs(roles), options),
   );
   if (result.kind === 'error') {
@@ -114,15 +207,18 @@ async function initializeFolder(target: InitTarget): Promise<void> {
     void vscode.window.showErrorMessage(`Could not initialize Migent: ${detail}`);
     return;
   }
-  vscode.window.setStatusBarMessage(`Initialized Migent in ${target.folder.name}.`, INFO_MESSAGE_MS);
   await vscode.commands.executeCommand('migent.refresh');
+  const message = `Initialized Migent in ${target.folder.name}.`;
+  const picked = await vscode.window.showInformationMessage(message, 'Run workflow');
+  if (picked === 'Run workflow') await vscode.commands.executeCommand('migent.session.run');
 }
 
 /**
- * `migent init` driven by Quick Picks (provider, then model, per role). The CLI creates `.migent/`. It runs under the
- * shared operation gate with a launch key per folder, so two invocations cannot initialize one folder at once.
+ * `migent init` driven by Quick Picks (one pick per role, or one pick for every role). The CLI creates `.migent/`.
+ * It runs under the shared operation gate with a launch key per folder, so two invocations cannot both initialize one
+ * folder at once.
  */
-export async function initializeProject(gate: OperationGate): Promise<void> {
+export async function initializeProject(gate: OperationGate, capability: CapabilityService): Promise<void> {
   const folder = await pickFolder();
   if (folder === undefined) return;
   const handle = gate.tryAcquire({ kind: 'launch', project: folder.uri.toString(), workflowId: INIT_GATE_ID });
@@ -131,7 +227,10 @@ export async function initializeProject(gate: OperationGate): Promise<void> {
     return;
   }
   try {
-    const target = await locateForFolder(folder);
+    const target = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Migent: loading providers…', cancellable: true },
+      (_progress, token) => loadTarget(folder, capability, token),
+    );
     if (target !== undefined) await initializeFolder(target);
   } finally {
     handle.release();

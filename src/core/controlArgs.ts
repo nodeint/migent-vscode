@@ -114,6 +114,15 @@ function stringList(value: unknown): string[] {
 export interface ProviderChoice {
   name: string;
   models: string[];
+  /** The provider's `default_model` when `provider list` reports one. */
+  defaultModel?: string;
+}
+
+/** The models of a provider with its default first, when it is one of them. */
+export function modelsDefaultFirst(choice: ProviderChoice): string[] {
+  const { defaultModel } = choice;
+  if (defaultModel === undefined || !choice.models.includes(defaultModel)) return choice.models;
+  return [defaultModel, ...choice.models.filter((model) => model !== defaultModel)];
 }
 
 /** The available providers of `provider list --json` with their models; unavailable ones are dropped. */
@@ -123,7 +132,10 @@ export function parseProviders(value: unknown): ProviderChoice[] {
   for (const item of value.providers as unknown[]) {
     if (!isRecord(item) || typeof item.name !== 'string' || item.available !== true) continue;
     const models = stringList(item.models);
-    if (models.length > 0) choices.push({ name: item.name, models });
+    if (models.length === 0) continue;
+    const choice: ProviderChoice = { name: item.name, models };
+    if (typeof item.default_model === 'string' && item.default_model !== '') choice.defaultModel = item.default_model;
+    choices.push(choice);
   }
   return choices;
 }
