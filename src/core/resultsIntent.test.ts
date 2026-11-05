@@ -31,16 +31,13 @@ describe('parseResultsMessage', () => {
     });
   });
 
-  it('accepts next-step intents by workflow id and reload without arguments', () => {
+  it('accepts next-step intents by workflow id', () => {
     expect(parseResultsMessage({ type: 'intent', intent: 'openNextStep', workflow: 'impl', argv: ['x'] })).toEqual({
       type: 'intent',
       value: { intent: 'openNextStep', workflow: 'impl' },
     });
     expect(parseResultsMessage({ type: 'intent', intent: 'openNextStep' })).toBeNull();
-    expect(parseResultsMessage({ type: 'intent', intent: 'reloadSuggestions' })).toEqual({
-      type: 'intent',
-      value: { intent: 'reloadSuggestions' },
-    });
+    expect(parseResultsMessage({ type: 'intent', intent: 'reloadSuggestions' })).toBeNull();
   });
 
   it('accepts each of the seven header actions and nothing else', () => {

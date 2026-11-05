@@ -238,7 +238,6 @@ export const nodeIds = {
   session: (project: string, sessionId: string): string => `session:${project}#${sessionId}`,
   execution: (project: string, sessionId: string, executionId: string): string =>
     `execution:${project}#${sessionId}/${executionId}`,
-  container: (kind: string, project: string, sessionId: string): string => `${kind}:${project}#${sessionId}`,
   file: (uri: string): string => `file:${uri}`,
   more: (project: string): string => `more:${project}`,
   diagnostic: (project: string, code: string): string => `diag:${project}#${code}`,

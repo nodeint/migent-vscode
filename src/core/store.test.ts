@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { isRetentionExempt } from './attention';
 import { probeLock } from './lockProbe';
 import type { SessionChangeEvent } from './model';
 import { SessionStore } from './store';
@@ -175,6 +176,25 @@ describe('SessionStore.load', () => {
     s.load();
     expect(s.all().map((snapshot) => snapshot.sessionId)).toEqual(['completed', 'blocked', 'prepared']);
   });
+
+  it('keeps a prepared session older than the limit and does not count it as hidden', () => {
+    const stamp = (name: string, createdAt: string): void => {
+      const file = path.join(sessionDir(name), 'manifest.yaml');
+      writeFileSync(file, readFileSync(file, 'utf8').replace(/created_at: .*/, `created_at: ${createdAt}`));
+    };
+    stamp('completed', '2026-10-26T12:00:00.000+00:00');
+    stamp('prepared', '2026-01-01T10:00:00.000+00:00');
+    const all = new SessionStore(dirs[dirs.length - 1]!);
+    all.load();
+    const exemptIds = all.all().filter((snapshot) => isRetentionExempt(snapshot)).map((snapshot) => snapshot.sessionId);
+    const limited = new SessionStore(dirs[dirs.length - 1]!, { limit: 1 });
+    limited.load();
+    const ids = limited.all().map((snapshot) => snapshot.sessionId);
+    expect(ids).toContain('prepared');
+    expect(ids).toContain('completed');
+    for (const id of exemptIds) expect(ids).toContain(id);
+    expect(limited.hiddenCount).toBe(all.all().length - ids.length);
+  });
 });
 
 describe('SessionStore running fixture', () => {
@@ -217,14 +237,14 @@ describe('SessionStore retention', () => {
     return new SessionStore(dirs[dirs.length - 1]!, { limit });
   }
 
-  it('retains the newest sessions plus every Running, Blocked and Question session, and counts the rest as hidden', () => {
+  it('retains the newest sessions plus every Running, Prepared, Blocked and Question session, and counts the rest as hidden', () => {
     freshenLock('running', false);
     const s = limited(2);
     s.load();
-    expect(retained(s)).toEqual(['blocked', 'completed', 'failed', 'running']);
-    // 10 fixture sessions, 4 retained.
+    expect(retained(s)).toEqual(['blocked', 'completed', 'failed', 'prepared', 'running']);
+    // 10 fixture sessions, 5 retained.
     expect(s.scanOutcome.eligible).toHaveLength(10);
-    expect(s.hiddenCount).toBe(6);
+    expect(s.hiddenCount).toBe(5);
   });
 
   it('exempts a session that only has pending questions', () => {
@@ -279,13 +299,13 @@ describe('SessionStore retention', () => {
     s.load();
     const hiddenBefore = s.hiddenCount;
     rmSync(sessionDir('blocked'), { recursive: true, force: true });
-    rmSync(sessionDir('prepared'), { recursive: true, force: true });
+    rmSync(sessionDir('stale-lock'), { recursive: true, force: true });
     const events = changes(s, () => {
       s.refreshSession('blocked');
-      s.refreshSession('prepared');
+      s.refreshSession('stale-lock');
     });
     expect(events).toEqual([expect.objectContaining({ sessionId: 'blocked', kind: 'removed' })]);
-    expect(s.snapshot('prepared')).toBeUndefined();
+    expect(s.snapshot('stale-lock')).toBeUndefined();
     expect(s.hiddenCount).toBe(hiddenBefore - 1);
   });
 

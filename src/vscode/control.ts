@@ -13,7 +13,6 @@ import {
   DEFAULT_RUN_SETTINGS,
   parsePrepared,
   prepareArgs,
-  regenerateNextArgs,
   repairArgs,
   runDownstreamArgs,
   runNewArgs,
@@ -37,7 +36,6 @@ export const STOP_TIMEOUT_MS = 20_000;
 const RECONCILE_ATTEMPTS = 4;
 const RECONCILE_DELAY_MS = 500;
 const PREPARE_TIMEOUT_MS = 30_000;
-const REGENERATE_TIMEOUT_MS = 60_000;
 const STATUS_MESSAGE_MS = 3000;
 /** `session cancel` exits 2 when the session does not exist, is not running, or runs elsewhere. */
 const CANCEL_REFUSED_EXIT = 2;
@@ -197,37 +195,6 @@ export class ControlService implements vscode.Disposable {
   /** Whether a launch for this source and target is pending in this extension instance. */
   public isDownstreamBusy(context: ProjectContext, workflowId: string, priorSessionId: string): boolean {
     return this.gate.isLaunchBusy({ kind: 'launch', project: context.key, workflowId, priorSessionId });
-  }
-
-  /**
-   * Ask the CLI to regenerate `next.json` of a Completed source (`session continue <id>`, which dispatches
-   * no stage). The result is read back from disk by the watcher; failures never change the session.
-   */
-  public async regenerateNext(context: ProjectContext, snapshot: SessionSnapshot): Promise<boolean> {
-    if (snapshot.displayState.state !== 'completed') {
-      vscode.window.setStatusBarMessage('The session is no longer completed.', INFO_MESSAGE_MS);
-      return false;
-    }
-    if (!(await this.ensureWritable(context, snapshot))) return false;
-    const launch = this.#launch(context);
-    const handle = this.gate.tryAcquire(this.#sessionKey(context, snapshot.sessionId), 'Starting');
-    if (launch === undefined || handle === null) return false;
-    try {
-      const result = await invokeText(launch, regenerateNextArgs(snapshot.sessionId), {
-        cwd: context.root,
-        env: this.#env(context),
-        timeoutMs: REGENERATE_TIMEOUT_MS,
-      });
-      context.store.refreshSession(snapshot.sessionId);
-      if (result.kind === 'error') {
-        this.#output.error(`reload suggestions failed: ${result.error.detail} ${result.error.stderr}`.trim());
-        void vscode.window.showErrorMessage(`Could not reload suggestions: ${result.error.detail}`);
-        return false;
-      }
-      return true;
-    } finally {
-      handle.release();
-    }
   }
 
   /** Start the prepared session `snapshot` (Save & Run). */

@@ -10,7 +10,6 @@ import type { ControlService, WorkflowChoice } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
-import { offerWorkflowDraft } from '../workflowDraft';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
 const INFO_MESSAGE_MS = 5000;
@@ -76,7 +75,6 @@ async function pickWorkflow(
     .map((entry) => ({
       label: entry.id,
       description: entry.title ?? undefined,
-      detail: entry.stages.join(' → '),
       entry,
     }))
     .sort((left, right) => Number(right.entry.id === last) - Number(left.entry.id === last));
@@ -118,7 +116,6 @@ async function runWorkflow(control: ControlService, context: ProjectContext, wor
   });
   if (prepared === undefined) return;
   await openTask(prepared.taskFile);
-  offerWorkflowDraft(context, prepared);
 }
 
 async function run(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
@@ -173,11 +170,12 @@ async function runWorkflowFile({ control, host, memento }: Deps, arg: unknown): 
   await runWorkflow(control, target.context, entry);
 }
 
-async function prepare(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
-  const context = await pickProject(registry);
-  if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'Prepare a session');
-  if (workflow === undefined) return;
+/** Title entry for a chosen workflow; prepares the session and opens its `task.md`. */
+async function prepareWorkflow(
+  control: ControlService,
+  context: ProjectContext,
+  workflow: WorkflowEntry,
+): Promise<void> {
   const title = await vscode.window.showInputBox({
     title: `Prepare ${workflow.id}`,
     prompt: 'Session title',
@@ -187,7 +185,33 @@ async function prepare(control: ControlService, memento: vscode.Memento, registr
   const prepared = await control.prepare(context, { workflowId: workflow.id, title: title.trim() });
   if (prepared === undefined) return;
   await openTask(prepared.taskFile);
-  offerWorkflowDraft(context, prepared);
+}
+
+async function prepare(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
+  const context = await pickProject(registry);
+  if (context === undefined) return;
+  const workflow = await pickWorkflow(context, memento, 'Prepare a session');
+  if (workflow !== undefined) await prepareWorkflow(control, context, workflow);
+}
+
+const RUN_NOW = 'Run now';
+const PREPARE = 'Prepare';
+
+/** Sessions view entry: project, workflow, then Run now or Prepare, reusing the choices made. */
+async function newSession(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
+  const context = await pickProject(registry);
+  if (context === undefined) return;
+  const workflow = await pickWorkflow(context, memento, 'New session');
+  if (workflow === undefined) return;
+  const mode = await vscode.window.showQuickPick(
+    [
+      { label: RUN_NOW, description: 'Describe a task and start the workflow now' },
+      { label: PREPARE, description: 'Create a session to start later' },
+    ],
+    { title: `New session · ${workflow.id}`, placeHolder: 'Run now or prepare' },
+  );
+  if (mode?.label === RUN_NOW) await runWorkflow(control, context, workflow);
+  else if (mode?.label === PREPARE) await prepareWorkflow(control, context, workflow);
 }
 
 interface TaskTarget {
@@ -293,6 +317,7 @@ export function registerControlCommands(
     vscode.commands.registerCommand('migent.workflow.run', (arg?: unknown) =>
       runWorkflowFile({ control, host, memento }, arg),
     ),
+    vscode.commands.registerCommand('migent.session.new', () => newSession(control, memento, host.registry)),
     vscode.commands.registerCommand('migent.session.prepare', () => prepare(control, memento, host.registry)),
     vscode.commands.registerCommand('migent.session.start', (arg: unknown) => start(control, host, arg)),
     vscode.commands.registerCommand('migent.session.continue', async (arg: unknown) => {

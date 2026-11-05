@@ -91,14 +91,15 @@ registry, store and catalog to follow: a project appearing and disappearing, a
 session whose marker arrives late, deleted and recreated folders, workflow and
 config edits, retained execution watchers, and `migent.refresh`. The scenarios in
 `sessionsTree.integration.test.ts` read the Sessions provider as VS Code would
-(groups, icons, Unknown reasons, badge, questions and history, execution files,
+(groups, icons, Unknown reasons, badge, session children limited to Files and stage attempts, execution files,
 selection and active editor staying put, Show more, commands). The scenarios in
 `capability.integration.test.ts` change the extension host's `PATH` and check the diagnostic node, the
 capability states and Recheck; `scripts/integration/run.mjs` puts a `migent` launcher for
 `fake-migent.js` (run with `node`) first on `PATH`, so they do not depend on an installed CLI. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
-text and hidden state; `results.integration.test.ts` opens Results panels from a Completed row, checks that
+text and hidden state; `results.integration.test.ts` opens Results panels from a session row (Completed, or Running
+until it completes in place), checks that
 reopening reuses the panel, that a `sessionAction` intent runs the session command for the panel's own session
 (and an unknown action nothing), that page intents open real files by identity (and invalid ones nothing),
 lineage navigation, background updates without focus changes, and that closing a panel releases its `outputs/`
@@ -144,7 +145,9 @@ and adopts, and a rejected draft releasing the gate so that a corrected draft ru
 `failureText.test.ts` covers the wording of failure messages. Notifications and their buttons are not driven, so check
 them by hand in VS Code:
 
-1. Prepare a session: the notification offers **Open workflow.yaml** and the button opens that session's file.
+1. Prepare a session from the Sessions view or the Command Palette: no notification appears, `task.md` opens, and the
+   session's `workflow.yaml` opens from the session's files in the Sessions tree. The Next step page's Prepare still
+   shows a notification offering **Open workflow.yaml**.
 2. Edit the draft's `id`, then Save & Run: the error names `workflow.yaml`, the session stays prepared, and after
    fixing the `id` Save & Run starts it.
 3. Leave `workflow.yaml` with unsaved edits and use Save & Run: the run is refused with a message. Save & Run saves

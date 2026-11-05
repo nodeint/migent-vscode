@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Show only Files and the stage attempts under each session in the Sessions view. The Outputs, Questions and History
+  branches are gone: outputs stay on Results, questions are answered from the Questions page, the session's Answer
+  Questions action and notifications, and `outputs/` and `questions.json` remain browsable under Files.
+- Open the Results page when clicking any session in the Sessions view, whatever its state, and offer Open Result in
+  every session's context menu. Remove the Reload suggestions button; existing next-step suggestions are unchanged.
+- Add a New session action to the Sessions view title bar: pick the project and workflow once, then Run now (task
+  input with Compose in editor) or Prepare (title input, opens `task.md`).
+  The workflow picker no longer lists each workflow's stages, and Prepare Session no longer shows a "Session prepared"
+  notification.
+
 ## 0.1.2
 
 - Support Migent CLI 0.3.5 session drafts: Prepare offers to open the session's `workflow.yaml`, Continue no longer

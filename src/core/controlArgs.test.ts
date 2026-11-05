@@ -11,7 +11,6 @@ import {
   parsePrepared,
   parseProviders,
   prepareArgs,
-  regenerateNextArgs,
   repairArgs,
   runDownstreamArgs,
   runNewArgs,
@@ -63,7 +62,6 @@ describe('control argv builders', () => {
       'session', 'prepare', 'T', '--workflow', 'impl', '--prior', 'src',
     ]);
     expect(prepareArgs({ title: 'T', workflowId: 'impl' })).not.toContain('--prior');
-    expect(regenerateNextArgs('src')).toEqual(['session', 'continue', 'src']);
   });
 });
 

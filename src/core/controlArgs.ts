@@ -53,11 +53,6 @@ export function prepareArgs(input: { title: string; workflowId: string; priorSes
   return args;
 }
 
-/** `session continue <source>` on a Completed session: regenerates `next.json` and dispatches no stage. */
-export function regenerateNextArgs(sessionId: string): string[] {
-  return ['session', 'continue', sessionId];
-}
-
 export interface ContinueInput {
   sessionId: string;
   /** Dispatch one stage without resetting revision counts. */

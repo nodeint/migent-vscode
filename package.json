@@ -163,6 +163,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "migent.session.new",
+        "title": "New session",
+        "category": "Migent",
+        "icon": "$(add)"
+      },
+      {
         "command": "migent.session.prepare",
         "title": "Prepare Session…",
         "category": "Migent",
@@ -373,6 +379,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "migent.session.new",
+          "when": "view == migent.sessions && migent.hasProjects && migent.cliState == ok",
+          "group": "navigation@0"
+        },
+        {
           "command": "migent.refresh",
           "when": "view == migent.sessions",
           "group": "navigation"
@@ -410,13 +421,8 @@
           "group": "inline@3"
         },
         {
-          "command": "migent.session.answerQuestions",
-          "when": "view == migent.sessions && viewItem == questionGroup",
-          "group": "inline@0"
-        },
-        {
           "command": "migent.session.openResult",
-          "when": "view == migent.sessions && viewItem =~ /^session.completed/",
+          "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "1_open@0"
         },
         {
@@ -521,6 +527,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "migent.session.new",
+          "when": "false"
+        },
         {
           "command": "migent.session.delete",
           "when": "false"

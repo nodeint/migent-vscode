@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { aggregateSessionsState, isCounted, isRetentionExempt, summarize } from './attention';
+import { aggregateSessionsState, groupOf, isCounted, isRetentionExempt, summarize } from './attention';
 import { deriveDisplayState } from './displayState';
 import type { LockProbe, ScanOutcome, SessionSnapshot } from './model';
 import { readStatus } from './statusReader';
@@ -24,8 +24,8 @@ function fromFixture(dir: string, lock: LockProbe = { kind: 'none' }): SessionSn
   };
 }
 
-function bare(state: 'unknown' | 'stopped' | 'failed' | 'completed'): SessionSnapshot {
-  const statusByState = { unknown: 'weird', stopped: 'active', failed: 'active', completed: 'completed' } as const;
+function bare(state: 'unknown' | 'stopped' | 'failed' | 'completed' | 'prepared'): SessionSnapshot {
+  const statusByState = { unknown: 'weird', stopped: 'active', failed: 'active', completed: 'completed', prepared: 'prepared' } as const;
   const base = fromFixture(capturedDir('question-answered'));
   const status = { ...base.status!, status: statusByState[state], latestExecutionStatus: state === 'failed' ? 'failed' : 'completed' };
   return {
@@ -74,12 +74,27 @@ describe('isCounted and summarize', () => {
   });
 });
 
+describe('groupOf', () => {
+  it('places prepared sessions in their own group, apart from Recent and Needs attention', () => {
+    expect(groupOf(bare('prepared'))).toBe('prepared');
+    expect(groupOf(bare('completed'))).toBe('recent');
+    expect(groupOf(bare('failed'))).toBe('attention');
+    expect(groupOf(fromFixture(syntheticDir('running-questions'), alive))).toBe('running');
+  });
+
+  it('does not count a prepared session toward attention', () => {
+    expect(isCounted(bare('prepared'))).toBe(false);
+    expect(summarize([bare('prepared')]).needsAttention).toBe(0);
+  });
+});
+
 describe('isRetentionExempt', () => {
-  it('exempts running, question, blocked and pending-question sessions only', () => {
+  it('exempts running, prepared, question, blocked and pending-question sessions only', () => {
     expect(isRetentionExempt(fromFixture(syntheticDir('running-questions'), alive))).toBe(true);
     expect(isRetentionExempt(fromFixture(capturedDir('question-pending')))).toBe(true);
     expect(isRetentionExempt(fromFixture(syntheticDir('blocked-questions')))).toBe(true);
     expect(isRetentionExempt(fromFixture(syntheticDir('running-questions')))).toBe(true);
+    expect(isRetentionExempt(bare('prepared'))).toBe(true);
     expect(isRetentionExempt(bare('failed'))).toBe(false);
     expect(isRetentionExempt(bare('stopped'))).toBe(false);
     expect(isRetentionExempt(bare('completed'))).toBe(false);

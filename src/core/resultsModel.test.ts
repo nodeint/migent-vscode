@@ -76,7 +76,7 @@ describe('buildResultsModel', () => {
     });
     // The captured sample does not include outputs/note.md.
     expect(model.outputs.rows).toEqual([{ key: 'name:note', label: 'note', path: 'outputs/note.md', state: 'missing' }]);
-    expect(model.next).toMatchObject({ state: 'ok', frozen: 'ok' });
+    expect(model.next).toMatchObject({ state: 'ok' });
     expect(model.next.suggestions).toEqual([
       {
         workflow: 'probe-target',
@@ -90,24 +90,6 @@ describe('buildResultsModel', () => {
       { sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed', task: null },
     ]);
     expect(JSON.stringify(model)).not.toContain('argv');
-  });
-
-  it('offers Reload only when next.json is unavailable although the frozen workflow declares downstream', () => {
-    const dir = tempDir();
-    cpSync(capturedDir('handoff-source'), dir, { recursive: true });
-    rmSync(path.join(dir, 'next.json'));
-    const snapshot = captured('handoff-source');
-    const build = (): boolean =>
-      buildResultsModel({
-        sessionId: SOURCE,
-        sessionDirPath: dir,
-        snapshots: [snapshot],
-        eligibleIds: [],
-        workflows: [],
-      }).next.canReload;
-    expect(build()).toBe(true);
-    cpSync(path.join(capturedDir('handoff-source'), 'next.json'), path.join(dir, 'next.json'));
-    expect(build()).toBe(false);
   });
 
   it('reports the target workflow as not found, duplicate or invalid', () => {
@@ -159,7 +141,7 @@ describe('buildResultsModel', () => {
         eligibleIds: [],
         workflows: [],
       });
-    expect(build().next).toMatchObject({ state: 'missing', frozen: 'absent', canReload: false });
+    expect(build().next).toMatchObject({ state: 'missing' });
     writeFileSync(path.join(dir, 'next.json'), '{ nope');
     expect(build().next.state).toBe('invalid');
     writeFileSync(path.join(dir, 'next.json'), '{"schema_version": 9}');
