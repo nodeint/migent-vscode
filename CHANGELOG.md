@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Support Migent CLI 0.3.5 session drafts: Prepare offers to open the session's `workflow.yaml`, Continue no longer
+  reports a workflow change or sends `--refresh-workflow` for a session started from its draft, Save & Run refuses to
+  start while `workflow.yaml` has unsaved edits, and a rejected draft is reported against `workflow.yaml` and can be
+  fixed and run again.
 - Give Results, Session Metrics and Questions one session header (state, workflow, title, session facts, page tabs),
   one set of VS Code icons shared with the Sessions view, and colored editor-tab icons that follow the session state.
 - Release the session after a reply once the blocked execution is resumed, instead of waiting for the reply text in

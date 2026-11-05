@@ -1,0 +1,70 @@
+source_sha256: 8e7b6ffc225783a14966da405923a52e5f1fcb4e7702b5aebc0f56d48f26c206
+workflow:
+  schema_version: 4
+  id: plan
+  concurrency: 1
+  constraints:
+    - DRAFT-ONLY constraint
+  stages:
+    - id: plan
+      depends_on: []
+      role: planner
+      ask: human
+      instructions:
+        - Define the goal, scope, and architectural constraints from the task and repository evidence.
+        - Design component responsibilities, boundaries, contracts, and dependencies.
+        - Favor maintainability and extensibility. Keep the design proportional to the task.
+        - Explain key decisions, trade-offs, risks, and open questions.
+        - Stay at the architecture level. Exclude implementation steps, code-level details, and test procedures.
+        - Resolve substantive review findings when revising.
+      produces:
+        artifact: plan.md
+      max_revisions: 3
+    - id: review_plan
+      depends_on:
+        - plan
+      role: reviewer
+      instructions:
+        - Review the architecture against the task and repository evidence.
+        - Assess correctness, feasibility, maintainability, and extensibility.
+        - Check responsibilities, boundaries, contracts, dependencies, and material trade-offs or risks.
+        - Stay at the architecture level. Do not require implementation steps, code-level details, or test procedures.
+        - Report all substantive gaps together with their impact and required corrections.
+        - Choose revise for substantive gaps; otherwise choose approved.
+        - Do not revise for style or formatting.
+      decision:
+        - approved:
+            when: Choose approved according to the stage instructions.
+            navigate: complete
+        - revise:
+            when: Choose revise according to the stage instructions.
+            navigate: plan
+  outputs:
+    - name: plan
+      from_stage: plan
+      artifact: plan.md
+roles:
+  planner:
+    - Read the task, relevant code, and project instructions before planning.
+    - Write only planning artifacts; do not modify project files or implement code.
+    - Design responsibilities, boundaries, contracts, and dependencies for maintainability and extensibility.
+    - Keep the design proportional to the task. Leave implementation details to the developer.
+    - Ground decisions in repository evidence. State assumptions, trade-offs, risks, and unresolved questions.
+  reviewer:
+    - Read the task, project instructions, and the work under review.
+    - Assess correctness, completeness, scope, and maintainability using evidence appropriate to the work.
+    - Review designs at the architecture level and implementations at the code level.
+    - Do not modify project files or implement fixes while reviewing.
+    - Report all substantive findings together. Identify the affected part, evidence, impact, and required correction.
+    - Approve only when the work meets the task and stage criteria. Do not block on personal preference.
+targets:
+  plan:
+    provider: claude
+    model: opus
+    options:
+      effort: medium
+  review_plan:
+    provider: codex
+    model: gpt-6.1-sol
+    options:
+      model_reasoning_effort: medium

@@ -14,6 +14,8 @@ export const QUESTIONS_FILENAME = 'questions.json';
 export const NEXT_FILENAME = 'next.json';
 export const FROZEN_WORKFLOW_FILENAME = 'workflow.frozen.yaml';
 export const TASK_FILENAME = 'task.md';
+/** The editable session workflow written by `session prepare` (CLI 0.3.5 and later). */
+export const WORKFLOW_DRAFT_FILENAME = 'workflow.yaml';
 export const METRICS_FILENAME = 'metrics.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
 export const CONFIG_FILENAME = 'config.yaml';
@@ -68,6 +70,10 @@ export function nextPath(projectRoot: string, sessionId: string): string {
 
 export function frozenWorkflowPath(projectRoot: string, sessionId: string): string {
   return path.join(sessionDir(projectRoot, sessionId), FROZEN_WORKFLOW_FILENAME);
+}
+
+export function workflowDraftPath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), WORKFLOW_DRAFT_FILENAME);
 }
 
 export function taskPath(projectRoot: string, sessionId: string): string {

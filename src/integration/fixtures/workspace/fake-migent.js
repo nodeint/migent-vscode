@@ -6,6 +6,11 @@
 //   MIGENT_FAKE_ANSWER   how `session continue --reply-file` treats the reply: record (default), reject (exit 1,
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
+//   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
+//                        Otherwise it models 0.3.5: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
+//                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
+//                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
 //   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
 //                        with no questions.json): consume (default; the new execution's prompt carries the reply),
 //                        ignore (a new execution without the reply, exit 0), reject (exit 2, nothing written)
@@ -17,6 +22,7 @@ const crypto = require('node:crypto');
 const args = process.argv.slice(2);
 // The harness reads this to prove no fake CLI process outlives its scenario.
 fs.appendFileSync(path.join(process.cwd(), 'fake-pids.log'), `${process.pid}\n`);
+const IS_LEGACY = process.env.MIGENT_FAKE_LEGACY === '1';
 const RUN_MS = Number(process.env.MIGENT_FAKE_RUN_MS ?? 1500);
 const TICK_MS = 50;
 const CANCEL_WAIT_MS = 5000;
@@ -28,6 +34,8 @@ function option(name) {
 
 const sessionsDir = path.join(process.cwd(), '.migent', 'sessions');
 const dirOf = (id) => path.join(sessionsDir, id);
+const draftOf = (id) => path.join(dirOf(id), 'workflow.yaml');
+const frozenOf = (id) => path.join(dirOf(id), 'workflow.frozen.yaml');
 const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value));
 
 function writeStatus(id, state, extra = {}) {
@@ -55,9 +63,39 @@ function create(workflow, title) {
   return id;
 }
 
+// CLI 0.3.5 `prepare`: an empty task.md and an editable copy of the workflow.
+function writeDraft(id, workflow) {
+  fs.writeFileSync(path.join(dirOf(id), 'task.md'), '');
+  fs.writeFileSync(
+    draftOf(id),
+    `# Session workflow draft. Edit this file before starting the session.
+schema_version: 4
+id: ${workflow}
+stages: []
+`,
+  );
+}
+
+// CLI 0.3.5 `run --session`: reject a bad draft before anything is written, else freeze it.
+function startDraft(id) {
+  const manifestFile = path.join(dirOf(id), 'manifest.yaml');
+  const expected = /^workflow_id: (.*)$/m.exec(fs.readFileSync(manifestFile, 'utf8'))?.[1];
+  const found = /^id: (.*)$/m.exec(fs.readFileSync(draftOf(id), 'utf8'))?.[1];
+  if (found !== expected) {
+    console.error(`migent: Session workflow id is ${found}, not ${expected}. Do not change id in workflow.yaml.`);
+    process.exit(2);
+  }
+  if (fs.readFileSync(path.join(dirOf(id), 'task.md'), 'utf8').trim() === '') {
+    console.error(`migent: Session ${id} has no task.md or it is empty. Write .migent/sessions/${id}/task.md before starting.`);
+    process.exit(2);
+  }
+  fs.copyFileSync(draftOf(id), frozenOf(id));
+}
+
 function prepare() {
   fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
   const id = create(option('--workflow'), args[2]);
+  if (!IS_LEGACY) writeDraft(id, option('--workflow'));
   writeStatus(id, 'prepared', { title: args[2], workflow_id: option('--workflow') });
   console.error(`[migent] session_id: ${id}`);
   console.log(
@@ -66,6 +104,7 @@ function prepare() {
       title: args[2],
       status: 'prepared',
       task_path: `.migent/sessions/${id}/task.md`,
+      ...(IS_LEGACY ? {} : { workflow_path: `.migent/sessions/${id}/workflow.yaml` }),
     }),
   );
 }
@@ -152,6 +191,13 @@ function run() {
   const workflow = option('--workflow');
   const id = option('--session') ?? (args[1] === 'continue' ? args[2] : create(workflow, option('--task') ?? 'task'));
   if (option('--reply-file') !== undefined) answer(id);
+  if (!IS_LEGACY && fs.existsSync(draftOf(id))) {
+    if (args[1] === 'run') {
+      if (!fs.existsSync(frozenOf(id))) startDraft(id);
+    } else if (args.includes('--refresh-workflow')) {
+      fs.copyFileSync(draftOf(id), frozenOf(id));
+    }
+  }
   const lockFile = path.join(dirOf(id), 'session.lock');
   const cancelFile = path.join(dirOf(id), 'cancel.requested');
   const beat = () =>
@@ -208,7 +254,7 @@ function cancel() {
 }
 
 if (args[0] === '--version') {
-  console.log('migent 0.3.1');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.3.5');
 } else if (args[0] === 'session' && args[1] === 'prepare') {
   prepare();
 } else if (args[0] === 'session' && args[1] === 'run') {
