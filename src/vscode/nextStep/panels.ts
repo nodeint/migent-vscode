@@ -22,6 +22,7 @@ import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type { ResultsPanels } from '../results/panels';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import { offerWorkflowDraft } from '../workflowDraft';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -255,13 +256,15 @@ export class NextStepPanels implements vscode.Disposable {
   }
 
   async #prepare(context: ProjectContext, launch: ResolvedLaunch): Promise<void> {
-    const file = await this.#control.prepare(context, {
+    const prepared = await this.#control.prepare(context, {
       workflowId: launch.workflowId,
       priorSessionId: launch.priorSessionId,
       title: titleOf(launch.taskText),
       taskText: launch.taskText,
     });
-    if (file !== undefined) await openFile(file, 'task.md');
+    if (prepared === undefined) return;
+    await openFile(prepared.taskFile, 'task.md');
+    offerWorkflowDraft(context, prepared);
   }
 
   /** Save the dirty target workflow document of this launch only; never Save All. */

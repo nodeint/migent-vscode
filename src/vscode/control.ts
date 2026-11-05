@@ -26,8 +26,9 @@ import { isRecord } from '../core/record';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
-import { runDoctor, workflowChange } from './controlHelpers';
+import { hasWorkflowDraft, isRejectedStart, runDoctor, workflowChange } from './controlHelpers';
 import type { ProjectContext, ProjectRegistry } from './projects';
+import { type PreparedSession, preparedSession, reportFailure } from './workflowDraft';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -297,7 +298,9 @@ export class ControlService implements vscode.Disposable {
     options: { choice: WorkflowChoice; isOnce: boolean },
   ): Promise<void> {
     if (!(await this.ensureWritable(context, snapshot))) return;
-    const input = { sessionId: snapshot.sessionId, refreshWorkflow: options.choice === 'updated', once: options.isOnce };
+    // A drafted session continues from its own copy: --refresh-workflow would re-freeze the draft, not the live file.
+    const isAdopting = options.choice === 'updated' && !hasWorkflowDraft(context.root, snapshot.sessionId);
+    const input = { sessionId: snapshot.sessionId, refreshWorkflow: isAdopting, once: options.isOnce };
     await this.#execute(context, {
       key: this.#sessionKey(context, snapshot.sessionId),
       args: continueArgs(input, this.settings(context)),
@@ -316,8 +319,8 @@ export class ControlService implements vscode.Disposable {
     return workflowChange(context, snapshot);
   }
 
-  /** `session prepare`, then (optionally) the user's task text. Returns the real `task.md` path. */
-  public async prepare(context: ProjectContext, input: PrepareInput): Promise<string | undefined> {
+  /** `session prepare`, then (optionally) the user's task text. Returns the real file paths. */
+  public async prepare(context: ProjectContext, input: PrepareInput): Promise<PreparedSession | undefined> {
     if (!(await this.ensureWritable(context))) return undefined;
     const handle = this.gate.tryAcquire({
       kind: 'launch',
@@ -336,7 +339,7 @@ export class ControlService implements vscode.Disposable {
     }
   }
 
-  async #prepareSession(context: ProjectContext, input: PrepareInput): Promise<string | undefined> {
+  async #prepareSession(context: ProjectContext, input: PrepareInput): Promise<PreparedSession | undefined> {
     const launch = this.#launch(context);
     if (launch === undefined) return undefined;
     const result = await invokeJson(launch, prepareArgs(input), {
@@ -357,7 +360,7 @@ export class ControlService implements vscode.Disposable {
     const taskFile = path.resolve(context.root, prepared.taskPath);
     await this.#writeTask(taskFile, input.taskText);
     context.store.refreshSession(prepared.sessionId);
-    return taskFile;
+    return preparedSession(context, prepared.sessionId, taskFile);
   }
 
   /** The CLI leaves `task.md` for the caller to write, so it always exists afterwards, empty if need be. */
@@ -572,31 +575,27 @@ export class ControlService implements vscode.Disposable {
       return;
     }
     const isConfirmed = await this.#reconcile(context, state);
-    if (isConfirmed || state.sessionId === undefined) {
+    // CLI 0.3.5 rejects the start of a prepared session with a bad draft before it writes anything (exit 2, still
+    // prepared, no lock), so holding the gate would only block the retry. Any other unconfirmed result, such as an
+    // exit 2 on a Continue, stays uncertain and keeps the gate.
+    const { sessionId } = state;
+    const isRejectedDraft =
+      sessionId !== undefined && isRejectedStart(context, { sessionId, before: state.before, outcome: result.outcome });
+    if (isConfirmed || isRejectedDraft || sessionId === undefined) {
       this.#release(context, state);
-      if (!isConfirmed || result.outcome === 'ConfigError' || result.outcome === 'Unknown') this.#reportFailure(result);
+      if (!isConfirmed || result.outcome === 'ConfigError' || result.outcome === 'Unknown') {
+        reportFailure({ context, sessionId }, result, () => { this.showLog(); });
+      }
       return;
     }
     // Keep the gate until a later refresh shows an effect: a silent re-enable could duplicate the run.
-    const { sessionId, before } = state;
+    const { before } = state;
     const unsubscribe = context.store.onDidChange((event) => {
       if (event.sessionId !== sessionId || !this.#isConfirmed(context, sessionId, before)) return;
       unsubscribe();
       this.#release(context, state);
     });
     await this.#offerRecovery('Status not confirmed.');
-  }
-
-  #reportFailure(result: Extract<RunResult, { kind: 'exited' }>): void {
-    const last = result.stderrTail.at(-1);
-    const text =
-      result.outcome === 'ConfigError'
-        ? 'Migent reported a configuration error.'
-        : `Migent exited with code ${result.exitCode ?? 'unknown'}.`;
-    const message = last === undefined ? text : `${text} ${last}`;
-    void vscode.window.showErrorMessage(message, 'View log').then((picked) => {
-      if (picked === 'View log') this.showLog();
-    });
   }
 
   /** Project of the editor document `uri` and its session id, when it is a session's `task.md`. */

@@ -7,8 +7,12 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import * as vscode from 'vscode';
+
 import type { SessionSnapshot } from '../core/model';
-import { createProject, type Env, freshLock, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
+import type { ProjectContext } from '../vscode/projects';
+import { openWorkflowDraft, type PreparedSession } from '../vscode/workflowDraft';
+import { createProject, type Env, freshLock, manifest, migentPath, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';
 
 const RUN_MS = 'MIGENT_FAKE_RUN_MS';
 
@@ -81,8 +85,9 @@ const scenarios: Scenario[] = [
     name: 'AC5: Prepare creates editable tasks and Save & Run preserves the task',
     async run(env) {
       const project = await createProject(env);
-      const file = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Prepared', taskText: 'Write it.' });
-      assert.ok(file, 'prepare returns task.md');
+      const prepared0 = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Prepared', taskText: 'Write it.' });
+      assert.ok(prepared0, 'prepare returns the session files');
+      const file = prepared0.taskFile;
       assert.equal(fs.readFileSync(file, 'utf8'), 'Write it.');
       await waitFor('prepared session', () => stateOf(env, 'prepared') !== undefined);
       const prepared = stateOf(env, 'prepared');
@@ -93,9 +98,9 @@ const scenarios: Scenario[] = [
       });
       assert.equal(fs.readFileSync(file, 'utf8'), 'Write it.', 'task.md untouched by the run');
       assert.equal(sessions(env).length, 1, 'no replacement session');
-      const emptyFile = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
-      assert.ok(emptyFile, 'prepare returns task.md');
-      assert.equal(fs.readFileSync(emptyFile, 'utf8'), '');
+      const emptyPrepared = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Compose' });
+      assert.ok(emptyPrepared, 'prepare returns task.md');
+      assert.equal(fs.readFileSync(emptyPrepared.taskFile, 'utf8'), '');
     },
   },
   {
@@ -165,6 +170,177 @@ const scenarios: Scenario[] = [
     },
   },
 ];
+
+const argvLog = (env: Env): string[][] =>
+  fs
+    .readFileSync(path.join(env.root, 'fake-argv.log'), 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as string[]);
+
+const sessionFile = (env: Env, sessionId: string, name: string): string =>
+  path.join(env.root, '.migent', 'sessions', sessionId, name);
+
+const snapshotOf = (project: ProjectContext, sessionId: string): SessionSnapshot => {
+  const snapshot = project.store.snapshot(sessionId);
+  assert.ok(snapshot, 'session is in the store');
+  return snapshot;
+};
+
+/** Prepare a session whose task is written, and wait until the store shows it as prepared. */
+async function prepareReady(env: Env, project: ProjectContext, taskText?: string): Promise<PreparedSession> {
+  const prepared = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Draft', taskText });
+  assert.ok(prepared, 'prepared');
+  await waitFor('prepared session in the store', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'prepared');
+  return prepared;
+}
+
+const gateHeld = (env: Env, project: ProjectContext, sessionId: string): boolean =>
+  env.api.control.gate.current(project.key, sessionId) !== undefined;
+
+scenarios.push(
+  {
+    name: "AC2/AC4: Prepare returns workflow.yaml only when the CLI wrote one, and the open action opens that session's file",
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project);
+      assert.equal(path.basename(prepared.workflowFile ?? ''), 'workflow.yaml');
+      assert.equal(path.basename(path.dirname(prepared.workflowFile ?? '')), prepared.sessionId, 'in the session folder');
+      assert.ok(fs.existsSync(prepared.workflowFile ?? ''), 'draft exists');
+      await openWorkflowDraft(project, prepared.sessionId);
+      const draftPath = vscode.Uri.file(prepared.workflowFile ?? '').fsPath;
+      const isShown = (): boolean =>
+        vscode.window.visibleTextEditors.some((editor) => editor.document.uri.fsPath === draftPath);
+      await waitFor('draft editor', isShown);
+      // The file may vanish before the click: nothing opens and nothing throws.
+      fs.rmSync(prepared.workflowFile ?? '');
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      await openWorkflowDraft(project, prepared.sessionId);
+      assert.equal(isShown(), false, 'no editor for a vanished draft');
+      await withFake({ MIGENT_FAKE_LEGACY: '1' }, async () => {
+        const legacy = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Legacy' });
+        assert.ok(legacy);
+        assert.equal(legacy.workflowFile, undefined, 'no draft before CLI 0.3.5');
+        assert.ok(!fs.existsSync(sessionFile(env, legacy.sessionId, 'workflow.yaml')));
+      });
+    },
+  },
+  {
+    name: 'AC1/AC4: Continue on an edited draft shows no change and never sends --refresh-workflow; a legacy session still adopts',
+    async run(env) {
+      const project = await createProject(env);
+      write(migentPath(env.root, 'workflows', 'plan.yaml'), 'id: plan\nstages: []\n');
+      const prepared = await prepareReady(env, project, 'Do it.');
+      fs.appendFileSync(prepared.workflowFile ?? '', '# edited draft\n');
+      let stopped: SessionSnapshot | undefined;
+      await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '1' }, async () => {
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+        await waitFor('stopped', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'stopped');
+        assert.ok(fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'frozen');
+        // The live file now differs from the frozen draft, which must not count as a change for a drafted session.
+        write(migentPath(env.root, 'workflows', 'plan.yaml'), 'id: plan\nstages:\n  - id: b\n');
+        project.catalog.reloadWorkflow('plan.yaml');
+        stopped = snapshotOf(project, prepared.sessionId);
+        assert.equal(env.api.control.workflowChange(project, stopped), undefined);
+      });
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        assert.ok(stopped);
+        await env.api.control.continueSession(project, stopped, 'updated');
+      });
+      const last = argvLog(env).at(-1);
+      assert.ok(last !== undefined && last.includes('continue'), 'continue was dispatched');
+      assert.ok(!last.includes('--refresh-workflow'), `no adoption flag: ${JSON.stringify(last)}`);
+      // Without workflow.yaml the live file is compared and adoption is still sent.
+      write(migentPath(env.root, 'sessions', 'old', 'manifest.yaml'), manifest('old', 'workflow_id: plan\n'));
+      write(migentPath(env.root, 'sessions', 'old', 'status.json'), status('cancelled'));
+      write(migentPath(env.root, 'sessions', 'old', 'workflow.frozen.yaml'), 'id: plan\nstages: []\n');
+      await waitFor('legacy session', () => project.store.snapshot('old') !== undefined);
+      const old = snapshotOf(project, 'old');
+      assert.ok(env.api.control.workflowChange(project, old), 'legacy session still sees the changed workflow');
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        await env.api.control.continueSession(project, old, 'updated');
+      });
+      assert.ok(argvLog(env).at(-1)?.includes('--refresh-workflow'), 'legacy adoption still sends the flag');
+    },
+  },
+  {
+    name: 'AC3: a rejected draft changes nothing, frees the gate, and a corrected draft then runs',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project, 'Do it.');
+      const draft = prepared.workflowFile ?? '';
+      const original = fs.readFileSync(draft, 'utf8');
+      fs.writeFileSync(draft, original.replace('id: plan', 'id: other'));
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+        assert.ok(!fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'a rejected draft is not frozen');
+        assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared', 'state unchanged');
+        assert.equal(gateHeld(env, project, prepared.sessionId), false, 'gate released, so retry is possible');
+        fs.writeFileSync(draft, original);
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+        await waitFor('completed after the correction', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'completed');
+        assert.ok(fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'corrected draft is frozen');
+      });
+    },
+  },
+  {
+    name: 'AC3: an exit 2 on Continue of a started session is uncertain and keeps the gate',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project, 'Do it.');
+      await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '1' }, async () => {
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+      });
+      await waitFor('stopped', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'stopped');
+      await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '2' }, async () => {
+        // Not awaited: the unconfirmed result waits on a prompt that nobody answers here.
+        void env.api.control.continueSession(project, snapshotOf(project, prepared.sessionId));
+        await sleep(3500);
+      });
+      assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'stopped', 'state unchanged');
+      assert.equal(gateHeld(env, project, prepared.sessionId), true, 'gate retained for an uncertain result');
+    },
+  },
+  {
+    name: 'Save & Run refuses a dirty workflow.yaml without dispatching or saving it, and runs once it is saved',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project, 'Do it.');
+      const draft = prepared.workflowFile ?? '';
+      const before = fs.readFileSync(draft, 'utf8');
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(draft));
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(document.uri, new vscode.Position(0, 0), '# unsaved\n');
+      assert.ok(await vscode.workspace.applyEdit(edit));
+      assert.ok(document.isDirty, 'draft has unsaved edits');
+      const taskUri = vscode.Uri.file(prepared.taskFile);
+      const calls = (): number => argvLog(env).filter((line) => line[1] === 'run').length;
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        await vscode.commands.executeCommand('migent.session.start', taskUri);
+        await sleep(1000);
+        assert.equal(calls(), 0, 'no CLI run was dispatched');
+        assert.equal(fs.readFileSync(draft, 'utf8'), before, 'the draft was not saved');
+        assert.ok(document.isDirty, 'still dirty');
+        assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared');
+        assert.ok(await document.save());
+        await vscode.commands.executeCommand('migent.session.start', taskUri);
+        await waitFor('completed after saving', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'completed');
+        assert.equal(calls(), 1);
+      });
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    },
+  },
+  {
+    name: 'AC3: a rejection that is not about the draft (empty task.md) also frees the gate',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project);
+      await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+      assert.equal(gateHeld(env, project, prepared.sessionId), false, 'gate released');
+      assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared');
+    },
+  },
+);
 
 export function runControlScenarios(): Promise<number> {
   return runScenarios(scenarios);

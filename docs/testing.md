@@ -39,7 +39,7 @@ VS Code and describe the manual steps in the PR.
 
 Core tests read two fixture sets in place under `src/core/fixtures/`:
 
-- `captured/` holds real files written by migent 0.3.1, redacted (see its
+- `captured/` holds real files written by migent 0.3.1 (and 0.3.5 for session drafts), redacted (see its
   [README](../src/core/fixtures/captured/README.md)). Tests that need a project
   layout copy from it into a temporary directory.
 - `synthetic/` holds hand-written files for shapes no captured sample covers
@@ -124,3 +124,26 @@ The fixture CLI enforces `--stage` targeting (only that stage's pending batch, a
 `session continue --reply-file` argv to `fake-argv.log` in the project, so tests assert the exact arguments (a role
 session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply so a test can observe the recovery
 record while the CLI runs.
+
+### Session drafts (CLI 0.3.5)
+
+The fixture CLI models the draft lifecycle by default. `session prepare` writes an empty `task.md` and a
+`workflow.yaml`. `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`,
+with exit 2 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue`
+keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_LEGACY=1` restores the 0.3.1
+behavior (no draft, no `task.md`), which the legacy scenarios in `control.integration.test.ts` use.
+
+Those scenarios cover Prepare returning `workflow.yaml` only when it exists, opening it (and a vanished file),
+Continue sending no `--refresh-workflow` for a drafted session while a session without `workflow.yaml` still compares
+and adopts, and a rejected draft releasing the gate so that a corrected draft runs. A drafted session whose
+`workflow.yaml` was deleted falls back to the legacy comparison through the same code path.
+
+`failureText.test.ts` covers the wording of failure messages. Notifications and their buttons are not driven, so check
+them by hand in VS Code:
+
+1. Prepare a session: the notification offers **Open workflow.yaml** and the button opens that session's file.
+2. Edit the draft's `id`, then Save & Run: the error names `workflow.yaml`, the session stays prepared, and after
+   fixing the `id` Save & Run starts it.
+3. Leave `workflow.yaml` with unsaved edits and use Save & Run: the run is refused with a message. Save & Run saves
+   `task.md` only, never `workflow.yaml`.
+4. Continue a started session after editing its draft or a workflow in `.migent/workflows`: no workflow prompt appears.

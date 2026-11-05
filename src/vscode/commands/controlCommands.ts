@@ -4,12 +4,13 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
-import { sessionDir, TASK_FILENAME } from '../../core/paths';
+import { sessionDir, TASK_FILENAME, workflowDraftPath } from '../../core/paths';
 import type { WorkflowEntry } from '../../core/workflows';
 import type { ControlService, WorkflowChoice } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
+import { offerWorkflowDraft } from '../workflowDraft';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
 const INFO_MESSAGE_MS = 5000;
@@ -110,12 +111,14 @@ async function runWorkflow(control: ControlService, context: ProjectContext, wor
     await control.runNew(context, workflow.id, input.text);
     return;
   }
-  const file = await control.prepare(context, {
+  const prepared = await control.prepare(context, {
     workflowId: workflow.id,
     title: titleOf(input.text),
     taskText: input.text,
   });
-  if (file !== undefined) await openTask(file);
+  if (prepared === undefined) return;
+  await openTask(prepared.taskFile);
+  offerWorkflowDraft(context, prepared);
 }
 
 async function run(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
@@ -181,8 +184,10 @@ async function prepare(control: ControlService, memento: vscode.Memento, registr
     validateInput: (value) => (value.trim().length === 0 ? 'Enter a title.' : undefined),
   });
   if (title === undefined) return;
-  const file = await control.prepare(context, { workflowId: workflow.id, title: title.trim() });
-  if (file !== undefined) await openTask(file);
+  const prepared = await control.prepare(context, { workflowId: workflow.id, title: title.trim() });
+  if (prepared === undefined) return;
+  await openTask(prepared.taskFile);
+  offerWorkflowDraft(context, prepared);
 }
 
 interface TaskTarget {
@@ -215,9 +220,24 @@ async function savedTask(target: TaskTarget): Promise<string | undefined> {
   return text;
 }
 
+/**
+ * Save & Run saves `task.md` only. The CLI reads `workflow.yaml` from disk and freezes it, so unsaved edits would
+ * be silently ignored; the run is refused instead of saving a file the user did not ask to save.
+ */
+function hasUnsavedDraft(target: TaskTarget): boolean {
+  const file = workflowDraftPath(target.context.root, target.sessionId);
+  return vscode.workspace.textDocuments.some((open) => open.uri.fsPath === file && open.isDirty);
+}
+
 async function start(control: ControlService, host: CommandHost, arg: unknown): Promise<void> {
   const target = await taskTarget(control, host, arg);
   if (target === undefined || (await savedTask(target)) === undefined) return;
+  if (hasUnsavedDraft(target)) {
+    void vscode.window.showErrorMessage(
+      'The session workflow.yaml has unsaved changes, so the session was not started. Save it, or discard the changes, then run again.',
+    );
+    return;
+  }
   // The identity is re-read after the save, so a stale snapshot never starts the wrong state.
   const snapshot = target.context.store.snapshot(target.sessionId);
   const workflowId = snapshot?.manifest?.workflowId;
