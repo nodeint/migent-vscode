@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.2
+
 - Support Migent CLI 0.3.5 session drafts: Prepare offers to open the session's `workflow.yaml`, Continue no longer
   reports a workflow change or sends `--refresh-workflow` for a session started from its draft, Save & Run refuses to
   start while `workflow.yaml` has unsaved edits, and a rejected draft is reported against `workflow.yaml` and can be
