@@ -314,6 +314,7 @@ const scenarios: Scenario[] = [
       const execution = migentPath(root, 'sessions', 's1', 'executions', executionId);
       write(path.join(execution, 'execution.json'), JSON.stringify({ execution_id: executionId, stage_id: 'plan', status: 'completed' }));
       write(path.join(execution, 'prompt.md'), 'p');
+      write(path.join(execution, 'custom.log'), 'custom');
       await waitForSessions(env, ['s1']);
       const project = env.project()!;
       const baseWatchers = project.watcher.watchCount;
@@ -325,7 +326,7 @@ const scenarios: Scenario[] = [
         const executions = children(env, session).filter((node) => node.kind === 'execution');
         assert.equal(executions.length, 1);
         assert.equal(itemOf(env, executions[0]!).label, 'plan · attempt 1');
-        assert.deepEqual(labelsOf(env, children(env, executions[0]!)), ['prompt.md']);
+        assert.deepEqual(labelsOf(env, children(env, executions[0]!)), ['custom.log', 'execution.json', 'prompt.md']);
         assert.ok(env.api.sessionsTree.retainedCount >= 2, 'expanding retains executions and the execution');
         assert.ok(project.watcher.watchCount > baseWatchers);
 
@@ -353,10 +354,17 @@ const scenarios: Scenario[] = [
         await waitFor('nested artifact deletion notified', () => fired.some((event) => Array.isArray(event) && event.includes(nested)));
         assert.ok(!labelsOf(env, children(env, nested)).includes('later.txt'));
         write(path.join(execution, 'turns', 'turn-1', 'verify.md'), 'v');
-        await waitFor('verify listed by turn', () => labelsOf(env, children(env, executions[0]!)).includes('verify · turn 1'));
+        await waitFor('turns folder listed', () => labelsOf(env, children(env, executions[0]!)).includes('turns'));
+        const turns = children(env, executions[0]!).find((node) => text(itemOf(env, node).label) === 'turns')!;
+        const turn = children(env, turns).find((node) => text(itemOf(env, node).label) === 'turn-1')!;
+        assert.deepEqual(labelsOf(env, children(env, turn)), ['verify.md']);
+        const verify = children(env, turn)[0]!;
+        assert.equal(itemOf(env, verify).resourceUri?.toString(),
+          vscode.Uri.file(path.join(execution, 'turns', 'turn-1', 'verify.md')).toString());
         await waitFor('the tree was told to refresh', () => fired.length > 0);
 
         env.api.sessionsTree.collapse(executions[0]!);
+        await waitFor('attempt directory watchers removed', () => project.watcher.watchCount === baseWatchers + 1);
         env.api.sessionsTree.collapse(session);
         assert.equal(env.api.sessionsTree.retainedCount, 0);
         await waitFor('detail watchers removed', () => project.watcher.watchCount === baseWatchers);
@@ -474,7 +482,7 @@ const scenarios: Scenario[] = [
       assert.equal(attempts.length, 2);
       const [firstAttempt, secondAttempt] = attempts;
       assert.match(String(itemOf(env, firstAttempt!).contextValue), /^execution\.failed;failure(;|$)/);
-      assert.deepEqual(labelsOf(env, children(env, firstAttempt!)), ['failure.md', 'diagnostics.json']);
+      assert.deepEqual(labelsOf(env, children(env, firstAttempt!)), ['diagnostics.json', 'execution.json', 'failure.md']);
 
       // The action opens the report of the attempt it was invoked on, not the latest execution.
       await vscode.commands.executeCommand('migent.session.openFailure', firstAttempt);

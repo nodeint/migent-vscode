@@ -74,7 +74,7 @@ background work; its caller chooses when to scan, refresh, and load details.
 | `next.json`, `workflow.frozen.yaml` | `readNext`, `readFrozenDownstream` on demand | Independent outcomes (`missing`, `unreadable`, `invalid`, `unsupported` or `ok`; `absent` for the frozen declaration). Artifact paths are checked against the session directory. `declared` is true only when workflow and artifact mapping match the frozen declaration, null when it was not read. `argv` is data, never an action |
 | Manifest `handoff` | `readHandoff(manifest, sessionDir)` | `absent`, `invalid` (outside the observed shape) or `ok`; `path` is confined to the target session, `source_path` is text only |
 | `executions/<id>/` contents | `listExecutionFiles(executionDir)` on demand | Lists only files that exist: `task.md`, `prompt.md`, `response.md`, `failure.md`, `diagnostics.json`, `questions.json`, `stream.jsonl`, `turns/*/verify.md`, `artifacts/*`. `failure.md` (CLI 0.3.6+) is offered as a failure report; older executions have none and show no extra action |
-| Session Files tree | `listSessionDirectory` on expansion | Lists each directory level; symbolic links are shown as files and are not traversed |
+| Session Files and attempt trees | `listSessionDirectory` on expansion | Lists each directory level; symbolic links are shown as files and are not traversed |
 
 The status reader keeps only the small scalar fields of `latest_provider_event`
 (`event`, `summary`, `stage_id`, `execution_id`, `provider`, `timestamp`) and
@@ -248,7 +248,7 @@ Evidence: [eventTail.test.ts](../src/core/eventTail.test.ts),
 [watchPlan.test.ts](../src/core/watchPlan.test.ts),
 [coalescer.test.ts](../src/core/coalescer.test.ts).
 
-The Sessions view's Files branch also keeps one non-recursive watcher per expanded directory,
+The Sessions view's Files branch and each attempt also keep one non-recursive watcher per expanded directory,
 created through the same backend. Collapsing a directory releases its watcher and those of its descendants.
 
 ## Updating this guide

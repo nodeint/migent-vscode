@@ -27,7 +27,6 @@ import type { Releasable } from '../watchBackend';
 import type { LeafNode, SessionNode, TreeNode } from './nodes';
 import {
   type ChildHost,
-  executionChildren,
   groupSessions,
   projectContents,
   sessionChildren,
@@ -129,7 +128,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     } else if (node.kind === 'directory') {
       this.#files.collapse(node);
     } else if (node.kind === 'execution') {
-      this.#files.release((candidate) => candidate.id.startsWith(`${node.id}/`));
+      this.#files.release((candidate) => candidate.id === node.id || candidate.id.startsWith(`${node.id}/`));
       this.#releaseKey(node.project, { kind: 'execution', sessionId: node.sessionId, executionId: node.executionId });
     }
   }
@@ -164,7 +163,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       case 'directory':
         return this.#files.children(context, node);
       case 'execution':
-        return executionChildren(this.#host, context, node);
+        this.#retain(node.project, { kind: 'execution', sessionId: node.sessionId, executionId: node.executionId });
+        return this.#files.children(context, node);
       case 'leaf':
         return [];
     }
