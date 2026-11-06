@@ -23,15 +23,20 @@ function readText(file: string): string | undefined {
 }
 
 /**
- * Whether the session directory holds the editable `workflow.yaml` that CLI 0.3.5 writes at prepare time.
- * The CLI keeps it after freezing, and a Continue (even with `--refresh-workflow`) reads it, never the live
- * `.migent/workflows` file, so the live file is not a source of change for such a session.
+ * Whether the session directory holds its editable `workflow.yaml`. The CLI keeps it after freezing, and a
+ * Continue (even with `--refresh-workflow`) reads it, never the live `.migent/workflows` file, so the live file
+ * is not a source of change for such a session.
+ *
+ * This reads session data, not the CLI version: a session prepared before CLI 0.3.5 has no file.
  */
 export function hasWorkflowDraft(projectRoot: string, sessionId: string): boolean {
   return existsSync(workflowDraftPath(projectRoot, sessionId));
 }
 
-/** Undefined for a drafted session; a session without `workflow.yaml` (CLI before 0.3.5) compares live and frozen. */
+/**
+ * Undefined for a session that has its own `workflow.yaml`; a session prepared before CLI 0.3.5 has none and
+ * compares the live and frozen copies.
+ */
 export function workflowChange(
   context: ProjectContext, snapshot: SessionSnapshot,
 ): { frozen: string; current: string } | undefined {

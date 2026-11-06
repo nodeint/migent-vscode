@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.3.6 or newer. The extension supports one minimum CLI version: a newer feature bumps that
+  minimum in its release, and an older CLI shows the existing Update Migent CLI action instead of a per-feature
+  guard.
 - Open the `failure.md` report of a failed execution from its attempt in the Sessions view or from the failure
   notification. The report opens read-only and the action appears only when the file exists; `failure.md` and
   `diagnostics.json` are also listed under the attempt.

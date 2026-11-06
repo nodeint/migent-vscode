@@ -10,13 +10,12 @@ import type { ProjectContext } from './projects';
 export interface PreparedSession {
   sessionId: string;
   taskFile: string;
-  /** The session's editable `workflow.yaml`; undefined when the CLI (before 0.3.5) wrote none. */
-  workflowFile: string | undefined;
+  /** The session's editable `workflow.yaml`, which every supported CLI writes at prepare time. */
+  workflowFile: string;
 }
 
 export function preparedSession(context: ProjectContext, sessionId: string, taskFile: string): PreparedSession {
-  const hasDraft = hasWorkflowDraft(context.root, sessionId);
-  return { sessionId, taskFile, workflowFile: hasDraft ? workflowDraftPath(context.root, sessionId) : undefined };
+  return { sessionId, taskFile, workflowFile: workflowDraftPath(context.root, sessionId) };
 }
 
 const OPEN_DRAFT = 'Open workflow.yaml';
@@ -38,14 +37,10 @@ export async function openWorkflowDraft(context: ProjectContext, sessionId: stri
 }
 
 /**
- * After Prepare, offer to open the session's `workflow.yaml` (only when it exists). The action is bound to this
- * session and checks the file again when clicked, because it may have been removed meanwhile.
+ * After Prepare, offer to open the session's `workflow.yaml`. The action is bound to this session and checks the
+ * file again when clicked, because it may have been removed meanwhile.
  */
-export function offerWorkflowDraft(
-  context: ProjectContext,
-  prepared: { sessionId: string; workflowFile?: string },
-): void {
-  if (prepared.workflowFile === undefined) return;
+export function offerWorkflowDraft(context: ProjectContext, prepared: { sessionId: string }): void {
   void vscode.window
     .showInformationMessage('Session prepared. Its workflow can be edited before it runs.', OPEN_DRAFT)
     .then((picked) => (picked === OPEN_DRAFT ? openWorkflowDraft(context, prepared.sessionId) : undefined));

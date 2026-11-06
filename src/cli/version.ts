@@ -3,10 +3,12 @@ import { execFile } from 'node:child_process';
 import { CLI_COMMAND, type LaunchSpec, locateCli, type LocateOptions } from './locate';
 
 /**
- * Oldest CLI the readers are written for (captured samples are 0.3.1). It belongs to the extension
- * release, not to user settings: bump it in the release that needs a newer CLI.
+ * The single minimum CLI version the extension supports. It belongs to the extension release, not to user
+ * settings: bump it in the release that needs a newer CLI, and users on an older CLI get the `old` capability
+ * state and are asked to upgrade. Do not add per-feature version gates or capability flags; every feature is
+ * available at this minimum.
  */
-export const MINIMUM_CLI_VERSION = '0.3.1';
+export const MINIMUM_CLI_VERSION = '0.3.6';
 
 export const VERSION_CHECK_TIMEOUT_MS = 5000;
 

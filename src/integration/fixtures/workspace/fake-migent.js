@@ -7,10 +7,13 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.3.5: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.3.6: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
+//                        A failed execution writes `failure.md`; `workflow validate` and `get` are implemented.
+//   MIGENT_FAKE_PREFLIGHT  fail makes `session run` fail the preflight (exit 2, nothing created or frozen) unless
+//                        `--skip-preflight` is passed. Ignored in legacy mode.
 //   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
 //                        with no questions.json): consume (default; the new execution's prompt carries the reply),
 //                        ignore (a new execution without the reply, exit 0), reject (exit 2, nothing written)
@@ -23,6 +26,7 @@ const args = process.argv.slice(2);
 // The harness reads this to prove no fake CLI process outlives its scenario.
 fs.appendFileSync(path.join(process.cwd(), 'fake-pids.log'), `${process.pid}\n`);
 const IS_LEGACY = process.env.MIGENT_FAKE_LEGACY === '1';
+const PREFLIGHT_FAILS = process.env.MIGENT_FAKE_PREFLIGHT === 'fail' || process.env.MIGENT_FAKE_PREFLIGHT === '1';
 const RUN_MS = Number(process.env.MIGENT_FAKE_RUN_MS ?? 1500);
 const TICK_MS = 50;
 const CANCEL_WAIT_MS = 5000;
@@ -63,7 +67,7 @@ function create(workflow, title) {
   return id;
 }
 
-// CLI 0.3.5 `prepare`: an empty task.md and an editable copy of the workflow.
+// `session prepare`: an empty task.md and an editable copy of the workflow (CLI 0.3.5 and later).
 function writeDraft(id, workflow) {
   fs.writeFileSync(path.join(dirOf(id), 'task.md'), '');
   fs.writeFileSync(
@@ -76,7 +80,7 @@ stages: []
   );
 }
 
-// CLI 0.3.5 `run --session`: reject a bad draft before anything is written, else freeze it.
+// `session run --session`: reject a bad draft before anything is written, else freeze it (CLI 0.3.5 and later).
 function startDraft(id) {
   const manifestFile = path.join(dirOf(id), 'manifest.yaml');
   const expected = /^workflow_id: (.*)$/m.exec(fs.readFileSync(manifestFile, 'utf8'))?.[1];
@@ -184,10 +188,32 @@ function answer(id) {
   if (mode === 'fail-after-record') process.exit(1);
 }
 
+// CLI 0.3.6 `session run`: the doctor checks over the whole workflow run before anything is created or frozen.
+function preflight() {
+  if (IS_LEGACY || !PREFLIGHT_FAILS || args.includes('--skip-preflight')) return;
+  console.error('workflow    failed');
+  console.error('  provider claude is not on PATH');
+  console.error('Preflight failed: fix the problems above and run again, or pass --skip-preflight.');
+  process.exit(2);
+}
+
+// CLI 0.3.6 writes a readable report for an execution that failed, next to its other files.
+function writeFailureReport(id, executionId, code) {
+  if (IS_LEGACY || ![1, 3, 4, 5, 6, 7].includes(code)) return;
+  const dir = path.join(dirOf(id), 'executions', executionId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'failure.md'),
+    `# Stage plan failed\n\n- exit code: ${code}\n- provider: fake\n- model: fake\n\n` +
+      'The fake CLI stopped before the stage completed.\n',
+  );
+}
+
 function run() {
   if (option('--reply-file') === undefined) {
     fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
   }
+  if (args[1] === 'run') preflight();
   const workflow = option('--workflow');
   const id = option('--session') ?? (args[1] === 'continue' ? args[2] : create(workflow, option('--task') ?? 'task'));
   if (option('--reply-file') !== undefined) answer(id);
@@ -229,6 +255,7 @@ function run() {
       clearInterval(timer);
       const code = Number(process.env.MIGENT_FAKE_EXIT ?? 0);
       if (code === 0) writeStatus(id, 'completed');
+      writeFailureReport(id, executionId, code);
       fs.rmSync(lockFile, { force: true });
       process.exit(code);
     }
@@ -253,8 +280,137 @@ function cancel() {
   }, TICK_MS);
 }
 
+function workflowValidate() {
+  const draft = args[2];
+  const asJson = args.includes('--json');
+  const emit = (code, valid, diagnostics) => {
+    if (asJson) {
+      console.log(JSON.stringify({ schema_version: 1, command: 'workflow.validate', valid, diagnostics }));
+    } else {
+      for (const item of diagnostics) console.error(`${item.severity}: ${item.message} [${item.code}]`);
+      if (valid) console.log('Valid.');
+    }
+    process.exit(code);
+  };
+  if (draft === undefined || draft.startsWith('-')) {
+    return emit(2, false, [{ severity: 'error', code: 'invalid-invocation', message: 'Pass a workflow draft file.' }]);
+  }
+  let text;
+  try {
+    text = fs.readFileSync(path.resolve(process.cwd(), draft), 'utf8');
+  } catch (error) {
+    return emit(2, false, [{ severity: 'error', code: 'draft-unreadable', message: `Unable to read draft: ${error.message}` }]);
+  }
+  let document = null;
+  if (draft.endsWith('.json')) {
+    try {
+      document = JSON.parse(text);
+    } catch (error) {
+      return emit(1, false, [{ severity: 'error', code: 'syntax', message: error.message }]);
+    }
+  }
+  const id = document === null ? /^id:\s*(\S.*)$/m.exec(text)?.[1] : document.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    return emit(1, false, [{ severity: 'error', code: 'invalid-value', path: ['id'], message: 'id is required.' }]);
+  }
+  return emit(0, true, []);
+}
+
+function workflowViews() {
+  const directory = path.join(process.cwd(), '.migent', 'workflows');
+  let names;
+  try {
+    names = fs.readdirSync(directory).filter((name) => /\.ya?ml$/.test(name)).sort();
+  } catch {
+    return [];
+  }
+  return names.map((file) => {
+    const text = fs.readFileSync(path.join(directory, file), 'utf8');
+    return {
+      name: /^id:\s*(\S.*)$/m.exec(text)?.[1] ?? file.replace(/\.ya?ml$/, ''),
+      file,
+      stages: (text.match(/^\s*-\s+id:/gm) ?? []).length,
+      roles: [],
+      problems: [],
+    };
+  });
+}
+
+function get() {
+  const type = args[1];
+  let name;
+  let session;
+  for (let at = 2; at < args.length; at += 1) {
+    const value = args[at];
+    if (value === '--session') {
+      session = args[at + 1];
+      at += 1;
+    } else if (value === '-o' || value === '--output') {
+      at += 1;
+    } else if (!value.startsWith('-') && name === undefined) {
+      name = value;
+    }
+  }
+  const format = args.includes('--json') ? 'json' : option('-o') ?? option('--output') ?? 'human';
+  const print = (value) => console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+  const unknown = (resource) => {
+    console.error(`Unknown resource type: ${resource}. Valid types: workflow|workflows, role|roles, model|models, config.`);
+    process.exit(2);
+  };
+  if (type === 'config') {
+    if (name !== undefined || format === 'name') {
+      console.error(name !== undefined ? 'config takes no name.' : '-o name is not valid for config.');
+      process.exit(2);
+    }
+    const file = path.join(process.cwd(), '.migent', 'config.yaml');
+    const text = fs.readFileSync(file, 'utf8');
+    print(format === 'json' ? { path: '.migent/config.yaml', text } : text);
+    return;
+  }
+  if (type === 'workflow' || type === 'workflows' || type === 'wf') {
+    if (session !== undefined) {
+      const draft = path.join(dirOf(session), 'workflow.yaml');
+      const frozen = path.join(dirOf(session), 'workflow.frozen.yaml');
+      const file = fs.existsSync(draft) ? draft : frozen;
+      if (!fs.existsSync(file)) {
+        console.error(`No session workflow found for ${session}.`);
+        process.exit(2);
+      }
+      print(format === 'json' ? { name: session, file: path.relative(process.cwd(), file), text: fs.readFileSync(file, 'utf8') } : fs.readFileSync(file, 'utf8'));
+      return;
+    }
+    const views = workflowViews();
+    if (name === undefined) {
+      if (format === 'name') print(views.map((view) => view.name).join('\n'));
+      else if (format === 'json') print(views);
+      else print(views.map((view) => `${view.name}  ${view.file}`).join('\n'));
+      return;
+    }
+    const view = views.find((candidate) => candidate.name === name || candidate.file === name || candidate.file === `${name}.yaml`);
+    if (view === undefined) {
+      console.error(`Workflow not found: ${name}.`);
+      process.exit(2);
+    }
+    print(format === 'json' ? view : `${view.name}  ${view.file}`);
+    return;
+  }
+  if (type === 'role' || type === 'roles' || type === 'model' || type === 'models') {
+    if (name !== undefined) {
+      console.error(`${type} not found: ${name}.`);
+      process.exit(2);
+    }
+    print(format === 'name' ? '' : []);
+    return;
+  }
+  return unknown(type);
+}
+
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.3.5');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.3.6');
+} else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
+  workflowValidate();
+} else if (args[0] === 'get' && !IS_LEGACY) {
+  get();
 } else if (args[0] === 'session' && args[1] === 'prepare') {
   prepare();
 } else if (args[0] === 'session' && args[1] === 'run') {
