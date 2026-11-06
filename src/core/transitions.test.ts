@@ -7,7 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { deriveDisplayState } from './displayState';
 import type { SessionSnapshot } from './model';
 import { parseStatus } from './statusReader';
-import { failureDetails, TransitionTracker } from './transitions';
+import {
+  FAILURE_REPORT_BUTTON,
+  failureButtons,
+  type FailureDetails,
+  failureDetails,
+  TransitionTracker,
+} from './transitions';
 
 function snapshot(raw: Record<string, unknown>, id = 's1'): SessionSnapshot {
   const status = parseStatus(JSON.stringify(raw));
@@ -73,6 +79,25 @@ describe('TransitionTracker', () => {
   });
 });
 
+describe('failureButtons', () => {
+  const details = (overrides: Partial<FailureDetails> = {}): FailureDetails => ({
+    cause: null,
+    file: null,
+    failureReport: null,
+    stageId: null,
+    attempt: null,
+    ...overrides,
+  });
+
+  it('offers the failure report only when the execution wrote one', () => {
+    expect(failureButtons(details({ failureReport: '/f/failure.md', file: { kind: 'verify', absolutePath: '/f/v' } })))
+      .toEqual(['Continue', FAILURE_REPORT_BUTTON, 'Open verify', 'View log']);
+    expect(failureButtons(details({ file: { kind: 'response', absolutePath: '/f/r' } })))
+      .toEqual(['Continue', 'Open response', 'View log']);
+    expect(failureButtons(undefined)).toEqual(['Continue', 'View log']);
+  });
+});
+
 describe('failureDetails', () => {
   function execution(record: Record<string, unknown>, files: Record<string, string>): { dir: string; id: string } {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-fail-'));
@@ -99,9 +124,24 @@ describe('failureDetails', () => {
     expect(failureDetails(dir, id).file?.kind).toBe('verify');
   });
 
+  it('offers the failure report only when the execution wrote one', () => {
+    const withReport = execution({ failure_reason: 'provider_failed' }, { 'failure.md': '# Failure' });
+    expect(failureDetails(withReport.dir, withReport.id).failureReport).toBe(
+      path.join(withReport.dir, 'executions', withReport.id, 'failure.md'),
+    );
+    const withoutReport = execution({ failure_reason: 'provider_failed' }, {});
+    expect(failureDetails(withoutReport.dir, withoutReport.id).failureReport).toBeNull();
+  });
+
   it('reports no cause or file rather than guessing', () => {
-    expect(failureDetails(os.tmpdir(), null)).toEqual({ cause: null, file: null, stageId: null, attempt: null });
+    expect(failureDetails(os.tmpdir(), null)).toEqual({
+      cause: null,
+      file: null,
+      failureReport: null,
+      stageId: null,
+      attempt: null,
+    });
     const { dir, id } = execution({}, {});
-    expect(failureDetails(dir, id)).toMatchObject({ cause: null, file: null });
+    expect(failureDetails(dir, id)).toMatchObject({ cause: null, file: null, failureReport: null });
   });
 });

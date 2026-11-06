@@ -207,8 +207,10 @@ export function executionIcon(execution: ExecutionSnapshot): string {
   }
 }
 
+/** `execution.<status>` plus `;failure` when the execution wrote a `failure.md` report. */
 export function executionContextValue(execution: ExecutionSnapshot): string {
-  return `execution.${execution.status ?? 'unknown'}`;
+  const base = `execution.${execution.status ?? 'unknown'}`;
+  return execution.hasFailureReport ? `${base};failure` : base;
 }
 
 export function executionFileLabel(file: ExecutionFile): string {

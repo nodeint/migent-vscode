@@ -4,8 +4,10 @@ import type { DirectoryState } from './model';
 import {
   CANCEL_REQUEST_FILENAME,
   CONFIG_FILENAME,
+  DIAGNOSTICS_FILENAME,
   EVENTS_FILENAME,
   EXECUTIONS_DIRNAME,
+  FAILURE_REPORT_FILENAME,
   FROZEN_WORKFLOW_FILENAME,
   LOCK_FILENAME,
   MANIFEST_FILENAME,
@@ -62,7 +64,7 @@ const SESSION_PATTERN = `{${[
   OUTPUTS_DIRNAME,
 ].join(',')}}`;
 
-const EXECUTION_PATTERN = '{execution.json,conversation.json,questions.json,prompt.md,task.md,response.md,stream.jsonl,artifacts,turns}';
+const EXECUTION_PATTERN = `{execution.json,conversation.json,questions.json,prompt.md,task.md,response.md,${FAILURE_REPORT_FILENAME},${DIAGNOSTICS_FILENAME},stream.jsonl,artifacts,turns}`;
 
 /** The anchor watcher on a workspace folder root: `.migent` created or deleted. Owned by the registry. */
 export function anchorWatch(workspaceRoot: string): WatchSpec {

@@ -14,6 +14,7 @@ import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerSessionMetricsCommands } from './vscode/commands/sessionMetricsCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
+import { ReadOnlyDocsProvider } from './vscode/content/readOnlyDocs';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
 import { ControlService } from './vscode/control';
@@ -162,6 +163,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     vscode.window.registerTreeDataProvider('migent.project', projectTree),
     tails,
     sessionDocs,
+    new ReadOnlyDocsProvider(),
     logs,
     statusBar,
     results,

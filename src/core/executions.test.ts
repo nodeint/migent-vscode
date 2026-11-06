@@ -1,11 +1,19 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { listExecutions, parseExecutionId, readExecution } from './executions';
+import { listExecutions, parseExecutionId, readExecution, readExecutionSummary } from './executions';
 
 const fixture = (name: string): string =>
   path.join(process.cwd(), 'src', 'core', 'fixtures', 'sessions', name);
+
+const temps: string[] = [];
+
+afterEach(() => {
+  for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe('parseExecutionId', () => {
   it('parses order, stage and attempt', () => {
@@ -46,6 +54,23 @@ describe('listExecutions', () => {
     const rows = listExecutions(fixture('blocked'));
     expect(rows[0]?.id).toBe('0001-plan--attempt-01');
     expect(rows[0]?.stage).toBe('plan');
+  });
+
+  it('flags an execution that wrote failure.md, and only that one', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, failure] of [['0001-a--attempt-01', true], ['0002-b--attempt-01', false]] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify({ status: 'failed' }));
+      if (failure) writeFileSync(path.join(executionDir, 'failure.md'), '# Failure');
+    }
+    expect(listExecutions(dir).map((execution) => [execution.id, execution.hasFailureReport])).toEqual([
+      ['0001-a--attempt-01', true],
+      ['0002-b--attempt-01', false],
+    ]);
+    expect(readExecutionSummary(path.join(dir, 'executions', '0001-a--attempt-01'))?.hasFailureReport).toBe(true);
+    expect(readExecutionSummary(path.join(dir, 'executions', 'gone'))).toBeNull();
   });
 });
 

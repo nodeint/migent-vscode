@@ -110,6 +110,7 @@ describe('execution rows', () => {
     decision: 'approved',
     provider: 'claude',
     model: 'sonnet',
+    hasFailureReport: false,
   };
 
   it('labels by stage and attempt, describes by provider and decision', () => {
@@ -120,6 +121,9 @@ describe('execution rows', () => {
     expect(executionIcon({ ...execution, status: 'failed' })).toBe('error');
     expect(executionIcon({ ...execution, status: null })).toBe('circle-outline');
     expect(executionContextValue({ ...execution, status: null })).toBe('execution.unknown');
+    expect(executionContextValue({ ...execution, status: 'failed', hasFailureReport: true })).toBe(
+      'execution.failed;failure',
+    );
   });
 
   it('labels files, with verify files by turn', () => {
