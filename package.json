@@ -729,22 +729,22 @@
         },
         {
           "command": "migent.session.start",
-          "when": "resourceFilename == task.md && resourcePath =~ /[\\/]\\.migent[\\/]sessions[\\/]/",
+          "when": "resourceFilename == task.md && resourcePath =~ /[\\\\/]\\.migent[\\\\/]sessions[\\\\/]/",
           "group": "navigation@0"
         },
         {
           "command": "migent.workflow.run",
-          "when": "resourcePath =~ /[\\/]\\.migent[\\/]workflows[\\/][^\\/]+\\.ya?ml$/",
+          "when": "resourcePath =~ /[\\\\/]\\.migent[\\\\/]workflows[\\\\/][^\\\\/]+\\.ya?ml$/",
           "group": "navigation@0"
         },
         {
           "command": "migent.session.sendReply",
-          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/",
+          "when": "resourcePath =~ /[\\\\/]reply-drafts[\\\\/][0-9a-f]+\\.md$/",
           "group": "navigation@0"
         },
         {
           "command": "migent.session.discardReply",
-          "when": "resourcePath =~ /[\\/]reply-drafts[\\/][0-9a-f]+\\.md$/",
+          "when": "resourcePath =~ /[\\\\/]reply-drafts[\\\\/][0-9a-f]+\\.md$/",
           "group": "1_modification"
         }
       ],
