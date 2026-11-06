@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report a failed pre-run check of Migent CLI 0.3.6 (`Preflight failed: ...`, exit 2) as such and point to the log,
+  which lists the problems, instead of blaming the session's `workflow.yaml`.
 - Show one onboarding action at a time in the Sessions view when no folder has a Migent project: Install or Update
   Migent CLI when the CLI is missing or older than required, Initialize project when it is usable. The CLI is now
   checked for the window, so this works before any project exists.
