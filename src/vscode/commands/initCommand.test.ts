@@ -52,7 +52,7 @@ vi.mock('vscode', () => hoisted.vscodeMock);
 const { initializeProject } = await import('./initCommand');
 const { state, vscodeMock } = hoisted;
 
-const required = '0.3.1';
+const required = '0.3.6';
 const launchKey = { kind: 'launch', project: 'file://f', workflowId: '<init>' } as const;
 
 function capabilityWith(windowReady: () => Promise<CapabilityState>): CapabilityService {

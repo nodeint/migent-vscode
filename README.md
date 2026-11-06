@@ -63,7 +63,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 ### Prerequisites
 
 - Install the Migent extension in VS Code.
-- Install Migent CLI v0.3.1 or newer to run workflows and control sessions:
+- Install Migent CLI v0.3.6 or newer to run workflows and control sessions:
 
   ```bash
   npm install -g @nodeint/migent
@@ -120,7 +120,7 @@ Configure the extension via VS Code settings (`Ctrl+,` or `Cmd+,`):
 
 ## Troubleshooting
 
-- **Cannot run workflows**: Check that Migent CLI v0.3.1 or newer is on `PATH`, then restart VS Code.
+- **Cannot run workflows**: Check that Migent CLI v0.3.6 or newer is on `PATH`, then restart VS Code.
   Use **Recheck CLI** on the CLI diagnostic row in the Sessions view to check again.
 - **Views not updating automatically**: Check whether `files.watcherExclude` includes `**/.migent/**`.
   Remove that pattern to restore live updates, or use **Migent: Refresh** to update the views manually.

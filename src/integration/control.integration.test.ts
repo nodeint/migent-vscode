@@ -449,29 +449,23 @@ const gateHeld = (env: Env, project: ProjectContext, sessionId: string): boolean
 
 scenarios.push(
   {
-    name: "AC2/AC4: Prepare returns workflow.yaml only when the CLI wrote one, and the open action opens that session's file",
+    name: "AC2/AC4: Prepare returns the session's workflow.yaml, and the open action opens that session's file",
     async run(env) {
       const project = await createProject(env);
       const prepared = await prepareReady(env, project);
-      assert.equal(path.basename(prepared.workflowFile ?? ''), 'workflow.yaml');
-      assert.equal(path.basename(path.dirname(prepared.workflowFile ?? '')), prepared.sessionId, 'in the session folder');
-      assert.ok(fs.existsSync(prepared.workflowFile ?? ''), 'draft exists');
+      assert.equal(path.basename(prepared.workflowFile), 'workflow.yaml');
+      assert.equal(path.basename(path.dirname(prepared.workflowFile)), prepared.sessionId, 'in the session folder');
+      assert.ok(fs.existsSync(prepared.workflowFile), 'draft exists');
       await openWorkflowDraft(project, prepared.sessionId);
-      const draftPath = vscode.Uri.file(prepared.workflowFile ?? '').fsPath;
+      const draftPath = vscode.Uri.file(prepared.workflowFile).fsPath;
       const isShown = (): boolean =>
         vscode.window.visibleTextEditors.some((editor) => editor.document.uri.fsPath === draftPath);
       await waitFor('draft editor', isShown);
       // The file may vanish before the click: nothing opens and nothing throws.
-      fs.rmSync(prepared.workflowFile ?? '');
+      fs.rmSync(prepared.workflowFile);
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
       await openWorkflowDraft(project, prepared.sessionId);
       assert.equal(isShown(), false, 'no editor for a vanished draft');
-      await withFake({ MIGENT_FAKE_LEGACY: '1' }, async () => {
-        const legacy = await env.api.control.prepare(project, { workflowId: 'plan', title: 'Legacy' });
-        assert.ok(legacy);
-        assert.equal(legacy.workflowFile, undefined, 'no draft before CLI 0.3.5');
-        assert.ok(!fs.existsSync(sessionFile(env, legacy.sessionId, 'workflow.yaml')));
-      });
     },
   },
   {
@@ -480,7 +474,7 @@ scenarios.push(
       const project = await createProject(env);
       write(migentPath(env.root, 'workflows', 'plan.yaml'), 'id: plan\nstages: []\n');
       const prepared = await prepareReady(env, project, 'Do it.');
-      fs.appendFileSync(prepared.workflowFile ?? '', '# edited draft\n');
+      fs.appendFileSync(prepared.workflowFile, '# edited draft\n');
       let stopped: SessionSnapshot | undefined;
       await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '1' }, async () => {
         await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
@@ -517,7 +511,7 @@ scenarios.push(
     async run(env) {
       const project = await createProject(env);
       const prepared = await prepareReady(env, project, 'Do it.');
-      const draft = prepared.workflowFile ?? '';
+      const draft = prepared.workflowFile;
       const original = fs.readFileSync(draft, 'utf8');
       fs.writeFileSync(draft, original.replace('id: plan', 'id: other'));
       await withFake({ [RUN_MS]: '100' }, async () => {
@@ -530,6 +524,37 @@ scenarios.push(
         await waitFor('completed after the correction', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'completed');
         assert.ok(fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'corrected draft is frozen');
       });
+    },
+  },
+  {
+    name: 'A failed 0.3.6 preflight changes nothing, releases the gate, and the fixed draft then runs',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project, 'Do it.');
+      await withFake({ [RUN_MS]: '100', MIGENT_FAKE_PREFLIGHT: 'fail' }, async () => {
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+        assert.ok(!fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'a preflight failure freezes nothing');
+        assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared', 'state unchanged');
+        assert.equal(gateHeld(env, project, prepared.sessionId), false, 'gate released, so retry is possible');
+      });
+      await withFake({ [RUN_MS]: '100' }, async () => {
+        await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
+        await waitFor('completed after the preflight passed', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'completed');
+      });
+    },
+  },
+  {
+    name: 'A failed 0.3.6 execution writes its failure.md report',
+    async run(env) {
+      const project = await createProject(env);
+      await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '3' }, async () => {
+        await env.api.control.runNew(project, 'plan', 'fail');
+      });
+      const snapshot = sessions(env).find((candidate) => candidate.manifest?.workflowId === 'plan');
+      assert.ok(snapshot, 'the session exists');
+      const report = path.join(sessionFile(env, snapshot.sessionId, 'executions'), '0001-plan--attempt-01', 'failure.md');
+      assert.ok(fs.existsSync(report), 'failure.md was written');
+      assert.match(fs.readFileSync(report, 'utf8'), /exit code: 3/);
     },
   },
   {
@@ -555,7 +580,7 @@ scenarios.push(
     async run(env) {
       const project = await createProject(env);
       const prepared = await prepareReady(env, project, 'Do it.');
-      const draft = prepared.workflowFile ?? '';
+      const draft = prepared.workflowFile;
       const before = fs.readFileSync(draft, 'utf8');
       const document = await vscode.workspace.openTextDocument(vscode.Uri.file(draft));
       const edit = new vscode.WorkspaceEdit();

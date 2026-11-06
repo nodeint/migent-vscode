@@ -129,17 +129,21 @@ The fixture CLI enforces `--stage` targeting (only that stage's pending batch, a
 session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply so a test can observe the recovery
 record while the CLI runs.
 
-### Session drafts (CLI 0.3.5)
+### Session drafts and CLI 0.3.6 behavior
 
-The fixture CLI models the draft lifecycle by default. `session prepare` writes an empty `task.md` and a
-`workflow.yaml`. `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`,
-with exit 2 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue`
-keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_LEGACY=1` restores the 0.3.1
-behavior (no draft, no `task.md`), which the legacy scenarios in `control.integration.test.ts` use.
+The fixture CLI models 0.3.6 by default. `session prepare` writes an empty `task.md` and a `workflow.yaml`.
+`session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
+before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
+frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`
+print `Preflight failed: ...` and exit 2 without creating or freezing anything, unless `--skip-preflight` is passed.
+A failed execution writes its `failure.md`, and `workflow validate` and `get` are implemented.
+`MIGENT_FAKE_LEGACY=1` restores the 0.3.1 behavior (no draft, no `task.md`, no 0.3.6 commands, `--version` reports
+0.3.1), which `capability.integration.test.ts` uses for the old CLI path.
 
-Those scenarios cover Prepare returning `workflow.yaml` only when it exists, opening it (and a vanished file),
-Continue sending no `--refresh-workflow` for a drafted session while a session without `workflow.yaml` still compares
-and adopts, and a rejected draft releasing the gate so that a corrected draft runs. A drafted session whose
+Those scenarios cover Prepare returning the session's `workflow.yaml`, opening it (and a vanished file), Continue
+sending no `--refresh-workflow` for a drafted session while a session without `workflow.yaml` still compares and
+adopts, a rejected draft releasing the gate so that a corrected draft runs, a failed preflight leaving the session
+prepared so the fixed draft can run, and a failed execution writing `failure.md`. A drafted session whose
 `workflow.yaml` was deleted falls back to the legacy comparison through the same code path.
 
 `failureText.test.ts` covers the wording of failure messages. Notifications and their buttons are not driven, so check

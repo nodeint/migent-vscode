@@ -21,7 +21,6 @@ import {
 } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
 import { type GateHandle, type GateKey, OperationGate } from '../core/operationGate';
-import { isRecord } from '../core/record';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
@@ -330,12 +329,11 @@ export class ControlService implements vscode.Disposable {
     return preparedSession(context, prepared.sessionId, taskFile);
   }
 
-  /** The CLI leaves `task.md` for the caller to write, so it always exists afterwards, empty if need be. */
+  /** `session prepare` has already written an empty `task.md`, so the user's task replaces it. */
   async #writeTask(file: string, content = ''): Promise<void> {
     try {
-      await writeFile(file, content, { encoding: 'utf8', flag: content.length > 0 ? 'w' : 'wx' });
+      await writeFile(file, content, { encoding: 'utf8' });
     } catch (error) {
-      if (isRecord(error) && error.code === 'EEXIST') return;
       const detail = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(`The session was prepared but task.md was not written: ${detail}`);
     }
