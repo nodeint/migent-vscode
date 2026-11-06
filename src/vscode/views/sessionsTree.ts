@@ -1,7 +1,11 @@
+import path from 'node:path';
+
 import * as vscode from 'vscode';
 
 import { groupOf, type SessionGroup, summarize } from '../../core/attention';
+import { readExecutionSummary } from '../../core/executions';
 import type { DisplayStateName, ExecutionSnapshot } from '../../core/model';
+import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
 import { RECENT_PERIOD_LABELS } from '../../core/recentPeriod';
 import {
   executionContextValue,
@@ -308,10 +312,22 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         target.kind === 'execution' && target.executionId !== undefined
           ? this.#nodes.get(nodeIds.execution(project, sessionId, target.executionId))
           : undefined;
+      if (execution?.kind === 'execution' && target.executionId !== undefined) {
+        // Re-read the summary so the row reflects a written or deleted file such as failure.md.
+        const summary = this.#executionSummary(project, sessionId, target.executionId);
+        if (summary !== null) execution.execution = summary;
+      }
       const isSessionLevel = target.kind === 'executions';
       const element = execution ?? (isSessionLevel || target.kind === 'execution' ? session : undefined);
       if (element !== undefined) this.#queue(element);
     }
+  }
+
+  /** Fresh summary of one execution for a targeted row refresh; null when it cannot be read. */
+  #executionSummary(project: string, sessionId: string, executionId: string): ExecutionSnapshot | null {
+    const context = this.#registry.project(project);
+    if (context === undefined) return null;
+    return readExecutionSummary(path.join(sessionDir(context.root, sessionId), EXECUTIONS_DIRNAME, executionId));
   }
 
   #queue(element: TreeNode | undefined): void {

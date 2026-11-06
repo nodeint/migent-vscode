@@ -73,8 +73,27 @@ export interface FailureDetails {
   cause: string | null;
   /** Absolute path of the exact verify or response file for the failing execution, when one exists. */
   file: { kind: 'verify' | 'response'; absolutePath: string } | null;
+  /** Absolute path of the execution's `failure.md` report, written by CLI 0.3.6 and later. */
+  failureReport: string | null;
   stageId: string | null;
   attempt: number | null;
+}
+
+export const FAILURE_REPORT_BUTTON = 'Open failure report';
+
+/**
+ * Button labels of a failed-execution notification. The failure report button needs a report that exists;
+ * older executions have none, so their notification keeps the existing buttons.
+ */
+export function failureButtons(details: FailureDetails | undefined): string[] {
+  const file = details?.file ?? null;
+  const report = details?.failureReport ?? null;
+  return [
+    'Continue',
+    ...(report === null ? [] : [FAILURE_REPORT_BUTTON]),
+    ...(file === null ? [] : [file.kind === 'verify' ? 'Open verify' : 'Open response']),
+    'View log',
+  ];
 }
 
 const CAUSE_MAX = 200;
@@ -100,13 +119,16 @@ function causeOf(record: Record<string, unknown> | null): string | null {
 
 /** The cause and the exact files of a failed execution. Verify output is preferred when the failure names it. */
 export function failureDetails(sessionDir: string, executionId: string | null): FailureDetails {
-  if (executionId === null) return { cause: null, file: null, stageId: null, attempt: null };
+  if (executionId === null) {
+    return { cause: null, file: null, failureReport: null, stageId: null, attempt: null };
+  }
   const dir = path.join(sessionDir, EXECUTIONS_DIRNAME, executionId);
   const record = readExecution(dir);
   const cause = causeOf(record);
-  const {files} = listExecutionFiles(dir);
+  const { files } = listExecutionFiles(dir);
   const verify = files.filter((file) => file.kind === 'verify').at(-1);
   const response = files.find((file) => file.kind === 'response');
+  const failureReport = files.find((file) => file.kind === 'failure')?.absolutePath ?? null;
   const reason = typeof record?.failure_reason === 'string' ? record.failure_reason : '';
   const isVerifyFailure = /verify/i.test(reason);
   let file: FailureDetails['file'] = null;
@@ -117,5 +139,5 @@ export function failureDetails(sessionDir: string, executionId: string | null): 
   }
   const stageId = typeof record?.stage_id === 'string' ? record.stage_id : null;
   const attempt = typeof record?.stage_attempt === 'number' ? record.stage_attempt : null;
-  return { cause, file, stageId, attempt };
+  return { cause, file, failureReport, stageId, attempt };
 }

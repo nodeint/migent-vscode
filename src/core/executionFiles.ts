@@ -1,9 +1,19 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { DIAGNOSTICS_FILENAME, FAILURE_REPORT_FILENAME } from './paths';
 import { isRecord } from './record';
 
-export type ExecutionFileKind = 'task' | 'prompt' | 'response' | 'questions' | 'stream' | 'verify' | 'artifact';
+export type ExecutionFileKind =
+  | 'task'
+  | 'prompt'
+  | 'response'
+  | 'failure'
+  | 'diagnostics'
+  | 'questions'
+  | 'stream'
+  | 'verify'
+  | 'artifact';
 
 export interface ExecutionFile {
   kind: ExecutionFileKind;
@@ -28,6 +38,8 @@ const FIXED_FILES: readonly { name: string; kind: ExecutionFileKind }[] = [
   { name: 'task.md', kind: 'task' },
   { name: 'prompt.md', kind: 'prompt' },
   { name: 'response.md', kind: 'response' },
+  { name: FAILURE_REPORT_FILENAME, kind: 'failure' },
+  { name: DIAGNOSTICS_FILENAME, kind: 'diagnostics' },
   { name: 'questions.json', kind: 'questions' },
   { name: 'stream.jsonl', kind: 'stream' },
 ];

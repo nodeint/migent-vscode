@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Open the `failure.md` report of a failed execution from its attempt in the Sessions view or from the failure
+  notification. The report opens read-only and the action appears only when the file exists; `failure.md` and
+  `diagnostics.json` are also listed under the attempt.
+
 ## 0.1.3
 
 - Report a failed pre-run check of Migent CLI 0.3.6 (`Preflight failed: ...`, exit 2) as such and point to the log,

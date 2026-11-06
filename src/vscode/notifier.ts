@@ -5,7 +5,15 @@ import { NotificationGate } from '../core/notificationGate';
 import { sessionDir } from '../core/paths';
 import { describeQuotaWait, quotaWait } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
-import { currentTransition, failureDetails, type Transition, TransitionTracker } from '../core/transitions';
+import {
+  currentTransition,
+  FAILURE_REPORT_BUTTON,
+  failureButtons,
+  type FailureDetails,
+  failureDetails,
+  type Transition,
+  TransitionTracker,
+} from '../core/transitions';
 import type { MigentChange } from './changes';
 import type { ProjectRegistry } from './projects';
 
@@ -40,6 +48,37 @@ function showSpec(spec: Spec): Thenable<string | undefined> {
   if (spec.severity === 'error') return vscode.window.showErrorMessage(spec.text, ...spec.buttons);
   if (spec.severity === 'warning') return vscode.window.showWarningMessage(spec.text, ...spec.buttons);
   return vscode.window.showInformationMessage(spec.text, ...spec.buttons);
+}
+
+interface FailureAction {
+  target: SessionTarget;
+  executionId: string | null;
+  failureReport: string | null;
+  file: FailureDetails['file'];
+}
+
+/** Run the failure notification button the user picked; each button names its own target. */
+function actOnFailure(picked: string, action: FailureAction): void {
+  if (picked === 'Continue') {
+    void vscode.commands.executeCommand('migent.session.continue', action.target);
+  } else if (picked === 'View log') {
+    void vscode.commands.executeCommand('migent.session.showLog', action.target);
+  } else if (picked === FAILURE_REPORT_BUTTON) {
+    if (action.failureReport !== null) {
+      void vscode.commands.executeCommand('migent.session.openFailure', {
+        ...action.target,
+        executionId: action.executionId,
+      });
+    }
+  } else if (action.file !== null) {
+    void vscode.commands.executeCommand('vscode.open', vscode.Uri.file(action.file.absolutePath));
+  }
+}
+
+function failureWhere(details: FailureDetails | undefined, snapshot: SessionSnapshot): string {
+  const attempt = details?.attempt ?? null;
+  const parts = [details?.stageId ?? snapshot.status?.latestStageId, attempt === null ? null : `attempt ${attempt}`];
+  return parts.filter((part): part is string => typeof part === 'string').join(' ');
 }
 
 /**
@@ -185,27 +224,24 @@ export class StateNotifier implements vscode.Disposable {
     };
   }
 
-  #failed(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
+  #failureDetailsFor(transition: Transition): FailureDetails | undefined {
     const context = this.#registry.project(transition.project);
-    const details =
-      context === undefined
-        ? undefined
-        : failureDetails(sessionDir(context.root, transition.sessionId), transition.executionId);
-    const attempt = details?.attempt ?? null;
-    const where = [details?.stageId ?? snapshot.status?.latestStageId, attempt === null ? null : `attempt ${attempt}`]
-      .filter((part): part is string => typeof part === 'string')
-      .join(' ');
+    if (context === undefined) return undefined;
+    return failureDetails(sessionDir(context.root, transition.sessionId), transition.executionId);
+  }
+
+  #failed(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
+    const details = this.#failureDetailsFor(transition);
+    const where = failureWhere(details, snapshot);
     const cause = details?.cause ?? 'The cause is in the response or log.';
     const file = details?.file ?? null;
-    const fileButton = file === null ? [] : [file.kind === 'verify' ? 'Open verify' : 'Open response'];
+    const failureReport = details?.failureReport ?? null;
     return {
       severity: 'error',
       text: `Session ${sessionLabel(snapshot)} failed${where === '' ? '' : ` (${where})`}. ${cause}`,
-      buttons: ['Continue', ...fileButton, 'View log'],
+      buttons: failureButtons(details),
       act: (picked) => {
-        if (picked === 'Continue') void vscode.commands.executeCommand('migent.session.continue', target);
-        else if (picked === 'View log') void vscode.commands.executeCommand('migent.session.showLog', target);
-        else if (file !== null) void vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file.absolutePath));
+        actOnFailure(picked, { target, executionId: transition.executionId, failureReport, file });
       },
     };
   }

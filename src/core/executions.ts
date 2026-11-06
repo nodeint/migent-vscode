@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import type { ExecutionSnapshot } from './model';
-import { EXECUTIONS_DIRNAME } from './paths';
+import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME } from './paths';
 import { isRecord } from './record';
 
 const EXECUTION_ID_PATTERN = /^(\d+)-(.+)--attempt-(\d+)$/;
@@ -47,7 +47,11 @@ function stageFrom(record: Record<string, unknown> | null, parsed: ParsedExecuti
   return str(record?.stage_id) ?? parsed?.stageId ?? '';
 }
 
-function summaryFrom(dirName: string, record: Record<string, unknown> | null): ExecutionSnapshot {
+function summaryFrom(
+  executionDirPath: string,
+  record: Record<string, unknown> | null,
+): ExecutionSnapshot {
+  const dirName = path.basename(executionDirPath);
   const parsed = parseExecutionId(dirName);
   const outcome = outcomeFrom(record);
 
@@ -60,6 +64,7 @@ function summaryFrom(dirName: string, record: Record<string, unknown> | null): E
     decision: str(outcome.decision),
     provider: str(record?.provider),
     model: str(record?.model),
+    hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
   };
 }
 
@@ -78,13 +83,17 @@ export function listExecutions(sessionDirPath: string): ExecutionSnapshot[] {
   const rows: ExecutionSnapshot[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const record = readExecutionRecord(
-      path.join(sessionDirPath, EXECUTIONS_DIRNAME, entry.name, 'execution.json'),
-    );
-    rows.push(summaryFrom(entry.name, record));
+    const dir = path.join(sessionDirPath, EXECUTIONS_DIRNAME, entry.name);
+    rows.push(summaryFrom(dir, readExecutionRecord(path.join(dir, 'execution.json'))));
   }
   rows.sort((left, right) => left.order - right.order || (left.id < right.id ? -1 : 1));
   return rows;
+}
+
+/** One execution summary from its directory, for a targeted refresh. Null when the directory is absent. */
+export function readExecutionSummary(executionDirPath: string): ExecutionSnapshot | null {
+  if (!statSyncSafe(executionDirPath)) return null;
+  return summaryFrom(executionDirPath, readExecutionRecord(path.join(executionDirPath, 'execution.json')));
 }
 
 /** Full execution.json for one execution, for views that show details. */
@@ -96,6 +105,14 @@ export function readExecution(executionDirPath: string): Record<string, unknown>
 function statSyncSafe(p: string): boolean {
   try {
     return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function isFile(p: string): boolean {
+  try {
+    return statSync(p).isFile();
   } catch {
     return false;
   }

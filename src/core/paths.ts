@@ -18,6 +18,10 @@ export const TASK_FILENAME = 'task.md';
 export const WORKFLOW_DRAFT_FILENAME = 'workflow.yaml';
 export const METRICS_FILENAME = 'metrics.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
+/** Readable failure report written by CLI 0.3.6 and later for a failed execution. */
+export const FAILURE_REPORT_FILENAME = 'failure.md';
+/** Provider failure diagnostics written by CLI 0.3.6 and later for a failed execution. */
+export const DIAGNOSTICS_FILENAME = 'diagnostics.json';
 export const CONFIG_FILENAME = 'config.yaml';
 
 export function migentDir(projectRoot: string): string {

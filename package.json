@@ -92,6 +92,12 @@
         "category": "Migent"
       },
       {
+        "command": "migent.session.openFailure",
+        "title": "Open Failure Report",
+        "category": "Migent",
+        "shortTitle": "Open Failure"
+      },
+      {
         "command": "migent.session.openOutput",
         "title": "Open Output",
         "category": "Migent",
@@ -491,6 +497,11 @@
           "group": "1_open@2"
         },
         {
+          "command": "migent.session.openFailure",
+          "when": "view == migent.sessions && viewItem =~ /^execution\\.failed.*;failure(;|$)/",
+          "group": "1_open@0"
+        },
+        {
           "command": "migent.session.showLog",
           "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "1_open@4"
@@ -604,6 +615,10 @@
         },
         {
           "command": "migent.session.openResponse",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openFailure",
           "when": "false"
         },
         {

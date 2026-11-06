@@ -154,6 +154,8 @@ export interface ExecutionSnapshot {
   decision: string | null;
   provider: string | null;
   model: string | null;
+  /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
+  hasFailureReport: boolean;
 }
 
 export interface SessionSnapshot {

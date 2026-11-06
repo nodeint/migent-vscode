@@ -5,10 +5,10 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../../core/model';
 import type { OperationGate } from '../../core/operationGate';
 import { listOutputs } from '../../core/outputs';
-import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
+import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { DEFAULT_SESSION_LIMIT } from '../../core/store';
-import { openFile } from '../openFile';
+import { openFile, openReadOnly } from '../openFile';
 import { type PickedSession,pickSession } from '../pick';
 import type { ProjectRegistry } from '../projects';
 import type { ActiveTarget } from '../results/panels';
@@ -31,7 +31,9 @@ interface Target {
 function explicitTarget(arg: unknown): Target | undefined {
   if (typeof arg !== 'object' || arg === null || !('project' in arg) || !('sessionId' in arg)) return undefined;
   const { project, sessionId } = arg;
-  return typeof project === 'string' && typeof sessionId === 'string' ? { project, sessionId } : undefined;
+  if (typeof project !== 'string' || typeof sessionId !== 'string') return undefined;
+  const executionId = 'executionId' in arg && typeof arg.executionId === 'string' ? arg.executionId : undefined;
+  return { project, sessionId, executionId };
 }
 
 function targetOf(arg: unknown): Target | undefined {
@@ -117,18 +119,22 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
   }
 }
 
-async function openExecutionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
+/** The file path of the selected execution, or undefined after reporting why it cannot be opened. */
+async function executionFilePath(host: CommandHost, arg: unknown, file: string): Promise<string | undefined> {
   const resolved = await resolve(host, arg, `Open ${file} of which session?`);
-  if (resolved === undefined) return;
+  if (resolved === undefined) return undefined;
   const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latestExecutionId ?? null;
   if (executionId === null) {
     vscode.window.setStatusBarMessage(`Session ${sessionLabel(resolved.snapshot)} has no execution yet.`, INFO_MESSAGE_MS);
-    return;
+    return undefined;
   }
-  await openFile(
-    path.join(sessionDir(resolved.context.root, resolved.snapshot.sessionId), EXECUTIONS_DIRNAME, executionId, file),
-    file,
-  );
+  const dir = sessionDir(resolved.context.root, resolved.snapshot.sessionId);
+  return path.join(dir, EXECUTIONS_DIRNAME, executionId, file);
+}
+
+async function openExecutionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
+  const target = await executionFilePath(host, arg, file);
+  if (target !== undefined) await openFile(target, file);
 }
 
 async function openSessionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
@@ -157,6 +163,10 @@ export function registerSessionCommands(host: CommandHost, gate: OperationGate):
     register('migent.session.openTask', (arg) => openSessionFile(host, arg, TASK_FILENAME)),
     register('migent.session.openPrompt', (arg) => openExecutionFile(host, arg, 'prompt.md')),
     register('migent.session.openResponse', (arg) => openExecutionFile(host, arg, 'response.md')),
+    register('migent.session.openFailure', async (arg) => {
+      const target = await executionFilePath(host, arg, FAILURE_REPORT_FILENAME);
+      if (target !== undefined) await openReadOnly(target, FAILURE_REPORT_FILENAME);
+    }),
     register('migent.session.openOutput', (arg) => openOutput(host, arg)),
     register('migent.session.openQuestions', (arg) => openSessionFile(host, arg, QUESTIONS_FILENAME)),
     register('migent.session.copyId', async (arg) => {

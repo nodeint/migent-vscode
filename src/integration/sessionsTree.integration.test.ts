@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { deleteSession } from '../vscode/commands/deleteSession';
+import { READ_ONLY_DOC_SCHEME } from '../vscode/content/readOnlyDocs';
 import type { TreeNode } from '../vscode/views/nodes';
 import {
   createProject,
@@ -445,6 +446,68 @@ const scenarios: Scenario[] = [
       await sleep(SETTLE_MS);
       assert.equal(vscode.window.activeTextEditor, undefined, 'nothing opened for a missing file');
       assert.ok(!fs.existsSync(migentPath(root, 'sessions', 's1', 'questions.json')), 'missing file was not created');
+    },
+  },
+  {
+    name: 'A failed attempt lists its failure files and opens the selected report read-only',
+    async run(env) {
+      const { root } = env;
+      const firstId = '0001-plan--attempt-01';
+      const secondId = '0002-plan--attempt-02';
+      addSession(root, 's1', 'active', { latest_execution_id: secondId, latest_execution_status: 'failed' });
+      const first = migentPath(root, 'sessions', 's1', 'executions', firstId);
+      const second = migentPath(root, 'sessions', 's1', 'executions', secondId);
+      for (const [execution, id, attempt, report] of [
+        [first, firstId, 1, '# First failure'],
+        [second, secondId, 2, '# Second failure'],
+      ] as const) {
+        write(path.join(execution, 'execution.json'), JSON.stringify({
+          execution_id: id, stage_id: 'plan', stage_attempt: attempt, status: 'failed',
+        }));
+        write(path.join(execution, 'failure.md'), report);
+      }
+      write(path.join(first, 'diagnostics.json'), '{}');
+      await waitForSessions(env, ['s1']);
+
+      const session = sessionNode(env, 's1');
+      const attempts = children(env, session).filter((node) => node.kind === 'execution');
+      assert.equal(attempts.length, 2);
+      const [firstAttempt, secondAttempt] = attempts;
+      assert.match(String(itemOf(env, firstAttempt!).contextValue), /^execution\.failed;failure(;|$)/);
+      assert.deepEqual(labelsOf(env, children(env, firstAttempt!)), ['failure.md', 'diagnostics.json']);
+
+      // The action opens the report of the attempt it was invoked on, not the latest execution.
+      await vscode.commands.executeCommand('migent.session.openFailure', firstAttempt);
+      await waitFor('failure report opened', () => vscode.window.activeTextEditor?.document.uri.scheme === READ_ONLY_DOC_SCHEME);
+      const editor = vscode.window.activeTextEditor!;
+      assert.match(editor.document.uri.path, new RegExp(`${firstId}/failure\\.md$`));
+      assert.match(editor.document.getText(), /# First failure/);
+      // The document is served read-only: an edit attempt changes neither the text nor the file.
+      const before = editor.document.getText();
+      await editor.edit((builder) => builder.insert(new vscode.Position(0, 0), 'x'));
+      await sleep(SETTLE_MS);
+      assert.equal(editor.document.getText(), before, 'the read-only report refused the edit');
+      assert.equal(editor.document.isDirty, false);
+      assert.equal(fs.readFileSync(path.join(first, 'failure.md'), 'utf8'), '# First failure');
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+      await vscode.commands.executeCommand('migent.session.openFailure', secondAttempt);
+      await waitFor('second report opened', () => vscode.window.activeTextEditor?.document.getText() === '# Second failure');
+
+      // The execution's own watcher reports the deletion, so the row stops offering the action without a Refresh.
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      fs.rmSync(path.join(first, 'failure.md'));
+      await waitFor('failure action withdrawn', () => !String(itemOf(env, firstAttempt!).contextValue).includes(';failure'));
+      assert.match(String(itemOf(env, secondAttempt!).contextValue), /;failure/);
+
+      // Invoking the action after the file vanished opens nothing and never creates the file.
+      await vscode.commands.executeCommand('migent.session.openFailure', firstAttempt);
+      await sleep(SETTLE_MS);
+      assert.equal(vscode.window.activeTextEditor, undefined);
+      assert.ok(!fs.existsSync(path.join(first, 'failure.md')));
+
+      env.api.sessionsTree.collapse(firstAttempt!);
+      env.api.sessionsTree.collapse(session);
     },
   },
   {
