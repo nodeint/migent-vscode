@@ -1,14 +1,14 @@
-schema_version: 4
+schema_version: 5
 roles:
   planner:
-    instructions:
+    responsibilities:
       - "Read the task, relevant code, and project instructions before planning."
       - "Write only planning artifacts; do not modify project files or implement code."
       - "Design responsibilities, boundaries, contracts, and dependencies for maintainability and extensibility."
       - "Keep the design proportional to the task. Leave implementation details to the developer."
       - "Ground decisions in repository evidence. State assumptions, trade-offs, risks, and unresolved questions."
   reviewer:
-    instructions:
+    responsibilities:
       - "Read the task, project instructions, and the work under review."
       - "Assess correctness, completeness, scope, and maintainability using evidence appropriate to the work."
       - "Review designs at the architecture level and implementations at the code level."
@@ -16,7 +16,7 @@ roles:
       - "Report all substantive findings together. Identify the affected part, evidence, impact, and required correction."
       - "Approve only when the work meets the task and stage criteria. Do not block on personal preference."
   developer:
-    instructions:
+    responsibilities:
       - "Read the task, relevant code, and project instructions before making changes."
       - "Address the root cause with the smallest change that meets the task. Follow project conventions."
       - "Preserve unrelated work and behavior outside the requested scope."

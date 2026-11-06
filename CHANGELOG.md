@@ -2,12 +2,16 @@
 
 ## Unreleased
 
-- Require Migent CLI 0.3.6 or newer. The extension supports one minimum CLI version: a newer feature bumps that
+- Require Migent CLI 0.4.0 or newer. The extension supports one minimum CLI version: a newer feature bumps that
   minimum in its release, and an older CLI shows the existing Update Migent CLI action instead of a per-feature
-  guard.
+  guard. After upgrading an existing project, run `migent migrate` once: `doctor`, `session run`, and
+  `session continue` refuse an older workflow schema. The migration replaces a stage's `model` with `agent` and
+  deletes stage `options`, so recreate any needed option as an inline `agent` on that stage.
 - Open the `failure.md` report of a failed execution from its attempt in the Sessions view or from the failure
   notification. The report opens read-only and the action appears only when the file exists; `failure.md` and
   `diagnostics.json` are also listed under the attempt.
+- Show the editor title actions for reply drafts, session tasks and workflows on Windows too: their resource path
+  masks now match both separators, so Send Reply appears for a reply draft and Start or Run for the related files.
 
 ## 0.1.3
 
