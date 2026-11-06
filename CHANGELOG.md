@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3
+
 - Report a failed pre-run check of Migent CLI 0.3.6 (`Preflight failed: ...`, exit 2) as such and point to the log,
   which lists the problems, instead of blaming the session's `workflow.yaml`.
 - Show one onboarding action at a time in the Sessions view when no folder has a Migent project: Install or Update
@@ -14,9 +16,6 @@
 - When the CLI is missing, the Sessions view shows the install onboarding even in a folder that already has `.migent`.
   While installing, the Install action is replaced by a progress message, and the view updates by itself once the CLI
   works (the CLI is rechecked every few seconds while the install runs).
-
-## 0.1.3
-
 - Clarify the extension's focus on workflow execution and AI agent orchestration in its description and README,
   update getting-started instructions, commands and settings, and exclude the README screenshot from the VSIX.
 - Show only Files and the stage attempts under each session in the Sessions view. The Outputs, Questions and History
