@@ -23,6 +23,20 @@ describe('describeFailure', () => {
     expect(result.message).not.toContain('rejected');
   });
 
+  it('reports a failed pre-run check without blaming the draft text', () => {
+    // Captured from migent 0.3.6: the last line of a failed preflight (exit 2, session still prepared).
+    const last = 'Preflight failed: fix the problems above and run again, or pass --skip-preflight.';
+    const message = "Migent's pre-run check failed. The log lists the problems; fix them and run again.";
+    expect(describeFailure({ outcome: 'ConfigError', exitCode: 2, last, isDrafted: true })).toEqual({
+      message,
+      offersDraft: true,
+    });
+    expect(describeFailure({ outcome: 'ConfigError', exitCode: 2, last, isDrafted: false })).toEqual({
+      message,
+      offersDraft: false,
+    });
+  });
+
   it('does not take workflow.frozen.yaml for the draft', () => {
     const result = describeFailure({
       outcome: 'ConfigError',
