@@ -234,6 +234,7 @@ export class SessionMetricsPanels implements vscode.Disposable {
         return;
       case 'project':
       case 'capability':
+      case 'cliWindow':
         return;
     }
   }

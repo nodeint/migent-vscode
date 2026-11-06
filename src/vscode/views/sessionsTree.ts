@@ -192,6 +192,9 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   }
 
   #rootChildren(): TreeNode[] {
+    // Without the CLI (or while installing it) the view is empty, so the welcome onboarding shows even in a project.
+    const { capability } = this.#host;
+    if (capability.isInstalling || capability.aggregate() === 'missing') return [];
     const projects = this.#registry.projects();
     const only = projects.length === 1 ? projects.at(0) : undefined;
     if (only !== undefined) return projectContents(this.#host, only, undefined);
@@ -263,7 +266,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
         this.#onFiles(change.project, change.sessionId, change.targets);
         return;
       case 'capability':
-        this.#queue(this.#projectElement(change.project));
+        this.#queue(undefined);
+        return;
+      case 'cliWindow':
+        this.#queue(undefined);
         return;
     }
   }

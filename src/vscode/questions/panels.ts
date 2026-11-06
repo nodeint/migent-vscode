@@ -567,6 +567,8 @@ export class AnswerPanels implements vscode.Disposable {
       case 'capability':
         this.#mark(() => true);
         return;
+      case 'cliWindow':
+        return;
     }
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeCapability } from './capabilityText';
+import { describeCapability, describeInstallOutcome } from './capabilityText';
 import type { CapabilityState } from './version';
 
 const base: CapabilityState = { kind: 'ok', required: '0.3.1' };
@@ -21,5 +21,19 @@ describe('describeCapability', () => {
 
   it.each(['missing', 'unparsable', 'error'] as const)('has a diagnostic for %s', (kind) => {
     expect(describeCapability({ ...base, kind })?.label).toBeTruthy();
+  });
+});
+
+describe('describeInstallOutcome', () => {
+  it('is ready once the CLI is usable', () => {
+    expect(describeInstallOutcome({ ...base, detected: '0.3.5' }, 0)).toEqual({ kind: 'ready', message: 'Migent CLI 0.3.5 is ready.' });
+  });
+
+  it('reports a failure for a non-zero exit', () => {
+    expect(describeInstallOutcome({ ...base, kind: 'missing' }, 1).kind).toBe('failed');
+  });
+
+  it.each([0, undefined])('hints at a restart when the CLI is still unusable after exit %s', (code) => {
+    expect(describeInstallOutcome({ ...base, kind: 'old' }, code).kind).toBe('restart');
   });
 });

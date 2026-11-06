@@ -61,7 +61,7 @@ async function withPath(
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC13: a missing CLI shows a diagnostic with versions while sessions stay visible, and Recheck recovers',
+    name: 'AC13: a missing CLI empties the Sessions view so onboarding shows, and Recheck recovers',
     async run(env) {
       write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
       write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
@@ -70,15 +70,12 @@ const scenarios: Scenario[] = [
       const empty = path.join(env.root, 'empty-path');
       fs.mkdirSync(empty, { recursive: true });
       await withPath(env, () => empty, 'missing', () => {
-        const item = diagnostic(env);
-        assert.ok(item, 'diagnostic node exists');
-        assert.match(String(item.label), /not found/);
-        assert.match(String(item.tooltip), /Required version: 0\.3\.1/);
         assert.equal(env.api.capability.aggregate(), 'missing');
-        assert.ok(children(env).some((node) => node.kind === 'group'), 'sessions stay visible');
+        assert.deepEqual(children(env), [], 'the view is empty so the welcome onboarding is shown');
       });
       assert.equal(kindOf(env), 'ok');
       assert.equal(diagnostic(env), undefined);
+      assert.ok(children(env).some((node) => node.kind === 'group'), 'sessions are back once the CLI works');
     },
   },
   {
@@ -107,6 +104,28 @@ const scenarios: Scenario[] = [
         assert.equal(state?.required, MINIMUM_CLI_VERSION);
         assert.match(String(diagnostic(env)?.label), /older than/);
       });
+    },
+  },
+  {
+    name: 'Onboarding: without any project the window CLI state drives migent.cliState, missing then recovered',
+    async run(env) {
+      assert.equal(env.project(), undefined, 'no project yet');
+      await waitFor('window ok', () => env.api.capability.windowState().kind === 'ok');
+      assert.equal(env.api.capability.aggregate(), 'ok');
+      const empty = path.join(env.root, 'empty-path-window');
+      fs.mkdirSync(empty, { recursive: true });
+      const original = process.env.PATH ?? '';
+      process.env.PATH = empty;
+      try {
+        await vscode.commands.executeCommand('migent.cli.recheck');
+        assert.equal((await env.api.capability.windowReady()).kind, 'missing');
+        assert.equal(env.api.capability.aggregate(), 'missing');
+      } finally {
+        process.env.PATH = original;
+        await vscode.commands.executeCommand('migent.cli.recheck');
+      }
+      assert.equal((await env.api.capability.windowReady()).kind, 'ok');
+      assert.equal(env.api.capability.aggregate(), 'ok');
     },
   },
 ];

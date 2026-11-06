@@ -6,7 +6,7 @@ import type { ProjectRegistry } from './projects';
 
 /**
  * Window context keys for welcome content and menus: `migent.hasProjects`, `migent.sessionsState`
- * and `migent.cliState` (the worst CLI capability across projects, `none` without a project).
+ * and `migent.cliState` (the worst CLI capability across projects, or the window state without a project).
  */
 export class ContextKeys implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
@@ -18,7 +18,7 @@ export class ContextKeys implements vscode.Disposable {
     this.#registry = registry;
     this.#capability = capability;
     this.#subscription = registry.onDidChange((change) => {
-      if (change.type === 'projects' || change.type === 'project' || change.type === 'refresh' || change.type === 'capability') this.update();
+      if (change.type === 'projects' || change.type === 'project' || change.type === 'refresh' || change.type === 'capability' || change.type === 'cliWindow') this.update();
     });
     this.update();
   }
@@ -27,6 +27,7 @@ export class ContextKeys implements vscode.Disposable {
     const projects = this.#registry.projects();
     this.#set('migent.hasProjects', projects.length > 0);
     this.#set('migent.cliState', this.#capability.aggregate());
+    this.#set('migent.cliInstalling', this.#capability.isInstalling);
     this.#set(
       'migent.sessionsState',
       aggregateSessionsState(

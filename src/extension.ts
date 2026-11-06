@@ -80,7 +80,7 @@ function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, on
     },
     registry.onDidChange((change) => {
       // Start or stop the single liveness timer whenever a session may have started or stopped running.
-      if (change.type !== 'files' && change.type !== 'capability') liveness.update();
+      if (change.type !== 'files' && change.type !== 'capability' && change.type !== 'cliWindow') liveness.update();
     }),
   ];
 }
@@ -183,7 +183,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerCapabilityCommands(capability),
     ...registerProjectCommands(registry),
     ...registerControlCommands(host, control, context.workspaceState),
-    ...registerReplyCommands({ host, control, replies }),
+    ...registerReplyCommands({ host, control, replies, capability }),
   );
   const ready = startRegistryLater(registry);
   return {

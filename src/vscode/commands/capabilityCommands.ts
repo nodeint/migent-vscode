@@ -1,15 +1,133 @@
+import { existsSync } from 'node:fs';
+
 import * as vscode from 'vscode';
 
+import { describeInstallOutcome, INSTALL_CLI_COMMAND, type InstallOutcome } from '../../cli/capabilityText';
+import { type InstallEnd, InstallWait } from '../../cli/installWait';
+import { migentDir } from '../../core/paths';
 import type { CapabilityService } from '../capability';
 
 const STATUS_MESSAGE_MS = 2000;
+const TERMINAL_NAME = 'Migent: Install CLI';
 
-/** Recheck of the CLI capability. */
+/** Shell integration (VS Code 1.93+); absent from the API types of the minimum supported version. */
+interface ShellExecution {
+  readonly commandLine?: unknown;
+}
+interface ShellIntegration {
+  executeCommand: (commandLine: string) => ShellExecution;
+}
+interface ShellEvents {
+  onDidEndTerminalShellExecution?: (
+    listener: (event: { execution: ShellExecution; exitCode: number | undefined }) => void,
+  ) => vscode.Disposable;
+}
+type ShellTerminal = vscode.Terminal & { shellIntegration?: ShellIntegration };
+
+function hasUninitializedFolder(): boolean {
+  return (vscode.workspace.workspaceFolders ?? []).some(
+    (folder) => folder.uri.scheme === 'file' && !existsSync(migentDir(folder.uri.fsPath)),
+  );
+}
+
+/**
+ * Sends the install command and resolves when that very execution ended (exit code from shell integration, VS Code
+ * 1.93+) or when its terminal closed. Without shell integration only the close (or the manual button) ends the wait.
+ */
+async function waitForInstall(terminal: ShellTerminal): Promise<InstallEnd> {
+  const wait = new InstallWait<ShellExecution, vscode.Terminal>();
+  const shellWindow: typeof vscode.window & ShellEvents = vscode.window;
+  const subscriptions = [
+    vscode.window.onDidCloseTerminal((closed) => wait.terminalClosed(closed, terminal)),
+    shellWindow.onDidEndTerminalShellExecution?.((event) => wait.executionEnded(event.execution, event.exitCode)) ??
+      new vscode.Disposable(() => {}),
+  ];
+  try {
+    if (terminal.shellIntegration === undefined) terminal.sendText(INSTALL_CLI_COMMAND);
+    else wait.track(terminal.shellIntegration.executeCommand(INSTALL_CLI_COMMAND));
+    return await wait.promise;
+  } finally {
+    for (const subscription of subscriptions) subscription.dispose();
+  }
+}
+
+/** Shell integration may be unavailable, so the user can also end the wait by hand. */
+async function waitForManualRecheck(): Promise<InstallEnd> {
+  const picked = await vscode.window.showInformationMessage(
+    'Installing the Migent CLI in the terminal. Use Recheck if this does not update by itself.',
+    'Recheck',
+  );
+  if (picked === 'Recheck') return { exitCode: undefined };
+  return new Promise<InstallEnd>(() => {});
+}
+
+const POLL_MS = 3000;
+
+/** Resolves once the CLI works, so an install typed or finished by hand also ends the wait. Stops when `isStopped`. */
+async function waitForCli(capability: CapabilityService, isStopped: () => boolean): Promise<InstallEnd> {
+  while (!isStopped()) {
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
+    if (isStopped()) break;
+    await capability.recheck();
+    if (capability.aggregate() === 'ok') return { exitCode: undefined };
+  }
+  return new Promise<InstallEnd>(() => {});
+}
+
+async function runInstall(capability: CapabilityService): Promise<InstallEnd> {
+  const existing = vscode.window.terminals.find((candidate) => candidate.name === TERMINAL_NAME);
+  const terminal: ShellTerminal = existing ?? vscode.window.createTerminal({ name: TERMINAL_NAME });
+  terminal.show();
+  let isDone = false;
+  try {
+    return await Promise.race([waitForInstall(terminal), waitForManualRecheck(), waitForCli(capability, () => isDone)]);
+  } finally {
+    isDone = true;
+  }
+}
+
+async function notifyInstall(outcome: InstallOutcome): Promise<void> {
+  if (outcome.kind === 'ready') {
+    const initialize = hasUninitializedFolder() ? 'Initialize project' : undefined;
+    const buttons = initialize === undefined ? [] : [initialize];
+    const picked = await vscode.window.showInformationMessage(outcome.message, ...buttons);
+    if (picked !== undefined) await vscode.commands.executeCommand('migent.init');
+    return;
+  }
+  if (outcome.kind === 'failed') {
+    void vscode.window.showErrorMessage(outcome.message);
+    return;
+  }
+  const picked = await vscode.window.showWarningMessage(outcome.message, 'Recheck');
+  if (picked === 'Recheck') await vscode.commands.executeCommand('migent.cli.recheck');
+}
+
+/** Recheck and install or update of the CLI. */
 export function registerCapabilityCommands(capability: CapabilityService): vscode.Disposable[] {
+  let isInstalling = false;
   return [
     vscode.commands.registerCommand('migent.cli.recheck', async () => {
       await capability.recheck();
       vscode.window.setStatusBarMessage('Migent CLI rechecked', STATUS_MESSAGE_MS);
+    }),
+    vscode.commands.registerCommand('migent.cli.install', async () => {
+      if (isInstalling) {
+        vscode.window.setStatusBarMessage('The Migent CLI install is already running.', STATUS_MESSAGE_MS);
+        return;
+      }
+      isInstalling = true;
+      capability.setInstalling(true);
+      let outcome: InstallOutcome;
+      try {
+        const { exitCode } = await runInstall(capability);
+        await capability.recheck();
+        outcome = describeInstallOutcome(await capability.windowReady(), exitCode);
+      } finally {
+        // Released before any notification is awaited, so an open message never blocks a new install.
+        isInstalling = false;
+        capability.setInstalling(false);
+      }
+      await notifyInstall(outcome);
     }),
   ];
 }

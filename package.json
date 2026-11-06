@@ -1,8 +1,8 @@
 {
   "name": "migent-vscode",
   "displayName": "Migent",
-  "description": "Monitor and run Migent sessions and workflows from VS Code.",
-  "version": "0.1.2",
+  "description": "Workflow runner and AI agent orchestrator for VS Code.",
+  "version": "0.1.3",
   "publisher": "nodeint",
   "icon": "media/migent.png",
   "license": "MIT",
@@ -137,6 +137,11 @@
       {
         "command": "migent.sessions.showMore",
         "title": "Show More Sessions",
+        "category": "Migent"
+      },
+      {
+        "command": "migent.cli.install",
+        "title": "Install or Update CLI",
         "category": "Migent"
       },
       {
@@ -352,13 +357,43 @@
     "viewsWelcome": [
       {
         "view": "migent.sessions",
-        "contents": "No Migent project was found in the open folders.\nInitialize one here, or create it with the Migent CLI and it appears here.\n[Initialize project](command:migent.init)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
-        "when": "!migent.hasProjects"
+        "contents": "Checking for the Migent CLI…",
+        "when": "!migent.cliInstalling && migent.cliState == checking"
       },
       {
         "view": "migent.sessions",
-        "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Recheck CLI](command:migent.cli.recheck)\n[Install the Migent CLI](https://github.com/nodeint/migent#readme)",
-        "when": "migent.hasProjects && migent.cliState =~ /^(missing|unsupported|old|unparsable|error)$/"
+        "contents": "Installing the Migent CLI… This updates when the install finishes.\n[Recheck CLI](command:migent.cli.recheck)",
+        "when": "migent.cliInstalling"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI is not installed.\n[Install Migent CLI](command:migent.cli.install)",
+        "when": "!migent.cliInstalling && migent.cliState == missing"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI is older than required.\n[Update Migent CLI](command:migent.cli.install)",
+        "when": "!migent.cliInstalling && migent.cliState == old"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI is older than required, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Update Migent CLI](command:migent.cli.install)",
+        "when": "!migent.cliInstalling && migent.hasProjects && migent.cliState == old"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI could not be used.\n[Recheck CLI](command:migent.cli.recheck)\nSee the [Migent README](https://github.com/nodeint/migent#readme) for help.",
+        "when": "!migent.hasProjects && migent.cliState =~ /^(unsupported|unparsable|error)$/"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "No Migent project was found in the open folders.\nInitialize one here, or create it with the Migent CLI and it appears here.\n[Initialize project](command:migent.init)",
+        "when": "!migent.hasProjects && migent.cliState == ok"
+      },
+      {
+        "view": "migent.sessions",
+        "contents": "The Migent CLI is not usable, so new sessions cannot be started from here. Sessions already on disk stay visible.\n[Recheck CLI](command:migent.cli.recheck)",
+        "when": "migent.hasProjects && migent.cliState =~ /^(unsupported|unparsable|error)$/"
       },
       {
         "view": "migent.sessions",
@@ -602,6 +637,10 @@
         {
           "command": "migent.cli.recheck",
           "when": "false"
+        },
+        {
+          "command": "migent.cli.install",
+          "when": "!migent.cliInstalling && migent.cliState =~ /^(missing|old)$/"
         },
         {
           "command": "migent.workflow.open",

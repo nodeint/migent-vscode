@@ -1,102 +1,129 @@
 # Migent for VS Code
 
-Monitor and run multi-stage AI workflows and agent sessions directly from your editor.
+Workflow runner and AI agent orchestrator for VS Code.
+
+Run multi-stage AI workflows, control agent sessions, and handle human checkpoints directly from your editor.
 
 ![Migent session explorer and session metrics in VS Code](https://raw.githubusercontent.com/nodeint/migent-vscode/main/media/screenshot.png)
 
----
-
 ## What is Migent?
 
-[Migent](https://github.com/nodeint/migent) is an orchestration engine for AI-assisted software development and
-automated coding workflows. Instead of treating AI as a simple one-shot chat, Migent structures complex development
-tasks into reproducible, multi-stage workflows—spanning code migration, automated refactoring, multi-turn agent
-execution, deterministic verification, and human-in-the-loop decision checkpoints.
+[Migent](https://github.com/nodeint/migent) organizes AI-assisted development tasks into reusable, multi-stage
+workflows. A workflow defines how work progresses through stages; a session records an individual run, including
+agent execution, outputs, and questions that need human input.
+
+**Migent for VS Code** brings workflow execution and session control into your editor. The Migent CLI executes
+workflows, while the extension lets you launch work, guide agents, inspect results, and continue from those results.
 
 ## Why Migent for VS Code?
 
-Running multi-stage AI workflows from a terminal often leads to constant context switching:
+Keep the workflow execution cycle alongside the code you are working on:
 
-- Sessions run in the background, but tracking execution progress requires tailing log files.
-- When an AI agent needs human guidance or hits an obstacle, you might not notice until you check the CLI.
-- Inspecting generated code, prompts, and model responses forces you to hunt through hidden `.migent/` directories.
+- **Run workflows**: Choose a project workflow and provide a task, or prepare a session and edit its task before running.
+- **Control execution**: Start, continue, or stop sessions, and run the next stage once when you want to inspect progress.
+- **Guide agents**: Answer human-input questions or reply to blocked sessions so work can continue with your guidance.
+- **Continue from results**: Review outputs and run or prepare a suggested next workflow using the completed session's context.
+- **Follow the work**: Track session status, stream execution events and logs, and inspect prompts, responses, and artifacts.
 
-**Migent for VS Code** integrates your AI workflows directly into your primary coding environment:
-
-- **Real-Time Visibility**: Track the status of every session (*Running*, *Needs attention*, *Completed*) at a
-  glance from the Activity Bar and Status Bar.
-- **Live Event & Log Streaming**: Follow agent execution step-by-step with live timelines and dedicated log
-  channels side-by-side with your code.
-- **Human-in-the-Loop Awareness**: Immediately spot when a session pauses for developer input or hits a
-  diagnostic state, so agents are never left waiting.
-- **Instant Artifact & Prompt Inspection**: Open generated files, prompts, agent responses, and session outputs
-  in native VS Code editors with a single click.
-- **Zero Friction & Non-Intrusive**: Works seamlessly alongside the Migent CLI. It reads directly from `.migent/`
-  on disk without proprietary background daemons or hidden lock-ins.
-
----
-
-> **Status**: Monitoring and interactive session execution are available.
-
----
+The extension works with the same `.migent/` project files as the CLI. Existing sessions remain available for
+inspection even when the CLI is not installed; running workflows and controlling sessions require the CLI.
 
 ## Core Capabilities
 
-- **Session Explorer**: Browse all project sessions categorized by status. Expand any session to inspect its
-  individual stage executions, generated outputs, modified files, and human-input questions.
-- **Live Timeline & Log Streaming**: Run `Migent: Show Session Timeline` or `Migent: Show Session Log` to watch
-  events stream live as agents work.
-- **Project & Workflow Catalog**: View available workflow definitions and project configuration (`config.yaml`)
-  with instant validation for syntax and schema errors.
-- **Results View**: Open a comprehensive overview for completed sessions to inspect final outcomes, outputs,
-  and downstream workflow suggestions, with the main actions in the page header.
-- **Session Controls**: Run or prepare workflows, start, continue, stop, and repair sessions, or run the next stage once.
-- **Human Input**: Answer questions and reply to blocked sessions with drafts preserved across reloads. Notifications
-  cover questions, blocked and failed sessions, quota waits, and completed sessions.
-- **Next Steps**: Run or prepare a suggested workflow using a completed session's outputs.
-- **Project Tools**: Initialize a project and run Doctor from VS Code.
+### Workflow execution and session control
+
+- Browse project workflows and open their definitions in the editor.
+- Run a workflow immediately, or prepare a session, edit its task, and use **Save & Run**.
+- Continue or stop a session, run the next stage once, retry after a quota wait, or repair a session.
+- Initialize a Migent project and run Doctor from VS Code.
+
+### Human input and agent guidance
+
+- Answer agent questions from the Questions page.
+- Write and send a reply when a session is blocked.
+- Keep question and reply drafts across reloads.
+- Receive notifications for questions, blocked or failed sessions, quota waits, and completed sessions.
+
+### Results and workflow continuation
+
+- Open a session's Results page to inspect its state, outputs, and available actions.
+- Review suggested next workflows and run or prepare one using the source session's outputs as context.
+- Inspect completed-session metrics from the Results page or the session context menu.
+
+### Execution visibility
+
+- Browse sessions by status in the Session Explorer and expand them to inspect files and stage executions.
+- Follow live event timelines and session logs alongside your code.
+- Open prompts, agent responses, and generated artifacts in VS Code editors.
+- Track running sessions and sessions needing attention from the Activity Bar and Status Bar.
+- Inspect project configuration and workflow validation diagnostics.
 
 ## Quick Start
 
-1. Open any workspace containing a `.migent/` directory.
-2. Click the **Migent** icon in the Activity Bar.
-3. Your active sessions, logs, and workflows appear automatically.
-4. Select **Run** on a workflow to start a session, or use `Migent: Initialize Project` to set up a new project.
-
 ### Prerequisites
 
-- A workspace containing a `.migent/` project directory.
-- *(Optional for monitoring, required for CLI execution)* [Migent CLI](https://github.com/nodeint/migent#readme)
-  v0.3.1 or newer.
-  - Install it with `npm install -g @nodeint/migent`. The extension finds `migent` on `PATH` and runs the package's
-    JavaScript entry with `node`; restart VS Code after installing so it sees the new `PATH`.
+- Install the Migent extension in VS Code.
+- Install Migent CLI v0.3.1 or newer to run workflows and control sessions:
+
+  ```bash
+  npm install -g @nodeint/migent
+  ```
+
+  The extension finds `migent` on `PATH`. Restart VS Code after installing so it sees the updated `PATH`.
+
+### Run your first workflow
+
+1. Open your project folder in VS Code and click **Migent** in the Activity Bar.
+2. If the folder has no `.migent/` project, run **Migent: Initialize Project…** from the Command Palette.
+3. In **Workflows**, open a workflow definition to review it, then select **Run** and provide your task.
+   You can also use **Migent: Prepare Session…** to prepare a session and edit its task before **Save & Run**.
+4. Follow the session in **Sessions**. Open its Results page for outputs and controls, or use its context menu
+   to open the timeline and logs.
+5. When the session needs input, answer its questions or send a reply. When it completes, review its outputs
+   and open any suggested next workflow to continue the work.
+
+For an existing Migent project, workflows and sessions appear automatically when you open its folder.
+For CLI setup and usage details, see the [Migent CLI documentation](https://github.com/nodeint/migent#readme).
+
+## Commands
+
+Start from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
+
+| Command | Purpose |
+| :--- | :--- |
+| `Migent: Initialize Project…` | Set up a Migent project in a workspace folder. |
+| `Migent: Run Workflow…` | Choose a workflow and start a session. |
+| `Migent: Prepare Session…` | Prepare a session so you can edit its task before running. |
+| `Migent: Run Doctor` | Run project diagnostics through the CLI. |
+| `Migent: Open Project Config` | Open the project `config.yaml`. |
+| `Migent: Refresh` | Re-read sessions and workflow definitions from disk. |
+
+Session actions are available from session rows, context menus, and page controls according to the session's state.
+Use these controls to **Save & Run**, **Continue**, **Stop**, answer questions, reply to blockers, inspect results,
+or open the timeline and logs. Suggested workflow actions are available from the Results and Next step pages.
 
 ## Extension Settings
 
 Configure the extension via VS Code settings (`Ctrl+,` or `Cmd+,`):
 
-| Setting | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `migent.sessions.limit` | `number` | `50` | Maximum number of recent sessions to display in the Sessions view. |
-
-## Commands
-
-Access these commands through the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
-
-| Command | Title | Description |
+| Setting | Default | Purpose |
 | :--- | :--- | :--- |
-| `migent.refresh` | `Migent: Refresh` | Re-read sessions and workflow definitions from disk. |
-| `migent.session.showTimeline` | `Migent: Show Session Timeline` | Follow live event timeline for the selected session. |
-| `migent.session.showLog` | `Migent: Show Session Log` | Stream live logs for the selected session. |
-| `migent.session.openResult` | `Migent: Open Result` | Open the read-only Results page for a completed session. |
-| `migent.openConfig` | `Migent: Open Project Config` | Open the project `config.yaml` in the editor. |
-| `migent.cli.recheck` | `Migent: Recheck CLI` | Validate CLI installation and version compatibility. |
+| `migent.run.maxDispatches` | `20` | Maximum stage dispatches in one run or continue command. |
+| `migent.run.progress` | `true` | Print completed tool calls in the Migent output. |
+| `migent.env` | `{}` | Extra environment variables passed to the Migent CLI. |
+| `migent.sessions.limit` | `50` | Recent sessions to display; running sessions and sessions needing attention are always shown. |
+| `migent.notifications.question` | `true` | Notify when a session waits for answers to human questions. |
+| `migent.notifications.blocked` | `true` | Notify when a session is blocked and needs a reply. |
+| `migent.notifications.failed` | `true` | Notify when a session fails. |
+| `migent.notifications.quota` | `true` | Notify about a quota wait and when it ends. |
+| `migent.notifications.completed` | `true` | Notify when a session completes. |
 
 ## Troubleshooting
 
-- **Views not updating automatically**:
-  Check if `files.watcherExclude` in your VS Code settings includes `**/.migent/**`. If excluded, VS Code will not
-  deliver file change events for `.migent/`, requiring manual refreshes. Remove that pattern to restore live updates.
+- **Cannot run workflows**: Check that Migent CLI v0.3.1 or newer is on `PATH`, then restart VS Code.
+  Use **Recheck CLI** on the CLI diagnostic row in the Sessions view to check again.
+- **Views not updating automatically**: Check whether `files.watcherExclude` includes `**/.migent/**`.
+  Remove that pattern to restore live updates, or use **Migent: Refresh** to update the views manually.
 
 ## Development
 

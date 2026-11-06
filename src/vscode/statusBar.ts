@@ -17,7 +17,7 @@ export class StatusBar implements vscode.Disposable {
     this.#item.name = 'Migent';
     this.#item.command = 'migent.sessions.focus';
     this.#subscription = registry.onDidChange((change) => {
-      if (change.type !== 'files' && change.type !== 'capability') this.update();
+      if (change.type !== 'files' && change.type !== 'capability' && change.type !== 'cliWindow') this.update();
     });
     this.update();
   }

@@ -7,6 +7,7 @@ import {
   doctorArgs,
   doctorLines,
   initArgs,
+  modelsDefaultFirst,
   parseDoctorOutput,
   parsePrepared,
   parseProviders,
@@ -106,6 +107,13 @@ describe('reply, repair, doctor and init argv', () => {
     });
     expect(providers).toEqual([{ name: 'a', models: ['m1'] }]);
     expect(parseProviders('nope')).toEqual([]);
+  });
+
+  it('reads default_model when present and lists it first', () => {
+    const [choice] = parseProviders({ providers: [{ name: 'a', available: true, models: ['m1', 'm2', 'm3'], default_model: 'm2' }] });
+    expect(choice.defaultModel).toBe('m2');
+    expect(modelsDefaultFirst(choice)).toEqual(['m2', 'm1', 'm3']);
+    expect(modelsDefaultFirst({ name: 'a', models: ['m1'], defaultModel: 'gone' })).toEqual(['m1']);
   });
 
   it('reads doctor output, including failed checks, and rejects other shapes', () => {
