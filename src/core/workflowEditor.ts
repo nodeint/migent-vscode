@@ -72,9 +72,6 @@ export interface WorkflowAuthoringResult {
   currentHash: string | null;
 }
 
-/** The workflow schema this editor edits; other versions open read-only. */
-const SUPPORTED_SCHEMA = 5;
-
 /** One other workflow file a downstream suggestion can name. */
 export interface WorkflowEditorWorkflow {
   id: string;
@@ -322,14 +319,13 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
   const body = isRecord(parsed) ? parsed : {};
   const form = formFromBody(body, fallbackId(input.file));
   const schemaVersion = numberValue(body.schema_version);
-  const isSupported = schemaVersion === SUPPORTED_SCHEMA;
   return {
     ...base,
     id: form.id,
     schemaVersion,
-    state: isSupported ? 'ok' : 'unsupported',
-    isSupported,
-    readError: isSupported ? null : 'schema_version must be 5',
+    state: 'ok',
+    isSupported: true,
+    readError: null,
     form,
     yaml: text,
     savedHash: hash(text),
@@ -478,9 +474,12 @@ function stageBody(stage: WorkflowStageForm): Record<string, unknown> {
   return body;
 }
 
-/** The schema 5 mapping the form describes. Keys the form does not expose are never invented. */
-export function workflowBodyFromForm(form: WorkflowForm): Record<string, unknown> {
-  const body: Record<string, unknown> = { schema_version: SUPPORTED_SCHEMA };
+/**
+ * The mapping the form describes. `schemaVersion` is the opened file's own; the CLI judges it.
+ * Keys the form does not expose are never invented. */
+export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number | null): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (schemaVersion !== null) body.schema_version = schemaVersion;
   if (form.id !== '') body.id = form.id;
   if (form.concurrency !== null) body.concurrency = form.concurrency;
   if (form.constraints.length > 0) body.constraints = form.constraints;
@@ -504,8 +503,8 @@ export function workflowBodyFromForm(form: WorkflowForm): Record<string, unknown
 }
 
 /** The canonical YAML sent to `migent workflow save -`; `--preserve-comments` keeps the target's layout. */
-export function workflowDraftFromForm(form: WorkflowForm): string {
-  return stringify(workflowBodyFromForm(form), { lineWidth: 0 });
+export function workflowDraftFromForm(form: WorkflowForm, schemaVersion: number | null): string {
+  return stringify(workflowBodyFromForm(form, schemaVersion), { lineWidth: 0 });
 }
 
 /** Parse one `migent workflow validate|save --json` envelope. Malformed output is reported, never trusted. */

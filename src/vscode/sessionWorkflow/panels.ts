@@ -306,7 +306,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     this.#publishLast(entry, transient(null, true));
     const result = await invokeJson(launch, saveArgs(identity.sessionId, request.baseHash), {
       cwd: context.root,
-      input: workflowDraftFromForm(workflowFormFromClient(request.rawForm)),
+      input: workflowDraftFromForm(workflowFormFromClient(request.rawForm), entry.lastModel?.schemaVersion ?? null),
       timeoutMs: SAVE_TIMEOUT_MS,
     });
     if (this.#entries.get(keyOf(identity)) !== entry) return;

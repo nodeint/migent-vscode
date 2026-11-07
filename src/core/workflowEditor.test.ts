@@ -168,7 +168,7 @@ stages:
 `;
     const result = model(project({ 'routed.yaml': source }), 'routed.yaml');
     expect(result.form.stages[0].decision[0].navigate).toBe('test, docs');
-    const body = workflowBodyFromForm(result.form);
+    const body = workflowBodyFromForm(result.form, result.schemaVersion);
     expect(body.stages).toEqual([
       {
         id: 'review',
@@ -187,12 +187,12 @@ stages:
     expect(result.form.stages).toEqual([]);
   });
 
-  it('marks another schema version unsupported but still projects its fields', () => {
+  it('does not gate on the schema version and projects its fields', () => {
     const result = model(project({ 'old.yaml': 'schema_version: 4\nid: old\nstages:\n  - id: a\n' }), 'old.yaml');
-    expect(result.state).toBe('unsupported');
-    expect(result.isSupported).toBe(false);
+    expect(result.state).toBe('ok');
+    expect(result.isSupported).toBe(true);
     expect(result.schemaVersion).toBe(4);
-    expect(result.readError).toBe('schema_version must be 5');
+    expect(result.readError).toBeNull();
     expect(result.form.stages.map((stage) => stage.id)).toEqual(['a']);
   });
 
@@ -236,7 +236,7 @@ describe('the page draft', () => {
     expect(form.stages[0]).toMatchObject({ id: 'a', agentMode: 'named', agentName: 'fast' });
     expect(form.stages[0]).not.toHaveProperty('options');
     expect(form.stages[1].agent).toMatchObject({ clientType: 'codex', model: 'gpt-5' });
-    expect(workflowBodyFromForm(form)).not.toHaveProperty('title');
+    expect(workflowBodyFromForm(form, 5)).not.toHaveProperty('title');
   });
 
   it('serializes the form as a canonical schema 5 draft', () => {
@@ -258,9 +258,9 @@ describe('the page draft', () => {
       outputs: [{ name: 'plan', fromStage: 'plan', artifact: 'plan.md' }],
       downstream: [{ workflow: 'implement', task: 'Do it.', artifacts: [{ key: 'plan', value: 'plan' }] }],
     });
-    const draft = workflowDraftFromForm(form);
+    const draft = workflowDraftFromForm(form, 6);
     expect(parse(draft)).toEqual({
-      schema_version: 5,
+      schema_version: 6,
       id: 'plan',
       concurrency: 1,
       constraints: ['Plan only.'],
@@ -291,7 +291,7 @@ describe('the page draft', () => {
         },
       ],
     });
-    const body = workflowBodyFromForm(form);
+    const body = workflowBodyFromForm(form, 5);
     expect(body.stages).toEqual([
       {
         id: 'plan',

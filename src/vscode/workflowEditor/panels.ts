@@ -381,7 +381,8 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     }
     const launch = await this.#launch(identity);
     if (launch === null) return;
-    const draft = workflowDraftFromForm(workflowFormFromClient(request.rawForm));
+    const form = workflowFormFromClient(request.rawForm);
+    const draft = workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null);
     entry.publish(entry.lastModel ?? unavailable(identity), true, transient(null, true));
     const result = await invokeJson(launch, saveArgs(identity.file, request.baseHash), {
       cwd: context.root,
