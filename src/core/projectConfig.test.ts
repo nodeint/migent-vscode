@@ -23,15 +23,22 @@ function project(configText?: string): string {
 describe('readProjectConfig', () => {
   it('is missing when the file is absent, without creating it', () => {
     const root = project();
-    expect(readProjectConfig(root)).toEqual({ state: 'missing', error: null, schemaVersion: null });
+    expect(readProjectConfig(root)).toEqual({ state: 'missing', error: null, schemaVersion: null, roles: [], agents: [] });
     expect(() => readProjectConfig(root)).not.toThrow();
   });
 
-  it('reads the raw schema version', () => {
+  it('reads the raw schema version and the role and agent names', () => {
+    const config = readProjectConfig(
+      project('schema_version: 5\nroles:\n  planner: {}\n  reviewer: {}\nagents:\n  deep_reasoning: {}\n'),
+    );
+    expect(config.roles).toEqual(['planner', 'reviewer']);
+    expect(config.agents).toEqual(['deep_reasoning']);
     expect(readProjectConfig(project('schema_version: 3\nroles: {}\n'))).toEqual({
       state: 'ok',
       error: null,
       schemaVersion: 3,
+      roles: [],
+      agents: [],
     });
     expect(readProjectConfig(project('roles: {}\n')).schemaVersion).toBeNull();
     expect(readProjectConfig(project('schema_version: "3"\n')).schemaVersion).toBeNull();

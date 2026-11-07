@@ -8,6 +8,7 @@
   --mg-border: var(--vscode-panelSection-border, var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)));
   --mg-focus: var(--vscode-focusBorder, var(--vscode-foreground));
   --mg-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --mg-surface-2: var(--vscode-sideBar-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
   --mg-hover: var(--vscode-list-hoverBackground, transparent);
   --mg-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
   --mg-warn: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, var(--vscode-foreground)));
@@ -215,6 +216,119 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 .mg-section > h3 {
   font-size: 1em;
   margin: var(--mg-space-3) 0 var(--mg-space-1);
+}
+
+/* A section nested in another one: a group sits inline, a card is one bordered repeated item. */
+.mg-section--group,
+.mg-section--card {
+  margin: 0;
+}
+
+.mg-section--group + .mg-section--group {
+  margin-top: var(--mg-space-5);
+}
+
+/* Cards in one list sit close together; the add row below them keeps its own distance. */
+.mg-section--card + .mg-section--card {
+  margin-top: var(--mg-space-2);
+}
+
+/* Section head: a sticky band that titles the section and keeps its Add action in reach while the content
+   scrolls. The page background keeps the scrolling content from showing through it. */
+.mg-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mg-space-2);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  background: var(--vscode-editor-background, var(--mg-surface));
+  border-radius: var(--mg-radius);
+  box-shadow: 0 6px 8px -8px var(--vscode-widget-shadow, transparent);
+}
+
+/* Only a page section's head sticks; a nested section keeps its head on the page. */
+.mg-section--group > .mg-section-head,
+.mg-section--card > .mg-section-head {
+  position: static;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mg-section--group > .mg-section-head {
+  margin-bottom: var(--mg-space-3);
+}
+
+.mg-section-heading {
+  min-width: 0;
+}
+
+.mg-section-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+}
+
+.mg-section-title {
+  margin: 0;
+  font-size: 1.15em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A nested section names itself quietly, so it does not compete with the page section it sits in. */
+.mg-section--group > .mg-section-head .mg-section-title,
+.mg-section--card > .mg-section-head .mg-section-title {
+  color: var(--mg-muted);
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mg-section-note {
+  margin: var(--mg-space-1) 0 0;
+  color: var(--mg-muted);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.mg-section--group > .mg-section-head .mg-section-note,
+.mg-section--card > .mg-section-head .mg-section-note {
+  font-size: 0.85em;
+}
+
+.mg-section-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+}
+
+.mg-section > .mg-section-head + * {
+  margin-top: 0;
+}
+
+/* A card is one repeated item: its head names it and carries its remove action, its body holds the controls. */
+.mg-section--card {
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  overflow: clip;
+}
+
+.mg-section--card > .mg-section-head {
+  padding: var(--mg-space-2) var(--mg-space-3);
+}
+
+.mg-section--accent {
+  border-left: 3px solid var(--mg-info);
 }
 
 /* Status indicator: icon + text + theme color, so status is never color alone. */
@@ -442,19 +556,65 @@ button.mg-row:hover {
   white-space: nowrap;
 }
 
-/* Collapsible details */
+/* Collapsible details: one shared disclosure. The chevron sits in its own box, so the header never drifts
+   from it, and the browser's default marker is hidden. */
 .mg-details {
   margin: var(--mg-space-2) 0 0;
 }
 
-.mg-details > summary {
-  cursor: pointer;
+.mg-details-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mg-space-2);
   color: var(--mg-muted);
+  cursor: pointer;
+  list-style: none;
   user-select: none;
+}
+
+.mg-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.mg-details-summary::marker {
+  content: '';
+}
+
+.mg-details-arrow {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 1.5em;
+  color: var(--mg-muted);
+}
+
+.mg-details-arrow .mg-icon {
+  transform: rotate(-90deg);
+}
+
+.mg-details[open] > .mg-details-summary .mg-details-arrow .mg-icon {
+  transform: rotate(0deg);
+}
+
+.mg-details-summary:hover .mg-details-arrow {
+  color: var(--mg-fg);
+}
+
+.mg-details-heading {
+  flex: 1;
+  min-width: 0;
 }
 
 .mg-details[open] > summary {
   margin-bottom: var(--mg-space-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mg-details-arrow .mg-icon {
+    transition: transform 120ms ease;
+  }
 }
 
 /* Alert: a problem or warning that stays visible, with text wrapped inside the page width. */
@@ -530,6 +690,294 @@ button.mg-row:hover {
   outline-offset: -1px;
 }
 
+.mg-textarea {
+  min-height: 4.5em;
+  resize: vertical;
+}
+
+/* A select uses the editor dropdown colors, as mg-input uses the input colors. */
+.mg-select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--mg-space-1) var(--mg-space-2);
+  font: inherit;
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, var(--mg-border));
+}
+
+.mg-select:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+/* A picker looks like a select but opens the host's own list; the page repaints it with the new value. */
+.mg-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mg-space-2);
+  text-align: left;
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, var(--mg-border));
+  cursor: pointer;
+}
+
+.mg-picker:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: -1px;
+}
+
+.mg-picker:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mg-picker-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-picker-value--empty {
+  color: var(--vscode-input-placeholderForeground, var(--mg-muted));
+}
+
+/* Form layout: a field is a label with its hint icon, the control and an issue message. */
+.mg-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--mg-space-3);
+}
+
+.mg-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mg-space-1);
+  min-width: 0;
+}
+
+.mg-field--wide {
+  grid-column: 1 / -1;
+}
+
+.mg-field-head {
+  display: flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+}
+
+.mg-label,
+.mg-legend {
+  padding: 0;
+  color: var(--mg-fg);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.mg-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  margin-bottom: var(--mg-space-1);
+}
+
+/* A hint is an icon whose tooltip carries the text, so it does not take a line of its own. */
+.mg-hint-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--mg-muted);
+  cursor: help;
+}
+
+/* Slightly smaller than the 16px base icon, so it sits on the line of a label or legend. */
+.mg-hint-icon .mg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.mg-hint-icon:hover {
+  color: var(--mg-fg);
+}
+
+.mg-hint-icon--warn {
+  color: var(--mg-warn);
+}
+
+.mg-issue {
+  margin: 0;
+  font-size: 0.85em;
+}
+
+.mg-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mg-fieldset + .mg-fieldset {
+  margin-top: var(--mg-space-3);
+}
+
+/* The content area under a section head: plain by default, padded by a card. */
+.mg-section-body {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* Blocks that follow one another inside a body keep a steady rhythm. */
+.mg-section-body > * + * {
+  margin-top: var(--mg-space-3);
+}
+
+.mg-section--card > .mg-section-body {
+  padding: var(--mg-space-3);
+}
+
+/* A page section whose content has no item cards of its own: the body itself sits on a card under the head. */
+.mg-section--surface > .mg-section-body {
+  padding: var(--mg-space-3);
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+}
+
+/* One editable row: control or controls, then a quiet remove button. */
+.mg-inline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mg-space-2);
+  margin-bottom: var(--mg-space-1);
+}
+
+.mg-inline-row > .mg-input,
+.mg-inline-row > .mg-select {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.mg-inline-row > .mg-btn {
+  flex: none;
+}
+
+/* Checkbox list; an unknown imported value keeps the warning tone. */
+.mg-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mg-space-1) var(--mg-space-4);
+  padding: var(--mg-space-1) 0;
+}
+
+.mg-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+}
+
+.mg-check:focus-within {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+}
+
+.mg-check--unknown {
+  color: var(--mg-warn);
+}
+
+/* Badge: a number or short count that anchors a block. */
+.mg-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8em;
+  height: 1.8em;
+  padding: 0 var(--mg-space-1);
+  font-size: 0.85em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-button-secondaryForeground, var(--mg-fg));
+  background: var(--vscode-button-secondaryBackground, var(--mg-hover));
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 999px;
+}
+
+.mg-badge--warn {
+  color: var(--mg-warn);
+  background: none;
+  border-color: var(--mg-warn);
+}
+
+/* Chip: a short, quiet value such as a role or an instruction count. */
+.mg-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 var(--mg-space-2);
+  font-size: 0.85em;
+  line-height: 1.7;
+  color: var(--mg-muted);
+  border: 1px solid var(--mg-border);
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.mg-chip--info {
+  color: var(--mg-info);
+  border-color: var(--mg-info);
+}
+
+.mg-chip--warn {
+  color: var(--mg-warn);
+  border-color: var(--mg-warn);
+}
+
+/* Quiet row action: text without a button frame until hover. */
+.mg-btn--quiet {
+  padding: 2px var(--mg-space-1);
+  color: var(--mg-muted);
+  background: none;
+  border-color: transparent;
+}
+
+.mg-btn--quiet:hover {
+  color: var(--mg-fg);
+  background: var(--mg-hover);
+}
+
+/* Full-width dashed row that adds an item to a list. */
+.mg-add {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+  margin-top: var(--mg-space-1);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  color: var(--mg-muted);
+  background: none;
+  border: 1px dashed var(--mg-border);
+}
+
+.mg-add:hover {
+  color: var(--mg-fg);
+  background: var(--mg-hover);
+  border-style: solid;
+}
+
+/* An empty block states what is missing instead of leaving a blank area. */
+.mg-empty {
+  margin: var(--mg-space-2) 0 0;
+  padding: var(--mg-space-3);
+  color: var(--mg-muted);
+  border: 1px dashed var(--mg-border);
+  border-radius: var(--mg-radius);
+  text-align: center;
+}
+
 /* Sticky action footer: stays reachable while the page scrolls, wraps at narrow widths and takes its own
    space in the flow, so it never covers content. */
 .mg-footer {
@@ -558,7 +1006,7 @@ button.mg-row:hover {
 .mg-row:focus-visible,
 .mg-card:focus-visible,
 .mg-menu-item:focus-visible,
-.mg-details > summary:focus-visible {
+.mg-details-summary:focus-visible {
   outline: 1px solid var(--mg-focus);
   outline-offset: 2px;
 }
@@ -566,4 +1014,16 @@ button.mg-row:hover {
 .mg-details h3 {
   font-size: 1em;
   margin: var(--mg-space-3) 0 var(--mg-space-1);
+}
+
+@media (max-width: 640px) {
+  /* Only a page section stacks its head; a nested one keeps title and action on one line. */
+  .mg-section:not(.mg-section--group):not(.mg-section--card) > .mg-section-head {
+    position: static;
+    flex-direction: column;
+  }
+
+  .mg-section:not(.mg-section--group):not(.mg-section--card) > .mg-section-head > .mg-section-actions {
+    width: 100%;
+  }
 }

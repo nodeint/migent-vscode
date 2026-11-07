@@ -5,14 +5,18 @@ import type { LaunchSpec } from './locate';
 
 const launch: LaunchSpec = { command: 'migent', prefixArgs: [], via: 'native' };
 
-type Seen = { args: readonly string[]; timeoutMs: number }[];
+type Seen = { args: readonly string[]; timeoutMs: number; input?: string }[];
 
 function exec(outcome: Awaited<ReturnType<Exec>>): { exec: Exec; seen: Seen } {
   const seen: Seen = [];
   return {
     seen,
     exec: (_launch, args, options) => {
-      seen.push({ args, timeoutMs: options.timeoutMs });
+      seen.push({
+        args,
+        timeoutMs: options.timeoutMs,
+        ...(options.input === undefined ? {} : { input: options.input }),
+      });
       return Promise.resolve(outcome);
     },
   };
@@ -34,6 +38,16 @@ describe('invokeJson', () => {
     const fake = exec({ kind: 'done', stdout: 'not json', stderr: '' });
     const result = await invokeJson(launch, [], { cwd: '/p', exec: fake.exec });
     expect(result).toMatchObject({ kind: 'error', error: { kind: 'parse' } });
+  });
+
+  it('forwards a draft on stdin for commands that read `-`', async () => {
+    const fake = exec({ kind: 'done', stdout: '{"valid":true}', stderr: '' });
+    await invokeJson(launch, ['workflow', 'save', '-'], { cwd: '/p', input: 'schema_version: 5\n', exec: fake.exec });
+    expect(fake.seen[0]).toEqual({
+      args: ['workflow', 'save', '-'],
+      timeoutMs: 30_000,
+      input: 'schema_version: 5\n',
+    });
   });
 });
 

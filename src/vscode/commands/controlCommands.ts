@@ -167,7 +167,7 @@ async function runWorkflowFile({ control, host, memento }: Deps, arg: unknown): 
     return;
   }
   await memento.update(`${LAST_WORKFLOW_KEY}.${target.context.key}`, entry.id);
-  await runWorkflow(control, target.context, entry);
+  await launchWorkflow(control, target.context, entry);
 }
 
 /** Title entry for a chosen workflow; prepares the session and opens its `task.md`. */
@@ -197,12 +197,12 @@ async function prepare(control: ControlService, memento: vscode.Memento, registr
 const RUN_NOW = 'Run now';
 const PREPARE = 'Prepare';
 
-/** Sessions view entry: project, workflow, then Run now or Prepare, reusing the choices made. */
-async function newSession(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
-  const context = await pickProject(registry);
-  if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'New session');
-  if (workflow === undefined) return;
+/** Ask whether to run the chosen workflow now or prepare a session for it. */
+async function launchWorkflow(
+  control: ControlService,
+  context: ProjectContext,
+  workflow: WorkflowEntry,
+): Promise<void> {
   const mode = await vscode.window.showQuickPick(
     [
       { label: RUN_NOW, description: 'Describe a task and start the workflow now' },
@@ -212,6 +212,15 @@ async function newSession(control: ControlService, memento: vscode.Memento, regi
   );
   if (mode?.label === RUN_NOW) await runWorkflow(control, context, workflow);
   else if (mode?.label === PREPARE) await prepareWorkflow(control, context, workflow);
+}
+
+/** Sessions view entry: project, workflow, then Run now or Prepare, reusing the choices made. */
+async function newSession(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
+  const context = await pickProject(registry);
+  if (context === undefined) return;
+  const workflow = await pickWorkflow(context, memento, 'New session');
+  if (workflow === undefined) return;
+  await launchWorkflow(control, context, workflow);
 }
 
 interface TaskTarget {

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Add a workflow editor page whose Design form edits and saves schema 5 workflows. A stage chooses the role's agent, a
+  named agent, or a complete inline agent, and Save validates and writes through
+  `migent workflow save --preserve-comments` with a base hash. CLI diagnostics are shown on the page, and an invalid
+  draft or a file that changed on disk keeps the draft.
+- Make the workflow editor's references closed lists: a stage's named agent, dependencies, resumed session, decision
+  destinations, output source and artifact, and downstream workflow and artifact names. A decision chooses exactly one
+  destination and never its own stage; an imported route to several stages or to itself stays visible with a warning.
+  Changing a stage id updates the references in the draft, and an unknown imported value stays visible instead of
+  being rewritten.
+- Edit an inline agent's model with one searchable, provider-grouped picker shared with initialization, which writes
+  the provider and model together. Effort stays beside it, native option keys are suggested from
+  `migent get options --client <id> --native`, and an imported value the list does not cover stays visible.
+- Redesign the workflow editor's Design view around a clearer hierarchy: numbered stage cards whose header shows role,
+  agent and instruction chips, with named groups (Identity, Inline agent, Dependencies, Instructions, Decisions,
+  Advanced), quiet row actions, and one full-width dashed button to add a row.
+- Add a shared form kit, `media/shared/form.js` (`MigentForm`), and matching `base.css` components: fields, grids,
+  sections, checkbox lists, string and key/value list editors, compact `hint` tooltips and `button`. Every block uses
+  one `mg-section` structure (`mg-section-head`, `mg-section-body`, with `--group`, `--card` and `--surface`
+  variants), page section heads stay in view while scrolling, and `MigentPage.details` is the single collapsible
+  component with its own chevron. The workflow editor is its first consumer.
+- Add the Session workflow page, with a Workflow and Task tab on every session page.
 - Require Migent CLI 0.5.0 or newer. Migent 0.5.0 replaced providers with clients: Initialize now lists the
   clients on `PATH` and their models with `get clients` and `get models`, and passes `--client` and
   `--planner-client`/`--reviewer-client`, because 0.5.0 removed `get providers` and the `--provider` flags. Session,

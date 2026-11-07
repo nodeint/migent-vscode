@@ -264,11 +264,11 @@ describe('Questions page', () => {
     expect(page.byId('jump-1').className).toContain('q-jump--done');
   });
 
-  it('shows the shared session header with Questions, Results and Metrics tabs', () => {
+  it('shows the shared session header with Questions, Results, Metrics, Workflow and Task tabs', () => {
     const page = load();
     page.deliver(1, model(1));
     const tabs = page.doc.root.descendants().filter((node) => node.className === 'mg-tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Results', 'Metrics']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Results', 'Metrics', 'Workflow', 'Task']);
     expect(tabs[0]?.attrs['aria-current']).toBe('page');
     tabs[1]?.click();
     tabs[2]?.click();

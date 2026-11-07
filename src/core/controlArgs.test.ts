@@ -7,6 +7,8 @@ import {
   doctorArgs,
   doctorLines,
   initArgs,
+  availableClients,
+  clientChoice,
   joinClients,
   modelsDefaultFirst,
   parseDoctorOutput,
@@ -133,6 +135,30 @@ describe('reply, repair, doctor and init argv', () => {
     );
     expect(modelsDefaultFirst(choice)).toEqual(['m2', 'm1', 'm3']);
     expect(modelsDefaultFirst({ id: 'a', models: ['m1'], defaultModel: 'gone' })).toEqual(['m1']);
+  });
+
+  it('builds a client choice with its models and native option keys', () => {
+    const models = [
+      { name: 'm1', client: 'c', default: false },
+      { name: 'm2', client: 'c', default: true },
+      { name: 'x', client: 'other', default: true },
+    ];
+    const options = [{ name: 'effort' }, { name: 'sandbox' }, { name: 3 }, null];
+    expect(clientChoice('c', models, options)).toEqual({
+      name: 'c',
+      models: ['m1', 'm2'],
+      defaultModel: 'm2',
+      optionKeys: ['effort', 'sandbox'],
+    });
+    expect(clientChoice('none', models, options)).toBeNull();
+    expect(clientChoice('c', 'nope', options)).toBeNull();
+  });
+
+  it('lists only the available clients', () => {
+    expect(
+      availableClients([{ name: 'a', available: true }, { name: 'b', available: false }, { available: true }, null]),
+    ).toEqual(['a']);
+    expect(availableClients({})).toEqual([]);
   });
 
   it('reads doctor output, including failed checks, and rejects other shapes', () => {

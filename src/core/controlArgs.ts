@@ -123,6 +123,8 @@ export interface ClientChoice {
   models: string[];
   /** The model `get models` marks as default for this client. */
   defaultModel?: string;
+  /** Native option keys the client reports in `get options --native`. */
+  optionKeys?: string[];
 }
 
 /** The models of a client with its default first, when it is one of them. */
@@ -160,6 +162,51 @@ export function joinClients(clients: unknown, models: unknown): ClientChoice[] {
     choices.push(choice);
   }
   return choices;
+}
+
+/** `get clients --json`: one row per registered CLI client, with its PATH availability. */
+export function clientsArgs(): string[] {
+  return ['get', 'clients', '--json'];
+}
+
+/** `get models --client <id> --json`: the models one client reports, with its default. */
+export function clientModelsArgs(client: string): string[] {
+  return ['get', 'models', '--client', client, '--json'];
+}
+
+/** `get options --client <id> --native --json`: the client's native headless options. */
+export function clientOptionsArgs(client: string): string[] {
+  return ['get', 'options', '--client', client, '--native', '--json'];
+}
+
+/** The names of the available clients in `get clients --json`, in CLI order. */
+export function availableClients(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names: string[] = [];
+  for (const row of value as unknown[]) {
+    if (isRecord(row) && row.available === true && typeof row.name === 'string' && row.name !== '') names.push(row.name);
+  }
+  return names;
+}
+
+/**
+ * One client's choice for the workflow editor from its `get models` and native `get options` rows; null when the
+ * client reports no model.
+ */
+export function clientChoice(client: string, models: unknown, options: unknown): ProviderChoice | null {
+  if (!Array.isArray(models)) return null;
+  const { names, defaultModel } = clientModels(models as unknown[], client);
+  if (names.length === 0) return null;
+  const choice: ProviderChoice = { name: client, models: names };
+  if (defaultModel !== undefined) choice.defaultModel = defaultModel;
+  const optionKeys = Array.isArray(options)
+    ? (options as unknown[])
+        .filter(isRecord)
+        .map((option) => (typeof option.name === 'string' ? option.name : ''))
+        .filter((name) => name !== '')
+    : [];
+  if (optionKeys.length > 0) choice.optionKeys = optionKeys;
+  return choice;
 }
 
 export interface RoleModel {

@@ -21,6 +21,8 @@ export interface ExecOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs: number;
+  /** Text written to the child's stdin, which is closed afterwards. */
+  input?: string;
 }
 
 export type ExecOutcome =
@@ -32,7 +34,7 @@ export type Exec = (launch: LaunchSpec, args: readonly string[], options: ExecOp
 
 export const execWithExecFile: Exec = (launch, args, options) =>
   new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       launch.command,
       [...launch.prefixArgs, ...args],
       { cwd: options.cwd, env: options.env, timeout: options.timeoutMs, windowsHide: true, shell: false, encoding: 'utf8' },
@@ -50,12 +52,18 @@ export const execWithExecFile: Exec = (launch, args, options) =>
         }
       },
     );
+    if (options.input !== undefined) {
+      child.stdin?.on('error', () => undefined);
+      child.stdin?.end(options.input);
+    }
   });
 
 export interface InvokeOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  /** Text written to the child's stdin, for drafts passed as `-`. */
+  input?: string;
   exec?: Exec;
 }
 
@@ -70,6 +78,7 @@ export async function invokeText(
     cwd: options.cwd,
     env: options.env,
     timeoutMs: options.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS,
+    ...(options.input === undefined ? {} : { input: options.input }),
   });
   if (outcome.kind === 'failed') return { kind: 'error', error: outcome.error };
   return { kind: 'ok', value: outcome.stdout };

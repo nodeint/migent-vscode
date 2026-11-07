@@ -13,6 +13,37 @@ interface Connected {
   post: (message: Record<string, unknown>) => void;
 }
 
+/** A minimal element, enough for `MigentPage.details` to build its header and chevron. */
+class FakeElement {
+  public children: (FakeElement | string)[] = [];
+  public attrs: Record<string, string> = {};
+  public className = '';
+  public open = false;
+  public listeners: string[] = [];
+
+  public constructor(public readonly tagName: string) {}
+
+  public set textContent(value: string) {
+    this.children = value === '' ? [] : [value];
+  }
+
+  public get textContent(): string {
+    return this.children.map((child) => (typeof child === 'string' ? child : child.textContent)).join('');
+  }
+
+  public append(...items: (FakeElement | string)[]): void {
+    this.children.push(...items);
+  }
+
+  public setAttribute(name: string, value: string): void {
+    this.attrs[name] = value;
+  }
+
+  public addEventListener(type: string): void {
+    this.listeners.push(type);
+  }
+}
+
 /** Run `media/shared/page.js` against a minimal browser stub and return what the page would see. */
 function load() {
   const listeners: Listener[] = [];
@@ -23,7 +54,12 @@ function load() {
   };
   const context = vm.createContext({
     window,
-    document: { querySelector: () => null, documentElement: { style: { setProperty: () => undefined } } },
+    document: {
+      querySelector: () => null,
+      documentElement: { style: { setProperty: () => undefined } },
+      createElement: (tag: string) => new FakeElement(tag.toUpperCase()),
+      createElementNS: (_ns: string, tag: string) => new FakeElement(tag.toUpperCase()),
+    },
     acquireVsCodeApi: () => ({
       postMessage: (message: unknown) => posted.push(message),
       setState: (state: unknown) => states.push(state),
@@ -35,6 +71,12 @@ function load() {
   const page = window.MigentPage as {
     sessionStates: Record<string, { icon: string; tone: string }>;
     connect: (options: { render: (...args: unknown[]) => void }) => Connected;
+    details: (
+      key: string,
+      summary: string | FakeElement,
+      className?: string,
+      isOpenByDefault?: boolean,
+    ) => FakeElement;
   };
   return { page, listeners, posted, states, icons: window.MigentIcons as Record<string, unknown[]> };
 }
@@ -71,6 +113,40 @@ describe('MigentPage.connect', () => {
 
     connected.post({ type: 'edit', fingerprint: 'f' });
     expect(posted.at(-1)).toEqual({ type: 'edit', fingerprint: 'f' });
+  });
+});
+
+describe('MigentPage.details', () => {
+  it('puts the shared chevron before the header and the header after it', () => {
+    const { page } = load();
+    const header = new FakeElement('DIV');
+    header.textContent = 'Advanced settings';
+    const node = page.details('stage:0', header, 'wf-advanced');
+
+    expect(node.tagName).toBe('DETAILS');
+    expect(node.className).toBe('mg-details wf-advanced');
+    expect(node.listeners).toContain('toggle');
+
+    const head = node.children[0] as FakeElement;
+    expect(head.tagName).toBe('SUMMARY');
+    expect(head.className).toBe('mg-details-summary');
+
+    const arrow = head.children[0] as FakeElement;
+    expect(arrow.className).toBe('mg-details-arrow');
+    expect((arrow.children[0] as FakeElement).tagName).toBe('SVG');
+
+    const heading = head.children[1] as FakeElement;
+    expect(heading.className).toBe('mg-details-heading');
+    expect(heading.children[0]).toBe(header);
+  });
+
+  it('keeps a string summary as the heading text and honors the default open state', () => {
+    const { page } = load();
+    const closed = page.details('details', 'Details');
+    const heading = (closed.children[0] as FakeElement).children[1] as FakeElement;
+    expect(heading.textContent).toBe('Details');
+    expect(closed.open).toBe(false);
+    expect(page.details('open', 'Details', undefined, true).open).toBe(true);
   });
 });
 

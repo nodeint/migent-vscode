@@ -13,6 +13,10 @@ export interface ProjectConfig {
   error: string | null;
   /** Raw `schema_version` when it is an integer; null when absent or not an integer. */
   schemaVersion: number | null;
+  /** Role names declared under `roles`, for the workflow editor's suggestions. */
+  roles: string[];
+  /** Named agent keys declared under `agents`, for the workflow editor's suggestions. */
+  agents: string[];
 }
 
 function errorText(error: unknown): string {
@@ -29,22 +33,24 @@ export function readProjectConfig(projectRoot: string): ProjectConfig {
     text = readFileSync(configPath(projectRoot), 'utf8');
   } catch (error) {
     const code = isRecord(error) ? error.code : undefined;
-    if (code === 'ENOENT') return { state: 'missing', error: null, schemaVersion: null };
-    return { state: 'unreadable', error: errorText(error), schemaVersion: null };
+    if (code === 'ENOENT') return { state: 'missing', error: null, schemaVersion: null, roles: [], agents: [] };
+    return { state: 'unreadable', error: errorText(error), schemaVersion: null, roles: [], agents: [] };
   }
   let parsed: unknown;
   try {
     parsed = parse(text);
   } catch (error) {
-    return { state: 'invalid', error: errorText(error), schemaVersion: null };
+    return { state: 'invalid', error: errorText(error), schemaVersion: null, roles: [], agents: [] };
   }
   if (!isRecord(parsed)) {
-    return { state: 'invalid', error: 'config.yaml must be a YAML mapping', schemaVersion: null };
+    return { state: 'invalid', error: 'config.yaml must be a YAML mapping', schemaVersion: null, roles: [], agents: [] };
   }
   const version = parsed.schema_version;
   return {
     state: 'ok',
     error: null,
     schemaVersion: typeof version === 'number' && Number.isInteger(version) ? version : null,
+    roles: isRecord(parsed.roles) ? Object.keys(parsed.roles) : [],
+    agents: isRecord(parsed.agents) ? Object.keys(parsed.agents) : [],
   };
 }

@@ -5,7 +5,7 @@ constraints:
 stages:
   - id: plan
     role: planner
-    depends_on: []
+    depends_on: [ review_plan ]
     max_revisions: 3
     ask: human
     instructions:
@@ -40,3 +40,8 @@ outputs:
   - name: plan
     from_stage: plan
     artifact: plan.md
+downstream:
+  - workflow: implement
+    task: implement approved workflow
+    artifacts:
+      approved_plan: plan
