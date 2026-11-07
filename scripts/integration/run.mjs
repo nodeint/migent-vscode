@@ -136,7 +136,7 @@ async function runVersion(version, executable, downloadError) {
       launchArgs: [workspace, `--user-data-dir=${join(scratch, 'vscode-user')}`, `--extensions-dir=${join(scratch, 'vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}), ...(fileFilter ? { MIGENT_IT_FILE: fileFilter } : {}), ...(caseFilter ? { MIGENT_IT_CASE: caseFilter } : {}) },
+      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_CLI_BIN: bin, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}), ...(fileFilter ? { MIGENT_IT_FILE: fileFilter } : {}), ...(caseFilter ? { MIGENT_IT_CASE: caseFilter } : {}) },
     });
     return 0;
   } catch (error) {

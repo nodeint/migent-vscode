@@ -17,6 +17,19 @@ import { runTimelineScenarios } from './timeline.integration.test';
 import { runWatcherProbe } from './watcherProbe.integration.test';
 import { runWorkflowsProjectScenarios } from './workflowsProject.integration.test';
 
+/**
+ * Put the runner's fake CLI launcher first on PATH. On macOS VS Code merges the login shell's PATH ahead of
+ * the one the runner passes, so an installed `migent` can shadow the fixture CLI; this entry runs before any
+ * project appears and makes the extension locate the launcher wherever the window's PATH was ordered.
+ */
+function preferFixtureCli(): void {
+  const bin = process.env.MIGENT_IT_CLI_BIN;
+  if (bin === undefined || bin === '') return;
+  const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
+  const entries = (process.env[key] ?? '').split(path.delimiter).filter((entry) => entry !== '' && entry !== bin);
+  process.env[key] = [bin, ...entries].join(path.delimiter);
+}
+
 class CasesFailedError extends Error {}
 
 /** Lower-case a `--file` filter or suite name and drop `run`, `Scenarios` and `.integration.test(.ts)` noise. */
@@ -77,6 +90,7 @@ async function runSuites(filters: Filters): Promise<number> {
 
 /** Entry point loaded by VS Code (`extensionTestsPath`). Rejects when a required case fails. */
 export async function run(): Promise<void> {
+  preferFixtureCli();
   try {
     const filters: Filters = { file: normalizeFilter(process.env.MIGENT_IT_FILE), case: process.env.MIGENT_IT_CASE };
     const isFiltered = filters.file !== undefined || filters.case !== undefined;
