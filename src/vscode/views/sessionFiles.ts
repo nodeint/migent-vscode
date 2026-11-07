@@ -1,16 +1,18 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { sessionDir } from '../../core/paths';
+import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
 import { listSessionDirectory } from '../../core/sessionDirectory';
 import type { ProjectContext } from '../projects';
 import type { Releasable } from '../watchBackend';
-import type { DirectoryNode, TreeNode } from './nodes';
+import type { DirectoryNode, ExecutionNode, TreeNode } from './nodes';
+
+type FileContainerNode = DirectoryNode | ExecutionNode;
 
 /** Watches only directories whose rows have been expanded. */
 export class SessionFiles implements vscode.Disposable {
-  readonly #watches = new Map<string, { node: DirectoryNode; handle: Releasable }>();
+  readonly #watches = new Map<string, { node: FileContainerNode; handle: Releasable }>();
   readonly #refresh: (node: TreeNode) => void;
   readonly #intern: <T extends TreeNode>(node: T, parent: TreeNode | undefined) => T;
 
@@ -21,15 +23,17 @@ export class SessionFiles implements vscode.Disposable {
     this.#intern = intern;
   }
 
-  public children(context: ProjectContext, node: DirectoryNode): TreeNode[] {
-    const folder = path.join(sessionDir(context.root, node.sessionId), node.relativePath);
+  public children(context: ProjectContext, node: FileContainerNode): TreeNode[] {
+    const containerPath = node.kind === 'execution'
+      ? path.join(EXECUTIONS_DIRNAME, node.executionId) : node.relativePath;
+    const folder = path.join(sessionDir(context.root, node.sessionId), containerPath);
     if (!this.#watches.has(node.id)) {
       const handle = context.watcher.watchDirectory(folder, () => { this.#refresh(node); });
       this.#watches.set(node.id, { node, handle });
     }
     try {
       return listSessionDirectory(folder).map((entry) => {
-        const relativePath = path.join(node.relativePath, entry.name);
+        const relativePath = path.join(containerPath, entry.name);
         const id = `${node.id}/${encodeURIComponent(entry.name)}`;
         if (entry.isDirectory) {
           return this.#intern<DirectoryNode>({
@@ -64,7 +68,7 @@ export class SessionFiles implements vscode.Disposable {
     this.release((candidate) => candidate.id === node.id || candidate.id.startsWith(`${node.id}/`));
   }
 
-  public release(isMatch: (node: DirectoryNode) => boolean): void {
+  public release(isMatch: (node: FileContainerNode) => boolean): void {
     for (const [id, entry] of this.#watches) {
       if (!isMatch(entry.node)) continue;
       entry.handle.dispose();

@@ -462,16 +462,6 @@
           "group": "inline@3"
         },
         {
-          "command": "migent.session.openResult",
-          "when": "view == migent.sessions && viewItem =~ /^session./",
-          "group": "1_open@0"
-        },
-        {
-          "command": "migent.session.openTask",
-          "when": "view == migent.sessions && viewItem =~ /^session./",
-          "group": "1_open@1"
-        },
-        {
           "command": "migent.session.openQuestions",
           "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
           "group": "1_open@2"
@@ -480,26 +470,6 @@
           "command": "migent.session.openOutput",
           "when": "view == migent.sessions && viewItem =~ /^session..*;outputs(;|$)/",
           "group": "1_open@3"
-        },
-        {
-          "command": "migent.session.openMetrics",
-          "when": "view == migent.sessions && viewItem =~ /^session\\.completed/",
-          "group": "1_open@6"
-        },
-        {
-          "command": "migent.session.openPrompt",
-          "when": "view == migent.sessions && viewItem =~ /^execution./",
-          "group": "1_open@1"
-        },
-        {
-          "command": "migent.session.openResponse",
-          "when": "view == migent.sessions && viewItem =~ /^execution./",
-          "group": "1_open@2"
-        },
-        {
-          "command": "migent.session.openFailure",
-          "when": "view == migent.sessions && viewItem =~ /^execution\\.failed.*;failure(;|$)/",
-          "group": "1_open@0"
         },
         {
           "command": "migent.session.showLog",
@@ -515,11 +485,6 @@
           "command": "migent.session.copyId",
           "when": "view == migent.sessions && viewItem =~ /^session./",
           "group": "2_session@1"
-        },
-        {
-          "command": "migent.session.revealInExplorer",
-          "when": "view == migent.sessions && viewItem =~ /^session./",
-          "group": "2_session@2"
         },
         {
           "command": "migent.refresh",

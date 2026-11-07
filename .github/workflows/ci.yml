@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -35,12 +35,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
-      - name: Integration tests (Linux, informational)
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: xvfb-run -a pnpm test:integration
       - name: Integration tests
-        if: runner.os != 'Linux'
         run: pnpm test:integration
       - run: pnpm package
       - uses: actions/upload-artifact@v4

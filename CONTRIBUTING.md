@@ -38,7 +38,7 @@ implementation so they can be resolved or explicitly accepted.
 - `src/core/fixtures/`: sample session and workflow data used by tests.
 - `package.json`: extension identity, version, VS Code contributions, and scripts.
 - `.vscodeignore`: allowlist of files included in the VSIX.
-- `.github/workflows/ci.yml`: validation on Ubuntu and Windows.
+- `.github/workflows/ci.yml`: validation on macOS and Windows.
 - `plans/` and `designs/`: roadmap and UI references.
 
 Keep data handling testable without a VS Code host. Follow existing ownership
@@ -98,8 +98,8 @@ pnpm test
 pnpm package
 ```
 
-CI runs this sequence on Ubuntu and Windows, followed by `pnpm test:integration`
-(informational on Ubuntu, under `xvfb-run`). `pnpm lint` enforces that
+CI runs this sequence on macOS and Windows, followed by `pnpm test:integration`
+(a failure fails the job on both systems). `pnpm lint` enforces that
 `src/core/` and `src/cli/` never import `vscode`. There are currently no separate
 lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
@@ -148,7 +148,7 @@ approval; do not force-push or bypass branch protection.
 The tag-triggered `.github/workflows/release.yml` publishes the VSIX
 to VS Code Marketplace, Open VSX, and GitHub Releases. It validates the tag,
 then builds and packages the VSIX without rerunning tests; the release PR's CI
-on Windows and Ubuntu is the test gate. `main` advances only after publication
+on Windows and macOS is the test gate. `main` advances only after publication
 is verified.
 
 ### One-time maintainer setup
@@ -193,8 +193,8 @@ assets when the release changes what users can do.
 Run the full verification sequence and inspect the VSIX contents using
 `pnpm exec vsce ls --no-dependencies`. Confirm that `.vscodeignore` includes
 all required runtime assets and excludes development files and secrets.
-Install the VSIX and test the release behavior. CI covers Ubuntu and Windows;
-record macOS and remote-host checks separately when relevant. The extension
+Install the VSIX and test the release behavior. CI covers macOS and Windows;
+record Linux and remote-host checks separately when relevant. The extension
 declares `extensionKind: ["workspace"]`, so remote behavior must be checked
 in the workspace extension host.
 

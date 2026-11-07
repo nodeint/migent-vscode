@@ -9,6 +9,15 @@
   `doctor`, `session run`, and `session continue` refuse an older workflow schema. The migration
   replaces a stage's `model` with `agent` and deletes stage `options`, so recreate any needed option as an inline
   `agent` on that stage.
+- Browse every attempt’s full on-disk directory tree in the Sessions view, including arbitrary files and nested
+  folders, with live updates while expanded. Remove the attempt context menu; open files directly from the tree.
+- Simplify the session context menu by removing Open Result, Open Task, Open Metrics and Reveal Session in File Explorer.
+
+- Require Migent CLI 0.4.0 or newer. The extension supports one minimum CLI version: a newer feature bumps that
+  minimum in its release, and an older CLI shows the existing Update Migent CLI action instead of a per-feature
+  guard. After upgrading an existing project, run `migent migrate` once: `doctor`, `session run`, and
+  `session continue` refuse an older workflow schema. The migration replaces a stage's `model` with `agent` and
+  deletes stage `options`, so recreate any needed option as an inline `agent` on that stage.
 - Open the `failure.md` report of a failed execution from its attempt in the Sessions view or from the failure
   notification. The report opens read-only and the action appears only when the file exists; `failure.md` and
   `diagnostics.json` are also listed under the attempt.

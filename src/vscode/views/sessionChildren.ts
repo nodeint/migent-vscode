@@ -1,15 +1,9 @@
-import path from 'node:path';
-
-import * as vscode from 'vscode';
-
 import { describeCapability } from '../../cli/capabilityText';
 import { groupOf, type SessionGroup } from '../../core/attention';
-import { listExecutionFiles } from '../../core/executionFiles';
 import { listExecutions } from '../../core/executions';
-import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
+import { sessionDir } from '../../core/paths';
 import { RECENT_PERIODS,recentPeriod } from '../../core/recentPeriod';
 import {
-  executionFileLabel,
   nodeIds,
   sessionsDiagnostic,
 } from '../../core/sessionPresentation';
@@ -161,38 +155,4 @@ export function sessionChildren(host: ChildHost, context: ProjectContext, node: 
     kind: 'directory', id: `${node.id}/files`, project: context.key, sessionId: node.sessionId, relativePath: '',
   }, node));
   return children;
-}
-
-/** Files of one execution. Retains its directory before reading. */
-export function executionChildren(host: ChildHost, context: ProjectContext, node: ExecutionNode): TreeNode[] {
-  host.retain(context.key, { kind: 'execution', sessionId: node.sessionId, executionId: node.executionId });
-  const dir = path.join(sessionDir(context.root, node.sessionId), EXECUTIONS_DIRNAME, node.executionId);
-  const listing = listExecutionFiles(dir);
-  const fields = { project: context.key, sessionId: node.sessionId, executionId: node.executionId };
-  if (listing.state !== 'ok') {
-    const view: LeafView = {
-      label: listing.state === 'missing' ? 'Execution folder not found' : 'Execution folder unreadable',
-      icon: 'error',
-      color: 'list.errorForeground',
-      contextValue: `diag.execution-${listing.state}`,
-    };
-    return [leaf(host, { id: `${node.id}/diag`, parent: node, ...fields }, view)];
-  }
-  const rows: TreeNode[] = listing.files.filter((file) => file.kind !== 'artifact').map((file) => {
-    const uri = vscode.Uri.file(file.absolutePath);
-    return leaf(host, { id: nodeIds.file(uri.toString()), parent: node, ...fields }, {
-      label: executionFileLabel(file),
-      icon: 'file',
-      contextValue: `file.${file.kind}`,
-      tooltip: file.relativePath,
-      uri,
-    });
-  });
-  if (listing.hasArtifacts) {
-    rows.push(host.intern({
-      kind: 'directory', id: `${node.id}/artifacts`, project: context.key, sessionId: node.sessionId,
-      relativePath: path.join(EXECUTIONS_DIRNAME, node.executionId, 'artifacts'),
-    }, node));
-  }
-  return rows;
 }
