@@ -102,6 +102,23 @@
     return node;
   }
 
+  /**
+   * The root of a form. One delegated `input` and `change` listener reports every value edit inside it through
+   * `options.onEdit`, so a control never has to remember to. The control's own listener runs first (it is deeper),
+   * so the draft already holds the new value when `onEdit` runs. Add, remove and pick actions are clicks, not
+   * value edits, and still call `onEdit` themselves. The node lays out as its children (`display: contents`).
+   */
+  function root(children, options) {
+    const node = el('div', null, 'mg-form-root');
+    const report = () => {
+      if (typeof options.onEdit === 'function') options.onEdit();
+    };
+    node.addEventListener('input', report);
+    node.addEventListener('change', report);
+    node.append(...children);
+    return node;
+  }
+
   // ---------- layout ----------
 
   /** A compact hint for a control: a filled question icon whose tooltip carries the text. */
@@ -430,6 +447,7 @@
     textarea,
     select,
     picker,
+    root,
     field,
     grid,
     group,

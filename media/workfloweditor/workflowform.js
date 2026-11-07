@@ -624,6 +624,7 @@
         checkList([...available, ...unknown], stage.dependsOn, 'stages.' + index + '.dependsOn', (id, checked) => {
           if (checked && !stage.dependsOn.includes(id)) stage.dependsOn.push(id);
           if (!checked) stage.dependsOn = stage.dependsOn.filter((value) => value !== id);
+          if (!checked && stage.sessionResumeFrom === id) stage.sessionResumeFrom = '';
         }, unknown),
       ];
       if (form.stages.length < 2) {
@@ -919,11 +920,13 @@
       return holder;
     }
 
-    /** The whole Design view: datalists, Basics, Stages, Outputs and Downstream. */
+    /**
+     * The whole Design view: datalists, Basics, Stages, Outputs and Downstream, inside one form root that reports
+     * every value edit through `onEdit`.
+     */
     function render() {
-      const nodes = [datalists(), renderBasics()];
-      nodes.push(renderStages(), renderOutputs(), renderDownstream());
-      return nodes;
+      const nodes = [datalists(), renderBasics(), renderStages(), renderOutputs(), renderDownstream()];
+      return [ui.root(nodes, { onEdit })];
     }
 
     /**

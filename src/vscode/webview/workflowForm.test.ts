@@ -245,6 +245,27 @@ function fire(node: FakeNode, type: string): void {
   for (const handler of node.listeners[type] ?? []) handler();
 }
 
+/** Fire like the DOM: the target first, then each ancestor up to the root, which the fake nodes do not track. */
+function bubble(roots: FakeNode[], target: FakeNode, type: string): void {
+  const chain = (node: FakeNode, path: FakeNode[]): FakeNode[] | null => {
+    if (node === target) return [...path, node];
+    for (const child of node.children) {
+      if (typeof child === 'string') continue;
+      const found = chain(child, [...path, node]);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+  for (const root of roots) {
+    const found = chain(root, []);
+    if (found !== null) {
+      for (const node of found.reverse()) fire(node, type);
+      return;
+    }
+  }
+  throw new Error('target is not inside the rendered form');
+}
+
 describe('workflow form reference controls', () => {
   it('offers closed lists for every cross-reference', () => {
     const nodes = render(makeForm());
@@ -277,6 +298,35 @@ describe('workflow form reference controls', () => {
     expect(form.stages[1].dependsOn).toEqual(['draft']);
     expect(form.stages[1].sessionResumeFrom).toBe('draft');
     expect(form.outputs[0].fromStage).toBe('draft');
+  });
+
+  it('clears the resumed session when its stage is removed from Depends on', () => {
+    const form = makeForm();
+    const box = byPath(render(form), 'stages.1.dependsOn.plan');
+    box.checked = false;
+    fire(box, 'change');
+
+    expect(form.stages[1].dependsOn).toEqual([]);
+    expect(form.stages[1].sessionResumeFrom).toBe('');
+  });
+
+  it('reports every value edit through the form root without a per-control onEdit', () => {
+    const form = makeForm();
+    let edits = 0;
+    const nodes = render(form, { onEdit: () => (edits += 1) });
+    const concurrency = byPath(nodes, 'concurrency');
+    concurrency.value = '3';
+
+    expect(nodes).toHaveLength(1);
+    bubble(nodes, concurrency, 'input');
+    expect(form.concurrency).toBe(3);
+    expect(edits).toBe(1);
+
+    const resume = byPath(nodes, 'stages.1.sessionResumeFrom');
+    resume.value = '';
+    bubble(nodes, resume, 'change');
+    expect(form.stages[1].sessionResumeFrom).toBe('');
+    expect(edits).toBe(2);
   });
 
   it('offers one decision destination, never the stage itself', () => {

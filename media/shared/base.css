@@ -203,6 +203,10 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   gap: var(--mg-space-2);
 }
 
+.mg-form-root {
+  display: contents;
+}
+
 .mg-section {
   margin: var(--mg-space-5) 0 0;
 }

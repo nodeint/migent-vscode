@@ -65,7 +65,13 @@ closes on re-render.
 | `hint(text, warning)`, `button(label, { kind, onClick, disabled })` | A hint icon whose tooltip carries the text, and a button in a kit style |
 | `checkboxList({ items, selected, path, onChange, onEdit, onRestructure })` | Checkboxes; an unknown item carries `unknown` and uses the warning tone |
 | `stringList({ values, ... })`, `pairList({ pairs, ... })` | Add and remove rows; they mutate the draft in place and call `onEdit` after a value change and `onRestructure(path)` after add or remove |
+| `root(children, { onEdit })` | The form's root node. One delegated `input` and `change` listener reports every value edit inside it through `onEdit`, so a control never has to call it; it lays out as its children (`display: contents`) |
 | `addButton`, `removeButton` | A full-width add row and a quiet row action; a remove action names its row in `aria-label` |
+
+A form page renders its controls inside `root`. `root` is the only place a value edit becomes an `onEdit` call: a page
+callback just writes the new value into the draft, and `onEdit` then marks the page dirty and refreshes what depends on
+it, such as a Save button. Add, remove and pick actions are clicks, not value edits; they call `onEdit` themselves, or
+rebuild through `onRestructure`.
 
 A form page keeps its own data shape, validation and repaint. The kit reads no model. The Workflow editor is its
 first consumer; another page adopts it by loading `form.js` and passing the draft it already owns.
