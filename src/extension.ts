@@ -73,6 +73,40 @@ function createResultsPages(
   };
 }
 
+/** The Sessions tree and the tree view it is attached to. */
+function createSessionsView(
+  registry: ProjectRegistry,
+  capability: CapabilityService,
+): { sessionsTree: SessionsTreeProvider; sessionsView: vscode.TreeView<TreeNode> } {
+  const sessionsTree = new SessionsTreeProvider(registry, capability);
+  const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
+    treeDataProvider: sessionsTree,
+    showCollapseAll: true,
+  });
+  sessionsTree.attach(sessionsView);
+  return { sessionsTree, sessionsView };
+}
+
+/** The Workflows and Project tree providers. */
+function createProjectTrees(registry: ProjectRegistry): {
+  workflowsTree: WorkflowsTreeProvider;
+  projectTree: ProjectTreeProvider;
+} {
+  return { workflowsTree: new WorkflowsTreeProvider(registry), projectTree: new ProjectTreeProvider(registry) };
+}
+
+/** The workflow editor and the Session workflow page, which share the capability gate. */
+function createWorkflowPages(
+  registry: ProjectRegistry,
+  capability: CapabilityService,
+  extensionUri: vscode.Uri,
+): { workflowEditor: WorkflowEditorPanels; sessionWorkflow: SessionWorkflowPanels } {
+  return {
+    workflowEditor: new WorkflowEditorPanels(registry, capability, extensionUri),
+    sessionWorkflow: new SessionWorkflowPanels(registry, capability, extensionUri),
+  };
+}
+
 /** Drive the single liveness timer and the views that follow it. */
 function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, onTick: () => void): vscode.Disposable[] {
   return [
@@ -140,16 +174,9 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const capability = new CapabilityService(registry);
   const control = new ControlService(registry, capability);
   const contextKeys = new ContextKeys(registry, capability);
-  const sessionsTree = new SessionsTreeProvider(registry, capability);
-  const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
-    treeDataProvider: sessionsTree,
-    showCollapseAll: true,
-  });
-  sessionsTree.attach(sessionsView);
-  const workflowsTree = new WorkflowsTreeProvider(registry);
-  const projectTree = new ProjectTreeProvider(registry);
-  const workflowEditor = new WorkflowEditorPanels(registry, capability, context.extensionUri);
-  const sessionWorkflow = new SessionWorkflowPanels(registry, capability, context.extensionUri);
+  const { sessionsTree, sessionsView } = createSessionsView(registry, capability);
+  const { workflowsTree, projectTree } = createProjectTrees(registry);
+  const { workflowEditor, sessionWorkflow } = createWorkflowPages(registry, capability, context.extensionUri);
   const tails = new TailManager(registry);
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
