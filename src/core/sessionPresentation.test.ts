@@ -95,7 +95,7 @@ describe('session rows', () => {
   });
 
   it('shows only the small provider event fields', () => {
-    const snapshot = snapshotFromDir(capturedDir('question-pending'));
+    const snapshot = snapshotFromDir(sessionFixture('completed'));
     expect(sessionTooltip(snapshot, NOW)).toContain('Latest event: provider.turn_completed · completed · claude');
   });
 });
@@ -108,7 +108,7 @@ describe('execution rows', () => {
     attempt: 2,
     status: 'completed',
     decision: 'approved',
-    provider: 'claude',
+    client: 'claude',
     model: 'sonnet',
     hasFailureReport: false,
   };
@@ -116,7 +116,7 @@ describe('execution rows', () => {
   it('labels by stage and attempt, describes by provider and decision', () => {
     expect(executionLabel(execution)).toBe('plan · attempt 2');
     expect(executionDescription(execution)).toBe('claude/sonnet · approved');
-    expect(executionDescription({ ...execution, provider: null, model: null, decision: null })).toBe('');
+    expect(executionDescription({ ...execution, client: null, model: null, decision: null })).toBe('');
     expect(executionIcon(execution)).toBe('pass');
     expect(executionIcon({ ...execution, status: 'failed' })).toBe('error');
     expect(executionIcon({ ...execution, status: null })).toBe('circle-outline');

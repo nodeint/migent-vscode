@@ -102,9 +102,9 @@ export function doctorArgs(): string[] {
   return ['doctor', '--json'];
 }
 
-/** `get providers --json`: one row per registered provider, with no subprocess. */
-export function providersArgs(): string[] {
-  return ['get', 'providers', '--json'];
+/** `get clients --json`: one row per registered CLI client, with PATH facts only and no subprocess. */
+export function clientsArgs(): string[] {
+  return ['get', 'clients', '--json'];
 }
 
 /** `get models --json`: one row per (client, model); a client that is missing or fails has no rows. */
@@ -117,15 +117,16 @@ function stringList(value: unknown): string[] {
   return items.filter((entry): entry is string => typeof entry === 'string');
 }
 
-export interface ProviderChoice {
-  name: string;
+export interface ClientChoice {
+  /** The client id `init --client` accepts, such as `claude-code`. */
+  id: string;
   models: string[];
-  /** The provider's `default_model` when `get models` marks one as default. */
+  /** The model `get models` marks as default for this client. */
   defaultModel?: string;
 }
 
-/** The models of a provider with its default first, when it is one of them. */
-export function modelsDefaultFirst(choice: ProviderChoice): string[] {
+/** The models of a client with its default first, when it is one of them. */
+export function modelsDefaultFirst(choice: ClientChoice): string[] {
   const { defaultModel } = choice;
   if (defaultModel === undefined || !choice.models.includes(defaultModel)) return choice.models;
   return [defaultModel, ...choice.models.filter((model) => model !== defaultModel)];
@@ -144,20 +145,17 @@ function clientModels(models: unknown[], client: string): { names: string[]; def
 }
 
 /**
- * Joins `get providers --json` and `get models --json` into what `migent init --no-input` accepts: providers that do
- * not require a client, each with the models of its default client (the catalog `init` validates against).
- * Providers without models are dropped.
+ * Joins `get clients --json` and `get models --json` into what `migent init --no-input` accepts: the clients that
+ * are available on `PATH`, each with the models it reports. Clients without models are dropped.
  */
-export function joinProviders(providers: unknown, models: unknown): ProviderChoice[] {
-  if (!Array.isArray(providers) || !Array.isArray(models)) return [];
-  const choices: ProviderChoice[] = [];
-  for (const item of providers as unknown[]) {
-    if (!isRecord(item) || typeof item.name !== 'string' || item.requires_client !== false) continue;
-    const client = item.default_client;
-    if (typeof client !== 'string' || client === '') continue;
-    const { names, defaultModel } = clientModels(models as unknown[], client);
+export function joinClients(clients: unknown, models: unknown): ClientChoice[] {
+  if (!Array.isArray(clients) || !Array.isArray(models)) return [];
+  const choices: ClientChoice[] = [];
+  for (const item of clients as unknown[]) {
+    if (!isRecord(item) || typeof item.name !== 'string' || item.name === '' || item.available !== true) continue;
+    const { names, defaultModel } = clientModels(models as unknown[], item.name);
     if (names.length === 0) continue;
-    const choice: ProviderChoice = { name: item.name, models: names };
+    const choice: ClientChoice = { id: item.name, models: names };
     if (defaultModel !== undefined) choice.defaultModel = defaultModel;
     choices.push(choice);
   }
@@ -165,7 +163,7 @@ export function joinProviders(providers: unknown, models: unknown): ProviderChoi
 }
 
 export interface RoleModel {
-  provider: string;
+  client: string;
   model: string;
 }
 
@@ -175,20 +173,20 @@ export interface InitInput {
   developer: RoleModel;
 }
 
-/** `init --no-input` with every role's provider and model as separate argv values. */
+/** `init --no-input` with every role's client and model as separate argv values. */
 export function initArgs(input: InitInput): string[] {
   return [
     'init',
-    '--planner-provider',
-    input.planner.provider,
+    '--planner-client',
+    input.planner.client,
     '--planner-model',
     input.planner.model,
-    '--reviewer-provider',
-    input.reviewer.provider,
+    '--reviewer-client',
+    input.reviewer.client,
     '--reviewer-model',
     input.reviewer.model,
-    '--provider',
-    input.developer.provider,
+    '--client',
+    input.developer.client,
     '--model',
     input.developer.model,
     '--no-input',

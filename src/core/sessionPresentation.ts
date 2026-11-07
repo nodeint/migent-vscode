@@ -127,7 +127,7 @@ function stageLine(snapshot: SessionSnapshot): string | null {
 function eventLine(snapshot: SessionSnapshot): string | null {
   const event = snapshot.status?.latestProviderEvent ?? null;
   if (event === null) return null;
-  const detail = [event.event, event.summary, event.provider].filter((part) => part !== null).join(' · ');
+  const detail = [event.event, event.summary, event.client].filter((part) => part !== null).join(' · ');
   return detail === '' ? null : `Latest event: ${detail}`;
 }
 
@@ -188,8 +188,8 @@ export function executionLabel(execution: ExecutionSnapshot): string {
 }
 
 export function executionDescription(execution: ExecutionSnapshot): string {
-  const provider = [execution.provider, execution.model].filter((part) => part !== null).join('/');
-  return [provider === '' ? null : provider, execution.decision]
+  const client = [execution.client, execution.model].filter((part) => part !== null).join('/');
+  return [client === '' ? null : client, execution.decision]
     .filter((part): part is string => part !== null)
     .join(' · ');
 }

@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- Require Migent CLI 0.4.1 or newer. Initialize now lists providers and models with
-  `get providers` and `get models`, because 0.4.1 removed `provider list`. The extension supports one minimum CLI
+- Require Migent CLI 0.5.0 or newer. Migent 0.5.0 replaced providers with clients: Initialize now lists the
+  clients on `PATH` and their models with `get clients` and `get models`, and passes `--client` and
+  `--planner-client`/`--reviewer-client`, because 0.5.0 removed `get providers` and the `--provider` flags. Session,
+  Results and Session Metrics pages read `client` instead of `provider` from `execution.json`, `status.json` and
+  `metrics.json`; sessions written by older Migent versions show no client. The extension supports one minimum CLI
   version: a newer feature bumps that minimum in its release, and an older CLI shows the existing Update Migent CLI
   action instead of a per-feature guard. After upgrading an existing project, run `migent migrate` once:
-  `doctor`, `session run`, and `session continue` refuse an older workflow schema. The migration
-  replaces a stage's `model` with `agent` and deletes stage `options`, so recreate any needed option as an inline
-  `agent` on that stage.
+  `doctor`, `session run`, and `session continue` refuse an older workflow schema (now version 6). The migration
+  turns an agent's `provider` into `client.type`.
 - Browse every attempt’s full on-disk directory tree in the Sessions view, including arbitrary files and nested
   folders, with live updates while expanded. Remove the attempt context menu; open files directly from the tree.
 - Simplify the session context menu by removing Open Result, Open Task, Open Metrics and Reveal Session in File Explorer.

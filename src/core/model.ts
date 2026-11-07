@@ -91,7 +91,7 @@ export interface ProviderEventSummary {
   summary: string | null;
   stageId: string | null;
   executionId: string | null;
-  provider: string | null;
+  client: string | null;
   timestamp: string | null;
   /** `details.retry_at` of a `provider.quota` event; null when absent or empty. */
   retryAt: string | null;
@@ -100,7 +100,7 @@ export interface ProviderEventSummary {
 export interface RunningStage {
   executionId: string | null;
   stageId: string | null;
-  provider: string | null;
+  client: string | null;
   event: string | null;
   summary: string | null;
   updatedAt: string | null;
@@ -152,7 +152,7 @@ export interface ExecutionSnapshot {
   attempt: number;
   status: string | null;
   decision: string | null;
-  provider: string | null;
+  client: string | null;
   model: string | null;
   /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
   hasFailureReport: boolean;

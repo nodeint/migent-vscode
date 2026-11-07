@@ -10,7 +10,7 @@ import { isRecord } from './record';
  * (`argv`, `agent_id`, `cli_version`, `git_head`, `git_dirty`) are deliberately not part of these types.
  */
 
-/** Token and cost values; null when the provider did not report the field. */
+/** Token and cost values; null when the client did not report the field. */
 export interface MetricsUsage {
   inputTokens: number | null;
   outputTokens: number | null;
@@ -64,7 +64,7 @@ export interface MetricsExecution {
   stageId: string;
   attempt: number | null;
   role: string | null;
-  provider: string | null;
+  client: string | null;
   model: string | null;
   status: string;
   decision: string | null;
@@ -178,7 +178,7 @@ function executionOf(value: unknown): MetricsExecution | null {
     stageId,
     attempt: num(value.stage_attempt),
     role: str(value.role),
-    provider: str(value.provider),
+    client: str(value.client),
     model: str(value.model),
     status,
     decision: str(value.decision),

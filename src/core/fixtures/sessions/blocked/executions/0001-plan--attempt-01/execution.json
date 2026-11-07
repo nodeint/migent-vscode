@@ -4,7 +4,7 @@
   "execution_order": 1,
   "stage_id": "plan",
   "stage_attempt": 1,
-  "provider": "claude",
+  "client": "claude",
   "model": "sonnet",
   "options": {},
   "agent_id": "00000000-0000-0000-0000-000000000001",

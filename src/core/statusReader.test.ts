@@ -11,7 +11,7 @@ const okJson = JSON.stringify({
   latest_execution_status: 'completed',
   blocked_by_execution_ids: ['0001-plan--attempt-01'],
   running_stages: [
-    { execution_id: '0002-impl--attempt-01', stage_id: 'impl', provider: 'claude', event: 'provider.turn_started', summary: 's', updated_at: 't' },
+    { execution_id: '0002-impl--attempt-01', stage_id: 'impl', client: 'claude', event: 'provider.turn_started', summary: 's', updated_at: 't' },
     'garbage-row',
   ],
 });
@@ -27,7 +27,7 @@ describe('parseStatus', () => {
       {
         executionId: '0002-impl--attempt-01',
         stageId: 'impl',
-        provider: 'claude',
+        client: 'claude',
         event: 'provider.turn_started',
         summary: 's',
         updatedAt: 't',
@@ -109,7 +109,7 @@ describe('parseStatus questions, outputs and provider event', () => {
       summary: 'completed',
       stage_id: 'planner',
       execution_id: '0001-planner--attempt-01',
-      provider: 'claude',
+      client: 'claude',
       timestamp: '2026-11-01T11:17:13.282+00:00',
       details: { argv: Array.from({ length: 5000 }, (_, i) => `--flag-${i}`) },
       data: { usage: { input_tokens: 1 } },
@@ -120,7 +120,7 @@ describe('parseStatus questions, outputs and provider event', () => {
       summary: 'completed',
       stageId: 'planner',
       executionId: '0001-planner--attempt-01',
-      provider: 'claude',
+      client: 'claude',
       timestamp: '2026-11-01T11:17:13.282+00:00',
       retryAt: null,
     });

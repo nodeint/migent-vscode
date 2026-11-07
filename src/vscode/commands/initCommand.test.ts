@@ -96,21 +96,21 @@ describe('initializeProject', () => {
   describe('discovery', () => {
     const launch = { command: 'migent', args: [] };
     const ok = { kind: 'ok', launch, required, detected: required } as unknown as CapabilityState;
-    const providerRows = [
-      { name: 'claude', default_client: 'claude-code', requires_client: false },
-      { name: 'codex', default_client: 'codex', requires_client: false },
-      { name: 'byteplus', default_client: null, requires_client: true },
+    const clientRows = [
+      { name: 'claude-code', command: 'claude', available: true },
+      { name: 'codex', command: 'codex', available: true },
+      { name: 'opencode', command: 'opencode', available: false },
     ];
     const modelRows = [
       { name: 'sonnet', client: 'claude-code', default: false },
       { name: 'opus', client: 'claude-code', default: true },
-      { name: 'ark', client: 'byteplus', default: true },
+      { name: 'oc', client: 'opencode', default: true },
     ];
 
-    /** Answers `get providers` and `get models`; `undefined` makes that command fail. */
-    function discovery(providers: unknown, models: unknown): void {
+    /** Answers `get clients` and `get models`; `undefined` makes that command fail. */
+    function discovery(clients: unknown, models: unknown): void {
       invoke.json.mockImplementation((_launch: unknown, args: string[]) => {
-        const value = args[1] === 'providers' ? providers : models;
+        const value = args[1] === 'clients' ? clients : models;
         return Promise.resolve(
           value === undefined
             ? { kind: 'error', error: { kind: 'exit', detail: 'exit 1', stderr: '' } }
@@ -151,26 +151,26 @@ describe('initializeProject', () => {
       await initializeProject(new OperationGate(), capabilityWith(() => Promise.resolve(ok)));
     }
 
-    it('offers the providers init accepts, default model first, and initializes with the pick', async () => {
-      discovery(providerRows, modelRows);
+    it('offers the clients init accepts, default model first, and initializes with the pick', async () => {
+      discovery(clientRows, modelRows);
       invoke.text.mockResolvedValue({ kind: 'ok', value: '' });
       const { shown } = pickAllWithFirstModel();
       await run();
       expect(invoke.json.mock.calls.map((call) => call[1])).toEqual([
-        ['get', 'providers', '--json'],
+        ['get', 'clients', '--json'],
         ['get', 'models', '--json'],
       ]);
-      // codex has no models and byteplus requires a client: only claude is offered, its default first.
+      // codex has no models and opencode is not on PATH: only claude-code is offered, its default first.
       expect(shown[0].filter((item) => item.model !== undefined).map((item) => item.label)).toEqual([
-        'claude · opus',
-        'claude · sonnet',
+        'claude-code · opus',
+        'claude-code · sonnet',
       ]);
       const args = invoke.text.mock.calls[0][1] as string[];
-      expect(args).toEqual(expect.arrayContaining(['init', '--no-input', '--provider', 'claude', '--model', 'opus']));
+      expect(args).toEqual(expect.arrayContaining(['init', '--no-input', '--client', 'claude-code', '--model', 'opus']));
     });
 
     it('uses a partial catalog as is', async () => {
-      discovery(providerRows, [{ name: 'gpt', client: 'codex', default: true }]);
+      discovery(clientRows, [{ name: 'gpt', client: 'codex', default: true }]);
       invoke.text.mockResolvedValue({ kind: 'ok', value: '' });
       const { shown } = pickAllWithFirstModel();
       await run();
@@ -178,15 +178,15 @@ describe('initializeProject', () => {
     });
 
     it.each([
-      ['get providers fails', undefined, modelRows],
-      ['get models fails', providerRows, undefined],
-      ['no client has models', providerRows, []],
-      ['only a client-required provider has models', providerRows, [{ name: 'ark', client: 'byteplus' }]],
-    ])('shows the no-provider error and opens no picker when %s', async (_name, providers, models) => {
-      discovery(providers, models);
+      ['get clients fails', undefined, modelRows],
+      ['get models fails', clientRows, undefined],
+      ['no client has models', clientRows, []],
+      ['only an unavailable client has models', clientRows, [{ name: 'oc', client: 'opencode' }]],
+    ])('shows the no-client error and opens no picker when %s', async (_name, clients, models) => {
+      discovery(clients, models);
       await run();
       expect(vscodeMock.window.showErrorMessage).toHaveBeenCalledWith(
-        'No provider with models is available. Install a provider CLI first.',
+        'No client with models is available. Install an agent CLI first.',
       );
       expect(vscodeMock.window.createQuickPick).not.toHaveBeenCalled();
       expect(invoke.text).not.toHaveBeenCalled();

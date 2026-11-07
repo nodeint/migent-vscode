@@ -48,26 +48,26 @@ describe('probeCapability', () => {
   it('is ok when the detected version meets the minimum', async () => {
     const state = await probeCapability({
       locate: locate(),
-      run: outputting({ kind: 'output', stdout: '0.4.1\n' }),
+      run: outputting({ kind: 'output', stdout: '0.5.0\n' }),
     });
-    expect(state).toMatchObject({ kind: 'ok', detected: '0.4.1', required: '0.4.1', resolvedPath: '/bin/migent' });
+    expect(state).toMatchObject({ kind: 'ok', detected: '0.5.0', required: '0.5.0', resolvedPath: '/bin/migent' });
   });
 
   it('is old just below the built-in minimum', async () => {
     const state = await probeCapability({
       locate: locate(),
-      run: outputting({ kind: 'output', stdout: '0.3.9' }),
+      run: outputting({ kind: 'output', stdout: '0.4.9' }),
     });
-    expect(state).toMatchObject({ kind: 'old', detected: '0.3.9', required: MINIMUM_CLI_VERSION });
+    expect(state).toMatchObject({ kind: 'old', detected: '0.4.9', required: MINIMUM_CLI_VERSION });
   });
 
   it('is old when below the effective minimum, even if above the constant', async () => {
     const state = await probeCapability({
       locate: locate(),
-      required: '0.5.0',
-      run: outputting({ kind: 'output', stdout: '0.4.5' }),
+      required: '0.6.0',
+      run: outputting({ kind: 'output', stdout: '0.5.5' }),
     });
-    expect(state).toMatchObject({ kind: 'old', detected: '0.4.5', required: '0.5.0' });
+    expect(state).toMatchObject({ kind: 'old', detected: '0.5.5', required: '0.6.0' });
   });
 
   it('is old against the built-in minimum when no minimum is injected', async () => {
@@ -113,7 +113,7 @@ describe('probeCapability', () => {
     const cache = new Map<string, Promise<VersionOutput>>();
     const run: RunVersion = () => {
       calls += 1;
-      return Promise.resolve({ kind: 'output', stdout: '0.4.1' });
+      return Promise.resolve({ kind: 'output', stdout: '0.5.0' });
     };
     await probeCapability({ locate: locate(), run, cache });
     await probeCapability({ locate: locate(), run, cache });

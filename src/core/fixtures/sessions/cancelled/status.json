@@ -16,7 +16,7 @@
     "execution_id": "0001-plan--attempt-01",
     "stage_id": "plan",
     "summary": "completed",
-    "provider": "claude",
+    "client": "claude",
     "details": {},
     "data": {}
   },

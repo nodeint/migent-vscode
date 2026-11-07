@@ -77,7 +77,7 @@ background work; its caller chooses when to scan, refresh, and load details.
 | Session Files and attempt trees | `listSessionDirectory` on expansion | Lists each directory level; symbolic links are shown as files and are not traversed |
 
 The status reader keeps only the small scalar fields of `latest_provider_event`
-(`event`, `summary`, `stage_id`, `execution_id`, `provider`, `timestamp`) and
+(`event`, `summary`, `stage_id`, `execution_id`, `client`, `timestamp`) and
 removes the object from `raw`: its `details` and `usage` can be very large.
 
 [readStatus](../src/core/statusReader.ts) makes at most three attempts with 100 ms
