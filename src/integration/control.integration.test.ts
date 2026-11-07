@@ -325,7 +325,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'New session: the Sessions title bar offers an add-icon action beside Refresh, and the Palette does not',
+    name: 'New session: the Sessions title bar offers a play-icon action beside Refresh, and the Palette does not',
     async run() {
       interface Item {
         command: string;
@@ -338,7 +338,7 @@ const scenarios: Scenario[] = [
         contributes: { commands: Item[]; menus: Record<string, Item[]> };
       };
       const command = contributes.commands.find((item) => item.command === 'migent.session.new');
-      assert.deepEqual([command?.title, command?.icon], ['New session', '$(add)']);
+      assert.deepEqual([command?.title, command?.icon], ['New session', '$(play)']);
       const titleBar = contributes.menus['view/title'].filter((item) => item.when?.startsWith('view == migent.sessions'));
       assert.deepEqual(
         titleBar.map((item) => [item.command, item.group?.startsWith('navigation')]),
