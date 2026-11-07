@@ -31,12 +31,13 @@ describe('readSessionWorkflow', () => {
     const model = read(project(false));
     expect(model.isLocked).toBe(false);
     expect(model.form.stages.map((s) => s.id)).toEqual(['plan']);
-    expect(model.canSave).toBe(false);
+    expect(model.canSave).toBe(true);
   });
 
   it('locks once a stage has an execution', () => {
     const model = read(project(true));
     expect(model.isLocked).toBe(true);
     expect(model.ranStages).toEqual(['plan']);
+    expect(model.canSave).toBe(false);
   });
 });

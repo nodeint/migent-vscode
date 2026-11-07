@@ -39,12 +39,12 @@ const PAGE: PageDescriptor = {
   title: 'Workflow',
 };
 
-const EMPTY_VALIDATION: WorkflowEditorModel['validation'] = { errors: [], warnings: [] };
+export const EMPTY_VALIDATION: WorkflowEditorModel['validation'] = { errors: [], warnings: [] };
 
-const SAVE_TIMEOUT_MS = 30_000;
+export const SAVE_TIMEOUT_MS = 30_000;
 
 /** Exit code of a rejected save because the file no longer matches the base hash. */
-const EXIT_CONFLICT = 3;
+export const EXIT_CONFLICT = 3;
 
 /** A workflow file inside one project's `.migent/workflows` folder. */
 export interface WorkflowEditorIdentity {
@@ -144,7 +144,7 @@ function transient(error: string | null, isSaving = false): WorkflowTransient {
   return { saving: isSaving, applying: false, error };
 }
 
-function splitDiagnostics(diagnostics: WorkflowDiagnostic[]): WorkflowEditorModel['validation'] {
+export function splitDiagnostics(diagnostics: WorkflowDiagnostic[]): WorkflowEditorModel['validation'] {
   return {
     errors: diagnostics
       .filter((item) => item.severity === 'error')
@@ -155,7 +155,7 @@ function splitDiagnostics(diagnostics: WorkflowDiagnostic[]): WorkflowEditorMode
   };
 }
 
-function envelopeOf(stdout: string | undefined): ReturnType<typeof parseWorkflowAuthoringEnvelope> {
+export function envelopeOf(stdout: string | undefined): ReturnType<typeof parseWorkflowAuthoringEnvelope> {
   if (stdout === undefined || stdout.trim() === '') return null;
   try {
     return parseWorkflowAuthoringEnvelope(JSON.parse(stdout) as unknown);
@@ -539,7 +539,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
 }
 
 /** A short, safe description of why the CLI could not save. */
-function saveFailure(exitCode: number | undefined, stderr: string): string {
+export function saveFailure(exitCode: number | undefined, stderr: string): string {
   const last = stderr
     .split(/\r?\n/)
     .map((line) => line.trim())

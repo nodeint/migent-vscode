@@ -1,9 +1,19 @@
 import * as vscode from 'vscode';
 
+import { describeCapability } from '../../cli/capabilityText';
+import { invokeJson } from '../../cli/invoke';
+import type { LaunchSpec } from '../../cli/locate';
+import type { CapabilityState } from '../../cli/version';
 import type { ProviderChoice } from '../../core/controlArgs';
 import { workflowDraftPath } from '../../core/paths';
 import { SESSION_ACTIONS } from '../../core/resultsIntent';
 import { readSessionWorkflow, type SessionWorkflowModel } from '../../core/sessionWorkflow';
+import {
+  parseWorkflowAuthoringEnvelope,
+  workflowDraftFromForm,
+  workflowFormFromClient,
+} from '../../core/workflowEditor';
+import { parseWorkflowEditorMessage } from '../../core/workflowEditorIntent';
 import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
 import { pickModel } from '../modelPicker';
@@ -11,6 +21,14 @@ import { openFile } from '../openFile';
 import type { ProjectRegistry } from '../projects';
 import { SESSION_ACTION_COMMANDS } from '../results/panels';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import {
+  EMPTY_VALIDATION,
+  envelopeOf,
+  EXIT_CONFLICT,
+  SAVE_TIMEOUT_MS,
+  saveFailure,
+  splitDiagnostics,
+} from '../workflowEditor/panels';
 import { ProviderCatalog } from '../workflowEditor/providerList';
 
 export const SESSION_WORKFLOW_VIEW_TYPE = 'migent.sessionWorkflow';
@@ -20,7 +38,11 @@ const PAGE: PageDescriptor = {
   styles: ['sessionworkflow.css'],
   scripts: ['sessionworkflow.js'],
   title: 'Session workflow',
-  modules: { folder: 'workfloweditor', styles: ['workfloweditor.css'], scripts: ['workflowform.js'] },
+  modules: {
+    folder: 'workfloweditor',
+    styles: ['workfloweditor.css'],
+    scripts: ['workflowform.js'],
+  },
 };
 
 export interface SessionWorkflowIdentity {
@@ -36,32 +58,93 @@ function isIdentity(value: unknown): value is SessionWorkflowIdentity {
 
 const SHORT_ID = 8;
 
+const LOCKED_MESSAGE = 'A stage already ran, so this workflow can no longer be changed.';
+
+interface SaveRequest {
+  rawForm: unknown;
+  baseHash: string;
+}
+
+interface Transient {
+  saving: boolean;
+  applying: boolean;
+  error: string | null;
+}
+
+const transient = (error: string | null, isSaving = false): Transient => ({
+  saving: isSaving,
+  applying: false,
+  error,
+});
+
+function saveArgs(sessionId: string, baseHash: string): string[] {
+  return [
+    'workflow',
+    'save',
+    '-',
+    '--session',
+    sessionId,
+    '--format',
+    'yaml',
+    '--base-hash',
+    baseHash,
+    '--preserve-comments',
+    '--json',
+  ];
+}
+
 const keyOf = (identity: SessionWorkflowIdentity): string => `${identity.project}#${identity.sessionId}`;
 
 class Entry {
   public revision = 0;
   public providers: ProviderChoice[] = [];
   public lastModel: SessionWorkflowModel | null = null;
+  /** Diagnostics of the last save attempt; they describe the page draft, not the file on disk. */
+  public validation: SessionWorkflowModel['validation'] = EMPTY_VALIDATION;
+  public validationHash: string | null = null;
+  /** One save at a time per page. */
+  #saving = false;
   #lastJson: string | null = null;
   constructor(
     public readonly identity: SessionWorkflowIdentity,
     public readonly panel: vscode.WebviewPanel,
   ) {}
 
-  public publish(model: SessionWorkflowModel, isForced: boolean): void {
-    const json = JSON.stringify(model);
+  public setValidation(validation: SessionWorkflowModel['validation'], hash: string | null): void {
+    this.validation = validation;
+    this.validationHash = hash;
+  }
+
+  public beginSave(): boolean {
+    if (this.#saving) return false;
+    this.#saving = true;
+    return true;
+  }
+
+  public endSave(): void {
+    this.#saving = false;
+  }
+
+  public publish(model: SessionWorkflowModel, isForced: boolean, state?: Transient): void {
+    const json = JSON.stringify(model) + (state === undefined ? '' : JSON.stringify(state));
     if (!isForced && json === this.#lastJson) return;
     this.#lastJson = json;
     this.lastModel = model;
     this.revision += 1;
     this.panel.title = `Session workflow: ${model.id || model.sessionId.slice(0, SHORT_ID)}`;
-    void this.panel.webview.postMessage({ type: 'model', revision: this.revision, identity: this.identity, model });
+    void this.panel.webview.postMessage({
+      type: 'model',
+      revision: this.revision,
+      identity: this.identity,
+      model,
+      ...(state === undefined ? {} : { transient: state }),
+    });
   }
 }
 
 /**
  * Session workflow pages: one per `(project, session)`. They show the session's own `workflow.yaml` as the shared
- * workflow form and lock every field once a stage has run. Saving is not available yet.
+ * workflow form and lock every field once a stage has run. Before that, the draft is saved with the CLI.
  */
 export class SessionWorkflowPanels implements vscode.Disposable {
   readonly #entries = new Map<string, Entry>();
@@ -70,10 +153,10 @@ export class SessionWorkflowPanels implements vscode.Disposable {
 
   constructor(
     private readonly registry: ProjectRegistry,
-    capability: CapabilityService,
+    private readonly capability: CapabilityService,
     private readonly extensionUri: vscode.Uri,
   ) {
-    this.#providers = new ProviderCatalog(capability);
+    this.#providers = new ProviderCatalog(this.capability);
     this.#subscriptions = [
       registry.onDidChange((change) => {
         this.#onChange(change);
@@ -124,7 +207,10 @@ export class SessionWorkflowPanels implements vscode.Disposable {
   }
 
   #options(): vscode.WebviewOptions {
-    return { enableScripts: true, localResourceRoots: pageResourceRoots(this.extensionUri, PAGE) };
+    return {
+      enableScripts: true,
+      localResourceRoots: pageResourceRoots(this.extensionUri, PAGE),
+    };
   }
 
   #adopt(panel: vscode.WebviewPanel, identity: SessionWorkflowIdentity): void {
@@ -144,7 +230,8 @@ export class SessionWorkflowPanels implements vscode.Disposable {
   /** Handle a page message; only a closed set is understood. */
   public async handle(identity: SessionWorkflowIdentity, raw: unknown): Promise<void> {
     const entry = this.#entries.get(keyOf(identity));
-    const message = typeof raw === 'object' && raw !== null ? (raw as { type?: unknown; intent?: unknown; action?: unknown }) : {};
+    const message =
+      typeof raw === 'object' && raw !== null ? (raw as { type?: unknown; intent?: unknown; action?: unknown }) : {};
     const { type } = message;
     const context = this.registry.project(identity.project);
     if (entry === undefined || context === undefined) return;
@@ -153,6 +240,12 @@ export class SessionWorkflowPanels implements vscode.Disposable {
       case 'reload':
         this.#send(identity, true);
         return;
+      case 'saveForm': {
+        const parsed = parseWorkflowEditorMessage(raw);
+        if (parsed?.type === 'saveForm')
+          await this.#save(identity, entry, { rawForm: parsed.form, baseHash: parsed.baseHash });
+        return;
+      }
       case 'intent':
         await this.#sessionAction(identity, message);
         return;
@@ -183,7 +276,94 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     if (message.intent !== 'sessionAction' || action === undefined || action === 'openWorkflow') return;
     // The Results tab opens the Results page; the action's own command opens the output file.
     const command = action === 'openResult' ? 'migent.session.openResult' : SESSION_ACTION_COMMANDS[action];
-    await vscode.commands.executeCommand(command, { project: identity.project, sessionId: identity.sessionId });
+    await vscode.commands.executeCommand(command, {
+      project: identity.project,
+      sessionId: identity.sessionId,
+    });
+  }
+
+  async #save(identity: SessionWorkflowIdentity, entry: Entry, request: SaveRequest): Promise<void> {
+    if (!entry.beginSave()) return;
+    try {
+      await this.#runSave(identity, entry, request);
+    } finally {
+      entry.endSave();
+    }
+  }
+
+  async #runSave(identity: SessionWorkflowIdentity, entry: Entry, request: SaveRequest): Promise<void> {
+    const context = this.registry.project(identity.project);
+    if (context === undefined) {
+      this.#fail(entry, 'The project is no longer available.');
+      return;
+    }
+    if (entry.lastModel?.isLocked ?? true) {
+      this.#fail(entry, LOCKED_MESSAGE);
+      return;
+    }
+    const launch = await this.#launch(entry);
+    if (launch === null) return;
+    this.#publishLast(entry, transient(null, true));
+    const result = await invokeJson(launch, saveArgs(identity.sessionId, request.baseHash), {
+      cwd: context.root,
+      input: workflowDraftFromForm(workflowFormFromClient(request.rawForm)),
+      timeoutMs: SAVE_TIMEOUT_MS,
+    });
+    if (this.#entries.get(keyOf(identity)) !== entry) return;
+    if (result.kind === 'ok') this.#saved(identity, entry, parseWorkflowAuthoringEnvelope(result.value));
+    else this.#saveFailed(entry, result.error);
+  }
+
+  #saved(
+    identity: SessionWorkflowIdentity,
+    entry: Entry,
+    envelope: ReturnType<typeof parseWorkflowAuthoringEnvelope>,
+  ): void {
+    if (!envelope?.written) {
+      this.#fail(entry, 'Migent did not confirm the save.');
+      return;
+    }
+    entry.setValidation(splitDiagnostics(envelope.diagnostics), envelope.hash);
+    this.#send(identity, true, transient(null));
+  }
+
+  #saveFailed(entry: Entry, error: { exitCode?: number; stderr: string; stdout?: string }): void {
+    const envelope = envelopeOf(error.stdout);
+    if (envelope !== null) {
+      entry.setValidation(splitDiagnostics(envelope.diagnostics), entry.lastModel?.savedHash ?? null);
+      if (error.exitCode === EXIT_CONFLICT) {
+        this.#publishLast(entry, transient('The file changed on disk. Reload it from disk before saving again.'));
+        return;
+      }
+      if (entry.validation.errors.length > 0) {
+        this.#publishLast(entry, transient(null));
+        return;
+      }
+    }
+    this.#fail(entry, saveFailure(error.exitCode, error.stderr));
+  }
+
+  async #launch(entry: Entry): Promise<LaunchSpec | null> {
+    let state: CapabilityState = this.capability.state(entry.identity.project);
+    if (state.kind === 'checking') state = await this.capability.windowReady();
+    if (state.kind === 'ok' && state.launch !== undefined) return state.launch;
+    const diagnostic = describeCapability(state);
+    this.#fail(
+      entry,
+      `Saving needs a usable Migent CLI. ${diagnostic?.label ?? 'The CLI check has not finished; try again shortly.'}`,
+    );
+    return null;
+  }
+
+  #fail(entry: Entry, message: string): void {
+    entry.setValidation(EMPTY_VALIDATION, null);
+    this.#publishLast(entry, transient(message));
+  }
+
+  /** Repost the shown model with the current diagnostics and a transient state. */
+  #publishLast(entry: Entry, state: Transient): void {
+    if (entry.lastModel === null) return;
+    entry.publish({ ...entry.lastModel, validation: entry.validation }, true, state);
   }
 
   async #loadProviders(identity: SessionWorkflowIdentity): Promise<void> {
@@ -196,23 +376,25 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     this.#send(identity, true);
   }
 
-  #send(identity: SessionWorkflowIdentity, isForced: boolean): void {
+  #send(identity: SessionWorkflowIdentity, isForced: boolean, state?: Transient): void {
     const entry = this.#entries.get(keyOf(identity));
     const context = this.registry.project(identity.project);
     if (entry === undefined || context === undefined) return;
-    entry.publish(
-      readSessionWorkflow({
-        projectKey: identity.project,
-        projectName: context.folder.name,
-        projectRoot: context.root,
-        sessionId: identity.sessionId,
-        snapshot: context.store.snapshot(identity.sessionId),
-        scan: context.catalog.workflows(),
-        config: context.catalog.config(),
-        providers: entry.providers,
-      }),
-      isForced,
-    );
+    const model = readSessionWorkflow({
+      projectKey: identity.project,
+      projectName: context.folder.name,
+      projectRoot: context.root,
+      sessionId: identity.sessionId,
+      snapshot: context.store.snapshot(identity.sessionId),
+      scan: context.catalog.workflows(),
+      config: context.catalog.config(),
+      providers: entry.providers,
+    });
+    if (entry.validationHash !== null && model.savedHash !== entry.validationHash) {
+      entry.setValidation(EMPTY_VALIDATION, null);
+    }
+    model.validation = entry.validation;
+    entry.publish(model, isForced, state);
   }
 
   #onChange(change: MigentChange): void {
