@@ -202,8 +202,8 @@ async function waitForWatcher(folder: vscode.Uri): Promise<void> {
 /**
  * Give one scenario its own temporary workspace folder, copied from the fixture template. Nothing is shared
  * between scenarios, so nothing has to wait for a previous scenario's `.migent/` to disappear. The window was
- * launched from a `.code-workspace` file, which is what keeps VS Code 1.90 from restarting the extension host
- * when a folder is added.
+ * launched from a `.code-workspace` file so it is multi-root from the start, a guard against the extension-host
+ * restart that adding a folder to a single-folder window can cause.
  */
 export async function openScenarioFolder(): Promise<ScenarioFolder> {
   const root = fs.mkdtempSync(path.join(requiredEnv('MIGENT_IT_SCRATCH'), 'case-'));

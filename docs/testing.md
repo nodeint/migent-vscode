@@ -52,9 +52,9 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 through `@vscode/test-electron`, and runs the suite concurrently against the minimum
 supported version (`engines.vscode`) and the latest stable in separate scratch trees and profiles. Files named
 `*.integration.test.ts` are excluded from Vitest. Each run opens VS Code from a `.code-workspace` file whose only
-folder is an empty anchor, so the window is multi-root from the start (adding a folder to a single-folder window
-restarts the extension host on 1.90). Every scenario and every watcher probe case gets its own folder, copied from
-`src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
+folder is an empty anchor, so the window is multi-root from the start (a guard against the extension-host restart
+that adding a folder to a single-folder window can cause). Every scenario and every watcher probe case
+gets its own folder, copied from `src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
 `updateWorkspaceFolders` and handed over once a sentinel file proves its watcher is live. Nothing is shared between
 cases, so no case waits for a previous case's `.migent/` to disappear. Folders are removed from the workspace after
 each case but deleted only when the run ends, because deleting a directory VS Code is still unwatching caused
@@ -69,7 +69,7 @@ and, on GitHub Actions, as error annotations. Each case also logs `RUN`, `PASS` 
 VS Code log. Pass `--versions a,b` to choose versions, `--file reply` to run only suites whose
 file name contains the text (`watcherProbe` selects the probe), and `--case "empty reply"` to run only cases whose
 name contains the text (both case-insensitive, combinable; a filter that matches nothing fails, and the watcher probe
-is skipped unless `--file` names it), for example `pnpm test:integration --versions 1.90.0 --file reply`. Pass
+is skipped unless `--file` names it), for example `pnpm test:integration --versions 1.93.0 --file reply`. Pass
 `--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
 delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to

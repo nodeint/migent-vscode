@@ -1,7 +1,7 @@
 /**
  * Integration test runner (@vscode/test-electron).
  *
- * Usage: node scripts/integration/run.mjs [--versions 1.90.0,stable] [--file reply] [--case "empty reply"]
+ * Usage: node scripts/integration/run.mjs [--versions 1.93.0,stable] [--file reply] [--case "empty reply"]
  * --file and --case narrow the run to matching suites/cases (case-insensitive substrings) for quick verification;
  * a filter that matches nothing fails the run.
  * Default versions: the minimum supported VS Code (engines.vscode) and the latest stable.
@@ -113,8 +113,8 @@ async function runVersion(version, executable, downloadError) {
   mkdirSync(anchor);
   mkdirSync(join(scratch, 'cases'));
   cpSync(join(root, 'src', 'integration', 'fixtures', 'workspace'), template, { recursive: true });
-  // Opening from a .code-workspace file makes the window multi-root from the start. Adding a folder to a plain
-  // single-folder window restarts the extension host on VS Code 1.90.
+  // Opening from a .code-workspace file makes the window multi-root from the start. This guards against
+  // the extension-host restart that adding a folder to a plain single-folder window can cause.
   const workspace = join(scratch, 'integration.code-workspace');
   writeFileSync(workspace, JSON.stringify({ folders: [{ path: anchor }] }, null, 2));
   if (isExclude) {

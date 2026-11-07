@@ -10,20 +10,6 @@ import type { CapabilityService } from '../capability';
 const STATUS_MESSAGE_MS = 2000;
 const TERMINAL_NAME = 'Migent: Install CLI';
 
-/** Shell integration (VS Code 1.93+); absent from the API types of the minimum supported version. */
-interface ShellExecution {
-  readonly commandLine?: unknown;
-}
-interface ShellIntegration {
-  executeCommand: (commandLine: string) => ShellExecution;
-}
-interface ShellEvents {
-  onDidEndTerminalShellExecution?: (
-    listener: (event: { execution: ShellExecution; exitCode: number | undefined }) => void,
-  ) => vscode.Disposable;
-}
-type ShellTerminal = vscode.Terminal & { shellIntegration?: ShellIntegration };
-
 function hasUninitializedFolder(): boolean {
   return (vscode.workspace.workspaceFolders ?? []).some(
     (folder) => folder.uri.scheme === 'file' && !existsSync(migentDir(folder.uri.fsPath)),
@@ -31,16 +17,14 @@ function hasUninitializedFolder(): boolean {
 }
 
 /**
- * Sends the install command and resolves when that very execution ended (exit code from shell integration, VS Code
- * 1.93+) or when its terminal closed. Without shell integration only the close (or the manual button) ends the wait.
+ * Sends the install command and resolves when that very execution ended (exit code from shell integration) or when
+ * its terminal closed. Without shell integration only the close (or the manual button) ends the wait.
  */
-async function waitForInstall(terminal: ShellTerminal): Promise<InstallEnd> {
-  const wait = new InstallWait<ShellExecution, vscode.Terminal>();
-  const shellWindow: typeof vscode.window & ShellEvents = vscode.window;
+async function waitForInstall(terminal: vscode.Terminal): Promise<InstallEnd> {
+  const wait = new InstallWait<vscode.TerminalShellExecution, vscode.Terminal>();
   const subscriptions = [
     vscode.window.onDidCloseTerminal((closed) => wait.terminalClosed(closed, terminal)),
-    shellWindow.onDidEndTerminalShellExecution?.((event) => wait.executionEnded(event.execution, event.exitCode)) ??
-      new vscode.Disposable(() => {}),
+    vscode.window.onDidEndTerminalShellExecution((event) => wait.executionEnded(event.execution, event.exitCode)),
   ];
   try {
     if (terminal.shellIntegration === undefined) terminal.sendText(INSTALL_CLI_COMMAND);
@@ -76,7 +60,7 @@ async function waitForCli(capability: CapabilityService, isStopped: () => boolea
 
 async function runInstall(capability: CapabilityService): Promise<InstallEnd> {
   const existing = vscode.window.terminals.find((candidate) => candidate.name === TERMINAL_NAME);
-  const terminal: ShellTerminal = existing ?? vscode.window.createTerminal({ name: TERMINAL_NAME });
+  const terminal: vscode.Terminal = existing ?? vscode.window.createTerminal({ name: TERMINAL_NAME });
   terminal.show();
   let isDone = false;
   try {
