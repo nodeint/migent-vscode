@@ -37,7 +37,7 @@ function execution(extra: Record<string, unknown> = {}): Record<string, unknown>
     stage_id: 'plan',
     stage_attempt: 1,
     role: null,
-    provider: null,
+    client: null,
     model: null,
     status: 'completed',
     usage,
@@ -64,7 +64,7 @@ describe('readMetrics', () => {
     expect(read.metrics.totals.usage.costUsd).toBe(0.5);
     expect(read.metrics.totals.usageMissing.costUsd).toBe(1);
     expect(read.metrics.stages.map((stage) => stage.id)).toEqual(['plan', 'review_plan']);
-    expect(read.metrics.executions.map((item) => [item.order, item.stageId, item.provider])).toEqual([
+    expect(read.metrics.executions.map((item) => [item.order, item.stageId, item.client])).toEqual([
       [1, 'plan', 'claude'],
       [2, 'review_plan', 'codex'],
     ]);

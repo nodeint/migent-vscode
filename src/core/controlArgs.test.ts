@@ -7,7 +7,7 @@ import {
   doctorArgs,
   doctorLines,
   initArgs,
-  joinProviders,
+  joinClients,
   modelsDefaultFirst,
   parseDoctorOutput,
   parsePrepared,
@@ -88,21 +88,21 @@ describe('reply, repair, doctor and init argv', () => {
   });
 
   it('passes every init role as separate argv values and never prompts', () => {
-    const role = (provider: string) => ({ provider, model: `${provider} model "x"` });
+    const role = (client: string) => ({ client, model: `${client} model "x"` });
     const args = initArgs({ developer: role('d'), planner: role('p'), reviewer: role('r') });
     expect(args).toContain('--no-input');
-    const planner = args.indexOf('--planner-provider');
-    expect(args.slice(planner, planner + 4)).toEqual(['--planner-provider', 'p', '--planner-model', 'p model "x"']);
-    const developer = args.indexOf('--provider');
-    expect(args.slice(developer, developer + 4)).toEqual(['--provider', 'd', '--model', 'd model "x"']);
+    const planner = args.indexOf('--planner-client');
+    expect(args.slice(planner, planner + 4)).toEqual(['--planner-client', 'p', '--planner-model', 'p model "x"']);
+    const developer = args.indexOf('--client');
+    expect(args.slice(developer, developer + 4)).toEqual(['--client', 'd', '--model', 'd model "x"']);
   });
 
-  it('joins providers with their default client models and drops the rest', () => {
-    const providers = [
-      { kind: 'provider', name: 'claude', default_client: 'claude-code', requires_client: false },
-      { kind: 'provider', name: 'codex', default_client: 'codex', requires_client: false },
-      { kind: 'provider', name: 'byteplus', default_client: null, requires_client: true },
-      { kind: 'provider', name: 'grok', default_client: 'grok', requires_client: false },
+  it('joins available clients with their models and drops the rest', () => {
+    const clients = [
+      { kind: 'client', name: 'claude-code', command: 'claude', available: true },
+      { kind: 'client', name: 'codex', command: 'codex', available: true },
+      { kind: 'client', name: 'opencode', command: 'opencode', available: false },
+      { kind: 'client', name: 'grok', command: 'grok', available: true },
       'junk',
     ];
     const models = [
@@ -110,21 +110,21 @@ describe('reply, repair, doctor and init argv', () => {
       { kind: 'model', name: 'opus', client: 'claude-code', default: true },
       { kind: 'model', name: 'opus', client: 'other', default: true },
       { kind: 'model', name: 'gpt', client: 'codex', default: false },
-      { kind: 'model', name: 'ark', client: 'byteplus', default: true },
+      { kind: 'model', name: 'x', client: 'opencode', default: true },
       { kind: 'model', client: 'grok' },
       null,
     ];
-    expect(joinProviders(providers, models)).toEqual([
-      { name: 'claude', models: ['sonnet', 'opus'], defaultModel: 'opus' },
-      { name: 'codex', models: ['gpt'] },
+    expect(joinClients(clients, models)).toEqual([
+      { id: 'claude-code', models: ['sonnet', 'opus'], defaultModel: 'opus' },
+      { id: 'codex', models: ['gpt'] },
     ]);
-    expect(joinProviders('nope', models)).toEqual([]);
-    expect(joinProviders(providers, {})).toEqual([]);
+    expect(joinClients('nope', models)).toEqual([]);
+    expect(joinClients(clients, {})).toEqual([]);
   });
 
   it('lists the default model first', () => {
-    const [choice] = joinProviders(
-      [{ name: 'a', default_client: 'c', requires_client: false }],
+    const [choice] = joinClients(
+      [{ name: 'c', available: true }],
       [
         { name: 'm1', client: 'c', default: false },
         { name: 'm2', client: 'c', default: true },
@@ -132,7 +132,7 @@ describe('reply, repair, doctor and init argv', () => {
       ],
     );
     expect(modelsDefaultFirst(choice)).toEqual(['m2', 'm1', 'm3']);
-    expect(modelsDefaultFirst({ name: 'a', models: ['m1'], defaultModel: 'gone' })).toEqual(['m1']);
+    expect(modelsDefaultFirst({ id: 'a', models: ['m1'], defaultModel: 'gone' })).toEqual(['m1']);
   });
 
   it('reads doctor output, including failed checks, and rejects other shapes', () => {

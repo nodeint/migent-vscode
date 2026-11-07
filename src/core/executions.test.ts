@@ -41,7 +41,7 @@ describe('listExecutions', () => {
       attempt: 1,
       status: 'completed',
       decision: null,
-      provider: 'claude',
+      client: 'claude',
       model: 'sonnet',
     });
   });
@@ -77,7 +77,7 @@ describe('listExecutions', () => {
 describe('readExecution', () => {
   it('returns the full record for an existing execution', () => {
     const record = readExecution(path.join(fixture('completed'), 'executions', '0001-plan--attempt-01'));
-    expect(record?.['provider']).toBe('claude');
+    expect(record?.['client']).toBe('claude');
     expect(record?.['hostname']).toBe('REDACTED_HOST');
   });
 

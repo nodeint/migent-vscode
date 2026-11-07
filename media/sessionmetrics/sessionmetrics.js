@@ -134,9 +134,9 @@
     const { node, body } = banner(false);
     if (totals.costPartial === true) {
       const missing = missingCostExecutions(metrics);
-      const providers = [...new Set(missing.map((execution) => execution.provider).filter((name) => name))];
+      const clients = [...new Set(missing.map((execution) => execution.client).filter((name) => name))];
       const total = isNumber(totals.executions) ? ' of ' + totals.executions : '';
-      const which = providers.length > 0 ? ' (' + providers.join(', ') + ')' : '';
+      const which = clients.length > 0 ? ' (' + clients.join(', ') + ')' : '';
       body.append(
         el('p', 'Cost is partial.'),
         el(
@@ -266,15 +266,15 @@
     ['Cache write', 'cacheWriteTokens'],
   ];
 
-  function providerKey(execution) {
-    return execution.provider === null ? 'No role' : execution.provider + '/' + (execution.model || NONE);
+  function clientKey(execution) {
+    return execution.client === null ? 'No role' : execution.client + '/' + (execution.model || NONE);
   }
 
-  function providerRows(metrics) {
+  function clientRows(metrics) {
     const byProvider = new Map();
     for (const execution of metrics.executions) {
       if (isSkipped(execution)) continue;
-      const key = providerKey(execution);
+      const key = clientKey(execution);
       const entry = byProvider.get(key) || { executions: 0, known: 0, reported: 0, missing: 0 };
       entry.executions += 1;
       if (isNumber(execution.usage.costUsd)) {
@@ -287,7 +287,7 @@
     return byProvider;
   }
 
-  function providerMeta(entry) {
+  function clientMeta(entry) {
     const executions = entry.executions + ' executions';
     if (entry.reported === 0) return executions + ' · no cost reported';
     if (entry.missing === 0) return executions + ' · ' + money(entry.known);
@@ -313,20 +313,20 @@
     node.append(el('p', 'Input excludes cache reads. Reasoning is reported beside output, not added to it.', 'mg-muted'));
 
     node.append(el('h3', 'Providers'));
-    const rows = providerRows(metrics);
+    const rows = clientRows(metrics);
     if (rows.size === 0) {
       node.append(el('p', 'No execution ran.', 'mg-muted'));
       return node;
     }
-    const providers = el('ul', null, 'mg-list');
+    const clients = el('ul', null, 'mg-list');
     for (const [name, entry] of rows) {
       const row = el('div', null, 'mg-row');
-      row.append(el('span', name, 'mg-row-main mg-mono'), el('span', providerMeta(entry), 'mg-row-meta'));
+      row.append(el('span', name, 'mg-row-main mg-mono'), el('span', clientMeta(entry), 'mg-row-meta'));
       const item = el('li');
       item.append(row);
-      providers.append(item);
+      clients.append(item);
     }
-    node.append(providers);
+    node.append(clients);
     return node;
   }
 
@@ -359,7 +359,7 @@
       meta.append(el('span', 'did not run', 'mg-muted'));
     } else {
       meta.append(
-        el('span', execution.provider === null ? 'no role' : providerKey(execution), 'mg-muted'),
+        el('span', execution.client === null ? 'no role' : clientKey(execution), 'mg-muted'),
         el('span', formatSeconds(execution.wallSeconds)),
         el('span', isNumber(execution.usage.costUsd) ? money(execution.usage.costUsd) : 'no cost', isNumber(execution.usage.costUsd) ? 'mg-muted' : 'mg-warn'),
       );
@@ -403,7 +403,7 @@
     if (isSkipped(execution)) {
       fact(facts, 'Skip reason', execution.skipReason || 'No reason recorded');
     } else {
-      fact(facts, 'Provider', execution.provider === null ? 'No role; Migent runs the verify list' : providerKey(execution));
+      fact(facts, 'Client', execution.client === null ? 'No role; Migent runs the verify list' : clientKey(execution));
     }
     const started = formatTime(execution.createdAt);
     const finished = formatTime(execution.completedAt);

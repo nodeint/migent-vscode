@@ -59,7 +59,7 @@
       "stage_id": "plan",
       "stage_attempt": 1,
       "role": "planner",
-      "provider": "claude",
+      "client": "claude",
       "model": "opus",
       "cli_version": "9.9.9 (Test CLI)",
       "argv": [
@@ -108,7 +108,7 @@
       "stage_id": "review_plan",
       "stage_attempt": 1,
       "role": "reviewer",
-      "provider": "codex",
+      "client": "codex",
       "model": "gpt-test",
       "cli_version": "9.9.9 (Test CLI)",
       "argv": [

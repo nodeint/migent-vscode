@@ -31,7 +31,7 @@ function runningStages(value: unknown): RunningStage[] {
     rows.push({
       executionId: asString(raw.execution_id),
       stageId: asString(raw.stage_id),
-      provider: asString(raw.provider),
+      client: asString(raw.client),
       event: asString(raw.event),
       summary: asString(raw.summary),
       updatedAt: asString(raw.updated_at),
@@ -66,7 +66,7 @@ function providerEventSummary(value: unknown): ProviderEventSummary | null {
     summary: asString(value.summary),
     stageId: asString(value.stage_id),
     executionId: asString(value.execution_id),
-    provider: asString(value.provider),
+    client: asString(value.client),
     timestamp: asString(value.timestamp),
     retryAt: retryAt === null || retryAt.trim() === '' ? null : retryAt,
   };

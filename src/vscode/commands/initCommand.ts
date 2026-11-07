@@ -5,13 +5,13 @@ import * as vscode from 'vscode';
 import { invokeJson, invokeText } from '../../cli/invoke';
 import type { LaunchSpec } from '../../cli/locate';
 import {
+  type ClientChoice,
+  clientsArgs,
   initArgs,
   type InitInput,
-  joinProviders,
+  joinClients,
   modelsArgs,
   modelsDefaultFirst,
-  type ProviderChoice,
-  providersArgs,
   type RoleModel,
 } from '../../core/controlArgs';
 import type { OperationGate } from '../../core/operationGate';
@@ -51,15 +51,15 @@ interface ModelItem extends vscode.QuickPickItem {
   model?: RoleModel;
 }
 
-function modelItems(providers: ProviderChoice[]): ModelItem[] {
+function modelItems(clients: ClientChoice[]): ModelItem[] {
   const items: ModelItem[] = [];
-  for (const choice of providers) {
-    items.push({ label: choice.name, kind: vscode.QuickPickItemKind.Separator });
+  for (const choice of clients) {
+    items.push({ label: choice.id, kind: vscode.QuickPickItemKind.Separator });
     for (const model of modelsDefaultFirst(choice)) {
       items.push({
-        label: `${choice.name} · ${model}`,
+        label: `${choice.id} · ${model}`,
         description: model === choice.defaultModel ? 'default' : undefined,
-        model: { provider: choice.name, model },
+        model: { client: choice.id, model },
       });
     }
   }
@@ -80,14 +80,14 @@ const FOR_ALL_BUTTON: vscode.QuickInputButton = {
 /** One filterable list; with `canPickAll`, a title button accepts the highlighted model for every role. */
 async function pickModel(
   title: string,
-  providers: ProviderChoice[],
+  clients: ClientChoice[],
   canPickAll: boolean,
 ): Promise<ModelPick | undefined> {
   const input = vscode.window.createQuickPick<ModelItem>();
   input.title = title;
-  input.placeholder = 'Type to filter by provider or model';
+  input.placeholder = 'Type to filter by client or model';
   input.matchOnDescription = true;
-  input.items = modelItems(providers);
+  input.items = modelItems(clients);
   if (canPickAll) input.buttons = [FOR_ALL_BUTTON];
   const subscriptions: vscode.Disposable[] = [];
   try {
@@ -111,10 +111,10 @@ async function pickModel(
 }
 
 /** One pick for each role (developer first), or one pick in total when the first uses "for all roles". */
-async function pickRoles(providers: ProviderChoice[]): Promise<InitInput | undefined> {
+async function pickRoles(clients: ClientChoice[]): Promise<InitInput | undefined> {
   const chosen: Partial<Record<Role, RoleModel>> = {};
   for (const role of ROLES) {
-    const picked = await pickModel(`Initialize Migent: ${role} model`, providers, role === ROLES[0]);
+    const picked = await pickModel(`Initialize Migent: ${role} model`, clients, role === ROLES[0]);
     if (picked === undefined) return undefined;
     if (picked.isForAll) return { developer: picked.model, planner: picked.model, reviewer: picked.model };
     chosen[role] = picked.model;
@@ -129,7 +129,7 @@ interface InitTarget {
   folder: vscode.WorkspaceFolder;
   launch: LaunchSpec;
   env: NodeJS.ProcessEnv;
-  providers: ProviderChoice[];
+  clients: ClientChoice[];
 }
 
 /** Resolves with `undefined` as soon as the token is cancelled; the abandoned work finishes on its own. */
@@ -159,8 +159,8 @@ async function warnUnavailable(kind: string): Promise<void> {
 }
 
 /**
- * The CLI and the provider list for a folder that has no project yet. It uses the window CLI state, which does not
- * depend on the folder, and reads `get providers` and `get models` once.
+ * The CLI and the client list for a folder that has no project yet. It uses the window CLI state, which does not
+ * depend on the folder, and reads `get clients` and `get models` once.
  */
 async function loadTarget(
   folder: vscode.WorkspaceFolder,
@@ -178,27 +178,27 @@ async function loadTarget(
   const listOptions = { cwd: folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS };
   const listed = await untilCancelled(
     Promise.all([
-      invokeJson(state.launch, providersArgs(), listOptions),
+      invokeJson(state.launch, clientsArgs(), listOptions),
       invokeJson(state.launch, modelsArgs(), listOptions),
     ]),
     token,
   );
   if (listed === undefined) return undefined;
-  const [providerRows, modelRows] = listed;
-  const providers =
-    providerRows.kind === 'ok' && modelRows.kind === 'ok' ? joinProviders(providerRows.value, modelRows.value) : [];
-  if (providers.length === 0) {
-    void vscode.window.showErrorMessage('No provider with models is available. Install a provider CLI first.');
+  const [clientRows, modelRows] = listed;
+  const clients =
+    clientRows.kind === 'ok' && modelRows.kind === 'ok' ? joinClients(clientRows.value, modelRows.value) : [];
+  if (clients.length === 0) {
+    void vscode.window.showErrorMessage('No client with models is available. Install an agent CLI first.');
     return undefined;
   }
-  return { folder, launch: state.launch, env, providers };
+  return { folder, launch: state.launch, env, clients };
 }
 
 /** Run the prompts and `migent init` for a folder whose launch key this call holds. */
 async function initializeFolder(target: InitTarget): Promise<void> {
   const { launch, env } = target;
   const options = { cwd: target.folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS };
-  const roles = await pickRoles(target.providers);
+  const roles = await pickRoles(target.clients);
   if (roles === undefined) return;
   // The prompts took time: the folder may have been initialized meanwhile, so eligibility is checked again.
   if (existsSync(migentDir(target.folder.uri.fsPath))) {
@@ -235,7 +235,7 @@ export async function initializeProject(gate: OperationGate, capability: Capabil
   }
   try {
     const target = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Migent: loading providers…', cancellable: true },
+      { location: vscode.ProgressLocation.Notification, title: 'Migent: loading clients…', cancellable: true },
       (_progress, token) => loadTarget(folder, capability, token),
     );
     if (target !== undefined) await initializeFolder(target);
