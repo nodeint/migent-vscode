@@ -23,19 +23,20 @@ const text = (value: vscode.TreeItem['label']): string => (typeof value === 'str
 const workflows = (env: Env): MetaNode[] => env.api.workflowsTree.getChildren();
 const labels = (env: Env): string[] =>
   workflows(env).map((node) => text(env.api.workflowsTree.getTreeItem(node).label));
-const itemFor = (env: Env, label: string): vscode.TreeItem => {
+const nodeFor = (env: Env, label: string): MetaNode => {
   const node = workflows(env).find((candidate) => text(env.api.workflowsTree.getTreeItem(candidate).label) === label);
   assert.ok(node, `workflow row ${label}`);
-  return env.api.workflowsTree.getTreeItem(node);
+  return node;
 };
+const itemFor = (env: Env, label: string): vscode.TreeItem => env.api.workflowsTree.getTreeItem(nodeFor(env, label));
 const workflow = (id: string, extra = ''): string => `id: ${id}\ntitle: ${id} title\nstages:\n  - id: a\n${extra}`;
 const activeFile = (): string => vscode.window.activeTextEditor?.document.uri.fsPath.toLowerCase() ?? '';
 
 const scenarios: Scenario[] = [
   {
-    name: 'AC4/AC6: workflows and config open in native editors; invalid files and duplicates are flagged',
+    name: 'AC4/AC6: workflow rows open the editor page and config opens in a native editor; invalid files and duplicates are flagged',
     async run(env) {
-      await createProject(env);
+      const project = await createProject(env);
       // Workflows directory missing, then empty.
       await waitFor('missing directory row', () => labels(env).join() === 'No workflows directory');
       fs.mkdirSync(migentPath(env.root, 'workflows'));
@@ -55,11 +56,17 @@ const scenarios: Scenario[] = [
       assert.match(String(itemFor(env, 'dup').description), /^duplicate id · [ab]\.yaml$/);
       assert.equal(itemFor(env, 'plan').contextValue, 'workflow.ok');
 
-      // Clicking a row opens the real file, including the invalid one.
+      // Clicking a row opens the editor page for that file, including the invalid one.
       for (const [label, file] of [['plan', 'plan.yaml'], ['broken.yml', 'broken.yml']] as const) {
         const { command } = itemFor(env, label);
-        assert.equal(command?.command, 'migent.workflow.open');
+        assert.equal(command?.command, 'migent.workflow.edit');
         await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+        assert.ok(env.api.workflowEditor.has({ project: project.key, file }), `editor page opened for ${file}`);
+      }
+
+      // The row's Open Workflow File action still opens the real file, including the invalid one.
+      for (const [label, file] of [['plan', 'plan.yaml'], ['broken.yml', 'broken.yml']] as const) {
+        await vscode.commands.executeCommand('migent.workflow.open', nodeFor(env, label));
         assert.equal(activeFile(), vscode.Uri.file(migentPath(env.root, 'workflows', file)).fsPath.toLowerCase());
       }
 

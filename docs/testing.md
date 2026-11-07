@@ -52,9 +52,9 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 through `@vscode/test-electron`, and runs the suite concurrently against the minimum
 supported version (`engines.vscode`) and the latest stable in separate scratch trees and profiles. Files named
 `*.integration.test.ts` are excluded from Vitest. Each run opens VS Code from a `.code-workspace` file whose only
-folder is an empty anchor, so the window is multi-root from the start (adding a folder to a single-folder window
-restarts the extension host on 1.90). Every scenario and every watcher probe case gets its own folder, copied from
-`src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
+folder is an empty anchor, so the window is multi-root from the start (a guard against the extension-host restart
+that adding a folder to a single-folder window can cause). Every scenario and every watcher probe case
+gets its own folder, copied from `src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
 `updateWorkspaceFolders` and handed over once a sentinel file proves its watcher is live. Nothing is shared between
 cases, so no case waits for a previous case's `.migent/` to disappear. Folders are removed from the workspace after
 each case but deleted only when the run ends, because deleting a directory VS Code is still unwatching caused
@@ -69,7 +69,7 @@ and, on GitHub Actions, as error annotations. Each case also logs `RUN`, `PASS` 
 VS Code log. Pass `--versions a,b` to choose versions, `--file reply` to run only suites whose
 file name contains the text (`watcherProbe` selects the probe), and `--case "empty reply"` to run only cases whose
 name contains the text (both case-insensitive, combinable; a filter that matches nothing fails, and the watcher probe
-is skipped unless `--file` names it), for example `pnpm test:integration --versions 1.90.0 --file reply`. Pass
+is skipped unless `--file` names it), for example `pnpm test:integration --versions 1.93.0 --file reply`. Pass
 `--exclude` to also set `files.watcherExclude` for `**/.migent/**`. VS Code then
 delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to
@@ -94,8 +94,10 @@ config edits, retained execution watchers, and `migent.refresh`. The scenarios i
 (groups, icons, Unknown reasons, badge, session children limited to Files and stage attempts, execution files,
 selection and active editor staying put, Show more, commands). The scenarios in
 `capability.integration.test.ts` change the extension host's `PATH` and check the diagnostic node, the
-capability states and Recheck; `scripts/integration/run.mjs` puts a `migent` launcher for
-`fake-migent.js` (run with `node`) first on `PATH`, so they do not depend on an installed CLI. The scenarios in
+capability states and Recheck. `scripts/integration/run.mjs` creates a `migent` launcher for
+`fake-migent.js` (run with `node`) and the test entry puts its directory first on the extension host's
+`PATH`, so the suite never uses an installed CLI; this matters on macOS, where VS Code merges the login
+shell's `PATH` ahead of the one the runner passes. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
 text and hidden state; `results.integration.test.ts` opens Results panels from a session row (Completed, or Running

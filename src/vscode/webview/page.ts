@@ -8,7 +8,7 @@ import { pageHtml } from './pageHtml';
 const NONCE_BYTES = 16;
 const SHARED_FOLDER = 'shared';
 const SHARED_STYLE = 'base.css';
-const SHARED_SCRIPTS = ['icons.js', 'page.js'];
+const SHARED_SCRIPTS = ['icons.js', 'page.js', 'form.js'];
 
 /**
  * A webview page: the `media/<folder>` it lives in, its own asset file names and its title.
@@ -19,6 +19,8 @@ export interface PageDescriptor {
   styles: readonly string[];
   scripts: readonly string[];
   title: string;
+  /** Scripts of another page folder this page builds on (loaded after the shared ones, before its own). */
+  modules?: { folder: string; styles?: readonly string[]; scripts: readonly string[] };
 }
 
 /** The only folders a page may load from, derived from the descriptor so HTML and roots cannot drift apart. */
@@ -26,6 +28,7 @@ export function pageResourceRoots(extensionUri: vscode.Uri, page: PageDescriptor
   return [
     vscode.Uri.joinPath(extensionUri, 'media', SHARED_FOLDER),
     vscode.Uri.joinPath(extensionUri, 'media', page.folder),
+    ...(page.modules === undefined ? [] : [vscode.Uri.joinPath(extensionUri, 'media', page.modules.folder)]),
   ];
 }
 
@@ -37,9 +40,13 @@ export function renderPage(webview: vscode.Webview, extensionUri: vscode.Uri, pa
     cspSource: webview.cspSource,
     nonce: randomBytes(NONCE_BYTES).toString('base64'),
     title: page.title,
-    styles: [asset(SHARED_FOLDER, SHARED_STYLE), ...page.styles.map((name) => asset(page.folder, name))],
+    styles: [
+      asset(SHARED_FOLDER, SHARED_STYLE),
+      ...(page.modules?.styles ?? []).map((name) => asset(page.modules?.folder ?? '', name)),
+      ...page.styles.map((name) => asset(page.folder, name))],
     scripts: [
       ...SHARED_SCRIPTS.map((name) => asset(SHARED_FOLDER, name)),
+      ...(page.modules?.scripts ?? []).map((name) => asset(page.modules?.folder ?? '', name)),
       ...page.scripts.map((name) => asset(page.folder, name)),
     ],
   });

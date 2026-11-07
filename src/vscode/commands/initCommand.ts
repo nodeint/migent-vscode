@@ -11,12 +11,12 @@ import {
   type InitInput,
   joinClients,
   modelsArgs,
-  modelsDefaultFirst,
   type RoleModel,
 } from '../../core/controlArgs';
 import type { OperationGate } from '../../core/operationGate';
 import { migentDir } from '../../core/paths';
 import type { CapabilityService } from '../capability';
+import { pickModel } from '../modelPicker';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -45,69 +45,6 @@ async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
     { title: 'Initialize which folder?' },
   );
   return picked?.folder;
-}
-
-interface ModelItem extends vscode.QuickPickItem {
-  model?: RoleModel;
-}
-
-function modelItems(clients: ClientChoice[]): ModelItem[] {
-  const items: ModelItem[] = [];
-  for (const choice of clients) {
-    items.push({ label: choice.id, kind: vscode.QuickPickItemKind.Separator });
-    for (const model of modelsDefaultFirst(choice)) {
-      items.push({
-        label: `${choice.id} · ${model}`,
-        description: model === choice.defaultModel ? 'default' : undefined,
-        model: { client: choice.id, model },
-      });
-    }
-  }
-  return items;
-}
-
-interface ModelPick {
-  model: RoleModel;
-  /** The title button was used: this model is for every remaining role. */
-  isForAll: boolean;
-}
-
-const FOR_ALL_BUTTON: vscode.QuickInputButton = {
-  iconPath: new vscode.ThemeIcon('check-all'),
-  tooltip: 'Use this model for all roles',
-};
-
-/** One filterable list; with `canPickAll`, a title button accepts the highlighted model for every role. */
-async function pickModel(
-  title: string,
-  clients: ClientChoice[],
-  canPickAll: boolean,
-): Promise<ModelPick | undefined> {
-  const input = vscode.window.createQuickPick<ModelItem>();
-  input.title = title;
-  input.placeholder = 'Type to filter by client or model';
-  input.matchOnDescription = true;
-  input.items = modelItems(clients);
-  if (canPickAll) input.buttons = [FOR_ALL_BUTTON];
-  const subscriptions: vscode.Disposable[] = [];
-  try {
-    return await new Promise<ModelPick | undefined>((resolve) => {
-      const finish = (isForAll: boolean): void => {
-        const model = input.selectedItems[0]?.model ?? input.activeItems[0]?.model;
-        resolve(model === undefined ? undefined : { model, isForAll });
-        input.hide();
-      };
-      subscriptions.push(
-        input.onDidAccept(() => finish(false)),
-        input.onDidTriggerButton(() => finish(true)),
-        input.onDidHide(() => resolve(undefined)),
-      );
-      input.show();
-    });
-  } finally {
-    for (const subscription of subscriptions) subscription.dispose();
-    input.dispose();
-  }
 }
 
 /** One pick for each role (developer first), or one pick in total when the first uses "for all roles". */

@@ -10,7 +10,7 @@ import {
 } from './workflows';
 
 const EMPTY_SCAN: WorkflowScan = { state: 'missing', error: null, entries: [] };
-const UNLOADED_CONFIG: ProjectConfig = { state: 'missing', error: null, schemaVersion: null };
+const UNLOADED_CONFIG: ProjectConfig = { state: 'missing', error: null, schemaVersion: null, roles: [], agents: [] };
 
 /**
  * Project metadata that is not a session: workflow files and `config.yaml`. Kept

@@ -242,6 +242,8 @@
         { key: 'questions', label: 'Questions' },
         { key: 'results', label: 'Results', onSelect: () => page.post({ type: 'openResults' }) },
         { key: 'metrics', label: 'Metrics', onSelect: () => page.post({ type: 'openMetrics' }) },
+        { key: 'workflow', label: 'Workflow', onSelect: () => page.post({ type: 'sessionAction', action: 'openWorkflow' }) },
+        { key: 'task', label: 'Task', onSelect: () => page.post({ type: 'sessionAction', action: 'openTask' }) },
       ],
       sendAction: (action) => page.post({ type: 'sessionAction', action }),
     });

@@ -1,0 +1,35 @@
+/* Workflow form layout, shared by the pages that load workflowform.js. Tokens and components live in
+   media/shared/base.css. */
+
+/* Keep a focused control clear of the sticky section head when the page scrolls it into view. */
+html {
+  scroll-padding-top: 72px;
+}
+
+@media (max-width: 640px) {
+  html {
+    scroll-padding-top: 0;
+  }
+}
+
+/* Decisions are a vertical list of shared section cards. */
+.wf-decision-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mg-space-3);
+}
+
+/* The list spaces its cards itself, so a card's own neighbour margin would double it. */
+.wf-decision-list > .mg-section--card {
+  margin-top: 0;
+}
+
+.wf-advanced {
+  margin-top: var(--mg-space-4);
+  padding-top: var(--mg-space-3);
+  border-top: 1px solid var(--mg-border);
+}
+
+.wf-advanced-body {
+  margin-top: var(--mg-space-2);
+}

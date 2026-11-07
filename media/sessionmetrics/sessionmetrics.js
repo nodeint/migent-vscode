@@ -76,6 +76,8 @@
           : []),
         { key: 'results', label: 'Results', onSelect: () => page.send({ intent: 'openResults' }) },
         { key: 'metrics', label: 'Metrics' },
+        { key: 'workflow', label: 'Workflow', onSelect: () => page.send({ intent: 'sessionAction', action: 'openWorkflow' }) },
+        { key: 'task', label: 'Task', onSelect: () => page.send({ intent: 'sessionAction', action: 'openTask' }) },
       ],
       menuItems: [{ label: 'Open metrics.json', onSelect: () => page.send({ intent: 'openMetricsFile' }) }],
     });

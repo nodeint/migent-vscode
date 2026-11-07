@@ -34,6 +34,8 @@
           : []),
         { key: 'results', label: 'Results' },
         { key: 'metrics', label: 'Metrics', onSelect: () => page.send(sessionAction('openMetrics')) },
+        { key: 'workflow', label: 'Workflow', onSelect: () => page.send(sessionAction('openWorkflow')) },
+        { key: 'task', label: 'Task', onSelect: () => page.send(sessionAction('openTask')) },
       ],
       menuItems: [{ label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) }],
     });

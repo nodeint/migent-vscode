@@ -44,20 +44,20 @@ describe('workflowRow', () => {
 describe('configRow', () => {
   it('shows each state with a matching context value', () => {
     const path = '.migent/config.yaml';
-    expect(configRow({ state: 'ok', error: null, schemaVersion: 2 }, path)).toMatchObject({
+    expect(configRow({ state: 'ok', error: null, schemaVersion: 2, roles: [], agents: [] }, path)).toMatchObject({
       label: 'config.yaml',
       description: 'schema 2',
       contextValue: 'config.ok',
     });
-    expect(configRow({ state: 'ok', error: null, schemaVersion: null }, path).description).toBeUndefined();
-    const missing = configRow({ state: 'missing', error: null, schemaVersion: null }, path);
+    expect(configRow({ state: 'ok', error: null, schemaVersion: null, roles: [], agents: [] }, path).description).toBeUndefined();
+    const missing = configRow({ state: 'missing', error: null, schemaVersion: null, roles: [], agents: [] }, path);
     expect(missing).toMatchObject({ description: 'not found', contextValue: 'config.missing' });
     expect(missing.tooltip).toContain(path);
-    expect(configRow({ state: 'invalid', error: 'boom', schemaVersion: null }, path)).toMatchObject({
+    expect(configRow({ state: 'invalid', error: 'boom', schemaVersion: null, roles: [], agents: [] }, path)).toMatchObject({
       description: 'boom',
       contextValue: 'config.invalid',
     });
-    expect(configRow({ state: 'unreadable', error: 'EACCES', schemaVersion: null }, path).contextValue).toBe(
+    expect(configRow({ state: 'unreadable', error: 'EACCES', schemaVersion: null, roles: [], agents: [] }, path).contextValue).toBe(
       'config.unreadable',
     );
   });

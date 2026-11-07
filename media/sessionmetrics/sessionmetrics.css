@@ -112,8 +112,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--mg-space-3);
-  width: calc(100% - 20px);
-  vertical-align: top;
+  width: 100%;
 }
 
 .metrics-exec-title {

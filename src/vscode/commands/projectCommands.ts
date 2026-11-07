@@ -7,6 +7,7 @@ import { openFile } from '../openFile';
 import { pickProject } from '../pick';
 import type { ProjectRegistry } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
+import type { WorkflowEditorPanels } from '../workflowEditor/panels';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -47,8 +48,17 @@ async function openConfig(registry: ProjectRegistry, arg: unknown): Promise<void
   if (context !== undefined) await openFile(configPath(context.root), 'Project config');
 }
 
-export function registerProjectCommands(registry: ProjectRegistry): vscode.Disposable[] {
+function editWorkflow(editor: WorkflowEditorPanels, arg: unknown): void {
+  if (!isMetaFileNode(arg) || arg.kind !== 'workflow') return;
+  editor.open({ project: arg.project, file: path.basename(arg.file) });
+}
+
+export function registerProjectCommands(
+  registry: ProjectRegistry,
+  editor: WorkflowEditorPanels,
+): vscode.Disposable[] {
   return [
+    vscode.commands.registerCommand('migent.workflow.edit', (arg?: unknown) => editWorkflow(editor, arg)),
     vscode.commands.registerCommand('migent.workflow.open', (arg?: unknown) => openWorkflow(registry, arg)),
     vscode.commands.registerCommand('migent.openConfig', (arg?: unknown) => openConfig(registry, arg)),
   ];

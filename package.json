@@ -12,7 +12,7 @@
     "url": "git+https://github.com/nodeint/migent-vscode.git"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Other",
@@ -24,7 +24,8 @@
     "onWebviewPanel:migent.results",
     "onWebviewPanel:migent.sessionMetrics",
     "onWebviewPanel:migent.nextStep",
-    "onWebviewPanel:migent.answerQuestions"
+    "onWebviewPanel:migent.answerQuestions",
+    "onWebviewPanel:migent.editWorkflow"
   ],
   "extensionKind": [
     "workspace"
@@ -48,6 +49,12 @@
         "title": "Open Metrics",
         "category": "Migent",
         "icon": "$(graph)"
+      },
+      {
+        "command": "migent.session.openWorkflow",
+        "title": "Open Session Workflow",
+        "category": "Migent",
+        "icon": "$(edit)"
       },
       {
         "command": "migent.session.openNextStep",
@@ -162,6 +169,11 @@
         "category": "Migent"
       },
       {
+        "command": "migent.workflow.edit",
+        "title": "Edit Workflow",
+        "category": "Migent"
+      },
+      {
         "command": "migent.openConfig",
         "title": "Open Project Config",
         "category": "Migent",
@@ -177,7 +189,7 @@
         "command": "migent.session.new",
         "title": "New session",
         "category": "Migent",
-        "icon": "$(add)"
+        "icon": "$(play)"
       },
       {
         "command": "migent.session.prepare",
@@ -208,10 +220,10 @@
       },
       {
         "command": "migent.workflow.run",
-        "title": "Run Workflow",
+        "title": "New Session from Workflow",
         "category": "Migent",
         "icon": "$(play)",
-        "shortTitle": "Run"
+        "shortTitle": "New session"
       },
       {
         "command": "migent.session.reply",
@@ -512,6 +524,11 @@
           "group": "inline@0"
         },
         {
+          "command": "migent.workflow.open",
+          "when": "view == migent.workflows && viewItem =~ /^workflow/",
+          "group": "1_open@1"
+        },
+        {
           "command": "migent.session.reply",
           "when": "view == migent.sessions && viewItem =~ /^session\\.blocked/ && !(viewItem =~ /;questions(;|$)/)",
           "group": "inline@0"
@@ -552,6 +569,10 @@
         },
         {
           "command": "migent.session.openMetrics",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.openWorkflow",
           "when": "false"
         },
         {
@@ -624,6 +645,10 @@
         },
         {
           "command": "migent.workflow.open",
+          "when": "false"
+        },
+        {
+          "command": "migent.workflow.edit",
           "when": "false"
         },
         {
@@ -753,7 +778,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.5",
-    "@types/vscode": "1.90.0",
+    "@types/vscode": "1.93.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "4.1.0",
     "esbuild": "^0.28.2",

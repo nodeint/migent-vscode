@@ -59,6 +59,7 @@ export const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
   openQuestions: 'migent.session.openQuestions',
   openMetrics: 'migent.session.openMetrics',
   answerQuestions: 'migent.session.answerQuestions',
+  openWorkflow: 'migent.session.openWorkflow',
 };
 
 /** Actions the overview delegates to the Next step feature; set once by the extension. */

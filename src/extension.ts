@@ -13,6 +13,7 @@ import { registerReplyCommands } from './vscode/commands/replyCommands';
 import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
 import { registerSessionMetricsCommands } from './vscode/commands/sessionMetricsCommands';
+import { registerSessionWorkflowCommands } from './vscode/commands/sessionWorkflowCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { ReadOnlyDocsProvider } from './vscode/content/readOnlyDocs';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
@@ -27,12 +28,14 @@ import { AnswerPanels } from './vscode/questions/panels';
 import { ReplyService } from './vscode/reply';
 import { ResultsPanels } from './vscode/results/panels';
 import { SessionMetricsPanels } from './vscode/sessionMetrics/panels';
+import { SessionWorkflowPanels } from './vscode/sessionWorkflow/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
 import { ProjectTreeProvider } from './vscode/views/projectTree';
 import { SessionsTreeProvider } from './vscode/views/sessionsTree';
 import { WorkflowsTreeProvider } from './vscode/views/workflowsTree';
+import { WorkflowEditorPanels } from './vscode/workflowEditor/panels';
 
 /** What activation returns; integration tests use it to observe the host. */
 export interface MigentApi {
@@ -43,12 +46,14 @@ export interface MigentApi {
   sessionsView: vscode.TreeView<TreeNode>;
   workflowsTree: WorkflowsTreeProvider;
   projectTree: ProjectTreeProvider;
+  workflowEditor: WorkflowEditorPanels;
   tails: TailManager;
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
   statusBar: StatusBar;
   results: ResultsPanels;
   sessionMetrics: SessionMetricsPanels;
+  sessionWorkflow: SessionWorkflowPanels;
   nextStep: NextStepPanels;
   answers: AnswerPanels;
   submitter: AnswerSubmitter;
@@ -65,6 +70,40 @@ function createResultsPages(
   return {
     results: new ResultsPanels(registry, extensionUri),
     sessionMetrics: new SessionMetricsPanels(registry, extensionUri),
+  };
+}
+
+/** The Sessions tree and the tree view it is attached to. */
+function createSessionsView(
+  registry: ProjectRegistry,
+  capability: CapabilityService,
+): { sessionsTree: SessionsTreeProvider; sessionsView: vscode.TreeView<TreeNode> } {
+  const sessionsTree = new SessionsTreeProvider(registry, capability);
+  const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
+    treeDataProvider: sessionsTree,
+    showCollapseAll: true,
+  });
+  sessionsTree.attach(sessionsView);
+  return { sessionsTree, sessionsView };
+}
+
+/** The Workflows and Project tree providers. */
+function createProjectTrees(registry: ProjectRegistry): {
+  workflowsTree: WorkflowsTreeProvider;
+  projectTree: ProjectTreeProvider;
+} {
+  return { workflowsTree: new WorkflowsTreeProvider(registry), projectTree: new ProjectTreeProvider(registry) };
+}
+
+/** The workflow editor and the Session workflow page, which share the capability gate. */
+function createWorkflowPages(
+  registry: ProjectRegistry,
+  capability: CapabilityService,
+  extensionUri: vscode.Uri,
+): { workflowEditor: WorkflowEditorPanels; sessionWorkflow: SessionWorkflowPanels } {
+  return {
+    workflowEditor: new WorkflowEditorPanels(registry, capability, extensionUri),
+    sessionWorkflow: new SessionWorkflowPanels(registry, capability, extensionUri),
   };
 }
 
@@ -135,14 +174,9 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const capability = new CapabilityService(registry);
   const control = new ControlService(registry, capability);
   const contextKeys = new ContextKeys(registry, capability);
-  const sessionsTree = new SessionsTreeProvider(registry, capability);
-  const sessionsView = vscode.window.createTreeView<TreeNode>('migent.sessions', {
-    treeDataProvider: sessionsTree,
-    showCollapseAll: true,
-  });
-  sessionsTree.attach(sessionsView);
-  const workflowsTree = new WorkflowsTreeProvider(registry);
-  const projectTree = new ProjectTreeProvider(registry);
+  const { sessionsTree, sessionsView } = createSessionsView(registry, capability);
+  const { workflowsTree, projectTree } = createProjectTrees(registry);
+  const { workflowEditor, sessionWorkflow } = createWorkflowPages(registry, capability, context.extensionUri);
   const tails = new TailManager(registry);
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
@@ -159,6 +193,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionsView,
     workflowsTree,
     projectTree,
+    workflowEditor,
+    sessionWorkflow,
     vscode.window.registerTreeDataProvider('migent.workflows', workflowsTree),
     vscode.window.registerTreeDataProvider('migent.project', projectTree),
     tails,
@@ -180,10 +216,11 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerSessionCommands(host, control.gate),
     ...registerResultsCommands(host, results, nextStep),
     ...registerSessionMetricsCommands(host, sessionMetrics),
+    ...registerSessionWorkflowCommands(host, sessionWorkflow),
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
-    ...registerProjectCommands(registry),
+    ...registerProjectCommands(registry, workflowEditor),
     ...registerControlCommands(host, control, context.workspaceState),
     ...registerReplyCommands({ host, control, replies, capability }),
   );
@@ -196,6 +233,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionsView,
     workflowsTree,
     projectTree,
+    workflowEditor,
+    sessionWorkflow,
     tails,
     sessionDocs,
     logs,

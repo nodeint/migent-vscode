@@ -87,12 +87,22 @@
 
   /**
    * A collapsible block (<details>/<summary>) that stays as the user left it across re-renders.
+   * The shared chevron has a box of its own, so a header with chips or a wrapped title keeps the arrow on the
+   * first line. `summary` is a string, or a node when the header needs a badge and metadata chips.
    * It starts closed unless `isOpenByDefault` is true and the reader has not toggled it yet.
    */
-  function details(key, summaryText, className, isOpenByDefault) {
+  function details(key, summary, className, isOpenByDefault) {
     const node = el('details', null, 'mg-details' + (className ? ' ' + className : ''));
     node.open = detailsOpen.has(key) ? detailsOpen.get(key) === true : isOpenByDefault === true;
-    node.append(el('summary', summaryText));
+    const head = el('summary', null, 'mg-details-summary');
+    const arrow = el('span', null, 'mg-details-arrow');
+    arrow.append(icon('chevron-down'));
+    head.append(arrow);
+    const heading = el('div', null, 'mg-details-heading');
+    if (typeof summary === 'string') heading.textContent = summary;
+    else if (summary) heading.append(summary);
+    head.append(heading);
+    node.append(head);
     node.addEventListener('toggle', () => detailsOpen.set(key, node.open));
     return node;
   }
@@ -307,7 +317,7 @@
   /**
    * The header shared by every session page, in four tiers: status badge with the workflow id
    * (`options.workflowId`), the title (at most two lines, full text in its tooltip), metadata and one row with the
-   * page tabs followed by the more menu (Open task, View log, Copy session ID, Reveal in Explorer, then
+   * page tabs followed by the more menu (View log, Copy session ID, Reveal in Explorer, then
    * `options.menuItems`).
    * - `options.state`: a session state name, or `{ icon, tone, text }` for a page with its own states.
    * - Metadata is `options.meta`, the model's `SessionMeta`, and the same on every page (see `sessionFacts`).
@@ -354,7 +364,6 @@
         label: '⋯',
         ariaLabel: 'More actions',
         items: [
-          { label: 'Open task', onSelect: send('openTask') },
           { label: 'View log', onSelect: send('showLog') },
           { label: 'Copy session ID', onSelect: send('copyId') },
           { label: 'Reveal in Explorer', onSelect: send('revealInExplorer') },

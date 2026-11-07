@@ -20,7 +20,7 @@ export interface MetaProjectNode extends Base {
 export interface MetaFileNode extends Base {
   kind: 'workflow' | 'config';
   project: ProjectKey;
-  /** Absolute path, opened with `migent.workflow.open` / `migent.openConfig`. */
+  /** Absolute path: a workflow opens the editor page, `config.yaml` opens in an editor. */
   file: string;
   view: RowView;
 }
@@ -72,7 +72,7 @@ function fileItem(node: MetaFileNode): vscode.TreeItem {
   item.contextValue = view.contextValue;
   // A missing config has nothing to open; every other row opens its real file.
   if (view.contextValue !== 'config.missing') {
-    const command = node.kind === 'workflow' ? 'migent.workflow.open' : 'migent.openConfig';
+    const command = node.kind === 'workflow' ? 'migent.workflow.edit' : 'migent.openConfig';
     item.command = { command, title: 'Open', arguments: [node] };
   }
   return item;

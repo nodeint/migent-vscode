@@ -7,7 +7,7 @@ necessarily implemented.
 ## Development setup
 
 Use Node.js 24 and pnpm 12.6.0 to match CI. The extension supports VS Code
-1.90.0 and later, as declared in `package.json`.
+1.93.0 and later, as declared in `package.json`.
 
 ```bash
 git clone https://github.com/nodeint/migent-vscode.git
