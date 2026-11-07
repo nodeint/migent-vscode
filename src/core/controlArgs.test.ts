@@ -7,10 +7,10 @@ import {
   doctorArgs,
   doctorLines,
   initArgs,
+  joinProviders,
   modelsDefaultFirst,
   parseDoctorOutput,
   parsePrepared,
-  parseProviders,
   prepareArgs,
   repairArgs,
   runDownstreamArgs,
@@ -97,21 +97,40 @@ describe('reply, repair, doctor and init argv', () => {
     expect(args.slice(developer, developer + 4)).toEqual(['--provider', 'd', '--model', 'd model "x"']);
   });
 
-  it('keeps only available providers that report models', () => {
-    const providers = parseProviders({
-      providers: [
-        { name: 'a', available: true, models: ['m1', 3] },
-        { name: 'b', available: false, models: ['m'] },
-        { name: 'c', available: true, models: [] },
-      ],
-    });
-    expect(providers).toEqual([{ name: 'a', models: ['m1'] }]);
-    expect(parseProviders('nope')).toEqual([]);
+  it('joins providers with their default client models and drops the rest', () => {
+    const providers = [
+      { kind: 'provider', name: 'claude', default_client: 'claude-code', requires_client: false },
+      { kind: 'provider', name: 'codex', default_client: 'codex', requires_client: false },
+      { kind: 'provider', name: 'byteplus', default_client: null, requires_client: true },
+      { kind: 'provider', name: 'grok', default_client: 'grok', requires_client: false },
+      'junk',
+    ];
+    const models = [
+      { kind: 'model', name: 'sonnet', client: 'claude-code', default: false },
+      { kind: 'model', name: 'opus', client: 'claude-code', default: true },
+      { kind: 'model', name: 'opus', client: 'other', default: true },
+      { kind: 'model', name: 'gpt', client: 'codex', default: false },
+      { kind: 'model', name: 'ark', client: 'byteplus', default: true },
+      { kind: 'model', client: 'grok' },
+      null,
+    ];
+    expect(joinProviders(providers, models)).toEqual([
+      { name: 'claude', models: ['sonnet', 'opus'], defaultModel: 'opus' },
+      { name: 'codex', models: ['gpt'] },
+    ]);
+    expect(joinProviders('nope', models)).toEqual([]);
+    expect(joinProviders(providers, {})).toEqual([]);
   });
 
-  it('reads default_model when present and lists it first', () => {
-    const [choice] = parseProviders({ providers: [{ name: 'a', available: true, models: ['m1', 'm2', 'm3'], default_model: 'm2' }] });
-    expect(choice.defaultModel).toBe('m2');
+  it('lists the default model first', () => {
+    const [choice] = joinProviders(
+      [{ name: 'a', default_client: 'c', requires_client: false }],
+      [
+        { name: 'm1', client: 'c', default: false },
+        { name: 'm2', client: 'c', default: true },
+        { name: 'm3', client: 'c', default: false },
+      ],
+    );
     expect(modelsDefaultFirst(choice)).toEqual(['m2', 'm1', 'm3']);
     expect(modelsDefaultFirst({ name: 'a', models: ['m1'], defaultModel: 'gone' })).toEqual(['m1']);
   });

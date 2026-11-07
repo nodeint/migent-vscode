@@ -102,8 +102,14 @@ export function doctorArgs(): string[] {
   return ['doctor', '--json'];
 }
 
+/** `get providers --json`: one row per registered provider, with no subprocess. */
 export function providersArgs(): string[] {
-  return ['provider', 'list', '--json'];
+  return ['get', 'providers', '--json'];
+}
+
+/** `get models --json`: one row per (client, model); a client that is missing or fails has no rows. */
+export function modelsArgs(): string[] {
+  return ['get', 'models', '--json'];
 }
 
 function stringList(value: unknown): string[] {
@@ -114,7 +120,7 @@ function stringList(value: unknown): string[] {
 export interface ProviderChoice {
   name: string;
   models: string[];
-  /** The provider's `default_model` when `provider list` reports one. */
+  /** The provider's `default_model` when `get models` marks one as default. */
   defaultModel?: string;
 }
 
@@ -125,16 +131,34 @@ export function modelsDefaultFirst(choice: ProviderChoice): string[] {
   return [defaultModel, ...choice.models.filter((model) => model !== defaultModel)];
 }
 
-/** The available providers of `provider list --json` with their models; unavailable ones are dropped. */
-export function parseProviders(value: unknown): ProviderChoice[] {
-  if (!isRecord(value) || !Array.isArray(value.providers)) return [];
+/** The model names a client reports in `get models --json` rows, in CLI order, and its default one. */
+function clientModels(models: unknown[], client: string): { names: string[]; defaultModel?: string } {
+  const names: string[] = [];
+  let defaultModel: string | undefined;
+  for (const row of models) {
+    if (!isRecord(row) || row.client !== client || typeof row.name !== 'string' || row.name === '') continue;
+    names.push(row.name);
+    if (row.default === true) defaultModel = row.name;
+  }
+  return defaultModel === undefined ? { names } : { names, defaultModel };
+}
+
+/**
+ * Joins `get providers --json` and `get models --json` into what `migent init --no-input` accepts: providers that do
+ * not require a client, each with the models of its default client (the catalog `init` validates against).
+ * Providers without models are dropped.
+ */
+export function joinProviders(providers: unknown, models: unknown): ProviderChoice[] {
+  if (!Array.isArray(providers) || !Array.isArray(models)) return [];
   const choices: ProviderChoice[] = [];
-  for (const item of value.providers as unknown[]) {
-    if (!isRecord(item) || typeof item.name !== 'string' || item.available !== true) continue;
-    const models = stringList(item.models);
-    if (models.length === 0) continue;
-    const choice: ProviderChoice = { name: item.name, models };
-    if (typeof item.default_model === 'string' && item.default_model !== '') choice.defaultModel = item.default_model;
+  for (const item of providers as unknown[]) {
+    if (!isRecord(item) || typeof item.name !== 'string' || item.requires_client !== false) continue;
+    const client = item.default_client;
+    if (typeof client !== 'string' || client === '') continue;
+    const { names, defaultModel } = clientModels(models as unknown[], client);
+    if (names.length === 0) continue;
+    const choice: ProviderChoice = { name: item.name, models: names };
+    if (defaultModel !== undefined) choice.defaultModel = defaultModel;
     choices.push(choice);
   }
   return choices;
