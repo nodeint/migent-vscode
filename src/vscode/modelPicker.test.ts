@@ -9,10 +9,10 @@ vi.mock('vscode', () => ({
 const { modelItems } = await import('./modelPicker');
 
 describe('modelItems', () => {
-  it('groups every provider and puts its default model first', () => {
+  it('groups every client and puts its default model first', () => {
     const items = modelItems([
-      { name: 'grok', models: ['grok-4', 'grok-4.7'], defaultModel: 'grok-4.7' },
-      { name: 'codex', models: ['gpt-5'] },
+      { id: 'grok', models: ['grok-4', 'grok-4.7'], defaultModel: 'grok-4.7' },
+      { id: 'codex', models: ['gpt-5'] },
     ]);
 
     expect(items.filter((item) => item.kind !== undefined).map((item) => item.label)).toEqual(['grok', 'codex']);
@@ -21,6 +21,6 @@ describe('modelItems', () => {
       'grok-4|',
       'gpt-5|',
     ]);
-    expect(items.find((item) => item.label === 'grok-4.7')?.model).toEqual({ provider: 'grok', model: 'grok-4.7' });
+    expect(items.find((item) => item.label === 'grok-4.7')?.model).toEqual({ client: 'grok', model: 'grok-4.7' });
   });
 });

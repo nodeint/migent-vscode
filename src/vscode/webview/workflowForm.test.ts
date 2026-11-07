@@ -73,7 +73,6 @@ interface StageForm {
   decision: { value: string; when: string; navigate: string }[];
   agentMode?: string;
   agent?: {
-    provider: string;
     model: string;
     effort: string;
     clientType: string;
@@ -156,7 +155,7 @@ function load() {
     workflowForm: window.MigentWorkflowForm as {
       create: (host: Record<string, unknown>) => {
         render: () => FakeNode[];
-        applyModelPick: (index: number, provider: string, model: string) => boolean;
+        applyModelPick: (index: number, client: string, model: string) => boolean;
       };
       normalizeForm: (input: unknown) => unknown;
     },
@@ -195,9 +194,9 @@ function create(form: WorkflowFormStub, host: Record<string, unknown> = {}) {
       roles: ['planner', 'reviewer'],
       agents: ['deep'],
       workflows: [{ id: 'implement', file: 'implement.yaml' }],
-      providers: [
-        { name: 'codex', models: ['gpt-5', 'gpt-6'], optionKeys: ['model_reasoning_effort', 'sandbox'] },
-        { name: 'claude', models: ['sonnet'], optionKeys: ['effort'] },
+      clients: [
+        { id: 'codex', models: ['gpt-5', 'gpt-6'], optionKeys: ['model_reasoning_effort', 'sandbox'] },
+        { id: 'claude', models: ['sonnet'], optionKeys: ['effort'] },
       ],
       isSupported: true,
       state: 'ok',
@@ -377,7 +376,6 @@ describe('workflow form reference controls', () => {
       ...form.stages[1],
       agentMode: 'inline',
       agent: {
-        provider: 'codex',
         model: 'gpt-5',
         effort: 'high',
         clientType: 'codex',
@@ -399,7 +397,7 @@ describe('workflow form reference controls', () => {
     form.stages[1] = {
       ...form.stages[1],
       agentMode: 'inline',
-      agent: { provider: 'codex', model: 'gpt-5', effort: 'high', clientType: 'codex', clientOptions: [] },
+      agent: { model: 'gpt-5', effort: 'high', clientType: 'codex', clientOptions: [] },
     };
     const pickModel = vi.fn();
     const nodes = render(form, { pickModel });
@@ -414,7 +412,6 @@ describe('workflow form reference controls', () => {
       ...form.stages[1],
       agentMode: 'inline',
       agent: {
-        provider: 'byteplus',
         model: 'coding-plan/deepseek-v4-pro',
         effort: '',
         clientType: 'opencode',
@@ -423,9 +420,8 @@ describe('workflow form reference controls', () => {
     };
     const nodes = render(form);
 
-    expect(byPath(nodes, 'stages.1.agent.model').textContent).toBe('byteplus · coding-plan/deepseek-v4-pro');
+    expect(byPath(nodes, 'stages.1.agent.model').textContent).toBe('opencode · coding-plan/deepseek-v4-pro');
     expect(form.stages[1].agent).toMatchObject({
-      provider: 'byteplus',
       model: 'coding-plan/deepseek-v4-pro',
       clientType: 'opencode',
     });
@@ -442,10 +438,9 @@ describe('workflow form reference controls', () => {
       ...form.stages[1],
       agentMode: 'inline',
       agent: {
-        provider: 'codex',
         model: 'gpt-5',
         effort: '',
-        clientType: '',
+        clientType: 'codex',
         clientOptions: [{ key: 'sandbox', value: 'true' }],
       },
     };
@@ -465,13 +460,13 @@ describe('workflow form reference controls', () => {
     form.stages[1] = {
       ...form.stages[1],
       agentMode: 'inline',
-      agent: { provider: 'codex', model: 'gpt-5', effort: '', clientType: '', clientOptions: [] },
+      agent: { model: 'gpt-5', effort: '', clientType: 'codex', clientOptions: [] },
     };
     const repaint = vi.fn();
     const api = create(form, { repaint });
 
     expect(api.applyModelPick(1, 'claude', 'sonnet')).toBe(true);
-    expect(form.stages[1].agent).toMatchObject({ provider: 'claude', model: 'sonnet' });
+    expect(form.stages[1].agent).toMatchObject({ clientType: 'claude', model: 'sonnet' });
     expect(repaint).toHaveBeenCalledWith('stages.1.agent.model');
   });
 
@@ -480,7 +475,7 @@ describe('workflow form reference controls', () => {
     const api = create(form, {});
 
     expect(api.applyModelPick(1, 'claude', 'sonnet')).toBe(false);
-    expect(form.stages[1].agent).toMatchObject({ provider: '', model: '' });
+    expect(form.stages[1].agent).toMatchObject({ clientType: '', model: '' });
   });
 });
 

@@ -99,8 +99,8 @@
     if (!message || message.type !== 'modelPicked' || pendingModelPick === null) return;
     const index = pendingModelPick;
     pendingModelPick = null;
-    if (typeof message.provider === 'string' && typeof message.model === 'string') {
-      designForm.applyModelPick(index, message.provider, message.model);
+    if (typeof message.client === 'string' && typeof message.model === 'string') {
+      designForm.applyModelPick(index, message.client, message.model);
     }
   });
 

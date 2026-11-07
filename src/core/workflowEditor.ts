@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { parse, stringify } from 'yaml';
 
-import type { ProviderChoice } from './controlArgs';
+import type { ClientChoice } from './controlArgs';
 import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
 import type { ProjectConfig } from './projectConfig';
 import { projectRelative } from './projectPresentation';
@@ -13,7 +13,6 @@ import type { WorkflowScan } from './workflows';
 
 /** A complete agent written inline on a stage. Empty fields are omitted when saved. */
 export interface WorkflowAgentForm {
-  provider: string;
   model: string;
   effort: string;
   clientType: string;
@@ -97,8 +96,8 @@ export interface WorkflowEditorModel {
   roles: string[];
   agents: string[];
   workflows: WorkflowEditorWorkflow[];
-  /** Available providers with their models and native option keys; empty when the CLI cannot list them. */
-  providers: ProviderChoice[];
+  /** Available clients with their models and native option keys; empty when the CLI cannot list them. */
+  clients: ClientChoice[];
   duplicateOf: string[];
   validation: { errors: { path: string; message: string }[]; warnings: { path: string; message: string }[] };
   savedHash: string;
@@ -112,14 +111,14 @@ export interface WorkflowEditorInput {
   file: string;
   scan: WorkflowScan;
   config: ProjectConfig;
-  /** `get clients`, `get models` and `get options` rows; omitted when the caller has no provider data yet. */
-  providers?: ProviderChoice[];
+  /** `get clients`, `get models` and `get options` rows; omitted when the caller has no client data yet. */
+  clients?: ClientChoice[];
   /** A workflow file outside `.migent/workflows` (a session's `workflow.yaml`); `file` stays its display name. */
   filePath?: string;
 }
 
 function emptyAgentForm(): WorkflowAgentForm {
-  return { provider: '', model: '', effort: '', clientType: '', clientOptions: [] };
+  return { model: '', effort: '', clientType: '', clientOptions: [] };
 }
 
 export function emptyStageForm(): WorkflowStageForm {
@@ -188,7 +187,6 @@ function inlineAgent(value: unknown): WorkflowAgentForm {
   const body = isRecord(value) ? value : {};
   const client = isRecord(body.client) ? body.client : {};
   return {
-    provider: stringValue(body.provider),
     model: stringValue(body.model),
     effort: stringValue(body.effort),
     clientType: stringValue(client.type),
@@ -284,7 +282,7 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
     workflows: input.scan.entries
       .filter((entry) => entry.state === 'ok' && (input.filePath !== undefined || entry.file !== input.file))
       .map((entry) => ({ id: entry.id, file: entry.file })),
-    providers: input.providers ?? [],
+    clients: input.clients ?? [],
     duplicateOf: input.filePath === undefined ? duplicatesOf(input.scan, input.file) : [],
     validation: { errors: [], warnings: [] },
     canSave: false,
@@ -369,7 +367,6 @@ function clientStage(value: unknown): WorkflowStageForm {
     agentMode: agentMode(body.agentMode),
     agentName: stringValue(body.agentName),
     agent: {
-      provider: stringValue(agent.provider),
       model: stringValue(agent.model),
       effort: stringValue(agent.effort),
       clientType: stringValue(agent.clientType),
@@ -431,7 +428,6 @@ function agentBody(stage: WorkflowStageForm): unknown {
   }
   if (stage.agentMode !== 'inline') return undefined;
   const agent: Record<string, unknown> = {};
-  if (stage.agent.provider !== '') agent.provider = stage.agent.provider;
   if (stage.agent.model !== '') agent.model = stage.agent.model;
   if (stage.agent.effort !== '') agent.effort = stage.agent.effort;
   const client: Record<string, unknown> = {};

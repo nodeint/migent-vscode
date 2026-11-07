@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import type { ProviderChoice } from './controlArgs';
+import type { ClientChoice } from './controlArgs';
 import { readProjectConfig } from './projectConfig';
 import { parseWorkflowAuthoringEnvelope, readWorkflowEditor, workflowBodyFromForm, workflowDraftFromForm, workflowFormFromClient } from './workflowEditor';
 import { scanWorkflows } from './workflows';
@@ -27,7 +27,7 @@ function project(files: Record<string, string>, config = 'schema_version: 5\n'):
   return root;
 }
 
-function model(root: string, file: string, providers: ProviderChoice[] = []) {
+function model(root: string, file: string, clients: ClientChoice[] = []) {
   return readWorkflowEditor({
     projectKey: 'p',
     projectName: 'demo',
@@ -35,7 +35,7 @@ function model(root: string, file: string, providers: ProviderChoice[] = []) {
     file,
     scan: scanWorkflows(root),
     config: readProjectConfig(root),
-    providers,
+    clients,
   });
 }
 
@@ -71,7 +71,6 @@ stages:
     role: reviewer
     depends_on: [plan]
     agent:
-      provider: codex
       model: gpt-5
       effort: high
       client:
@@ -146,7 +145,6 @@ describe('readWorkflowEditor', () => {
       runWhenPaths: ['docs/**/*'],
     });
     expect(review.agent).toEqual({
-      provider: 'codex',
       model: 'gpt-5',
       effort: 'high',
       clientType: 'codex',
@@ -210,10 +208,10 @@ stages:
     expect(model(root, 'a.yaml').duplicateOf).toEqual(['b.yaml']);
   });
 
-  it('carries the provider suggestions into the model', () => {
-    const providers = [{ name: 'codex', models: ['gpt-5'], optionKeys: ['model_reasoning_effort'] }];
-    const result = model(project({ 'a.yaml': 'schema_version: 5\nid: a\n' }), 'a.yaml', providers);
-    expect(result.providers).toEqual(providers);
+  it('carries the client suggestions into the model', () => {
+    const clients = [{ id: 'codex', models: ['gpt-5'], optionKeys: ['model_reasoning_effort'] }];
+    const result = model(project({ 'a.yaml': 'schema_version: 5\nid: a\n' }), 'a.yaml', clients);
+    expect(result.clients).toEqual(clients);
   });
 });
 
@@ -230,14 +228,14 @@ describe('the page draft', () => {
           options: { effort: 'high' },
           decision: [{ value: 'ok', navigate: 'complete' }],
         },
-        { id: 'b', agentMode: 'inline', agent: { provider: 'codex', model: 'gpt-5', clientOptions: [{ key: 'k', value: 'v' }] } },
+        { id: 'b', agentMode: 'inline', agent: { clientType: 'codex', model: 'gpt-5', clientOptions: [{ key: 'k', value: 'v' }] } },
       ],
       outputs: [],
       downstream: [],
     });
     expect(form.stages[0]).toMatchObject({ id: 'a', agentMode: 'named', agentName: 'fast' });
     expect(form.stages[0]).not.toHaveProperty('options');
-    expect(form.stages[1].agent).toMatchObject({ provider: 'codex', model: 'gpt-5' });
+    expect(form.stages[1].agent).toMatchObject({ clientType: 'codex', model: 'gpt-5' });
     expect(workflowBodyFromForm(form)).not.toHaveProperty('title');
   });
 
@@ -289,7 +287,7 @@ describe('the page draft', () => {
           id: 'plan',
           role: 'planner',
           agentMode: 'inline',
-          agent: { provider: 'codex', model: 'gpt-5', clientType: 'codex', clientOptions: [{ key: 'sandbox', value: 'read-only' }] },
+          agent: { model: 'gpt-5', clientType: 'codex', clientOptions: [{ key: 'sandbox', value: 'read-only' }] },
         },
       ],
     });
@@ -298,7 +296,7 @@ describe('the page draft', () => {
       {
         id: 'plan',
         role: 'planner',
-        agent: { provider: 'codex', model: 'gpt-5', client: { type: 'codex', options: { sandbox: 'read-only' } } },
+        agent: { model: 'gpt-5', client: { type: 'codex', options: { sandbox: 'read-only' } } },
       },
     ]);
   });
@@ -311,7 +309,7 @@ describe('parseWorkflowAuthoringEnvelope', () => {
       command: 'workflow.save',
       valid: false,
       diagnostics: [
-        { severity: 'error', code: 'invalid-value', message: 'provider is required.', path: ['stages', 0, 'agent', 'provider'] },
+        { severity: 'error', code: 'invalid-value', message: 'client is required.', path: ['stages', 0, 'agent', 'client', 'type'] },
         { severity: 'warning', code: 'comments-not-preserved', message: 'Comments were not preserved.' },
       ],
       file: 'workflows/plan.yaml',
@@ -320,7 +318,7 @@ describe('parseWorkflowAuthoringEnvelope', () => {
     expect(result).toEqual({
       valid: false,
       diagnostics: [
-        { severity: 'error', code: 'invalid-value', message: 'provider is required.', path: 'stages.0.agent.provider' },
+        { severity: 'error', code: 'invalid-value', message: 'client is required.', path: 'stages.0.agent.client.type' },
         { severity: 'warning', code: 'comments-not-preserved', message: 'Comments were not preserved.', path: '' },
       ],
       file: 'workflows/plan.yaml',

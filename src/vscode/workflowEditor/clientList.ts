@@ -3,34 +3,34 @@ import * as vscode from 'vscode';
 import { invokeJson } from '../../cli/invoke';
 import {
   availableClients,
+  type ClientChoice,
   clientChoice,
   clientModelsArgs,
   clientOptionsArgs,
   clientsArgs,
-  type ProviderChoice,
 } from '../../core/controlArgs';
 import type { CapabilityService } from '../capability';
 import type { ProjectKey } from '../changes';
 import type { ProjectContext } from '../projects';
 
 /** Reading a client's models and native options runs its CLI, so it is slower than a version check. */
-const PROVIDERS_TIMEOUT_MS = 60_000;
+const CLIENTS_TIMEOUT_MS = 60_000;
 
 /**
  * One read per project (`get clients`, then `get models` and `get options --native` per client), shared by every
  * open page and refreshed on request.
  * The list describes this machine's CLIs, not the project files, so a failed read simply means no suggestions.
  */
-export class ProviderCatalog {
+export class ClientCatalog {
   readonly #capability: CapabilityService;
-  readonly #cache = new Map<ProjectKey, Promise<ProviderChoice[]>>();
+  readonly #cache = new Map<ProjectKey, Promise<ClientChoice[]>>();
 
   constructor(capability: CapabilityService) {
     this.#capability = capability;
   }
 
-  /** The cached providers, reading them on first use; a failed read is cached as an empty list. */
-  public get(context: ProjectContext): Promise<ProviderChoice[]> {
+  /** The cached clients, reading them on first use; a failed read is cached as an empty list. */
+  public get(context: ProjectContext): Promise<ClientChoice[]> {
     let pending = this.#cache.get(context.key);
     if (pending === undefined) {
       pending = this.#read(context);
@@ -48,12 +48,12 @@ export class ProviderCatalog {
     this.#cache.clear();
   }
 
-  async #read(context: ProjectContext): Promise<ProviderChoice[]> {
+  async #read(context: ProjectContext): Promise<ClientChoice[]> {
     const state = await this.#capability.windowReady();
     if (state.kind !== 'ok' || state.launch === undefined) return [];
     const configuration = vscode.workspace.getConfiguration('migent', context.folder.uri);
     const env = { ...process.env, ...configuration.get<Record<string, string>>('env', {}) };
-    const options = { cwd: context.root, env, timeoutMs: PROVIDERS_TIMEOUT_MS };
+    const options = { cwd: context.root, env, timeoutMs: CLIENTS_TIMEOUT_MS };
     const clients = await invokeJson(state.launch, clientsArgs(), options);
     if (clients.kind !== 'ok') return [];
     const { launch } = state;
@@ -67,6 +67,6 @@ export class ProviderCatalog {
         return clientChoice(client, models.value, native.kind === 'ok' ? native.value : []);
       }),
     );
-    return choices.filter((choice): choice is ProviderChoice => choice !== null);
+    return choices.filter((choice): choice is ClientChoice => choice !== null);
   }
 }

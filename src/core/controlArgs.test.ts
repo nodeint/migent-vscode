@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  availableClients,
   cancelArgs,
+  clientChoice,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
   doctorArgs,
   doctorLines,
   initArgs,
-  availableClients,
-  clientChoice,
   joinClients,
   modelsDefaultFirst,
   parseDoctorOutput,
@@ -145,7 +145,7 @@ describe('reply, repair, doctor and init argv', () => {
     ];
     const options = [{ name: 'effort' }, { name: 'sandbox' }, { name: 3 }, null];
     expect(clientChoice('c', models, options)).toEqual({
-      name: 'c',
+      id: 'c',
       models: ['m1', 'm2'],
       defaultModel: 'm2',
       optionKeys: ['effort', 'sandbox'],

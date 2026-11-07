@@ -11,8 +11,8 @@
   destination and never its own stage; an imported route to several stages or to itself stays visible with a warning.
   Changing a stage id updates the references in the draft, and an unknown imported value stays visible instead of
   being rewritten.
-- Edit an inline agent's model with one searchable, provider-grouped picker shared with initialization, which writes
-  the provider and model together. Effort stays beside it, native option keys are suggested from
+- Edit an inline agent's model with one searchable, client-grouped picker shared with initialization, which writes
+  the client and model together. Effort stays beside it, native option keys are suggested from
   `migent get options --client <id> --native`, and an imported value the list does not cover stays visible.
 - Redesign the workflow editor's Design view around a clearer hierarchy: numbered stage cards whose header shows role,
   agent and instruction chips, with named groups (Identity, Inline agent, Dependencies, Instructions, Decisions,

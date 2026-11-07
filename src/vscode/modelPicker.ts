@@ -1,21 +1,21 @@
 import * as vscode from 'vscode';
 
-import { modelsDefaultFirst, type ProviderChoice, type RoleModel } from '../core/controlArgs';
+import { type ClientChoice, modelsDefaultFirst, type RoleModel } from '../core/controlArgs';
 
 interface ModelItem extends vscode.QuickPickItem {
   model?: RoleModel;
 }
 
-/** One separator per provider, then its models with the default first and marked. */
-export function modelItems(providers: ProviderChoice[]): ModelItem[] {
+/** One separator per client, then its models with the default first and marked. */
+export function modelItems(clients: ClientChoice[]): ModelItem[] {
   const items: ModelItem[] = [];
-  for (const choice of providers) {
-    items.push({ label: choice.name, kind: vscode.QuickPickItemKind.Separator });
+  for (const choice of clients) {
+    items.push({ label: choice.id, kind: vscode.QuickPickItemKind.Separator });
     for (const model of modelsDefaultFirst(choice)) {
       items.push({
-        label: `${choice.name} · ${model}`,
+        label: `${choice.id} · ${model}`,
         description: model === choice.defaultModel ? 'default' : undefined,
-        model: { provider: choice.name, model },
+        model: { client: choice.id, model },
       });
     }
   }
@@ -36,14 +36,14 @@ const FOR_ALL_BUTTON: vscode.QuickInputButton = {
 /** One filterable list; with `canPickAll`, a title button accepts the highlighted model for every role. */
 export async function pickModel(
   title: string,
-  providers: ProviderChoice[],
+  clients: ClientChoice[],
   canPickAll: boolean,
 ): Promise<ModelPick | undefined> {
   const input = vscode.window.createQuickPick<ModelItem>();
   input.title = title;
-  input.placeholder = 'Type to filter by provider or model';
+  input.placeholder = 'Type to filter by client or model';
   input.matchOnDescription = true;
-  input.items = modelItems(providers);
+  input.items = modelItems(clients);
   if (canPickAll) input.buttons = [FOR_ALL_BUTTON];
   const subscriptions: vscode.Disposable[] = [];
   try {

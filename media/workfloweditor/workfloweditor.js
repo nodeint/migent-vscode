@@ -121,8 +121,8 @@
     const index = pendingModelPick;
     pendingModelPick = null;
     if (index === null) return;
-    if (typeof message.provider !== 'string' || typeof message.model !== 'string') return;
-    designForm.applyModelPick(index, message.provider, message.model);
+    if (typeof message.client !== 'string' || typeof message.model !== 'string') return;
+    designForm.applyModelPick(index, message.client, message.model);
   }
 
   window.addEventListener('message', (event) => {

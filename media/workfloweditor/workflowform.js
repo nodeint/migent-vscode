@@ -26,7 +26,7 @@
   // ---------- plain data ----------
 
   function emptyAgent() {
-    return { provider: '', model: '', effort: '', clientType: '', clientOptions: [] };
+    return { model: '', effort: '', clientType: '', clientOptions: [] };
   }
 
   function emptyStage() {
@@ -65,7 +65,6 @@
     stage.agentMode = stage.agentMode === 'named' || stage.agentMode === 'inline' ? stage.agentMode : 'role';
     stage.agentName = typeof stage.agentName === 'string' ? stage.agentName : '';
     stage.agent = {
-      provider: typeof agent.provider === 'string' ? agent.provider : '',
       model: typeof agent.model === 'string' ? agent.model : '',
       effort: typeof agent.effort === 'string' ? agent.effort : '',
       clientType: typeof agent.clientType === 'string' ? agent.clientType : '',
@@ -394,31 +393,31 @@
       return options;
     }
 
-    function providerChoices() {
-      return getModel().providers || [];
+    function clientChoices() {
+      return getModel().clients || [];
     }
 
-    function providerChoice(name) {
-      return providerChoices().find((choice) => choice.name === name);
+    function clientChoice(name) {
+      return clientChoices().find((choice) => choice.id === name);
     }
 
-    function optionKeySuggestions(providerName) {
-      const choice = providerChoice(providerName);
+    function optionKeySuggestions(clientName) {
+      const choice = clientChoice(clientName);
       return choice && Array.isArray(choice.optionKeys) ? choice.optionKeys : [];
     }
 
-    function isKnownModel(providerName, modelName) {
-      const choice = providerChoice(providerName);
+    function isKnownModel(clientName, modelName) {
+      const choice = clientChoice(clientName);
       return Boolean(choice && modelName !== '' && (choice.models || []).includes(modelName));
     }
 
     /** The picker's value: both halves when known, and the missing half named otherwise. */
     function agentModelLabel(agent) {
-      const provider = agent.provider || '';
+      const client = agent.clientType || '';
       const model = agent.model || '';
-      if (provider !== '' && model !== '') return provider + ' · ' + model;
-      if (model !== '') return model + ' (no provider)';
-      if (provider !== '') return provider + ' (no model)';
+      if (client !== '' && model !== '') return client + ' · ' + model;
+      if (model !== '') return model + ' (no client)';
+      if (client !== '') return client + ' (no model)';
       return '';
     }
 
@@ -572,17 +571,17 @@
       return 'role agent';
     }
 
-    /** Not a complete agent yet is fine: the CLI reports the missing provider or model after Save. */
+    /** Not a complete agent yet is fine: the CLI reports the missing client or model after Save. */
     function inlineAgentEditor(stage, index) {
       const agent = stage.agent;
-      const known = isKnownModel(agent.provider, agent.model);
-      const hasModel = agent.provider !== '' || agent.model !== '';
+      const known = isKnownModel(agent.clientType, agent.model);
+      const hasModel = agent.clientType !== '' || agent.model !== '';
       const hint =
-        providerChoices().length === 0
-          ? 'Provider list is not available yet; Reload to try again.'
+        clientChoices().length === 0
+          ? 'Client list is not available yet; Reload to try again.'
           : hasModel && !known
-            ? 'Not in the provider list; pick a listed model or edit the workflow file to change it.'
-            : 'Every provider and model migent provider list reports.';
+            ? 'Not in the client list; pick a listed model or edit the workflow file to change it.'
+            : 'Every client and model migent get models reports.';
       return ui.group('Inline agent', 'A complete agent replaces the role agent entirely.', {
         children: [
           ui.grid([
@@ -597,7 +596,7 @@
             }), stagePath(index, 'agent.model'), hint),
             field('Effort', textControl(agent.effort, stagePath(index, 'agent.effort'), (next) => {
               agent.effort = next;
-            }, { placeholder: 'high', list: 'wf-efforts' }), stagePath(index, 'agent.effort'), 'A value the provider supports; doctor reports an invalid one.'),
+            }, { placeholder: 'high', list: 'wf-efforts' }), stagePath(index, 'agent.effort'), 'A value the client supports; doctor reports an invalid one.'),
           ]),
           pairList(
             agent.clientOptions,
@@ -642,7 +641,7 @@
           ui.grid([
             field('Resume from', selectControl(stage.sessionResumeFrom, stagePath(index, 'sessionResumeFrom'), resumeOptions(stage, stage.sessionResumeFrom), (next) => {
               stage.sessionResumeFrom = next;
-            }), stagePath(index, 'sessionResumeFrom'), 'A completed role stage in Depends on; provider, model and options must match.'),
+            }), stagePath(index, 'sessionResumeFrom'), 'A completed role stage in Depends on; client, model and options must match.'),
           ]),
         ],
       });
@@ -914,7 +913,7 @@
       holder.append(ui.datalist('wf-efforts', EFFORT_SUGGESTIONS));
       getForm().stages.forEach((stage, index) => {
         holder.append(
-          ui.datalist('wf-option-keys-' + index, optionKeySuggestions(stage.agent.provider)),
+          ui.datalist('wf-option-keys-' + index, optionKeySuggestions(stage.agent.clientType)),
         );
       });
       return holder;
@@ -931,11 +930,11 @@
      * Apply a pair chosen in the host's model picker. The page owns the draft, so the host only reports the choice
      * and this writes it; an unknown stage or a read-only form keeps the draft unchanged.
      */
-    function applyModelPick(index, provider, model) {
+    function applyModelPick(index, client, model) {
       const stage = getForm().stages[index];
       if (isFormReadOnly() || !stage || stage.agentMode !== 'inline' || !stage.agent) return false;
-      if (typeof provider !== 'string' || provider === '' || typeof model !== 'string' || model === '') return false;
-      stage.agent.provider = provider;
+      if (typeof client !== 'string' || client === '' || typeof model !== 'string' || model === '') return false;
+      stage.agent.clientType = client;
       stage.agent.model = model;
       edited('stages.' + index + '.agent.model');
       return true;

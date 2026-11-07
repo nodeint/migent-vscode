@@ -164,11 +164,6 @@ export function joinClients(clients: unknown, models: unknown): ClientChoice[] {
   return choices;
 }
 
-/** `get clients --json`: one row per registered CLI client, with its PATH availability. */
-export function clientsArgs(): string[] {
-  return ['get', 'clients', '--json'];
-}
-
 /** `get models --client <id> --json`: the models one client reports, with its default. */
 export function clientModelsArgs(client: string): string[] {
   return ['get', 'models', '--client', client, '--json'];
@@ -193,11 +188,11 @@ export function availableClients(value: unknown): string[] {
  * One client's choice for the workflow editor from its `get models` and native `get options` rows; null when the
  * client reports no model.
  */
-export function clientChoice(client: string, models: unknown, options: unknown): ProviderChoice | null {
+export function clientChoice(client: string, models: unknown, options: unknown): ClientChoice | null {
   if (!Array.isArray(models)) return null;
   const { names, defaultModel } = clientModels(models as unknown[], client);
   if (names.length === 0) return null;
-  const choice: ProviderChoice = { name: client, models: names };
+  const choice: ClientChoice = { id: client, models: names };
   if (defaultModel !== undefined) choice.defaultModel = defaultModel;
   const optionKeys = Array.isArray(options)
     ? (options as unknown[])

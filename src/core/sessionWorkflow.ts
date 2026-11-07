@@ -1,4 +1,4 @@
-import type { ProviderChoice } from './controlArgs';
+import type { ClientChoice } from './controlArgs';
 import { listExecutions } from './executions';
 import type { SessionSnapshot } from './model';
 import { sessionDir, workflowDraftPath } from './paths';
@@ -30,7 +30,7 @@ export interface SessionWorkflowInput {
   sessionId: string;
   scan: WorkflowScan;
   config: ProjectConfig;
-  providers?: ProviderChoice[];
+  clients?: ClientChoice[];
   snapshot?: SessionSnapshot;
 }
 
@@ -43,7 +43,7 @@ export function readSessionWorkflow(input: SessionWorkflowInput): SessionWorkflo
     filePath: workflowDraftPath(input.projectRoot, input.sessionId),
     scan: input.scan,
     config: input.config,
-    providers: input.providers,
+    clients: input.clients,
   });
   const ranStages = [...new Set(listExecutions(sessionDir(input.projectRoot, input.sessionId)).map((e) => e.stage))];
   const { snapshot } = input;

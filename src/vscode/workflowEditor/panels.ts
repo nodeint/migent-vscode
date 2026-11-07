@@ -6,7 +6,7 @@ import { describeCapability } from '../../cli/capabilityText';
 import { invokeJson } from '../../cli/invoke';
 import type { LaunchSpec } from '../../cli/locate';
 import type { CapabilityState } from '../../cli/version';
-import type { ProviderChoice } from '../../core/controlArgs';
+import type { ClientChoice } from '../../core/controlArgs';
 import { workflowsDir } from '../../core/paths';
 import {
   emptyWorkflowForm,
@@ -28,7 +28,7 @@ import { pickModel } from '../modelPicker';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
-import { ProviderCatalog } from './providerList';
+import { ClientCatalog } from './clientList';
 
 export const WORKFLOW_EDITOR_VIEW_TYPE = 'migent.editWorkflow';
 
@@ -82,7 +82,7 @@ class Entry {
   /** One save at a time per page; a second request is ignored while the first is in flight. */
   public saving = false;
   /** Provider suggestions for the inline-agent fields; empty until the client reads answer. */
-  public providers: ProviderChoice[] = [];
+  public clients: ClientChoice[] = [];
   #lastJson: string | null = null;
 
   constructor(identity: WorkflowEditorIdentity, panel: vscode.WebviewPanel) {
@@ -125,7 +125,7 @@ function unavailable(identity: WorkflowEditorIdentity): WorkflowEditorModel {
     roles: [],
     agents: [],
     workflows: [],
-    providers: [],
+    clients: [],
     duplicateOf: [],
     validation: EMPTY_VALIDATION,
     savedHash: '',
@@ -188,7 +188,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
   readonly #capability: CapabilityService;
   readonly #extensionUri: vscode.Uri;
-  readonly #providers: ProviderCatalog;
+  readonly #clients: ClientCatalog;
   readonly #entries = new Map<string, Entry>();
   readonly #dirty = new Set<string>();
   readonly #subscriptions: vscode.Disposable[];
@@ -198,7 +198,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     this.#registry = registry;
     this.#capability = capability;
     this.#extensionUri = extensionUri;
-    this.#providers = new ProviderCatalog(capability);
+    this.#clients = new ClientCatalog(capability);
     this.#subscriptions = [
       registry.onDidChange((change) => {
         this.#onChange(change);
@@ -250,7 +250,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
 
   public dispose(): void {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
-    this.#providers.dispose();
+    this.#clients.dispose();
     for (const entry of [...this.#entries.values()]) entry.panel.dispose();
     this.#entries.clear();
     for (const subscription of this.#subscriptions.splice(0)) subscription.dispose();
@@ -283,7 +283,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       this.#dirty.delete(key);
     });
     this.#send(identity, true);
-    void this.#loadProviders(identity);
+    void this.#loadClients(identity);
   }
 
   /** Handle a page message. Public so tests can drive the intent path without a webview. */
@@ -308,8 +308,8 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         entry.validation = EMPTY_VALIDATION;
         entry.validationHash = null;
         context?.catalog.reloadWorkflow(identity.file);
-        this.#providers.invalidate(identity.project);
-        void this.#loadProviders(identity);
+        this.#clients.invalidate(identity.project);
+        void this.#loadClients(identity);
         this.#send(identity, true);
       },
       openFile: async () => {
@@ -335,20 +335,20 @@ export class WorkflowEditorPanels implements vscode.Disposable {
 
   /** Open the shared model picker and hand the choice back to the page's own draft. */
   async #pickInlineModel(identity: WorkflowEditorIdentity, entry: Entry): Promise<void> {
-    if (entry.providers.length === 0) {
-      this.#providers.invalidate(identity.project);
-      await this.#loadProviders(identity);
+    if (entry.clients.length === 0) {
+      this.#clients.invalidate(identity.project);
+      await this.#loadClients(identity);
     }
     if (this.#entries.get(keyOf(identity)) !== entry) return;
-    if (entry.providers.length === 0) {
-      this.#error(identity, 'No provider list is available. Check the Migent CLI, then Reload the page.');
+    if (entry.clients.length === 0) {
+      this.#error(identity, 'No client list is available. Check the Migent CLI, then Reload the page.');
       return;
     }
-    const picked = await pickModel('Inline agent model', entry.providers, false);
+    const picked = await pickModel('Inline agent model', entry.clients, false);
     if (picked === undefined || this.#entries.get(keyOf(identity)) !== entry) return;
     void entry.panel.webview.postMessage({
       type: 'modelPicked',
-      provider: picked.model.provider,
+      client: picked.model.client,
       model: picked.model.model,
     });
   }
@@ -459,18 +459,18 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       file: identity.file,
       scan: context.catalog.workflows(),
       config: context.catalog.config(),
-      providers: this.#entries.get(keyOf(identity))?.providers ?? [],
+      clients: this.#entries.get(keyOf(identity))?.clients ?? [],
     });
   }
 
   /** Read the provider list once, then repaint with the suggestions it enables. */
-  async #loadProviders(identity: WorkflowEditorIdentity): Promise<void> {
+  async #loadClients(identity: WorkflowEditorIdentity): Promise<void> {
     const context = this.#registry.project(identity.project);
     if (context === undefined) return;
-    const providers = await this.#providers.get(context);
+    const clients = await this.#clients.get(context);
     const entry = this.#entries.get(keyOf(identity));
     if (entry === undefined) return;
-    entry.providers = providers;
+    entry.clients = clients;
     this.#send(identity, true);
   }
 

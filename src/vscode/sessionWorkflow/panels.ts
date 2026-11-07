@@ -4,7 +4,7 @@ import { describeCapability } from '../../cli/capabilityText';
 import { invokeJson } from '../../cli/invoke';
 import type { LaunchSpec } from '../../cli/locate';
 import type { CapabilityState } from '../../cli/version';
-import type { ProviderChoice } from '../../core/controlArgs';
+import type { ClientChoice } from '../../core/controlArgs';
 import { workflowDraftPath } from '../../core/paths';
 import { SESSION_ACTIONS } from '../../core/resultsIntent';
 import { readSessionWorkflow, type SessionWorkflowModel } from '../../core/sessionWorkflow';
@@ -21,6 +21,7 @@ import { openFile } from '../openFile';
 import type { ProjectRegistry } from '../projects';
 import { SESSION_ACTION_COMMANDS } from '../results/panels';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
+import { ClientCatalog } from '../workflowEditor/clientList';
 import {
   EMPTY_VALIDATION,
   envelopeOf,
@@ -29,7 +30,6 @@ import {
   saveFailure,
   splitDiagnostics,
 } from '../workflowEditor/panels';
-import { ProviderCatalog } from '../workflowEditor/providerList';
 
 export const SESSION_WORKFLOW_VIEW_TYPE = 'migent.sessionWorkflow';
 
@@ -97,7 +97,7 @@ const keyOf = (identity: SessionWorkflowIdentity): string => `${identity.project
 
 class Entry {
   public revision = 0;
-  public providers: ProviderChoice[] = [];
+  public clients: ClientChoice[] = [];
   public lastModel: SessionWorkflowModel | null = null;
   /** Diagnostics of the last save attempt; they describe the page draft, not the file on disk. */
   public validation: SessionWorkflowModel['validation'] = EMPTY_VALIDATION;
@@ -148,7 +148,7 @@ class Entry {
  */
 export class SessionWorkflowPanels implements vscode.Disposable {
   readonly #entries = new Map<string, Entry>();
-  readonly #providers: ProviderCatalog;
+  readonly #clients: ClientCatalog;
   readonly #subscriptions: vscode.Disposable[];
 
   constructor(
@@ -156,7 +156,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     private readonly capability: CapabilityService,
     private readonly extensionUri: vscode.Uri,
   ) {
-    this.#providers = new ProviderCatalog(this.capability);
+    this.#clients = new ClientCatalog(this.capability);
     this.#subscriptions = [
       registry.onDidChange((change) => {
         this.#onChange(change);
@@ -200,7 +200,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
   }
 
   public dispose(): void {
-    this.#providers.dispose();
+    this.#clients.dispose();
     for (const entry of [...this.#entries.values()]) entry.panel.dispose();
     this.#entries.clear();
     for (const subscription of this.#subscriptions.splice(0)) subscription.dispose();
@@ -224,7 +224,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     });
     panel.onDidDispose(() => this.#entries.delete(key));
     this.#send(identity, true);
-    void this.#loadProviders(identity);
+    void this.#loadClients(identity);
   }
 
   /** Handle a page message; only a closed set is understood. */
@@ -253,12 +253,12 @@ export class SessionWorkflowPanels implements vscode.Disposable {
         await openFile(workflowDraftPath(context.root, identity.sessionId), 'workflow.yaml');
         return;
       case 'pickModel': {
-        if (entry.providers.length === 0) return;
-        const picked = await pickModel('Inline agent model', entry.providers, false);
+        if (entry.clients.length === 0) return;
+        const picked = await pickModel('Inline agent model', entry.clients, false);
         if (picked === undefined) return;
         void entry.panel.webview.postMessage({
           type: 'modelPicked',
-          provider: picked.model.provider,
+          client: picked.model.client,
           model: picked.model.model,
         });
         return;
@@ -366,13 +366,13 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     entry.publish({ ...entry.lastModel, validation: entry.validation }, true, state);
   }
 
-  async #loadProviders(identity: SessionWorkflowIdentity): Promise<void> {
+  async #loadClients(identity: SessionWorkflowIdentity): Promise<void> {
     const context = this.registry.project(identity.project);
     if (context === undefined) return;
-    const providers = await this.#providers.get(context);
+    const clients = await this.#clients.get(context);
     const entry = this.#entries.get(keyOf(identity));
     if (entry === undefined) return;
-    entry.providers = providers;
+    entry.clients = clients;
     this.#send(identity, true);
   }
 
@@ -388,7 +388,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
       snapshot: context.store.snapshot(identity.sessionId),
       scan: context.catalog.workflows(),
       config: context.catalog.config(),
-      providers: entry.providers,
+      clients: entry.clients,
     });
     if (entry.validationHash !== null && model.savedHash !== entry.validationHash) {
       entry.setValidation(EMPTY_VALIDATION, null);

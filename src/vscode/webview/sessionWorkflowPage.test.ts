@@ -196,7 +196,7 @@ function model(overrides: Record<string, unknown> = {}) {
     roles: ['planner'],
     agents: [],
     workflows: [],
-    providers: [],
+    clients: [],
     duplicateOf: [],
     validation: { errors: [], warnings: [] },
     savedHash: 'h1',
