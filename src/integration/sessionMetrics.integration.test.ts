@@ -210,9 +210,11 @@ const scenarios: Scenario[] = [
         menus.commandPalette?.filter((item) => item.command === 'migent.session.openMetrics').map((item) => item.when),
         ['false'],
       );
-      const entry = menus['view/item/context']?.find((item) => item.command === 'migent.session.openMetrics');
-      assert.equal(entry?.group, '1_open@6');
-      assert.match(entry?.when ?? '', /viewItem =~ \/\^session\\\.completed\//);
+      assert.equal(
+        menus['view/item/context']?.some((item) => item.command === 'migent.session.openMetrics') ?? false,
+        false,
+        'the Sessions view context menu no longer offers Open Metrics',
+      );
       await closeAll(env);
     },
   },

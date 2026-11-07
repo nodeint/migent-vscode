@@ -99,7 +99,7 @@ pnpm package
 ```
 
 CI runs this sequence on Ubuntu and Windows, followed by `pnpm test:integration`
-(informational on Ubuntu, under `xvfb-run`). `pnpm lint` enforces that
+(under `xvfb-run` on Ubuntu; a failure fails the job on both systems). `pnpm lint` enforces that
 `src/core/` and `src/cli/` never import `vscode`. There are currently no separate
 lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
