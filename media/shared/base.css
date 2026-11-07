@@ -1005,6 +1005,114 @@ button.mg-row:hover {
   text-align: left;
 }
 
+/* Save footer: the save state on the left, the actions on the right. */
+.mg-save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  color: var(--mg-muted);
+}
+
+.mg-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .mg-footer-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* The area under a page header that holds banners and issue lists. */
+.mg-notices {
+  margin: 0 0 var(--mg-space-4);
+}
+
+/* An issue list in a banner: one button per problem, each revealing its field. */
+.mg-issue-list {
+  margin: var(--mg-space-1) 0 0;
+}
+
+.mg-issue-list .mg-btn {
+  text-align: left;
+}
+
+/* A collapsible card holds controls, so it is not an mg-card. The header carries the number, title and
+   chips; the body groups the content. */
+.mg-collapsible {
+  margin-top: var(--mg-space-3);
+  background: var(--mg-surface-2);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  overflow: clip;
+}
+
+.mg-collapsible > summary {
+  padding: var(--mg-space-2) var(--mg-space-3);
+  color: var(--mg-fg);
+}
+
+.mg-collapsible > summary:hover {
+  background: var(--mg-hover);
+}
+
+.mg-collapsible[open] > summary {
+  background: var(--vscode-sideBarSectionHeader-background, transparent);
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.mg-collapsible-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-2);
+}
+
+.mg-collapsible-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mg-collapsible-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mg-space-1);
+  margin-left: auto;
+}
+
+.mg-collapsible-body {
+  padding: var(--mg-space-3) var(--mg-space-3) var(--mg-space-4);
+}
+
+.mg-collapsible-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-1);
+  margin-bottom: var(--mg-space-3);
+  padding: var(--mg-space-1) 0 var(--mg-space-2);
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.mg-collapsible-tool-remove {
+  margin-left: auto;
+}
+
+.mg-collapsible-tool-remove:hover {
+  color: var(--mg-error);
+}
+
+@media (max-width: 640px) {
+  .mg-collapsible-chips {
+    margin-left: 0;
+  }
+}
+
 /* Keyboard focus */
 .mg-btn:focus-visible,
 .mg-row:focus-visible,

@@ -1,12 +1,15 @@
 // Workflow form: the Design view's controls, separated from the editor page so another page can reuse them.
-// It owns the form's data shape (empty, normalize) and renders sections of controls over a draft it does not own.
+// It renders sections of controls over a draft it does not own; the data shape and pure draft operations live in
+// workflowmodel.js.
 // The host page supplies the model, the draft, validation issues and two callbacks (see `create`).
-// Every string is set with textContent. Needs media/shared/page.js and media/shared/form.js loaded first (see docs/ui.md).
+// Every string is set with textContent. Needs media/shared/page.js, media/shared/form.js and workflowmodel.js loaded first (see docs/ui.md).
 (function () {
   'use strict';
 
   const { el, details } = window.MigentPage;
   const ui = window.MigentForm;
+  const ops = window.MigentWorkflowModel;
+  const { emptyStage, emptyForm, normalizeForm, uniqueValues, artifactBaseName, agentModelLabel } = ops;
 
   const ASK_OPTIONS = [
     { value: '', label: 'No questions' },
@@ -23,85 +26,6 @@
   // so it stays free text. Doctor reports an invalid effort for a client and model.
   const EFFORT_SUGGESTIONS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-  // ---------- plain data ----------
-
-  function emptyAgent() {
-    return { model: '', effort: '', clientType: '', clientOptions: [] };
-  }
-
-  function emptyStage() {
-    return {
-      id: '',
-      description: '',
-      role: '',
-      ask: '',
-      agentMode: 'role',
-      agentName: '',
-      agent: emptyAgent(),
-      dependsOn: [],
-      maxRevisions: null,
-      instructions: [],
-      producesArtifact: '',
-      sessionResumeFrom: '',
-      verify: [],
-      verifyTimeout: null,
-      maxVerify: null,
-      runWhenPaths: [],
-      decision: [],
-    };
-  }
-
-  function emptyForm() {
-    return { id: '', concurrency: null, constraints: [], stages: [], outputs: [], downstream: [] };
-  }
-
-  function normalizePairs(values) {
-    return (Array.isArray(values) ? values : []).map((pair) => ({ key: '', value: '', ...(pair || {}) }));
-  }
-
-  function normalizeStage(input) {
-    const stage = { ...emptyStage(), ...(input || {}) };
-    const agent = stage.agent && typeof stage.agent === 'object' ? stage.agent : {};
-    stage.agentMode = stage.agentMode === 'named' || stage.agentMode === 'inline' ? stage.agentMode : 'role';
-    stage.agentName = typeof stage.agentName === 'string' ? stage.agentName : '';
-    stage.agent = {
-      model: typeof agent.model === 'string' ? agent.model : '',
-      effort: typeof agent.effort === 'string' ? agent.effort : '',
-      clientType: typeof agent.clientType === 'string' ? agent.clientType : '',
-      clientOptions: normalizePairs(agent.clientOptions),
-    };
-    stage.dependsOn = Array.isArray(stage.dependsOn) ? stage.dependsOn : [];
-    stage.instructions = Array.isArray(stage.instructions) ? stage.instructions : [];
-    stage.verify = Array.isArray(stage.verify) ? stage.verify : [];
-    stage.runWhenPaths = Array.isArray(stage.runWhenPaths) ? stage.runWhenPaths : [];
-    stage.decision = (Array.isArray(stage.decision) ? stage.decision : []).map((route) => ({
-      value: '',
-      when: '',
-      navigate: '',
-      ...(route || {}),
-    }));
-    return stage;
-  }
-
-  function normalizeForm(input) {
-    const next = { ...emptyForm(), ...(input || {}) };
-    next.constraints = Array.isArray(next.constraints) ? next.constraints : [];
-    next.stages = (Array.isArray(next.stages) ? next.stages : []).map(normalizeStage);
-    next.outputs = (Array.isArray(next.outputs) ? next.outputs : []).map((output) => ({
-      name: '',
-      fromStage: '',
-      artifact: '',
-      ...(output || {}),
-    }));
-    next.downstream = (Array.isArray(next.downstream) ? next.downstream : []).map((target) => ({
-      workflow: '',
-      task: '',
-      ...(target || {}),
-      artifacts: normalizePairs(target && target.artifacts),
-    }));
-    return next;
-  }
-
   /**
    * Create a form renderer.
    *
@@ -115,7 +39,10 @@
   function create(host) {
     const { getModel, getForm, issues, onEdit, repaint, pickModel } = host;
 
-    /** A structural edit: drop stale diagnostics through `onEdit`, then rebuild and refocus. */
+    /**
+     * A structural edit from a click: drop stale diagnostics through `onEdit`, then rebuild and refocus. A value
+     * edit that also rebuilds calls `repaint` alone, because the form root reports the edit.
+     */
     function edited(path) {
       onEdit();
       repaint(path);
@@ -305,211 +232,54 @@
       });
     }
 
-    function moveStage(index, delta) {
-      const form = getForm();
-      const target = index + delta;
-      if (target < 0 || target >= form.stages.length) return;
-      const [stage] = form.stages.splice(index, 1);
-      form.stages.splice(target, 0, stage);
-      edited('stages.' + target + '.id');
-    }
-
-    function removeStage(index) {
-      getForm().stages.splice(index, 1);
-      edited('stages.' + Math.max(0, index - 1) + '.id');
-    }
-
     function stagePath(index, key) {
       return 'stages.' + index + '.' + key;
     }
 
-    /** Keep every in-file reference in step when a stage id changes. */
-    function renameStageReferences(oldId, newId) {
-      if (oldId === '' || newId === '' || oldId === newId) return;
-      const form = getForm();
-      let changed = false;
-      for (const stage of form.stages) {
-        stage.dependsOn = stage.dependsOn.map((id) => {
-          if (id !== oldId) return id;
-          changed = true;
-          return newId;
-        });
-        if (stage.sessionResumeFrom === oldId) {
-          stage.sessionResumeFrom = newId;
-          changed = true;
-        }
-        for (const route of stage.decision || []) {
-          const parts = route.navigate
-            .split(',')
-            .map((part) => part.trim())
-            .filter((part) => part !== '')
-            .map((part) => (part === oldId ? newId : part));
-          const next = parts.join(', ');
-          if (next !== route.navigate) {
-            route.navigate = next;
-            changed = true;
-          }
-        }
-      }
-      for (const output of form.outputs) {
-        if (output.fromStage === oldId) {
-          output.fromStage = newId;
-          changed = true;
-        }
-      }
-      if (changed) onEdit();
+    const roleOptions = (current) => ops.roleOptions(getModel(), current);
+    const agentNameOptions = (current) => ops.agentNameOptions(getModel(), current);
+    const clientChoices = () => ops.clientChoices(getModel());
+    const optionKeySuggestions = (clientName) => ops.optionKeySuggestions(getModel(), clientName);
+    const isKnownModel = (clientName, modelName) => ops.isKnownModel(getModel(), clientName, modelName);
+    const resumeOptions = (stage, current) => ops.resumeOptions(getForm(), stage, current);
+    const outputStageOptions = (current) => ops.outputStageOptions(getForm(), current);
+    const outputArtifactOptions = (output) => ops.outputArtifactOptions(getForm(), output);
+    const outputNameOptions = (current) => ops.outputNameOptions(getForm(), current);
+    const workflowOptions = (current) => ops.workflowOptions(getModel(), current);
+    const stageIds = () => ops.stageIds(getForm());
+
+    function moveStage(index, delta) {
+      const target = ops.moveStage(getForm(), index, delta);
+      if (target >= 0) edited('stages.' + target + '.id');
     }
 
-    function roleOptions(current) {
-      const roles = getModel().roles || [];
-      const options = [{ value: '', label: 'No role (verify only)' }];
-      for (const role of roles) options.push({ value: role, label: role });
-      if (current && !roles.includes(current)) options.push({ value: current, label: current + ' (not in config)' });
-      return options;
+    function removeStage(index) {
+      ops.removeStage(getForm(), index);
+      edited('stages.' + Math.max(0, index - 1) + '.id');
     }
 
-    function uniqueValues(values) {
-      const unique = [];
-      for (const value of values) {
-        if (value !== '' && !unique.includes(value)) unique.push(value);
-      }
-      return unique;
-    }
-
-    function stageIds() {
-      return uniqueValues(getForm().stages.map((stage) => stage.id));
-    }
-
-    function artifactBaseName(artifact) {
-      const base = String(artifact).split('/').pop() || String(artifact);
-      return base.replace(/\.[^.]+$/, '') || base;
-    }
-
-    function agentNameOptions(current) {
-      const agents = getModel().agents || [];
-      const options = [{ value: '', label: agents.length === 0 ? 'No agents in config' : 'Choose an agent' }];
-      for (const agent of agents) options.push({ value: agent, label: agent });
-      if (current && !agents.includes(current)) options.push({ value: current, label: current + ' (not in config)' });
-      return options;
-    }
-
-    function clientChoices() {
-      return getModel().clients || [];
-    }
-
-    function clientChoice(name) {
-      return clientChoices().find((choice) => choice.id === name);
-    }
-
-    function optionKeySuggestions(clientName) {
-      const choice = clientChoice(clientName);
-      return choice && Array.isArray(choice.optionKeys) ? choice.optionKeys : [];
-    }
-
-    function isKnownModel(clientName, modelName) {
-      const choice = clientChoice(clientName);
-      return Boolean(choice && modelName !== '' && (choice.models || []).includes(modelName));
-    }
-
-    /** The picker's value: both halves when known, and the missing half named otherwise. */
-    function agentModelLabel(agent) {
-      const client = agent.clientType || '';
-      const model = agent.model || '';
-      if (client !== '' && model !== '') return client + ' · ' + model;
-      if (model !== '') return model + ' (no client)';
-      if (client !== '') return client + ' (no model)';
-      return '';
-    }
-
-    function resumeOptions(stage, current) {
-      const form = getForm();
-      const options = [{ value: '', label: 'No resumed session' }];
-      const listed = [];
-      for (const id of uniqueValues(stage.dependsOn)) {
-        const dependency = form.stages.find((candidate) => candidate.id === id);
-        if (dependency && dependency.role === '') continue;
-        options.push({ value: id, label: id });
-        listed.push(id);
-      }
-      if (current && !listed.includes(current)) {
-        const suffix = stage.dependsOn.includes(current) ? ' (no role)' : ' (not a dependency)';
-        options.push({ value: current, label: current + suffix });
-      }
-      return options;
-    }
-
-    function outputStageOptions(current) {
-      const options = [{ value: '', label: 'Choose a stage' }];
-      const seen = [];
-      for (const stage of getForm().stages) {
-        if (stage.id === '' || seen.includes(stage.id)) continue;
-        if (stage.producesArtifact === '' && stage.id !== current) continue;
-        seen.push(stage.id);
-        const suffix = stage.producesArtifact === '' ? ' (no artifact)' : ' → ' + stage.producesArtifact;
-        options.push({ value: stage.id, label: stage.id + suffix });
-      }
-      if (current && !seen.includes(current)) options.push({ value: current, label: current + ' (not a stage)' });
-      return options;
-    }
-
-    function outputArtifactOptions(output) {
-      const options = [{ value: '', label: output.fromStage === '' ? 'Choose a stage first' : 'Choose an artifact' }];
-      const stage = getForm().stages.find((candidate) => candidate.id === output.fromStage);
-      if (stage && stage.producesArtifact !== '') {
-        options.push({ value: stage.producesArtifact, label: stage.producesArtifact });
-      }
-      if (output.artifact !== '' && !options.some((option) => option.value === output.artifact)) {
-        options.push({ value: output.artifact, label: output.artifact + ' (does not match)' });
-      }
-      return options;
-    }
-
-    function outputNameOptions(current) {
-      const options = [{ value: '', label: 'Choose an output' }];
-      const names = uniqueValues(getForm().outputs.map((output) => output.name));
-      for (const name of names) options.push({ value: name, label: name });
-      if (current && !names.includes(current)) options.push({ value: current, label: current + ' (not an output)' });
-      return options;
-    }
-
-    function workflowOptions(current) {
-      const workflows = getModel().workflows || [];
-      const options = [{ value: '', label: 'Choose a workflow' }];
-      const ids = uniqueValues(workflows.map((workflow) => workflow.id));
-      for (const id of ids) options.push({ value: id, label: id });
-      if (current && !ids.includes(current)) options.push({ value: current, label: current + ' (not in project)' });
-      return options;
-    }
-
-    function stageSummary(stage, index) {
-      const head = el('div', null, 'wf-stage-head');
-      head.append(el('span', String(index + 1), 'mg-badge' + (stage.id ? '' : ' mg-badge--warn')));
-      head.append(el('span', stageLabel(stage, index), 'wf-stage-title'));
-      const chips = el('span', null, 'wf-stage-chips');
-      chips.append(el('span', stage.role || 'verify only', 'mg-chip'));
-      chips.append(
-        el('span', agentSummary(stage), stage.agentMode === 'inline' ? 'mg-chip mg-chip--info' : 'mg-chip'),
-      );
+    function stageChips(stage) {
+      const chips = [el('span', stage.role || 'verify only', 'mg-chip')];
+      chips.push(el('span', agentSummary(stage), stage.agentMode === 'inline' ? 'mg-chip mg-chip--info' : 'mg-chip'));
       if (stage.dependsOn.length > 0) {
         const depends = el('span', 'needs ' + stage.dependsOn.join(', '), 'mg-chip');
         depends.title = 'Depends on ' + stage.dependsOn.join(', ');
-        chips.append(depends);
+        chips.push(depends);
       }
       const duplicate = stage.id !== '' && getForm().stages.filter((candidate) => candidate.id === stage.id).length > 1;
-      if (duplicate) chips.append(el('span', 'duplicate id', 'mg-chip mg-chip--warn'));
-      head.append(chips);
-      return head;
+      if (duplicate) chips.push(el('span', 'duplicate id', 'mg-chip mg-chip--warn'));
+      return chips;
     }
 
     function stageTools(index) {
       const total = getForm().stages.length;
-      const tools = el('div', null, 'wf-stage-tools');
+      const tools = el('div', null, 'mg-collapsible-tools');
       tools.append(
         action('Move up', 'quiet', () => moveStage(index, -1), isFormReadOnly() || index === 0),
         action('Move down', 'quiet', () => moveStage(index, 1), isFormReadOnly() || index === total - 1),
       );
       const remove = action('Remove stage', 'quiet', () => removeStage(index), isFormReadOnly());
-      remove.classList.add('wf-tool-remove');
+      remove.classList.add('mg-collapsible-tool-remove');
       tools.append(remove);
       return tools;
     }
@@ -523,13 +293,13 @@
         const next = idControl.value.trim();
         if (next !== idControl.value) idControl.value = next;
         stage.id = next;
-        renameStageReferences(originalId, next);
-        edited(stagePath(index, 'id'));
+        ops.renameStageReferences(getForm(), originalId, next);
+        repaint(stagePath(index, 'id'));
       });
       const producesControl = textControl(stage.producesArtifact, stagePath(index, 'producesArtifact'), (next) => {
         stage.producesArtifact = next;
       }, { placeholder: 'stage.md' });
-      producesControl.addEventListener('change', () => edited(stagePath(index, 'producesArtifact')));
+      producesControl.addEventListener('change', () => repaint(stagePath(index, 'producesArtifact')));
       const fields = [
         field('ID', idControl, stagePath(index, 'id'), 'Other stages and outputs refer to this id.'),
         field('Description', textControl(stage.description, stagePath(index, 'description'), (next) => {
@@ -537,11 +307,11 @@
         }, { placeholder: 'What this stage covers' }), stagePath(index, 'description'), undefined, true),
         field('Role', selectControl(stage.role, stagePath(index, 'role'), roleOptions(stage.role), (next) => {
           stage.role = next;
-          edited(stagePath(index, 'role'));
+          repaint(stagePath(index, 'role'));
         }), stagePath(index, 'role'), 'The role supplies the agent unless it is overridden.'),
         field('Agent', selectControl(stage.agentMode, stagePath(index, 'agentMode'), AGENT_MODES, (next) => {
           stage.agentMode = next;
-          edited(stagePath(index, 'agentMode'));
+          repaint(stagePath(index, 'agentMode'));
         }), stagePath(index, 'agentMode'), 'Use the role agent, a named agent, or a complete inline agent.'),
       ];
       if (stage.agentMode === 'named') {
@@ -676,7 +446,7 @@
       if (!known) choices.push({ value: current, label: navigationLabel(current, stageId) });
       const control = selectControl(current, path, choices, (next) => {
         route.navigate = next;
-        edited(path);
+        repaint(path);
       });
       const hint =
         current === ''
@@ -789,17 +559,24 @@
     }
 
     function renderStage(stage, index) {
-      const box = details('stage:' + index, stageSummary(stage, index), 'wf-stage', index === 0);
+      const box = ui.collapsibleCard({
+        key: 'stage:' + index,
+        number: index + 1,
+        title: stageLabel(stage, index),
+        warn: !stage.id,
+        chips: stageChips(stage),
+        open: index === 0,
+        body: [
+          stageTools(index),
+          identityGroup(stage, index),
+          ...(stage.agentMode === 'inline' ? [inlineAgentEditor(stage, index)] : []),
+          dependenciesGroup(stage, index),
+          instructionsGroup(stage, index),
+          decisionsGroup(stage, index),
+          stageAdvanced(stage, index),
+        ],
+      });
       box.id = 'stage-' + index;
-      const body = el('div', null, 'wf-stage-body');
-      body.append(stageTools(index));
-      body.append(identityGroup(stage, index));
-      if (stage.agentMode === 'inline') body.append(inlineAgentEditor(stage, index));
-      body.append(dependenciesGroup(stage, index));
-      body.append(instructionsGroup(stage, index));
-      body.append(decisionsGroup(stage, index));
-      body.append(stageAdvanced(stage, index));
-      box.append(body);
       return box;
     }
 
@@ -830,12 +607,12 @@
                     output.artifact = artifact;
                     if (output.name === '') output.name = artifactBaseName(artifact);
                   }
-                  edited('outputs.' + index + '.fromStage');
+                  repaint('outputs.' + index + '.fromStage');
                 }), 'outputs.' + index + '.fromStage'),
                 field('Artifact', selectControl(output.artifact, 'outputs.' + index + '.artifact', outputArtifactOptions(output), (next) => {
                   output.artifact = next;
                   if (output.name === '') output.name = artifactBaseName(next);
-                  edited('outputs.' + index + '.artifact');
+                  repaint('outputs.' + index + '.artifact');
                 }), 'outputs.' + index + '.artifact', 'Must match the source stage\'s produces.artifact.'),
               ]),
             ],

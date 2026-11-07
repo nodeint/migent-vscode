@@ -40,8 +40,8 @@ const PAGE: PageDescriptor = {
   title: 'Session workflow',
   modules: {
     folder: 'workfloweditor',
-    styles: ['workfloweditor.css'],
-    scripts: ['workflowform.js'],
+    styles: ['workflowform.css'],
+    scripts: ['workflowmodel.js', 'workflowform.js'],
   },
 };
 

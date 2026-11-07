@@ -164,36 +164,28 @@
     return nodes;
   }
 
-  function renderFooter() {
-    const footer = el('footer', null, 'mg-footer wf-footer');
-    footerHost = footer;
-    fillFooter(footer);
-    return footer;
+  function footerOptions() {
+    const dirty = isDirty();
+    return {
+      stateLabel: dirty ? 'Unsaved changes' : '',
+      saving: transient.saving,
+      canDiscard: dirty,
+      canSave: dirty && issues('errors').length === 0,
+      onDiscard: () => {
+        form = normalizeForm(savedForm);
+        paint();
+      },
+      onSave: saveWorkflow,
+    };
   }
 
   function fillFooter(footer) {
-    footer.replaceChildren();
-    const dirty = isDirty();
-    const state = el('span', null, 'wf-save-state');
-    if (dirty) state.append(icon('circle'), 'Unsaved changes');
-    footer.append(state);
-    const actions = el('div', null, 'wf-footer-actions');
-    actions.append(
-      ui.button('Discard changes', {
-        kind: 'secondary',
-        onClick: () => {
-          form = normalizeForm(savedForm);
-          paint();
-        },
-        disabled: !dirty || transient.saving,
-      }),
-      ui.button(transient.saving ? 'Saving…' : 'Save workflow', {
-        kind: 'primary',
-        onClick: saveWorkflow,
-        disabled: !dirty || issues('errors').length > 0 || transient.saving,
-      }),
-    );
-    footer.append(actions);
+    ui.saveFooter(footerOptions(), footer);
+  }
+
+  function renderFooter() {
+    footerHost = ui.saveFooter(footerOptions());
+    return footerHost;
   }
 
   function paint() {
@@ -204,7 +196,7 @@
       root.append(el('p', 'Loading the workflow…', 'mg-muted'));
       return;
     }
-    noticesHost = el('div', null, 'wf-notices');
+    noticesHost = ui.notices([]);
     noticesHost.append(...renderNotices());
     root.append(renderHeader(), noticesHost, ...designForm.render());
     if (model.canSave && !model.isLocked) root.append(renderFooter());

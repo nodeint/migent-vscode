@@ -12,6 +12,7 @@ vi.mock('../../cli/invoke', () => ({ invokeJson: invoke.json, invokeText: vi.fn(
 const posted = vi.hoisted(() => ({
   messages: [] as Record<string, unknown>[],
   handler: undefined as ((raw: unknown) => void) | undefined,
+  html: '',
 }));
 vi.mock('vscode', () => ({
   ViewColumn: { Active: 1 },
@@ -34,9 +35,11 @@ vi.mock('vscode', () => ({
       onDidDispose: () => undefined,
       webview: {
         options: {},
-        html: '',
+        set html(value: string) {
+          posted.html = value;
+        },
         cspSource: 'csp',
-        asWebviewUri: (uri: unknown) => uri,
+        asWebviewUri: (uri: { fsPath: string }) => ({ toString: () => uri.fsPath }),
         postMessage: (message: Record<string, unknown>) => {
           posted.messages.push(message);
           return Promise.resolve(true);
@@ -101,6 +104,15 @@ const envelope = (extra: Record<string, unknown> = {}) => ({
   hash: 'b'.repeat(64),
   written: true,
   ...extra,
+});
+
+describe('SessionWorkflowPanels page', () => {
+  it('loads the shared workflow form stylesheet, not the editor page stylesheet', () => {
+    posted.html = '';
+    setup(makeRoot(false));
+    expect(posted.html).toContain('workflowform.css');
+    expect(posted.html).not.toContain('workfloweditor.css');
+  });
 });
 
 describe('SessionWorkflowPanels save', () => {

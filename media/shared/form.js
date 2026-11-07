@@ -119,6 +119,62 @@
     return node;
   }
 
+  // ---------- page chrome ----------
+
+  /**
+   * The sticky save footer: the save state on the left, Discard and Save on the right. Pass `into` (an earlier
+   * result) to refill it in place. `options`: `stateLabel` (empty shows nothing), `saving`, `canDiscard`,
+   * `canSave`, `onDiscard`, `onSave`, optional `saveLabel`. Save and Discard are disabled while `saving` (the Save
+   * label then reads Saving…) or `busy` (disabled, label unchanged).
+   */
+  function saveFooter(options, into) {
+    const footer = into || el('footer', null, 'mg-footer mg-save-footer');
+    footer.replaceChildren();
+    const state = el('span', null, 'mg-save-state');
+    if (options.stateLabel) state.append(window.MigentPage.icon('circle'), options.stateLabel);
+    const actions = el('div', null, 'mg-footer-actions');
+    actions.append(
+      button('Discard changes', {
+        kind: 'secondary',
+        onClick: options.onDiscard,
+        disabled: options.saving === true || options.busy === true || options.canDiscard !== true,
+      }),
+      button(options.saving ? 'Saving…' : options.saveLabel || 'Save workflow', {
+        kind: 'primary',
+        onClick: options.onSave,
+        disabled: options.saving === true || options.busy === true || options.canSave !== true,
+      }),
+    );
+    footer.append(state, actions);
+    return footer;
+  }
+
+  /** The area under the page header that holds banners and issue lists. */
+  function notices(children) {
+    const node = el('div', null, 'mg-notices');
+    node.append(...children);
+    return node;
+  }
+
+  /**
+   * A collapsible card on top of `details`: a header with a number badge, a title and chips, then the body.
+   * `options`: `key` (keeps it open or closed across repaints), `number`, `title`, `chips` (nodes),
+   * `warn` (warning badge), `open` (default state), `body` (nodes). The caller may set `id` on the result.
+   */
+  function collapsibleCard(options) {
+    const head = el('div', null, 'mg-collapsible-head');
+    head.append(el('span', String(options.number), 'mg-badge' + (options.warn ? ' mg-badge--warn' : '')));
+    head.append(el('span', options.title, 'mg-collapsible-title'));
+    const chips = el('span', null, 'mg-collapsible-chips');
+    chips.append(...(options.chips || []));
+    head.append(chips);
+    const node = window.MigentPage.details(options.key, head, 'mg-collapsible', options.open === true);
+    const body = el('div', null, 'mg-collapsible-body');
+    body.append(...(options.body || []));
+    node.append(body);
+    return node;
+  }
+
   // ---------- layout ----------
 
   /** A compact hint for a control: a filled question icon whose tooltip carries the text. */
@@ -298,7 +354,7 @@
   /**
    * A checkbox group. `options.items` is `[{ value, label, unknown, title }]`; an unknown item is shown in the
    * warning tone instead of being dropped.
-   * After a change the kit calls `onEdit` and then `onRestructure(path + '.' + value)`.
+   * After a change the kit calls `onRestructure(path + '.' + value)`; the form root reports the edit.
    */
   function checkboxList(options) {
     const wrap = el('div', null, 'mg-checks');
@@ -313,7 +369,6 @@
       box.disabled = options.disabled === true;
       box.addEventListener('change', () => {
         options.onChange(item.value, box.checked);
-        options.onEdit();
         options.onRestructure(options.path + '.' + item.value);
       });
       label.append(box, el('span', item.label === undefined ? item.value : item.label));
@@ -324,7 +379,8 @@
 
   /**
    * A list of strings with add and remove rows. `values` is edited in place.
-   * The kit calls `options.onEdit` after every edit and `options.onRestructure(path)` after add or remove.
+   * The form root reports value edits. The kit calls `options.onEdit` after add or remove and
+   * `options.onRestructure(path)` to rebuild.
    * With a `label` it renders as a fieldset; without one it is a plain block inside a titled group.
    */
   function stringList(options) {
@@ -343,7 +399,6 @@
             disabled: options.disabled,
             onInput: (next) => {
               values[index] = next;
-              options.onEdit();
             },
           })
         : text({
@@ -353,7 +408,6 @@
             disabled: options.disabled,
             onInput: (next) => {
               values[index] = next;
-              options.onEdit();
             },
           });
       control.setAttribute('aria-label', itemLabel + ' ' + (index + 1));
@@ -377,7 +431,8 @@
 
   /**
    * A list of key/value pairs. `valueOptions(value)` returns select choices; without it the value is free text.
-   * The kit edits `pairs` in place and calls `onEdit` after every edit and `onRestructure(path)` after add or remove.
+   * The kit edits `pairs` in place. The form root reports value edits; add and remove call `onEdit` and then
+   * `onRestructure(path)`.
    */
   function pairList(options) {
     const pairs = options.pairs;
@@ -394,7 +449,6 @@
         disabled: options.disabled,
         onInput: (next) => {
           pair.key = next;
-          options.onEdit();
         },
       });
       key.setAttribute('aria-label', itemLabel + ' ' + (index + 1) + ' key');
@@ -407,7 +461,6 @@
           disabled: options.disabled,
           onInput: (next) => {
             pair.value = next;
-            options.onEdit();
           },
         });
       } else {
@@ -418,7 +471,6 @@
           disabled: options.disabled,
           onInput: (next) => {
             pair.value = next;
-            options.onEdit();
           },
         });
       }
@@ -448,6 +500,9 @@
     select,
     picker,
     root,
+    saveFooter,
+    collapsibleCard,
+    notices,
     field,
     grid,
     group,

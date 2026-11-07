@@ -77,7 +77,7 @@
       return;
     }
     root.append(renderHeader());
-    noticesHost = el('div', null, 'wf-notices');
+    noticesHost = ui.notices([]);
     noticesHost.append(...renderNotices());
     root.append(noticesHost);
     root.append(...designForm.render());
@@ -220,7 +220,7 @@
     mark.append(icon(tone === 'error' ? 'error' : 'warning'));
     const body = el('div');
     body.append(el('p', summary));
-    const items = el('ul', null, 'mg-list wf-issue-list');
+    const items = el('ul', null, 'mg-list mg-issue-list');
     for (const issue of list) {
       const item = el('li');
       const jump = el('button', issue.message, 'mg-btn mg-btn--link');
@@ -281,35 +281,27 @@
     return ui.button(label, { kind, onClick, disabled: Boolean(isDisabled) });
   }
 
-  function renderFooter() {
-    const footer = el('footer', null, 'mg-footer wf-footer');
-    footerHost = footer;
-    fillFooter(footer);
-    return footer;
+  function footerOptions() {
+    const dirty = isDirty();
+    return {
+      // A clean, saved workflow shows nothing; only unsaved or never-saved states are worth a label.
+      stateLabel: dirty ? 'Unsaved changes' : model.mode === 'new' ? 'Not saved yet' : '',
+      saving: transient.saving,
+      busy: transient.applying,
+      canDiscard: dirty,
+      canSave: dirty && issues('errors').length === 0,
+      onDiscard: discardChanges,
+      onSave: saveWorkflow,
+    };
   }
 
   function fillFooter(footer) {
-    footer.replaceChildren();
-    const dirty = isDirty();
-    const state = el('span', null, 'wf-save-state');
-    // A clean, saved workflow shows nothing; only unsaved or never-saved states are worth a label.
-    if (dirty || model.mode === 'new') {
-      state.append(icon('circle'), dirty ? 'Unsaved changes' : 'Not saved yet');
-    }
-    footer.append(state);
+    ui.saveFooter(footerOptions(), footer);
+  }
 
-    const actions = el('div', null, 'wf-footer-actions');
-    actions.append(action('Discard changes', 'secondary', discardChanges, !dirty || transient.saving || transient.applying));
-    const cannotSave = issues('errors').length > 0;
-    actions.append(
-      action(
-        transient.saving ? 'Saving…' : 'Save workflow',
-        'primary',
-        saveWorkflow,
-        !dirty || cannotSave || transient.saving || transient.applying,
-      ),
-    );
-    footer.append(actions);
+  function renderFooter() {
+    footerHost = ui.saveFooter(footerOptions());
+    return footerHost;
   }
 
   // ---------- start ----------

@@ -240,6 +240,7 @@ function load() {
     'shared/icons.js',
     'shared/page.js',
     'shared/form.js',
+    'workfloweditor/workflowmodel.js',
     'workfloweditor/workflowform.js',
     'sessionworkflow/sessionworkflow.js',
   ]) {

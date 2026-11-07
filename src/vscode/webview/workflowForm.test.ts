@@ -93,13 +93,35 @@ interface DownstreamForm {
 }
 
 interface WorkflowFormStub {
+  concurrency: number | null;
   constraints: string[];
   stages: StageForm[];
   outputs: OutputForm[];
   downstream: DownstreamForm[];
 }
 
+interface FooterOptions {
+  stateLabel?: string;
+  saving?: boolean;
+  busy?: boolean;
+  canDiscard?: boolean;
+  canSave?: boolean;
+  onDiscard?: () => void;
+  onSave?: () => void;
+}
+
 interface FormKit {
+  saveFooter: (options: FooterOptions, into?: FakeNode) => FakeNode;
+  notices: (children: FakeNode[]) => FakeNode;
+  collapsibleCard: (options: {
+    key: string;
+    number: number;
+    title: string;
+    chips?: FakeNode[];
+    warn?: boolean;
+    open?: boolean;
+    body?: FakeNode[];
+  }) => FakeNode;
   select: (options: {
     value: string;
     options: { value: string; label: string }[];
@@ -148,7 +170,7 @@ function load() {
     window,
     document: { getElementById: (): null => null },
   });
-  for (const file of ['../../../media/shared/form.js', '../../../media/workfloweditor/workflowform.js']) {
+  for (const file of ['../../../media/shared/form.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   return {
@@ -565,7 +587,7 @@ describe('workflow form layout', () => {
       expect(texts).toContain(heading);
     }
 
-    const heads = all(nodes).filter((node) => node.className === 'wf-stage-head');
+    const heads = all(nodes).filter((node) => node.className === 'mg-collapsible-head');
     expect(heads.map((head) => (head.children[0] as FakeNode).textContent)).toEqual(['1', '2']);
   });
 
@@ -612,5 +634,74 @@ describe('shared form kit', () => {
     expect(options(node)).toEqual(['custom', 'known']);
     expect(node.children[0]).toBeTruthy();
     expect((node.children[0] as FakeNode).textContent).toBe('custom (not in list)');
+  });
+
+  const footerButtons = (footer: FakeNode): Record<string, FakeNode> =>
+    Object.fromEntries(all([footer]).filter((n) => n.tagName === 'BUTTON').map((n) => [n.textContent, n]));
+
+  it('disables Save when clean, invalid or saving, and refills in place', () => {
+    const kit = load().form;
+    const base = { canDiscard: true, canSave: true, onDiscard: () => undefined, onSave: () => undefined };
+    const footer = kit.saveFooter({ ...base, canDiscard: false, canSave: false });
+    expect(footer.className).toContain('mg-footer');
+    expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
+    expect(footerButtons(footer)['Discard changes'].disabled).toBe(true);
+
+    expect(kit.saveFooter(base, footer)).toBe(footer);
+    expect(footerButtons(footer)['Save workflow'].disabled).toBe(false);
+    expect(footerButtons(footer)['Discard changes'].disabled).toBe(false);
+
+    kit.saveFooter({ ...base, canSave: false }, footer);
+    expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
+
+    kit.saveFooter({ ...base, saving: true }, footer);
+    expect(footerButtons(footer)['Saving…'].disabled).toBe(true);
+    expect(footerButtons(footer)['Discard changes'].disabled).toBe(true);
+
+    kit.saveFooter({ ...base, busy: true }, footer);
+    expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
+  });
+
+  it('shows the save state label only when given and wires the actions', () => {
+    const kit = load().form;
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
+    const footer = kit.saveFooter({ stateLabel: 'Unsaved changes', canDiscard: true, canSave: true, onSave, onDiscard });
+    expect(all([footer]).find((n) => n.className === 'mg-save-state')?.textContent).toContain('Unsaved changes');
+    fire(footerButtons(footer)['Save workflow'], 'click');
+    fire(footerButtons(footer)['Discard changes'], 'click');
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
+    const clean = kit.saveFooter({});
+    expect(all([clean]).find((n) => n.className === 'mg-save-state')?.descendants()).toHaveLength(0);
+  });
+
+  it('wraps notices in the shared area', () => {
+    const kit = load().form;
+    const node = kit.notices([el('p', 'hello')]);
+    expect(node.className).toBe('mg-notices');
+    expect(node.descendants()).toHaveLength(1);
+  });
+
+  it('renders a collapsible card with number, title, chips and body', () => {
+    const kit = load().form;
+    const card = kit.collapsibleCard({
+      key: 'k',
+      number: 2,
+      title: 'Review',
+      chips: [el('span', 'planner', 'mg-chip')],
+      body: [el('p', 'inside')],
+      open: true,
+    });
+    expect(card.tagName).toBe('DETAILS');
+    expect(card.className).toContain('mg-collapsible');
+    expect(card.open).toBe(true);
+    const texts = all([card]).map((n) => n.textContent);
+    expect(texts).toEqual(expect.arrayContaining(['2', 'Review', 'planner', 'inside']));
+    expect(all([card]).find((n) => n.className === 'mg-collapsible-body')).toBeTruthy();
+    expect(all([card]).find((n) => n.className === 'mg-badge')).toBeTruthy();
+    const warned = kit.collapsibleCard({ key: 'w', number: 1, title: '', warn: true });
+    expect(all([warned]).find((n) => n.className === 'mg-badge mg-badge--warn')).toBeTruthy();
   });
 });
