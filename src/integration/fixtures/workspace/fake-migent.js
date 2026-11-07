@@ -7,7 +7,7 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.4.0: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.4.1: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
@@ -394,7 +394,26 @@ function get() {
     print(format === 'json' ? view : `${view.name}  ${view.file}`);
     return;
   }
-  if (type === 'role' || type === 'roles' || type === 'model' || type === 'models') {
+  if (type === 'providers' || type === 'models') {
+    // Machine resources of 0.4.1: a plain array, exit 0. `byteplus` requires a client; `grok` has no models.
+    print(
+      type === 'providers'
+        ? [
+            { kind: 'provider', name: 'claude', command: 'claude', default_client: 'claude-code', requires_client: false },
+            { kind: 'provider', name: 'codex', command: 'codex', default_client: 'codex', requires_client: false },
+            { kind: 'provider', name: 'grok', command: 'grok', default_client: 'grok', requires_client: false },
+            { kind: 'provider', name: 'byteplus', command: 'byteplus', default_client: null, requires_client: true },
+          ]
+        : [
+            { kind: 'model', name: 'sonnet', client: 'claude-code', default: false },
+            { kind: 'model', name: 'opus', client: 'claude-code', default: true },
+            { kind: 'model', name: 'gpt-5', client: 'codex', default: true },
+            { kind: 'model', name: 'ark', client: 'byteplus', default: true },
+          ],
+    );
+    return;
+  }
+  if (type === 'role' || type === 'roles') {
     if (name !== undefined) {
       console.error(`${type} not found: ${name}.`);
       process.exit(2);
@@ -406,9 +425,12 @@ function get() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.4.0');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.4.1');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
+} else if (args[0] === 'provider' && args[1] === 'list' && !IS_LEGACY) {
+  console.error('error: unknown command provider list (removed in 0.4.1)');
+  process.exit(2);
 } else if (args[0] === 'get' && !IS_LEGACY) {
   get();
 } else if (args[0] === 'session' && args[1] === 'prepare') {

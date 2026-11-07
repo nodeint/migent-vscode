@@ -7,8 +7,9 @@ import type { LaunchSpec } from '../../cli/locate';
 import {
   initArgs,
   type InitInput,
+  joinProviders,
+  modelsArgs,
   modelsDefaultFirst,
-  parseProviders,
   type ProviderChoice,
   providersArgs,
   type RoleModel,
@@ -159,7 +160,7 @@ async function warnUnavailable(kind: string): Promise<void> {
 
 /**
  * The CLI and the provider list for a folder that has no project yet. It uses the window CLI state, which does not
- * depend on the folder, and reads `provider list` once.
+ * depend on the folder, and reads `get providers` and `get models` once.
  */
 async function loadTarget(
   folder: vscode.WorkspaceFolder,
@@ -174,12 +175,18 @@ async function loadTarget(
   }
   const config = vscode.workspace.getConfiguration('migent', folder.uri);
   const env = { ...process.env, ...config.get<Record<string, string>>('env', {}) };
+  const listOptions = { cwd: folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS };
   const listed = await untilCancelled(
-    invokeJson(state.launch, providersArgs(), { cwd: folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS }),
+    Promise.all([
+      invokeJson(state.launch, providersArgs(), listOptions),
+      invokeJson(state.launch, modelsArgs(), listOptions),
+    ]),
     token,
   );
   if (listed === undefined) return undefined;
-  const providers = listed.kind === 'ok' ? parseProviders(listed.value) : [];
+  const [providerRows, modelRows] = listed;
+  const providers =
+    providerRows.kind === 'ok' && modelRows.kind === 'ok' ? joinProviders(providerRows.value, modelRows.value) : [];
   if (providers.length === 0) {
     void vscode.window.showErrorMessage('No provider with models is available. Install a provider CLI first.');
     return undefined;
