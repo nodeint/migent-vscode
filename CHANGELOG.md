@@ -11,6 +11,9 @@
 - Share one agent editor, draft handling and save runner between the workflow pages and the Configuration page. The workflow
   editor and the Session workflow page look and save as before.
 - Watch `config.local.yaml` next to `config.yaml`.
+- Require Migent CLI 0.5.2 and add Complete Session, which runs `migent session complete` on a stopped, failed,
+  cancelled, blocked or waiting session after a confirmation. It is in the Sessions view row menu and the More Actions
+  menu of the session page.
 - Create, duplicate and delete workflows. New Workflow opens an unsaved starter draft that Save creates, Duplicate
   copies a workflow's saved file under a new id, and Delete moves it to the Trash after a confirmation. They are in
   the Workflows view title and row menu, the Command Palette, and the editor page.

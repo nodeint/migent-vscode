@@ -20,6 +20,7 @@ class FakeElement {
   public className = '';
   public open = false;
   public listeners: string[] = [];
+  public handlers: Record<string, (() => void)[]> = {};
 
   public constructor(public readonly tagName: string) {}
 
@@ -39,8 +40,9 @@ class FakeElement {
     this.attrs[name] = value;
   }
 
-  public addEventListener(type: string): void {
+  public addEventListener(type: string, handler?: () => void): void {
     this.listeners.push(type);
+    if (handler !== undefined) (this.handlers[type] ??= []).push(handler);
   }
 }
 
@@ -71,6 +73,7 @@ function load() {
   const page = window.MigentPage as {
     sessionStates: Record<string, { icon: string; tone: string }>;
     connect: (options: { render: (...args: unknown[]) => void }) => Connected;
+    sessionHeader: (connected: Connected, options: Record<string, unknown>) => FakeElement;
     details: (
       key: string,
       summary: string | FakeElement,
@@ -147,6 +150,37 @@ describe('MigentPage.details', () => {
     expect(heading.textContent).toBe('Details');
     expect(closed.open).toBe(false);
     expect(page.details('open', 'Details', undefined, true).open).toBe(true);
+  });
+});
+
+function menuItems(node: FakeElement): FakeElement[] {
+  const own = node.attrs.role === 'menuitem' ? [node] : [];
+  return [...own, ...node.children.flatMap((child) => (typeof child === 'string' ? [] : menuItems(child)))];
+}
+
+describe('MigentPage.sessionHeader', () => {
+  const header = (state: string, canComplete: boolean) => {
+    const { page, posted } = load();
+    const connected = page.connect({ render: () => undefined });
+    const meta = { canComplete };
+    const node = page.sessionHeader(connected, { state, title: 't', meta, tabs: [], current: 'results' });
+    return { items: menuItems(node), posted };
+  };
+
+  it('offers Complete session in the more menu of a stopped session and sends its session action', () => {
+    const { items, posted } = header('Stopped', true);
+    const complete = items.find((item) => item.textContent === 'Complete session…');
+    expect(complete).toBeDefined();
+    complete?.handlers.click?.[0]();
+    expect(posted.at(-1)).toMatchObject({ type: 'intent', intent: 'sessionAction', action: 'completeSession' });
+  });
+
+  it.each(['Running', 'Completed', 'Prepared', 'Unknown'])('does not offer Complete session for a %s session', (state) => {
+    expect(header(state, false).items.map((item) => item.textContent)).not.toContain('Complete session…');
+  });
+
+  it('does not offer Complete session for a stopped role session, which the host marks as not completable', () => {
+    expect(header('Stopped', false).items.map((item) => item.textContent)).not.toContain('Complete session…');
   });
 });
 

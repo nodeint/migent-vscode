@@ -67,12 +67,12 @@ export interface InvokeOptions {
   exec?: Exec;
 }
 
-/** Run a short command and return its stdout. No shell; `args` are passed as separate argv values. */
-export async function invokeText(
+/** Run a short command and return its stdout and stderr. No shell; `args` are passed as separate argv values. */
+export async function invokeCaptured(
   launch: LaunchSpec,
   args: readonly string[],
   options: InvokeOptions,
-): Promise<InvokeResult<string>> {
+): Promise<InvokeResult<{ stdout: string; stderr: string }>> {
   const exec = options.exec ?? execWithExecFile;
   const outcome = await exec(launch, args, {
     cwd: options.cwd,
@@ -81,7 +81,17 @@ export async function invokeText(
     ...(options.input === undefined ? {} : { input: options.input }),
   });
   if (outcome.kind === 'failed') return { kind: 'error', error: outcome.error };
-  return { kind: 'ok', value: outcome.stdout };
+  return { kind: 'ok', value: { stdout: outcome.stdout, stderr: outcome.stderr } };
+}
+
+/** Run a short command and return its stdout; a successful run's stderr is dropped (see `invokeCaptured`). */
+export async function invokeText(
+  launch: LaunchSpec,
+  args: readonly string[],
+  options: InvokeOptions,
+): Promise<InvokeResult<string>> {
+  const result = await invokeCaptured(launch, args, options);
+  return result.kind === 'error' ? result : { kind: 'ok', value: result.value.stdout };
 }
 
 /** Like `invokeText`, then parse stdout as JSON. */

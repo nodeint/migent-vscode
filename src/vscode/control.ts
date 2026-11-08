@@ -4,11 +4,12 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import { parseSessionId } from '../cli/exitCode';
-import { invokeJson, type InvokeResult, invokeText } from '../cli/invoke';
+import { invokeCaptured, invokeJson, type InvokeResult, invokeText } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
 import { runLong, type RunResult } from '../cli/runner';
 import {
   cancelArgs,
+  completeArgs,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
   parsePrepared,
@@ -24,7 +25,7 @@ import { type GateHandle, type GateKey, OperationGate } from '../core/operationG
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
-import { hasWorkflowDraft, isRejectedStart, runDoctor, workflowChange } from './controlHelpers';
+import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, workflowChange } from './controlHelpers';
 import type { ProjectContext, ProjectRegistry } from './projects';
 import { type PreparedSession, preparedSession, reportFailure } from './workflowDraft';
 
@@ -364,6 +365,43 @@ export class ControlService implements vscode.Disposable {
       const detail = result.error.stderr.trim() || result.error.detail;
       this.#output.error(`repair failed: ${detail}`);
       const picked = await vscode.window.showErrorMessage(`Could not repair the session: ${detail}`, 'View log');
+      if (picked === 'View log') this.showLog();
+    } finally {
+      handle.release();
+    }
+  }
+
+  /**
+   * `session complete` under the session's gate. The CLI appends the completion event and publishes outputs;
+   * the new state returns through the watcher. Missing required artifacts are warned on stderr but still complete.
+   */
+  public async complete(context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+    if (!(await this.ensureWritable(context, snapshot))) return;
+    const launch = this.#launch(context);
+    if (launch === undefined) return;
+    const id = snapshot.sessionId;
+    const handle = this.gate.tryAcquire(this.#sessionKey(context, id), 'Completing');
+    if (handle === null) {
+      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
+      return;
+    }
+    try {
+      const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Window, title: `Completing ${sessionLabel(snapshot)}` },
+        () => invokeCaptured(launch, completeArgs(id), options),
+      );
+      context.store.refreshSession(id);
+      if (result.kind === 'ok') {
+        await reportCompleted(snapshot, result.value.stderr.trim(), {
+          log: (line) => { this.#output.warn(line); },
+          showLog: () => { this.showLog(); },
+        });
+        return;
+      }
+      const detail = result.error.stderr.trim() || result.error.detail;
+      this.#output.error(`complete failed: ${detail}`);
+      const picked = await vscode.window.showErrorMessage(`Could not complete the session: ${detail}`, 'View log');
       if (picked === 'View log') this.showLog();
     } finally {
       handle.release();

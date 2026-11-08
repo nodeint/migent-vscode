@@ -1,7 +1,7 @@
 import { isRecord } from './record';
 
 /** Header actions, a closed set. The host maps each to an existing session command for the panel's own session. */
-export const SESSION_ACTIONS = ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics', 'answerQuestions', 'openWorkflow'] as const;
+export const SESSION_ACTIONS = ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics', 'answerQuestions', 'openWorkflow', 'completeSession'] as const;
 
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 

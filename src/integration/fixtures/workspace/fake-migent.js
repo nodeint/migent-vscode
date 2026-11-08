@@ -7,11 +7,12 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.5.1: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.5.2: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
 //                        A failed execution writes `failure.md`; `workflow validate` and `get` are implemented.
+//   MIGENT_FAKE_COMPLETE_WARN  1 makes `session complete` warn on stderr about a missing required artifact (exit 0)
 //   MIGENT_FAKE_PREFLIGHT  fail makes `session run` fail the preflight (exit 2, nothing created or frozen) unless
 //                        `--skip-preflight` is passed. Ignored in legacy mode.
 //   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
@@ -280,6 +281,27 @@ function cancel() {
   }, TICK_MS);
 }
 
+// `session complete` (CLI 0.5.2): a stopped workflow session becomes completed; refused (exit 2) when it is missing,
+// prepared, a role session or running. Already completed is a no-op success.
+function complete() {
+  fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
+  const id = args[2];
+  const dir = dirOf(id);
+  const statusFile = path.join(dir, 'status.json');
+  const refuse = (reason) => {
+    console.error(`migent: ${reason}`);
+    process.exit(2);
+  };
+  if (!fs.existsSync(statusFile)) refuse(`Session ${id} was not found.`);
+  if (/^role:/m.test(fs.readFileSync(path.join(dir, 'manifest.yaml'), 'utf8'))) refuse(`Session ${id} is a role session.`);
+  if (fs.existsSync(path.join(dir, 'session.lock'))) refuse(`Session ${id} is running.`);
+  const current = JSON.parse(fs.readFileSync(statusFile, 'utf8')).status;
+  if (current === 'prepared') refuse(`Session ${id} is prepared and has not run.`);
+  if (current === 'completed') return;
+  if (process.env.MIGENT_FAKE_COMPLETE_WARN === '1') console.error('warning: required artifact "plan" was not produced');
+  writeStatus(id, 'completed', { completion_method: 'manual' });
+}
+
 function workflowValidate() {
   const draft = args[2];
   const asJson = args.includes('--json');
@@ -425,7 +447,7 @@ function get() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.1');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.2');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
 } else if (args[0] === 'get' && args[1] === 'providers' && !IS_LEGACY) {
@@ -441,6 +463,8 @@ if (args[0] === '--version') {
   run();
 } else if (args[0] === 'session' && args[1] === 'cancel') {
   cancel();
+} else if (args[0] === 'session' && args[1] === 'complete' && !IS_LEGACY) {
+  complete();
 } else {
   console.error(`fake-migent: unsupported command ${args.join(' ')}`);
   process.exit(2);

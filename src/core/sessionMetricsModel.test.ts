@@ -86,7 +86,14 @@ describe('buildSessionMetricsModel', () => {
       state: 'Unavailable',
       workflowId: null,
       completedAt: null,
-      meta: { stageId: null, createdAt: null, updatedAt: null, isRunning: false, pendingQuestions: 0 },
+      meta: {
+        stageId: null,
+        createdAt: null,
+        updatedAt: null,
+        isRunning: false,
+        pendingQuestions: 0,
+        canComplete: false,
+      },
       metrics: { kind: 'missing' },
     });
   });

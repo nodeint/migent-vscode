@@ -171,12 +171,13 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
   return lines.filter((line): line is string => line !== null).join('\n');
 }
 
-/** `session.<state>` plus `;questions`, `;foreign`, `;outputs`, `;reason-<reason>` in that order. */
+/** `session.<state>` plus `;questions`, `;foreign`, `;outputs`, `;role`, `;reason-<reason>` in that order. */
 export function sessionContextValue(snapshot: SessionSnapshot): string {
   const flags = [
     pendingQuestionTotal(snapshot) > 0 ? 'questions' : null,
     snapshot.displayState.writable ? null : 'foreign',
     (snapshot.status?.outputs.length ?? 0) > 0 ? 'outputs' : null,
+    (snapshot.manifest?.role ?? null) === null ? null : 'role',
     snapshot.displayState.unknownReason === undefined ? null : `reason-${snapshot.displayState.unknownReason}`,
   ].filter((flag): flag is string => flag !== null);
   return [`session.${snapshot.displayState.state}`, ...flags].join(';');

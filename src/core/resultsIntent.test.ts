@@ -40,8 +40,8 @@ describe('parseResultsMessage', () => {
     expect(parseResultsMessage({ type: 'intent', intent: 'reloadSuggestions' })).toBeNull();
   });
 
-  it('accepts each of the seven header actions and nothing else', () => {
-    for (const action of ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics']) {
+  it('accepts each of the header actions and nothing else', () => {
+    for (const action of ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics', 'completeSession']) {
       expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action })).toEqual({
         type: 'intent',
         value: { intent: 'sessionAction', action },

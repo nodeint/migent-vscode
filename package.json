@@ -281,6 +281,12 @@
         "shortTitle": "Continue without reply"
       },
       {
+        "command": "migent.session.complete",
+        "title": "Complete Session…",
+        "category": "Migent",
+        "shortTitle": "Complete…"
+      },
+      {
         "command": "migent.session.repair",
         "title": "Repair Session…",
         "category": "Migent",
@@ -569,9 +575,14 @@
           "group": "3_more@2"
         },
         {
+          "command": "migent.session.complete",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed|blocked|question)/ && !(viewItem =~ /;role(;|$)/)",
+          "group": "3_more@3"
+        },
+        {
           "command": "migent.session.repair",
           "when": "view == migent.sessions && viewItem =~ /^session\\.(?!running)/",
-          "group": "3_more@3"
+          "group": "3_more@4"
         }
       ],
       "commandPalette": [
@@ -708,6 +719,10 @@
           "when": "false"
         },
         {
+          "command": "migent.session.complete",
+          "when": "false"
+        },
+        {
           "command": "migent.session.repair",
           "when": "false"
         }
@@ -766,6 +781,10 @@
         {
           "command": "migent.session.openQuestions",
           "group": "1_session@3"
+        },
+        {
+          "command": "migent.session.complete",
+          "group": "2_manage@1"
         }
       ]
     },

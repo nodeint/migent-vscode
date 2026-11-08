@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type Exec, invokeJson, invokeText } from './invoke';
+import { type Exec, invokeCaptured, invokeJson, invokeText } from './invoke';
 import type { LaunchSpec } from './locate';
 
 const launch: LaunchSpec = { command: 'migent', prefixArgs: [], via: 'native' };
@@ -48,6 +48,15 @@ describe('invokeJson', () => {
       timeoutMs: 30_000,
       input: 'schema_version: 5\n',
     });
+  });
+});
+
+describe('invokeCaptured', () => {
+  it('keeps the stderr of a successful run, which invokeText drops', async () => {
+    const fake = exec({ kind: 'done', stdout: 'ok', stderr: 'warning: missing artifact' });
+    const result = await invokeCaptured(launch, ['session', 'complete', 's'], { cwd: '/p', exec: fake.exec });
+    expect(result).toEqual({ kind: 'ok', value: { stdout: 'ok', stderr: 'warning: missing artifact' } });
+    expect(await invokeText(launch, [], { cwd: '/p', exec: fake.exec })).toEqual({ kind: 'ok', value: 'ok' });
   });
 });
 
