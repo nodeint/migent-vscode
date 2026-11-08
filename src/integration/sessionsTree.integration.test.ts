@@ -182,7 +182,7 @@ const scenarios: Scenario[] = [
       const future = itemOf(env, sessionNode(env, 'future'));
       assert.equal(future.description, 'Unsupported schema version 99');
       assert.equal(iconId(future), 'question');
-      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;questions');
+      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;questions;role');
 
       // Blocked, Failed and Question count once each; Stopped and Unknown do not.
       await waitFor('badge', () => env.api.sessionsView.badge?.value === 3);

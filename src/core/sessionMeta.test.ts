@@ -32,7 +32,19 @@ describe('buildSessionMeta', () => {
       updatedAt: '2026-11-01T10:09:48.000+00:00',
       isRunning: false,
       pendingQuestions: 2,
+      canComplete: false,
     });
+  });
+
+  it('allows Complete only for a stopped workflow session, never a running, completed or role session', () => {
+    const stopped = (extra: Record<string, unknown> = {}): SessionSnapshot => {
+      const base = snapshot('completed', {});
+      return { ...base, displayState: { state: 'stopped' }, ...extra } as unknown as SessionSnapshot;
+    };
+    expect(buildSessionMeta(stopped()).canComplete).toBe(true);
+    expect(buildSessionMeta(stopped({ manifest: { createdAt: 'x', role: 'planner' } })).canComplete).toBe(false);
+    expect(buildSessionMeta(snapshot('running', {})).canComplete).toBe(false);
+    expect(buildSessionMeta(snapshot('completed', {})).canComplete).toBe(false);
   });
 
   it('prefers the running stage and marks a running session', () => {

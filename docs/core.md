@@ -176,7 +176,7 @@ Sessions view, so they are tested without VS Code:
   the failure cause with the reset time when `retry_at` is recorded (`Failed on client quota; resets …`).
   Missing values read "unavailable". Quota is a failure reason, not a wait: since CLI 0.5.1 `session continue`
   reruns the stage at once and ignores `retry_at`.
-- `contextValue`: `session.<state>` then `;questions`, `;foreign`, `;outputs`, `;reason-<reason>`.
+- `contextValue`: `session.<state>` then `;questions`, `;foreign`, `;outputs`, `;role`, `;reason-<reason>`.
 - Node ids never include state, and two projects with the same session id get distinct ids.
 - A project shows "No sessions yet" for a missing, empty or marker-less sessions folder, and an error row
   for an unreadable one.

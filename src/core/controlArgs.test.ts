@@ -4,6 +4,7 @@ import {
   availableClients,
   cancelArgs,
   clientChoice,
+  completeArgs,
   continueArgs,
   DEFAULT_RUN_SETTINGS,
   doctorArgs,
@@ -52,6 +53,7 @@ describe('control argv builders', () => {
       'session', 'prepare', 'My title', '--workflow', 'plan',
     ]);
     expect(cancelArgs('s')).toEqual(['session', 'cancel', 's', '--json']);
+    expect(completeArgs('s')).toEqual(['session', 'complete', 's']);
   });
 
   it('builds downstream run and prepare arguments with the prior as its own value', () => {

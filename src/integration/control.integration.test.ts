@@ -616,6 +616,124 @@ scenarios.push(
   },
 );
 
+/** Stub the warning and error boxes, answering warnings from `answer`; restores them afterwards. */
+async function withMessages(
+  answer: (message: string) => string | undefined,
+  body: (shown: string[]) => Promise<void>,
+): Promise<void> {
+  const window = vscode.window as unknown as Record<string, unknown>;
+  const saved = { warning: window.showWarningMessage, error: window.showErrorMessage };
+  const shown: string[] = [];
+  window.showWarningMessage = (message: string): Promise<string | undefined> => {
+    shown.push(`warning:${message}`);
+    return Promise.resolve(answer(message));
+  };
+  window.showErrorMessage = (message: string): Promise<undefined> => {
+    shown.push(`error:${message}`);
+    return Promise.resolve(undefined);
+  };
+  try {
+    await body(shown);
+  } finally {
+    window.showWarningMessage = saved.warning;
+    window.showErrorMessage = saved.error;
+  }
+}
+
+const confirmComplete = (message: string): string | undefined => (message.startsWith('Complete ') ? 'Complete' : undefined);
+
+/** Run a long session and stop it, leaving a cancelled session that `session complete` accepts. */
+async function stoppedSession(env: Env, project: ProjectContext): Promise<SessionSnapshot> {
+  await withFake({ [RUN_MS]: '30000' }, async () => {
+    const run = env.api.control.runNew(project, 'plan', 'long task');
+    await waitFor('session running', () => stateOf(env, 'running') !== undefined);
+    const running = stateOf(env, 'running');
+    assert.ok(running);
+    await env.api.control.cancel(project, running);
+    await run;
+  });
+  await waitFor('session cancelled', () => stateOf(env, 'cancelled') !== undefined);
+  const cancelled = stateOf(env, 'cancelled');
+  assert.ok(cancelled);
+  return cancelled;
+}
+
+scenarios.push(
+  {
+    name: 'Complete: the command confirms, completes a stopped session and releases the gate',
+    async run(env) {
+      const project = await createProject(env);
+      const stopped = await stoppedSession(env, project);
+      await withMessages(confirmComplete, async (shown) => {
+        await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
+        await waitFor('session completed', () => project.store.snapshot(stopped.sessionId)?.displayState.state === 'completed');
+        assert.ok(shown.some((line) => line.startsWith('warning:Complete ')), 'asked to confirm first');
+      });
+      assert.equal(gateHeld(env, project, stopped.sessionId), false, 'gate released');
+      assert.deepEqual(argvLog(env).at(-1), ['session', 'complete', stopped.sessionId]);
+    },
+  },
+  {
+    name: 'Complete: declining the confirmation runs nothing',
+    async run(env) {
+      const project = await createProject(env);
+      const stopped = await stoppedSession(env, project);
+      await withMessages(() => undefined, async () => {
+        await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
+      });
+      assert.equal(argvLog(env).some((argv) => argv[1] === 'complete'), false, 'no CLI call');
+      assert.equal(snapshotOf(project, stopped.sessionId).displayState.state, 'cancelled');
+    },
+  },
+  {
+    name: 'Complete: a prepared session is not offered and the CLI refusal frees the gate with an error',
+    async run(env) {
+      const project = await createProject(env);
+      const prepared = await prepareReady(env, project);
+      await withMessages(confirmComplete, async (shown) => {
+        await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: prepared.sessionId });
+        assert.equal(argvLog(env).some((argv) => argv[1] === 'complete'), false, 'ineligible: no CLI call');
+        await env.api.control.complete(project, snapshotOf(project, prepared.sessionId));
+        assert.ok(shown.some((line) => line.startsWith('error:Could not complete the session')), 'refusal reported');
+      });
+      assert.equal(gateHeld(env, project, prepared.sessionId), false, 'gate released');
+      assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared');
+    },
+  },
+  {
+    name: 'Complete: a role session is not offered',
+    async run(env) {
+      const project = await createProject(env);
+      const stopped = await stoppedSession(env, project);
+      fs.appendFileSync(sessionFile(env, stopped.sessionId, 'manifest.yaml'), 'role: planner\n');
+      await waitFor('manifest shows the role', () => project.store.snapshot(stopped.sessionId)?.manifest?.role === 'planner');
+      await withMessages(confirmComplete, async (shown) => {
+        await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
+        assert.equal(shown.some((line) => line.startsWith('warning:Complete ')), false, 'no confirmation');
+      });
+      assert.equal(argvLog(env).some((argv) => argv[1] === 'complete'), false, 'no CLI call');
+    },
+  },
+  {
+    name: 'Complete: the CLI warning about a missing artifact is shown with the success',
+    async run(env) {
+      const project = await createProject(env);
+      const stopped = await stoppedSession(env, project);
+      await withFake({ MIGENT_FAKE_COMPLETE_WARN: '1' }, async () => {
+        await withMessages(confirmComplete, async (shown) => {
+          await env.api.control.complete(project, stopped);
+          await waitFor('session completed', () => project.store.snapshot(stopped.sessionId)?.displayState.state === 'completed');
+          assert.ok(
+            shown.some((line) => line.startsWith('warning:Completed ') && line.includes('required artifact "plan"')),
+            'warning shown',
+          );
+        });
+      });
+      assert.equal(gateHeld(env, project, stopped.sessionId), false, 'gate released');
+    },
+  },
+);
+
 export function runControlScenarios(): Promise<number> {
   return runScenarios(scenarios);
 }

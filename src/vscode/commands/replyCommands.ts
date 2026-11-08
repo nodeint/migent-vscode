@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { isCompletable } from '../../core/completeEligibility';
 import type { SessionSnapshot } from '../../core/model';
 import { type BlockedTarget, blockedTargets, blockKind } from '../../core/replyFlow';
 import { sessionLabel } from '../../core/sessionPresentation';
@@ -19,7 +20,6 @@ const isOrdinaryBlocker = (snapshot: SessionSnapshot): boolean => blockKind(snap
 const canRunOnce = (snapshot: SessionSnapshot): boolean =>
   blockKind(snapshot) !== 'question' && (CONTINUABLE.has(snapshot.displayState.state) || isOrdinaryBlocker(snapshot));
 const isRepairable = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state !== 'running';
-
 async function pickBlocked(targets: BlockedTarget[]): Promise<BlockedTarget | undefined> {
   const [only] = targets;
   if (targets.length === 1) return only;
@@ -141,6 +141,20 @@ async function repair(control: ControlService, context: ProjectContext, snapshot
   if (picked === 'Repair') await control.repair(context, snapshot);
 }
 
+async function complete(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+  if (!isCompletable(snapshot)) {
+    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} is not a stopped workflow session, so it cannot be completed.`, INFO_MESSAGE_MS);
+    return;
+  }
+  if (!(await control.ensureWritable(context, snapshot))) return;
+  const picked = await vscode.window.showWarningMessage(
+    `Complete ${sessionLabel(snapshot)}? No further stage runs, and its outputs are published as they are.`,
+    { modal: true },
+    'Complete',
+  );
+  if (picked === 'Complete') await control.complete(context, snapshot);
+}
+
 async function runAction(
   deps: { host: CommandHost; control: ControlService },
   action: SessionAction,
@@ -174,6 +188,7 @@ const SESSION_ACTIONS: readonly SessionAction[] = [
     isEligible: isOrdinaryBlocker,
     act: continueWithoutReply,
   },
+  { id: 'migent.session.complete', title: 'Complete which session?', isEligible: isCompletable, act: complete },
   { id: 'migent.session.repair', title: 'Repair which session?', isEligible: isRepairable, act: repair },
 ];
 

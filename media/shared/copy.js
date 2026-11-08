@@ -21,6 +21,7 @@
       viewLog: 'View log',
       copySessionId: 'Copy session ID',
       revealInExplorer: 'Reveal in Explorer',
+      completeSession: 'Complete session…',
       reloadFromDisk: 'Reload from disk',
     },
 

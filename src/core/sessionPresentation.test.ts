@@ -68,7 +68,7 @@ describe('session rows', () => {
     const snapshot = snapshotFromDir(capturedDir('question-pending'));
     expect(snapshot.displayState.state).toBe('question');
     expect(sessionDescription(snapshot, NOW)).toContain('3 questions');
-    expect(sessionContextValue(snapshot)).toBe('session.question;questions');
+    expect(sessionContextValue(snapshot)).toBe('session.question;questions;role');
     expect(sessionIcon(snapshot)).toBe('comment-discussion');
   });
 
@@ -76,6 +76,13 @@ describe('session rows', () => {
     const snapshot = snapshotFromDir(capturedDir('handoff-source'), foreign);
     expect(snapshot.displayState.writable).toBe(false);
     expect(sessionContextValue(snapshot)).toBe('session.running;foreign;outputs');
+  });
+
+  it('flags a role session so Complete is not offered for it', () => {
+    const snapshot = snapshotFromDir(capturedDir('question-answered'));
+    expect(snapshot.manifest?.role).toBe('planner');
+    expect(sessionContextValue(snapshot).split(';')).toContain('role');
+    expect(sessionContextValue(snapshotFromDir(capturedDir('handoff-source'))).split(';')).not.toContain('role');
   });
 
   it('builds a tooltip with unavailable values, blockers and no raw provider event', () => {

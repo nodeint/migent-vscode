@@ -397,6 +397,7 @@
           { label: copy.menu.viewLog, onSelect: send('showLog') },
           { label: copy.menu.copySessionId, onSelect: send('copyId') },
           { label: copy.menu.revealInExplorer, onSelect: send('revealInExplorer') },
+          ...(options.meta && options.meta.canComplete ? [{ label: copy.menu.completeSession, onSelect: send('completeSession') }] : []),
           ...(options.menuItems || []),
         ],
       }),

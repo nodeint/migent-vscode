@@ -73,6 +73,11 @@ export function cancelArgs(sessionId: string): string[] {
   return ['session', 'cancel', sessionId, '--json'];
 }
 
+/** `session complete <id>`: marks a stopped workflow session completed without dispatching a stage. */
+export function completeArgs(sessionId: string): string[] {
+  return ['session', 'complete', sessionId];
+}
+
 /** What `session prepare` printed, or null when it is not the documented object. */
 export function parsePrepared(value: unknown): { sessionId: string; taskPath: string } | null {
   if (!isRecord(value)) return null;

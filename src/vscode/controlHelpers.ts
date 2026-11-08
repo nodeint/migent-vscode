@@ -8,7 +8,10 @@ import type { LaunchSpec } from '../cli/locate';
 import { doctorArgs, doctorLines, parseDoctorOutput } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
 import { frozenWorkflowPath, workflowDraftPath, workflowsDir } from '../core/paths';
+import { sessionLabel } from '../core/sessionPresentation';
 import type { ProjectContext } from './projects';
+
+const COMPLETED_MESSAGE_MS = 3000;
 
 function normalizeYaml(text: string): string {
   return text.replaceAll('\r\n', '\n').replace(/[ \t]+$/gm, '').trim();
@@ -66,6 +69,27 @@ export function isRejectedStart(
   if (outcome !== 'ConfigError' || before?.displayState.state !== 'prepared') return false;
   const now = context.store.snapshot(sessionId);
   return hasWorkflowDraft(context.root, sessionId) && now?.displayState.state === 'prepared' && now.lock.kind !== 'alive';
+}
+
+/**
+ * Report a finished `session complete`. The CLI warns on stderr about each missing required artifact and
+ * completes anyway, so those warnings are shown instead of an unconditional success.
+ */
+export async function reportCompleted(
+  snapshot: SessionSnapshot,
+  warnings: string,
+  sinks: { log: (line: string) => void; showLog: () => void },
+): Promise<void> {
+  if (warnings === '') {
+    vscode.window.setStatusBarMessage(`Completed ${sessionLabel(snapshot)}`, COMPLETED_MESSAGE_MS);
+    return;
+  }
+  sinks.log(`complete warnings: ${warnings}`);
+  const picked = await vscode.window.showWarningMessage(
+    `Completed ${sessionLabel(snapshot)} with warnings: ${warnings}`,
+    'View log',
+  );
+  if (picked === 'View log') sinks.showLog();
 }
 
 export async function runDoctor(

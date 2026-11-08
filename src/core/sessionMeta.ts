@@ -1,3 +1,4 @@
+import { isCompletable } from './completeEligibility';
 import type { SessionSnapshot } from './model';
 import { stageOf } from './sessionPresentation';
 
@@ -13,6 +14,8 @@ export interface SessionMeta {
   /** A running session's duration runs to now; any other one's ends at `updatedAt`. */
   isRunning: boolean;
   pendingQuestions: number;
+  /** Whether `session complete` applies (a stopped workflow session); decided by the host, not the page. */
+  canComplete: boolean;
 }
 
 export const NO_SESSION_META: SessionMeta = {
@@ -21,6 +24,7 @@ export const NO_SESSION_META: SessionMeta = {
   updatedAt: null,
   isRunning: false,
   pendingQuestions: 0,
+  canComplete: false,
 };
 
 export function buildSessionMeta(snapshot: SessionSnapshot | undefined): SessionMeta {
@@ -31,5 +35,6 @@ export function buildSessionMeta(snapshot: SessionSnapshot | undefined): Session
     updatedAt: snapshot.status?.updatedAt ?? null,
     isRunning: snapshot.displayState.state === 'running',
     pendingQuestions: snapshot.status?.questions.length ?? 0,
+    canComplete: isCompletable(snapshot),
   };
 }

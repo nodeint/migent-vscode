@@ -217,7 +217,14 @@ function model(overrides: Record<string, unknown> = {}) {
     title: 'Session',
     sessionState: 'Prepared',
     workflowId: 'wf',
-    meta: { stageId: null, createdAt: null, updatedAt: null, isRunning: false, pendingQuestions: 0 },
+    meta: {
+      stageId: null,
+      createdAt: null,
+      updatedAt: null,
+      isRunning: false,
+      pendingQuestions: 0,
+      canComplete: false,
+    },
     ...overrides,
   };
 }
