@@ -89,6 +89,8 @@ class Entry {
   public validationHash: string | null = null;
   /** One save at a time per page; a second request is ignored while the first is in flight. */
   public saving = false;
+  /** The file does not exist yet; the page edits a starter draft and the first save creates it. */
+  public isNew = false;
   /** Provider suggestions for the inline-agent fields; empty until the client reads answer. */
   public clients: ClientChoice[] = [];
   #lastJson: string | null = null;
@@ -109,7 +111,8 @@ class Entry {
     void this.panel.webview.postMessage({
       type: 'model',
       revision: this.revision,
-      identity: this.identity,
+      // The page persists this identity; `isNew` lets a reloaded window restore an unsaved draft.
+      identity: this.isNew ? { ...this.identity, isNew: true } : this.identity,
       model,
       ...(transient === undefined ? {} : { transient }),
     });
@@ -172,20 +175,10 @@ export function envelopeOf(stdout: string | undefined): ReturnType<typeof parseW
   }
 }
 
-function saveArgs(file: string, baseHash: string): string[] {
-  return [
-    'workflow',
-    'save',
-    '-',
-    '--target',
-    file,
-    '--format',
-    'yaml',
-    '--base-hash',
-    baseHash,
-    '--preserve-comments',
-    '--json',
-  ];
+/** A new file is saved without a base hash, so the CLI creates it and refuses to replace one that appeared. */
+export function saveArgs(file: string, baseHash: string | null): string[] {
+  const base = ['workflow', 'save', '-', '--target', file, '--format', 'yaml'];
+  return baseHash === null ? [...base, '--json'] : [...base, '--base-hash', baseHash, '--preserve-comments', '--json'];
 }
 
 /**
@@ -235,8 +228,13 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     return this.#entries.get(keyOf(identity))?.lastModel ?? null;
   }
 
-  /** Open the page for a workflow file, or reveal the one that exists. */
-  public open(identity: WorkflowEditorIdentity): void {
+  /** Close the page of a workflow file, if open (the file was deleted). */
+  public close(identity: WorkflowEditorIdentity): void {
+    this.#entries.get(keyOf(identity))?.panel.dispose();
+  }
+
+  /** Open the page for a workflow file, or reveal the one that exists. `isNew` edits a draft with no file yet. */
+  public open(identity: WorkflowEditorIdentity, options: { isNew?: boolean } = {}): void {
     if (!isWorkflowEditorIdentity(identity)) return;
     const existing = this.#entries.get(keyOf(identity));
     if (existing !== undefined) {
@@ -253,7 +251,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
       },
     );
-    this.#adopt(panel, identity);
+    this.#adopt(panel, identity, options.isNew === true);
   }
 
   public dispose(): void {
@@ -274,11 +272,14 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       enableScripts: true,
       localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
     };
-    this.#adopt(panel, state);
+    // A draft is restored as new; `#input` drops the flag if the file exists by now.
+    const { project, file } = state;
+    this.#adopt(panel, { project, file }, 'isNew' in state && state.isNew === true);
   }
 
-  #adopt(panel: vscode.WebviewPanel, identity: WorkflowEditorIdentity): void {
+  #adopt(panel: vscode.WebviewPanel, identity: WorkflowEditorIdentity, isNew = false): void {
     const entry = new Entry(identity, panel);
+    entry.isNew = isNew;
     const key = keyOf(identity);
     const { webview } = panel;
     this.#entries.set(key, entry);
@@ -311,6 +312,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       await this.#save(identity, message.form, message.baseHash);
       return;
     }
+    if (entry.isNew && message.type !== 'pickModel' && message.type !== 'reload') return;
     const handlers: Record<Exclude<WorkflowEditorMessageType, 'saveForm'>, () => Promise<void> | void> = {
       reload: () => {
         entry.validation = EMPTY_VALIDATION;
@@ -336,7 +338,12 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         }
       },
       pickModel: () => this.#pickInlineModel(identity, entry),
-      duplicate: () => this.#error(identity, 'Duplicating a workflow from the page is not available yet.'),
+      duplicate: async () => {
+        await vscode.commands.executeCommand('migent.workflow.duplicate', { kind: 'workflow', project: identity.project, file });
+      },
+      delete: async () => {
+        await vscode.commands.executeCommand('migent.workflow.delete', { kind: 'workflow', project: identity.project, file });
+      },
     };
     await handlers[message.type]();
   }
@@ -393,7 +400,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     if (launch === null) return;
     const draft = workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null);
     entry.publish(entry.lastModel ?? unavailable(identity), true, transient(null, true));
-    const result = await invokeJson(launch, saveArgs(identity.file, request.baseHash), {
+    const result = await invokeJson(launch, saveArgs(identity.file, entry.isNew ? null : request.baseHash), {
       cwd: context.root,
       input: draft,
       timeoutMs: SAVE_TIMEOUT_MS,
@@ -418,6 +425,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       this.#saveError(identity, 'Migent did not confirm the save.');
       return;
     }
+    entry.isNew = false;
     entry.validation = splitDiagnostics(envelope.diagnostics);
     entry.validationHash = envelope.hash;
     context.catalog.reloadWorkflow(identity.file);
@@ -465,15 +473,20 @@ export class WorkflowEditorPanels implements vscode.Disposable {
   #input(identity: WorkflowEditorIdentity): WorkflowEditorModel | undefined {
     const context = this.#registry.project(identity.project);
     if (context === undefined) return undefined;
-    return readWorkflowEditor({
+    const entry = this.#entries.get(keyOf(identity));
+    const model = readWorkflowEditor({
       projectKey: identity.project,
       projectName: context.folder.name,
       projectRoot: context.root,
       file: identity.file,
       scan: context.catalog.workflows(),
       config: context.catalog.config(),
-      clients: this.#entries.get(keyOf(identity))?.clients ?? [],
+      clients: entry?.clients ?? [],
+      isNew: entry?.isNew === true,
     });
+    // The file exists (saved elsewhere, or a restored draft whose file appeared): it is an ordinary edit now.
+    if (entry !== undefined && model.mode === 'edit') entry.isNew = false;
+    return model;
   }
 
   /** Read the provider list once, then repaint with the suggestions it enables. */

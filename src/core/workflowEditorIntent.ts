@@ -1,6 +1,6 @@
 import { isRecord } from './record';
 
-const MESSAGE_TYPES = ['openFile', 'reload', 'reveal', 'run', 'duplicate', 'pickModel', 'saveForm'] as const;
+const MESSAGE_TYPES = ['openFile', 'reload', 'reveal', 'run', 'duplicate', 'delete', 'pickModel', 'saveForm'] as const;
 
 export type WorkflowEditorMessageType = (typeof MESSAGE_TYPES)[number];
 

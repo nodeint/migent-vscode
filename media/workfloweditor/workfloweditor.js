@@ -186,9 +186,12 @@
 
   function workflowMenu() {
     const items = [];
-    items.push({ label: 'New session', onSelect: () => post('run') });
-    items.push({ label: 'Duplicate workflow', onSelect: () => post('duplicate') });
-    if (model.file) items.push({ label: copy.menu.reloadFromDisk, onSelect: () => post('reload') });
+    if (model.mode !== 'new') {
+      items.push({ label: 'New session', onSelect: () => post('run') });
+      items.push({ label: 'Duplicate workflow', onSelect: () => post('duplicate') });
+      items.push({ label: 'Delete workflow', onSelect: () => post('delete') });
+    }
+    if (model.file && model.mode !== 'new') items.push({ label: copy.menu.reloadFromDisk, onSelect: () => post('reload') });
     if (model.file) items.push({ label: copy.menu.revealInExplorer, onSelect: () => post('reveal') });
     return menuButton({ label: '⋯', ariaLabel: 'Workflow actions', items });
   }
@@ -221,7 +224,7 @@
     // YAML is the file itself: the tab opens it in the VS Code editor instead of a page-made editor.
     const yaml = el('button', 'YAML', 'mg-tab');
     yaml.type = 'button';
-    if (model.file) {
+    if (model.file && model.mode !== 'new') {
       yaml.title = 'Open the YAML file in the editor';
       yaml.addEventListener('click', () => post('openFile'));
     } else {
@@ -328,7 +331,7 @@
       saving: transient.saving,
       busy: transient.applying,
       canDiscard: dirty,
-      canSave: dirty && issues('errors').length === 0,
+      canSave: (dirty || model.mode === 'new') && issues('errors').length === 0,
       onDiscard: discardChanges,
       onSave: saveWorkflow,
     };

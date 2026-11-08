@@ -7,7 +7,8 @@ import { parse } from 'yaml';
 
 import type { ClientChoice } from './controlArgs';
 import { readProjectConfig } from './projectConfig';
-import { duplicateArtifactProblem, parseWorkflowAuthoringEnvelope, readWorkflowEditor, workflowBodyFromForm, workflowDraftFromForm, workflowFormFromClient } from './workflowEditor';
+import { duplicateWorkflowText, workflowFileName, workflowIdProblem } from './workflowDraft';
+import { duplicateArtifactProblem, newWorkflowForm, parseWorkflowAuthoringEnvelope, readWorkflowEditor, workflowBodyFromForm, workflowDraftFromForm, workflowFormFromClient } from './workflowEditor';
 import { scanWorkflows } from './workflows';
 
 const dirs: string[] = [];
@@ -427,5 +428,31 @@ describe('parseWorkflowAuthoringEnvelope', () => {
   it('refuses output that is not an envelope', () => {
     expect(parseWorkflowAuthoringEnvelope({ valid: true })).toBeNull();
     expect(parseWorkflowAuthoringEnvelope(null)).toBeNull();
+  });
+});
+
+describe('creating and duplicating workflows', () => {
+  it('accepts only path-safe ids', () => {
+    expect(workflowIdProblem('plan_2-b')).toBeNull();
+    for (const bad of ['', '../x', 'a/b', '-a', 'a b', 'a.yaml']) expect(workflowIdProblem(bad)).not.toBeNull();
+    expect(workflowFileName('plan')).toBe('plan.yaml');
+  });
+
+  it('reads a missing file as a new starter draft only when the page asks for one', () => {
+    const root = project({});
+    const base = { projectKey: 'p', projectName: 'demo', projectRoot: root, file: 'fresh.yaml', scan: scanWorkflows(root), config: readProjectConfig(root) };
+    const fresh = readWorkflowEditor({ ...base, isNew: true });
+    expect(fresh).toMatchObject({ mode: 'new', id: 'fresh', canSave: true, state: 'ok' });
+    expect(fresh.form.stages).toHaveLength(1);
+    expect(readWorkflowEditor(base)).toMatchObject({ mode: 'edit', state: 'unreadable', canSave: false });
+    expect(newWorkflowForm('x', ['dev']).stages[0]?.role).toBe('dev');
+  });
+
+  it('copies the saved text with a new id and keeps comments', () => {
+    const text = '# keep\nschema_version: 7\nid: a\nstages: []\n';
+    const copy = duplicateWorkflowText(text, 'b') ?? '';
+    expect(copy).toContain('# keep');
+    expect(parse(copy)).toMatchObject({ id: 'b', schema_version: 7 });
+    expect(duplicateWorkflowText('- a\n- b\n', 'b')).toBeNull();
   });
 });

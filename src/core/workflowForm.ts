@@ -75,3 +75,38 @@ export interface WorkflowForm {
   /** `artifacts: null` means the key is absent: every published artifact is passed under its own id. */
   downstream: { workflow: string; task: string; artifacts: { key: string; value: string }[] | null }[];
 }
+
+export function emptyAgentForm(): WorkflowAgentForm {
+  return { model: '', effort: '', clientType: '', clientOptions: [] };
+}
+
+export function emptyStageForm(): WorkflowStageForm {
+  return {
+    id: '',
+    description: '',
+    role: '',
+    ask: '',
+    agentMode: 'role',
+    agentName: '',
+    agent: emptyAgentForm(),
+    depends_on: [],
+    max_revisions: null,
+    instructions: [],
+    artifacts: [],
+    sessionResumeFrom: '',
+    verify: [],
+    verify_timeout: null,
+    max_verify: null,
+    runWhenPaths: [],
+    decision: [],
+  };
+}
+
+export function emptyWorkflowForm(): WorkflowForm {
+  return { id: '', concurrency: null, constraints: [], stages: [], artifacts: [], downstream: [] };
+}
+
+/** The starting form of a new workflow: its id and one stage. The CLI judges the rest when the user saves. */
+export function newWorkflowForm(id: string, roles: readonly string[]): WorkflowForm {
+  return { ...emptyWorkflowForm(), id, stages: [{ ...emptyStageForm(), id: 'implement', role: roles[0] ?? '' }] };
+}

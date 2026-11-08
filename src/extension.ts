@@ -220,7 +220,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
-    ...registerProjectCommands(registry, workflowEditor),
+    ...registerProjectCommands(registry, workflowEditor, capability),
     ...registerControlCommands(host, control, context.workspaceState),
     ...registerReplyCommands({ host, control, replies, capability }),
   );

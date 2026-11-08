@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parse, stringify } from 'yaml';
@@ -11,6 +11,10 @@ import { projectRelative } from './projectPresentation';
 import { isRecord } from './record';
 import {
   EDITABLE_SCHEMA_VERSION,
+  emptyAgentForm,
+  emptyStageForm,
+  emptyWorkflowForm,
+  newWorkflowForm,
   type WorkflowAgentForm,
   type WorkflowAgentMode,
   type WorkflowForm,
@@ -49,7 +53,8 @@ export interface WorkflowEditorWorkflow {
 }
 
 export interface WorkflowEditorModel {
-  mode: 'edit';
+  /** `new` is a draft whose file does not exist yet; saving creates it and never replaces a file. */
+  mode: 'edit' | 'new';
   project: string;
   file: string;
   path: string;
@@ -80,38 +85,10 @@ export interface WorkflowEditorInput {
   config: ProjectConfig;
   /** `get clients`, `get models` and `get options` rows; omitted when the caller has no client data yet. */
   clients?: ClientChoice[];
+  /** The file is a draft that has not been saved: when it is missing, return a starter form instead of an error. */
+  isNew?: boolean;
   /** A workflow file outside `.migent/workflows` (a session's `workflow.yaml`); `file` stays its display name. */
   filePath?: string;
-}
-
-function emptyAgentForm(): WorkflowAgentForm {
-  return { model: '', effort: '', clientType: '', clientOptions: [] };
-}
-
-export function emptyStageForm(): WorkflowStageForm {
-  return {
-    id: '',
-    description: '',
-    role: '',
-    ask: '',
-    agentMode: 'role',
-    agentName: '',
-    agent: emptyAgentForm(),
-    depends_on: [],
-    max_revisions: null,
-    instructions: [],
-    artifacts: [],
-    sessionResumeFrom: '',
-    verify: [],
-    verify_timeout: null,
-    max_verify: null,
-    runWhenPaths: [],
-    decision: [],
-  };
-}
-
-export function emptyWorkflowForm(): WorkflowForm {
-  return { id: '', concurrency: null, constraints: [], stages: [], artifacts: [], downstream: [] };
 }
 
 function stringValue(value: unknown): string {
@@ -254,6 +231,24 @@ export function workflowFilePath(projectRoot: string, file: string): string {
   return path.join(projectRoot, MIGENT_DIR, WORKFLOWS_DIRNAME, file);
 }
 
+function newDraftFields(
+  input: WorkflowEditorInput,
+): Pick<WorkflowEditorModel, 'mode' | 'id' | 'schemaVersion' | 'state' | 'isSupported' | 'canSave' | 'readError' | 'form' | 'yaml' | 'savedHash'> {
+  const id = fallbackId(input.file);
+  return {
+    mode: 'new',
+    id,
+    schemaVersion: EDITABLE_SCHEMA_VERSION,
+    state: 'ok',
+    isSupported: true,
+    canSave: true,
+    readError: null,
+    form: newWorkflowForm(id, input.config.roles),
+    yaml: '',
+    savedHash: hash(''),
+  };
+}
+
 /** Read one workflow file for the editor. A vanished file is reported, never created. */
 export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorModel {
   const filePath = input.filePath ?? workflowFilePath(input.projectRoot, input.file);
@@ -273,6 +268,7 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
     validation: { errors: [], warnings: [] },
     canSave: false,
   };
+  if (input.isNew === true && !existsSync(filePath)) return { ...base, ...newDraftFields(input) };
   let text: string;
   try {
     text = readFileSync(filePath, 'utf8');

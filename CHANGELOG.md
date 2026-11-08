@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Create, duplicate and delete workflows. New Workflow opens an unsaved starter draft that Save creates, Duplicate
+  copies a workflow's saved file under a new id, and Delete moves it to the Trash after a confirmation. They are in
+  the Workflows view title and row menu, the Command Palette, and the editor page.
 - Require Migent CLI 0.5.1. A client quota failure is now an ordinary failed stage that Continue reruns at once, so the
   Retry After Quota Wait command, its expiry reminders and the `migent.notifications.quota` setting are removed. The
   failed notification and the session tooltip name the reset time when the CLI recorded one. A stopped session with a
