@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parse, stringify } from 'yaml';
@@ -9,48 +9,22 @@ import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
 import type { ProjectConfig } from './projectConfig';
 import { projectRelative } from './projectPresentation';
 import { isRecord } from './record';
+import {
+  EDITABLE_SCHEMA_VERSION,
+  emptyAgentForm,
+  emptyStageForm,
+  emptyWorkflowForm,
+  newWorkflowForm,
+  type WorkflowAgentForm,
+  type WorkflowAgentMode,
+  type WorkflowForm,
+  type WorkflowLocalArtifactForm,
+  type WorkflowRouteArtifacts,
+  type WorkflowStageForm,
+} from './workflowForm';
 import type { WorkflowScan } from './workflows';
 
-/** A complete agent written inline on a stage. Empty fields are omitted when saved. */
-export interface WorkflowAgentForm {
-  model: string;
-  effort: string;
-  clientType: string;
-  clientOptions: { key: string; value: string }[];
-}
-
-/** How a stage selects its agent: the role's own, a named agent, or a complete inline agent. */
-export type WorkflowAgentMode = 'role' | 'named' | 'inline';
-
-/** One stage as the editor form shows it. Every field is inert data, never a command. */
-export interface WorkflowStageForm {
-  id: string;
-  description: string;
-  role: string;
-  ask: string;
-  agentMode: WorkflowAgentMode;
-  agentName: string;
-  agent: WorkflowAgentForm;
-  dependsOn: string[];
-  maxRevisions: number | null;
-  instructions: string[];
-  producesArtifact: string;
-  sessionResumeFrom: string;
-  verify: string[];
-  verifyTimeout: number | null;
-  maxVerify: number | null;
-  runWhenPaths: string[];
-  decision: { value: string; when: string; navigate: string }[];
-}
-
-export interface WorkflowForm {
-  id: string;
-  concurrency: number | null;
-  constraints: string[];
-  stages: WorkflowStageForm[];
-  outputs: { name: string; fromStage: string; artifact: string }[];
-  downstream: { workflow: string; task: string; artifacts: { key: string; value: string }[] }[];
-}
+export * from './workflowForm';
 
 export type WorkflowEditorState = 'ok' | 'invalid' | 'unreadable' | 'unsupported';
 
@@ -79,7 +53,8 @@ export interface WorkflowEditorWorkflow {
 }
 
 export interface WorkflowEditorModel {
-  mode: 'edit';
+  /** `new` is a draft whose file does not exist yet; saving creates it and never replaces a file. */
+  mode: 'edit' | 'new';
   project: string;
   file: string;
   path: string;
@@ -110,38 +85,10 @@ export interface WorkflowEditorInput {
   config: ProjectConfig;
   /** `get clients`, `get models` and `get options` rows; omitted when the caller has no client data yet. */
   clients?: ClientChoice[];
+  /** The file is a draft that has not been saved: when it is missing, return a starter form instead of an error. */
+  isNew?: boolean;
   /** A workflow file outside `.migent/workflows` (a session's `workflow.yaml`); `file` stays its display name. */
   filePath?: string;
-}
-
-function emptyAgentForm(): WorkflowAgentForm {
-  return { model: '', effort: '', clientType: '', clientOptions: [] };
-}
-
-export function emptyStageForm(): WorkflowStageForm {
-  return {
-    id: '',
-    description: '',
-    role: '',
-    ask: '',
-    agentMode: 'role',
-    agentName: '',
-    agent: emptyAgentForm(),
-    dependsOn: [],
-    maxRevisions: null,
-    instructions: [],
-    producesArtifact: '',
-    sessionResumeFrom: '',
-    verify: [],
-    verifyTimeout: null,
-    maxVerify: null,
-    runWhenPaths: [],
-    decision: [],
-  };
-}
-
-export function emptyWorkflowForm(): WorkflowForm {
-  return { id: '', concurrency: null, constraints: [], stages: [], outputs: [], downstream: [] };
 }
 
 function stringValue(value: unknown): string {
@@ -167,6 +114,20 @@ function navigationText(value: unknown): string {
   return strings(value).join(', ');
 }
 
+function localArtifactBody(id: string, value: unknown): WorkflowLocalArtifactForm {
+  const body = isRecord(value) ? value : {};
+  return { id, file: stringValue(body.file), description: stringValue(body.description) };
+}
+
+/** A list stays registry ids; a mapping keyed by id holds artifacts local to the decision. */
+function routeArtifacts(value: unknown): WorkflowRouteArtifacts {
+  if (Array.isArray(value)) return { kind: 'ids', ids: strings(value) };
+  if (isRecord(value)) {
+    return { kind: 'local', items: Object.entries(value).map(([id, item]) => localArtifactBody(id, item)) };
+  }
+  return null;
+}
+
 function decisions(value: unknown): WorkflowStageForm['decision'] {
   if (!Array.isArray(value)) return [];
   const routes: WorkflowStageForm['decision'] = [];
@@ -174,7 +135,12 @@ function decisions(value: unknown): WorkflowStageForm['decision'] {
     if (!isRecord(entry)) continue;
     for (const [name, route] of Object.entries(entry)) {
       const body = isRecord(route) ? route : {};
-      routes.push({ value: name, when: stringValue(body.when), navigate: navigationText(body.navigate) });
+      routes.push({
+        value: name,
+        when: stringValue(body.when),
+        navigate: navigationText(body.navigate),
+        artifacts: routeArtifacts(body.artifacts),
+      });
     }
   }
   return routes;
@@ -199,7 +165,6 @@ function agentFields(value: unknown): Pick<WorkflowStageForm, 'agentMode' | 'age
 
 function stageForm(value: unknown): WorkflowStageForm {
   const body = isRecord(value) ? value : {};
-  const produces = isRecord(body.produces) ? body.produces : {};
   const session = isRecord(body.session) ? body.session : {};
   const runWhen = isRecord(body.run_when) ? body.run_when : {};
   return {
@@ -208,33 +173,34 @@ function stageForm(value: unknown): WorkflowStageForm {
     role: stringValue(body.role),
     ask: stringValue(body.ask),
     ...agentFields(body.agent),
-    dependsOn: strings(body.depends_on),
-    maxRevisions: numberValue(body.max_revisions),
+    depends_on: strings(body.depends_on),
+    max_revisions: numberValue(body.max_revisions),
     instructions: strings(body.instructions),
-    producesArtifact: stringValue(produces.artifact),
+    artifacts: strings(body.artifacts),
     sessionResumeFrom: stringValue(session.resume_from),
     verify: strings(body.verify),
-    verifyTimeout: numberValue(body.verify_timeout),
-    maxVerify: numberValue(body.max_verify),
+    verify_timeout: numberValue(body.verify_timeout),
+    max_verify: numberValue(body.max_verify),
     runWhenPaths: strings(runWhen.changed_paths),
     decision: decisions(body.decision),
   };
 }
 
 function formFromBody(body: Record<string, unknown>, fallbackId: string): WorkflowForm {
-  const outputs = Array.isArray(body.outputs) ? body.outputs : [];
+  const registry = isRecord(body.artifacts) ? Object.entries(body.artifacts) : [];
   const downstream = Array.isArray(body.downstream) ? body.downstream : [];
   return {
     id: stringValue(body.id) || fallbackId,
     concurrency: numberValue(body.concurrency),
     constraints: strings(body.constraints),
     stages: (Array.isArray(body.stages) ? body.stages : []).map(stageForm),
-    outputs: outputs.map((value) => {
-      const output = isRecord(value) ? value : {};
+    artifacts: registry.map(([id, value]) => {
+      const item = isRecord(value) ? value : {};
       return {
-        name: stringValue(output.name),
-        fromStage: stringValue(output.from_stage),
-        artifact: stringValue(output.artifact),
+        id,
+        file: stringValue(item.file),
+        description: stringValue(item.description),
+        required: typeof item.required === 'boolean' ? item.required : null,
       };
     }),
     downstream: downstream.map((value) => {
@@ -242,7 +208,7 @@ function formFromBody(body: Record<string, unknown>, fallbackId: string): Workfl
       return {
         workflow: stringValue(target.workflow),
         task: stringValue(target.task),
-        artifacts: pairs(target.artifacts),
+        artifacts: isRecord(target.artifacts) ? pairs(target.artifacts) : null,
       };
     }),
   };
@@ -265,6 +231,24 @@ export function workflowFilePath(projectRoot: string, file: string): string {
   return path.join(projectRoot, MIGENT_DIR, WORKFLOWS_DIRNAME, file);
 }
 
+function newDraftFields(
+  input: WorkflowEditorInput,
+): Pick<WorkflowEditorModel, 'mode' | 'id' | 'schemaVersion' | 'state' | 'isSupported' | 'canSave' | 'readError' | 'form' | 'yaml' | 'savedHash'> {
+  const id = fallbackId(input.file);
+  return {
+    mode: 'new',
+    id,
+    schemaVersion: EDITABLE_SCHEMA_VERSION,
+    state: 'ok',
+    isSupported: true,
+    canSave: true,
+    readError: null,
+    form: newWorkflowForm(id, input.config.roles),
+    yaml: '',
+    savedHash: hash(''),
+  };
+}
+
 /** Read one workflow file for the editor. A vanished file is reported, never created. */
 export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorModel {
   const filePath = input.filePath ?? workflowFilePath(input.projectRoot, input.file);
@@ -284,6 +268,7 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
     validation: { errors: [], warnings: [] },
     canSave: false,
   };
+  if (input.isNew === true && !existsSync(filePath)) return { ...base, ...newDraftFields(input) };
   let text: string;
   try {
     text = readFileSync(filePath, 'utf8');
@@ -319,12 +304,14 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
   const body = isRecord(parsed) ? parsed : {};
   const form = formFromBody(body, fallbackId(input.file));
   const schemaVersion = numberValue(body.schema_version);
+  const isSupported = schemaVersion === EDITABLE_SCHEMA_VERSION;
   return {
     ...base,
     id: form.id,
     schemaVersion,
-    state: 'ok',
-    isSupported: true,
+    state: isSupported ? 'ok' : 'unsupported',
+    isSupported,
+    canSave: isSupported,
     readError: null,
     form,
     yaml: text,
@@ -351,6 +338,20 @@ function agentMode(value: unknown): WorkflowAgentMode {
   return value === 'named' || value === 'inline' ? value : 'role';
 }
 
+function clientLocalArtifact(value: unknown): WorkflowLocalArtifactForm {
+  const body = isRecord(value) ? value : {};
+  return { id: stringValue(body.id), file: stringValue(body.file), description: stringValue(body.description) };
+}
+
+function clientRouteArtifacts(value: unknown): WorkflowRouteArtifacts {
+  if (!isRecord(value)) return null;
+  if (value.kind === 'ids') return { kind: 'ids', ids: strings(value.ids) };
+  if (value.kind === 'local') {
+    return { kind: 'local', items: (Array.isArray(value.items) ? value.items : []).map(clientLocalArtifact) };
+  }
+  return null;
+}
+
 function clientStage(value: unknown): WorkflowStageForm {
   const body = isRecord(value) ? value : {};
   const agent = isRecord(body.agent) ? body.agent : {};
@@ -368,19 +369,20 @@ function clientStage(value: unknown): WorkflowStageForm {
       clientType: stringValue(agent.clientType),
       clientOptions: pairList(agent.clientOptions),
     },
-    dependsOn: strings(body.dependsOn),
-    maxRevisions: numberValue(body.maxRevisions),
+    depends_on: strings(body.depends_on),
+    max_revisions: numberValue(body.max_revisions),
     instructions: strings(body.instructions),
-    producesArtifact: stringValue(body.producesArtifact),
+    artifacts: strings(body.artifacts),
     sessionResumeFrom: stringValue(body.sessionResumeFrom),
     verify: strings(body.verify),
-    verifyTimeout: numberValue(body.verifyTimeout),
-    maxVerify: numberValue(body.maxVerify),
+    verify_timeout: numberValue(body.verify_timeout),
+    max_verify: numberValue(body.max_verify),
     runWhenPaths: strings(body.runWhenPaths),
     decision: (Array.isArray(body.decision) ? body.decision : []).filter(isRecord).map((route) => ({
       value: stringValue(route.value),
       when: stringValue(route.when),
       navigate: stringValue(route.navigate),
+      artifacts: clientRouteArtifacts(route.artifacts),
     })),
   };
 }
@@ -393,20 +395,21 @@ export function workflowFormFromClient(raw: unknown): WorkflowForm {
     concurrency: numberValue(body.concurrency),
     constraints: strings(body.constraints),
     stages: (Array.isArray(body.stages) ? body.stages : []).map(clientStage),
-    outputs: (Array.isArray(body.outputs) ? body.outputs : []).filter(isRecord).map((output) => ({
-      name: stringValue(output.name),
-      fromStage: stringValue(output.fromStage),
-      artifact: stringValue(output.artifact),
+    artifacts: (Array.isArray(body.artifacts) ? body.artifacts : []).filter(isRecord).map((item) => ({
+      id: stringValue(item.id),
+      file: stringValue(item.file),
+      description: stringValue(item.description),
+      required: typeof item.required === 'boolean' ? item.required : null,
     })),
     downstream: (Array.isArray(body.downstream) ? body.downstream : []).filter(isRecord).map((target) => ({
       workflow: stringValue(target.workflow),
       task: stringValue(target.task),
-      artifacts: pairList(target.artifacts),
+      artifacts: Array.isArray(target.artifacts) ? pairList(target.artifacts) : null,
     })),
   };
 }
 
-// ---------- the canonical schema 5 draft the CLI saves ----------
+// ---------- the canonical schema 7 draft the CLI saves ----------
 
 function pairsToRecord(values: { key: string; value: string }[]): Record<string, string> | undefined {
   const record: Record<string, string> = {};
@@ -444,12 +447,25 @@ function navigateValue(text: string): string | string[] | undefined {
   return parts.length === 1 ? parts[0] : parts;
 }
 
+/** Decision-local artifacts are a mapping keyed by id. */
+function localArtifactsRecord(items: WorkflowLocalArtifactForm[]): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (const item of items) {
+    const entry: Record<string, unknown> = { file: item.file };
+    if (item.description !== '') entry.description = item.description;
+    record[item.id] = entry;
+  }
+  return record;
+}
+
 function decisionBody(routes: WorkflowStageForm['decision']): Record<string, unknown>[] {
   return routes.map((route) => {
     const body: Record<string, unknown> = {};
     if (route.when !== '') body.when = route.when;
     const navigate = navigateValue(route.navigate);
     if (navigate !== undefined) body.navigate = navigate;
+    if (route.artifacts?.kind === 'ids') body.artifacts = route.artifacts.ids;
+    else if (route.artifacts?.kind === 'local') body.artifacts = localArtifactsRecord(route.artifacts.items);
     return { [route.value]: body };
   });
 }
@@ -461,13 +477,13 @@ function stageBody(stage: WorkflowStageForm): Record<string, unknown> {
   const agent = agentBody(stage);
   if (agent !== undefined) body.agent = agent;
   if (stage.ask !== '') body.ask = stage.ask;
-  if (stage.dependsOn.length > 0) body.depends_on = stage.dependsOn;
-  if (stage.maxRevisions !== null) body.max_revisions = stage.maxRevisions;
+  if (stage.depends_on.length > 0) body.depends_on = stage.depends_on;
+  if (stage.max_revisions !== null) body.max_revisions = stage.max_revisions;
   if (stage.instructions.length > 0) body.instructions = stage.instructions;
-  if (stage.producesArtifact !== '') body.produces = { artifact: stage.producesArtifact };
+  if (stage.artifacts.length > 0) body.artifacts = stage.artifacts;
   if (stage.verify.length > 0) body.verify = stage.verify;
-  if (stage.verifyTimeout !== null) body.verify_timeout = stage.verifyTimeout;
-  if (stage.maxVerify !== null) body.max_verify = stage.maxVerify;
+  if (stage.verify_timeout !== null) body.verify_timeout = stage.verify_timeout;
+  if (stage.max_verify !== null) body.max_verify = stage.max_verify;
   if (stage.sessionResumeFrom !== '') body.session = { resume_from: stage.sessionResumeFrom };
   if (stage.runWhenPaths.length > 0) body.run_when = { changed_paths: stage.runWhenPaths };
   if (stage.decision.length > 0) body.decision = decisionBody(stage.decision);
@@ -483,23 +499,49 @@ export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number |
   if (form.id !== '') body.id = form.id;
   if (form.concurrency !== null) body.concurrency = form.concurrency;
   if (form.constraints.length > 0) body.constraints = form.constraints;
-  body.stages = form.stages.map(stageBody);
-  if (form.outputs.length > 0) {
-    body.outputs = form.outputs.map((output) => ({
-      name: output.name,
-      from_stage: output.fromStage,
-      artifact: output.artifact,
-    }));
+  if (form.artifacts.length > 0) {
+    // The registry is a mapping keyed by artifact id.
+    const registry: Record<string, unknown> = {};
+    for (const item of form.artifacts) {
+      const entry: Record<string, unknown> = { file: item.file };
+      if (item.description !== '') entry.description = item.description;
+      if (item.required !== null) entry.required = item.required;
+      registry[item.id] = entry;
+    }
+    body.artifacts = registry;
   }
+  body.stages = form.stages.map(stageBody);
   if (form.downstream.length > 0) {
     body.downstream = form.downstream.map((target) => {
-      const entry: Record<string, unknown> = { workflow: target.workflow, task: target.task };
-      const artifacts = pairsToRecord(target.artifacts);
-      if (artifacts !== undefined) entry.artifacts = artifacts;
+      const entry: Record<string, unknown> = { workflow: target.workflow };
+      if (target.task !== '') entry.task = target.task;
+      // Absent passes every published artifact; an explicit mapping, even an empty one, passes only what it names.
+      if (target.artifacts !== null) entry.artifacts = pairsToRecord(target.artifacts) ?? {};
       return entry;
     });
   }
   return body;
+}
+
+/**
+ * The first artifact id used twice, in the registry or within one decision's local artifacts, as a message; null when
+ * none. Both serializations are mappings keyed by id, so a duplicate would silently discard the earlier definition
+ * and the CLI could not see it. Hosts refuse to save before serializing.
+ */
+export function duplicateArtifactProblem(form: WorkflowForm): string | null {
+  const repeated = (ids: string[]): string | undefined => ids.find((id, index) => ids.indexOf(id) !== index);
+  const registry = repeated(form.artifacts.map((item) => item.id));
+  if (registry !== undefined) return `The artifact id "${registry}" is used more than once. Give each artifact its own id.`;
+  for (const stage of form.stages) {
+    for (const route of stage.decision) {
+      if (route.artifacts?.kind !== 'local') continue;
+      const local = repeated(route.artifacts.items.map((item) => item.id));
+      if (local !== undefined) {
+        return `Decision "${route.value}" of stage "${stage.id}" defines the artifact id "${local}" more than once.`;
+      }
+    }
+  }
+  return null;
 }
 
 /** The canonical YAML sent to `migent workflow save -`; `--preserve-comments` keeps the target's layout. */

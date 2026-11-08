@@ -22,6 +22,9 @@ class FakeNode {
   public placeholder = '';
   public type = '';
   public open = false;
+  public hidden = false;
+  public tabIndex = -1;
+  public refresh?: () => void;
   public readonly classList = {
     add: (...names: string[]): void => {
       const current = new Set(this.className.split(' ').filter(Boolean));
@@ -68,9 +71,10 @@ class FakeNode {
 
 interface StageForm {
   id: string;
-  dependsOn: string[];
+  depends_on: string[];
   sessionResumeFrom: string;
-  decision: { value: string; when: string; navigate: string }[];
+  artifacts?: string[];
+  decision: { value: string; when: string; navigate: string; artifacts?: unknown }[];
   agentMode?: string;
   agent?: {
     model: string;
@@ -80,23 +84,24 @@ interface StageForm {
   };
 }
 
-interface OutputForm {
-  name: string;
-  fromStage: string;
-  artifact: string;
+interface ArtifactForm {
+  id: string;
+  file: string;
+  description: string;
+  required: boolean | null;
 }
 
 interface DownstreamForm {
   workflow: string;
   task: string;
-  artifacts: { key: string; value: string }[];
+  artifacts: { key: string; value: string }[] | null;
 }
 
 interface WorkflowFormStub {
   concurrency: number | null;
   constraints: string[];
   stages: StageForm[];
-  outputs: OutputForm[];
+  artifacts: ArtifactForm[];
   downstream: DownstreamForm[];
 }
 
@@ -117,7 +122,8 @@ interface FormKit {
     key: string;
     number: number;
     title: string;
-    chips?: FakeNode[];
+    summary?: string[];
+    alerts?: FakeNode[];
     warn?: boolean;
     open?: boolean;
     body?: FakeNode[];
@@ -170,7 +176,7 @@ function load() {
     window,
     document: { getElementById: (): null => null },
   });
-  for (const file of ['../../../media/shared/form.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
+  for (const file of ['../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/workfloweditor/workflowcopy.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   return {
@@ -191,7 +197,7 @@ function makeForm(): WorkflowFormStub {
       {
         id: 'plan',
         role: 'planner',
-        producesArtifact: 'plan.md',
+        artifacts: ['plan'],
         decision: [{ value: 'approved', when: '', navigate: 'complete' }],
       },
       {
@@ -199,13 +205,14 @@ function makeForm(): WorkflowFormStub {
         role: 'reviewer',
         agentMode: 'named',
         agentName: 'deep',
-        dependsOn: ['plan'],
+        depends_on: ['plan'],
         sessionResumeFrom: 'plan',
       },
     ],
-    outputs: [{ name: 'plan', fromStage: 'plan', artifact: 'plan.md' }],
+    artifacts: [{ id: 'plan', file: 'plan.md' }],
     downstream: [
       { workflow: 'implement', task: 'Do it', artifacts: [{ key: 'plan', value: 'plan' }] },
+      { workflow: 'all', task: 'Take everything' },
     ],
   }) as WorkflowFormStub;
 }
@@ -294,20 +301,76 @@ describe('workflow form reference controls', () => {
 
     expect(options(byPath(nodes, 'stages.1.agentName'))).toEqual(['', 'deep']);
     expect(options(byPath(nodes, 'stages.1.sessionResumeFrom'))).toEqual(['', 'plan']);
-    expect(options(byPath(nodes, 'outputs.0.fromStage'))).toEqual(['', 'plan']);
-    expect(options(byPath(nodes, 'outputs.0.artifact'))).toEqual(['', 'plan.md']);
     expect(options(byPath(nodes, 'downstream.0.workflow'))).toEqual(['', 'implement']);
     expect(options(byPath(nodes, 'downstream.0.artifacts.0.value'))).toEqual(['', 'plan']);
   });
 
-  it('fills the output artifact and name from the selected stage', () => {
+  it('renames an artifact id in stage lists, decision lists and downstream mappings', () => {
     const form = makeForm();
-    form.outputs[0] = { name: '', fromStage: '', artifact: '' };
-    const fromStage = byPath(render(form), 'outputs.0.fromStage');
-    fromStage.value = 'plan';
-    fire(fromStage, 'change');
+    form.stages[0].decision[0].artifacts = { kind: 'ids', ids: ['plan'] };
+    const id = byPath(render(form), 'artifacts.0.id');
+    id.value = 'draft';
+    fire(id, 'change');
 
-    expect(form.outputs[0]).toEqual({ name: 'plan', fromStage: 'plan', artifact: 'plan.md' });
+    expect(form.artifacts[0].id).toBe('draft');
+    expect(form.stages[0].artifacts).toEqual(['draft']);
+    expect(form.stages[0].decision[0].artifacts).toEqual({ kind: 'ids', ids: ['draft'] });
+    expect(form.downstream[0].artifacts).toEqual([{ key: 'plan', value: 'draft' }]);
+  });
+
+  it('lets a stage pick registry artifacts and leaves the required flag unset by default', () => {
+    const form = makeForm();
+    form.artifacts.push({ id: 'notes', file: 'notes.md', description: '', required: null });
+    const box = byPath(render(form), 'stages.1.artifacts.notes');
+    box.checked = true;
+    fire(box, 'change');
+
+    expect(form.stages[1].artifacts).toEqual(['notes']);
+    expect(form.artifacts[1].required).toBeNull();
+  });
+
+  it('shows a CLI diagnostic keyed by artifact id against the control at that index', () => {
+    const nodes = render(makeForm(), {
+      issues: (kind: string) =>
+        kind === 'errors' ? [{ path: 'artifacts.plan.file', message: 'file is not unique' }] : [],
+    });
+    const file = byPath(nodes, 'artifacts.0.file');
+    expect(file.attrs['aria-invalid']).toBe('true');
+  });
+
+  it('shows a diagnostic on a stage artifact list and on a decision artifact list', () => {
+    const form = makeForm();
+    form.stages[0].decision[0].artifacts = { kind: 'ids', ids: ['plan'] };
+    const nodes = render(form, {
+      issues: (kind: string) =>
+        kind === 'errors'
+          ? [
+              { path: 'stages.0.artifacts.0', message: 'stage list problem' },
+              { path: 'stages.0.decision.0.approved.artifacts.0', message: 'decision list problem' },
+            ]
+          : [],
+    });
+    const messages = all(nodes)
+      .filter((node) => node.className.includes('mg-issue'))
+      .map((node) => node.textContent);
+    expect(messages).toEqual(expect.arrayContaining(['stage list problem', 'decision list problem']));
+    expect(byPath(nodes, 'stages.0.artifacts.plan').dataset.path).toBe('stages.0.artifacts.plan');
+    expect(byPath(nodes, 'stages.0.decision.0.artifacts.ids.plan').dataset.path).toBe(
+      'stages.0.decision.0.artifacts.ids.plan',
+    );
+  });
+
+  it('shows an omitted downstream mapping as such and not as an empty list', () => {
+    const form = makeForm();
+    const nodes = render(form);
+
+    const mode = byPath(nodes, 'downstream.1.mode');
+    const selected = mode.children.find(
+      (child): child is FakeNode => typeof child !== 'string' && (child as FakeNode & { selected?: boolean }).selected === true,
+    );
+    expect(selected?.value).toBe('all');
+    expect(all(nodes).some((node) => node.dataset.path === 'downstream.1.artifacts.0.key')).toBe(false);
+    expect(form.downstream[1].artifacts).toBeNull();
   });
 
   it('renames every reference when a stage id changes', () => {
@@ -317,18 +380,17 @@ describe('workflow form reference controls', () => {
     fire(id, 'change');
 
     expect(form.stages[0].id).toBe('draft');
-    expect(form.stages[1].dependsOn).toEqual(['draft']);
+    expect(form.stages[1].depends_on).toEqual(['draft']);
     expect(form.stages[1].sessionResumeFrom).toBe('draft');
-    expect(form.outputs[0].fromStage).toBe('draft');
   });
 
   it('clears the resumed session when its stage is removed from Depends on', () => {
     const form = makeForm();
-    const box = byPath(render(form), 'stages.1.dependsOn.plan');
+    const box = byPath(render(form), 'stages.1.depends_on.plan');
     box.checked = false;
     fire(box, 'change');
 
-    expect(form.stages[1].dependsOn).toEqual([]);
+    expect(form.stages[1].depends_on).toEqual([]);
     expect(form.stages[1].sessionResumeFrom).toBe('');
   });
 
@@ -392,40 +454,76 @@ describe('workflow form reference controls', () => {
     expect(repaint).toHaveBeenCalledWith('stages.0.decision.0.navigate');
   });
 
-  it('renders hints as tooltip icons on controls only', () => {
+  it('renders hints as tooltips on labels, with no icon and not on layout heads', () => {
     const nodes = render(makeForm());
-    const icons = all(nodes).filter((node) => node.className.includes('mg-hint-icon'));
+    const labels = all(nodes).filter((node) => node.className.includes('mg-has-hint'));
 
-    expect(icons.length).toBeGreaterThan(0);
-    expect(icons[0].title).not.toBe('');
-    expect(icons[0].children.some((child) => typeof child !== 'string' && child.tagName === 'SVG')).toBe(true);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels[0].attrs['data-tip']).toBeTruthy();
+    expect(labels[0].tabIndex).toBe(0);
+    expect(all(nodes).some((node) => node.className.includes('mg-hint-icon'))).toBe(false);
     expect(all(nodes).some((node) => node.className === 'mg-hint')).toBe(false);
 
     const layoutHeads = all(nodes).filter((node) => node.className === 'mg-section-head');
     expect(layoutHeads.length).toBeGreaterThan(0);
     for (const head of layoutHeads) {
-      expect(head.descendants().some((node) => node.className.includes('mg-hint-icon'))).toBe(false);
+      expect(head.descendants().some((node) => node.className.includes('mg-has-hint'))).toBe(false);
     }
     expect(all(nodes).some((node) => node.className === 'mg-section-note')).toBe(true);
   });
 
-  it('renders each output and suggestion on its own card', () => {
+  it('describes a control by its hint text for assistive technology', () => {
     const nodes = render(makeForm());
-    const cards = all(nodes).filter((node) => node.className.split(' ').includes('mg-section--card'));
+    const concurrency = byPath(nodes, 'concurrency');
+    const describedBy = concurrency.attrs['aria-describedby'];
+    const text = all(nodes).find((node) => node.id === describedBy);
+
+    expect(text?.textContent).toBe('How many stages may run at the same time.');
+    expect(text?.hidden).toBe(true);
+  });
+
+  it('renders each artifact and suggestion on its own collapsible card, closed by default', () => {
+    const nodes = render(makeForm());
+    const cards = all(nodes).filter((node) => node.className.split(' ').includes('mg-collapsible'));
     const titles = cards.flatMap((card) =>
-      card.descendants().filter((node) => node.className === 'mg-section-title').map((node) => node.textContent),
+      card.descendants().filter((node) => node.className === 'mg-collapsible-title').map((node) => node.textContent),
     );
 
-    expect(titles).toEqual(expect.arrayContaining(['Output 1', 'Suggestion 1']));
+    expect(titles).toEqual(expect.arrayContaining(['plan', 'implement', 'all']));
+    expect(cards.length).toBeGreaterThanOrEqual(5);
+    expect(cards.every((card) => card.open !== true)).toBe(true);
+  });
+
+  it('moves artifacts and downstream suggestions with the up and down buttons of their cards', () => {
+    const form = makeForm();
+    form.artifacts.push({ id: 'review', file: 'review.md', description: '', required: null });
+    const repainted: string[] = [];
+    const nodes = render(form, { repaint: (path: string) => repainted.push(path) });
+
+    // The first item cannot move up and the last cannot move down.
+    expect(byPath(nodes, 'artifacts.0.move-up').disabled).toBe(true);
+    expect(byPath(nodes, 'artifacts.1.move-down').disabled).toBe(true);
+    expect(byPath(nodes, 'downstream.0.move-up').disabled).toBe(true);
+    expect(byPath(nodes, 'downstream.1.move-down').disabled).toBe(true);
+
+    fire(byPath(nodes, 'artifacts.0.move-down'), 'click');
+    expect(form.artifacts.map((item) => item.id)).toEqual(['review', 'plan']);
+    // The focus follows the pressed button to the item's new place; at the end of the list that button is
+    // disabled, so it goes to the opposite one.
+    expect(repainted.at(-1)).toBe('artifacts.1.move-up');
+
+    fire(byPath(nodes, 'downstream.1.move-up'), 'click');
+    expect(form.downstream.map((target) => target.workflow)).toEqual(['all', 'implement']);
+    expect(repainted.at(-1)).toBe('downstream.0.move-down');
   });
 
   it('marks a decision without a destination with the warning hint tone', () => {
     const form = makeForm();
     form.stages[0].decision = [{ value: 'ok', when: '', navigate: '' }];
     const nodes = render(form);
-    const icon = all(nodes).find((node) => node.className.includes('mg-hint-icon--warn'));
+    const label = all(nodes).find((node) => node.className.includes('mg-has-hint--warn'));
 
-    expect(icon?.title).toBe('A decision needs one destination.');
+    expect(label?.attrs['data-tip']).toBe('A decision needs one destination.');
   });
 
   it('keeps an imported multi-destination or self route visible', () => {
@@ -579,7 +677,7 @@ describe('workflow form layout', () => {
     const nodes = render(makeForm());
     const texts = all(nodes).map((node) => node.textContent);
 
-    for (const heading of ['Basics', 'Stages', 'Outputs', 'Downstream']) {
+    for (const heading of ['Basics', 'Artifacts', 'Stages', 'Downstream']) {
       expect(texts).toContain(heading);
     }
     expect(texts).not.toContain('Flow');
@@ -588,7 +686,8 @@ describe('workflow form layout', () => {
     }
 
     const heads = all(nodes).filter((node) => node.className === 'mg-collapsible-head');
-    expect(heads.map((head) => (head.children[0] as FakeNode).textContent)).toEqual(['1', '2']);
+    // Artifacts, then stages, then downstream suggestions, each numbered from 1.
+    expect(heads.map((head) => (head.children[0] as FakeNode).textContent)).toEqual(['1', '1', '2', '1', '2']);
   });
 
   it('renders a validation issue against its field', () => {
@@ -604,6 +703,91 @@ describe('workflow form layout', () => {
     expect(messages.map((node) => node.textContent)).toContain('id is required');
   });
 
+  describe('an issue sits on one control', () => {
+    const collisionForm = (): WorkflowFormStub =>
+      load().workflowForm.normalizeForm({
+        artifacts: [{ id: 'plan-comment', file: 'plan-comments.md' }],
+        stages: [
+          {
+            id: 'plan',
+            role: 'planner',
+            decision: [
+              { value: 'approved', navigate: 'complete' },
+              {
+                value: 'revise',
+                navigate: 'plan',
+                artifacts: { kind: 'local', items: [{ id: 'plan-comment', file: 'review.md', description: '' }] },
+              },
+            ],
+          },
+        ],
+      }) as WorkflowFormStub;
+
+    const flagged = (nodes: FakeNode[]): string[] =>
+      all(nodes)
+        .filter((node) => node.attrs['aria-invalid'] === 'true' && node.dataset.path !== undefined)
+        .map((node) => node.dataset.path as string);
+
+    it('marks only the ID of a decision-local artifact whose id collides with a top-level one', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) =>
+          kind === 'errors'
+            ? [
+                {
+                  path: 'stages.0.decision.1.revise.artifacts.plan-comment',
+                  message: 'artifact id collides with a top-level artifact.',
+                },
+              ]
+            : [],
+      });
+      expect(flagged(nodes)).toEqual(['stages.0.decision.1.artifacts.0.id']);
+    });
+
+    it('marks only the ID of a top-level artifact for an issue about the whole artifact', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) => (kind === 'errors' ? [{ path: 'artifacts.plan-comment', message: 'bad' }] : []),
+      });
+      expect(flagged(nodes)).toEqual(['artifacts.0.id']);
+    });
+
+    it('marks only the named property when the path already names one', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) => (kind === 'errors' ? [{ path: 'artifacts.plan-comment.file', message: 'bad' }] : []),
+      });
+      expect(flagged(nodes)).toEqual(['artifacts.0.file']);
+    });
+
+    it('marks only the value of a decision for an issue about the whole decision', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) => (kind === 'errors' ? [{ path: 'stages.0.decision.0', message: 'bad' }] : []),
+      });
+      expect(flagged(nodes)).toEqual(['stages.0.decision.0.value']);
+    });
+
+    it('marks only the id of a stage for an issue about the whole stage', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) => (kind === 'errors' ? [{ path: 'stages.0', message: 'bad' }] : []),
+      });
+      expect(flagged(nodes)).toEqual(['stages.0.id']);
+    });
+
+    it('flags the stage header, with its problem count, when an error is inside it', () => {
+      const nodes = render(collisionForm(), {
+        issues: (kind: string) =>
+          kind === 'errors'
+            ? [
+                { path: 'stages.0.decision.1.revise.artifacts.plan-comment', message: 'a' },
+                { path: 'stages.0.decision.0.navigate', message: 'b' },
+              ]
+            : [],
+      });
+      const head = all(nodes).find(
+        (node) => node.className === 'mg-collapsible-head' && node.textContent.includes('planner'),
+      );
+      expect(head?.textContent).toContain('2 problems');
+    });
+  });
+
   it('adds and removes constraint rows through the shared list editor', () => {
     const form = makeForm();
     const repaint = vi.fn();
@@ -616,6 +800,7 @@ describe('workflow form layout', () => {
     const next = render(form, { repaint });
     const remove = all(next).find((node) => node.attrs['aria-label'] === 'Remove constraint 1');
     if (remove === undefined) throw new Error('no remove button for constraint 1');
+    expect(remove.attrs['data-tip']).toBe('Remove constraint 1');
     fire(remove, 'click');
     expect(form.constraints).toEqual([]);
     expect(repaint).toHaveBeenLastCalledWith('constraints.0');
@@ -662,6 +847,22 @@ describe('shared form kit', () => {
     expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
   });
 
+  it('keeps the same buttons when the footer is refilled, so a click already under way still lands', () => {
+    const kit = load().form;
+    const first = vi.fn();
+    const second = vi.fn();
+    const footer = kit.saveFooter({ canDiscard: true, canSave: true, onSave: first, onDiscard: () => undefined });
+    const save = footerButtons(footer)['Save workflow'];
+
+    kit.saveFooter({ canDiscard: true, canSave: true, onSave: second, onDiscard: () => undefined }, footer);
+
+    // A refill during a press (a field's change event fires when Save takes the focus) must not swap the button.
+    expect(footerButtons(footer)['Save workflow']).toBe(save);
+    fire(save, 'click');
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the save state label only when given and wires the actions', () => {
     const kit = load().form;
     const onSave = vi.fn();
@@ -684,13 +885,13 @@ describe('shared form kit', () => {
     expect(node.descendants()).toHaveLength(1);
   });
 
-  it('renders a collapsible card with number, title, chips and body', () => {
+  it('renders a collapsible card with number, title, summary and body', () => {
     const kit = load().form;
     const card = kit.collapsibleCard({
       key: 'k',
       number: 2,
       title: 'Review',
-      chips: [el('span', 'planner', 'mg-chip')],
+      summary: ['planner', '', '2 decisions'],
       body: [el('p', 'inside')],
       open: true,
     });
@@ -698,10 +899,63 @@ describe('shared form kit', () => {
     expect(card.className).toContain('mg-collapsible');
     expect(card.open).toBe(true);
     const texts = all([card]).map((n) => n.textContent);
-    expect(texts).toEqual(expect.arrayContaining(['2', 'Review', 'planner', 'inside']));
+    expect(texts).toEqual(expect.arrayContaining(['2', 'Review', 'planner \u00b7 2 decisions', 'inside']));
     expect(all([card]).find((n) => n.className === 'mg-collapsible-body')).toBeTruthy();
     expect(all([card]).find((n) => n.className === 'mg-badge')).toBeTruthy();
     const warned = kit.collapsibleCard({ key: 'w', number: 1, title: '', warn: true });
     expect(all([warned]).find((n) => n.className === 'mg-badge mg-badge--warn')).toBeTruthy();
+  });
+
+  it('redraws a card header from the draft when a value in its body is edited', () => {
+    const form = makeForm();
+    const nodes = render(form);
+    const titles = (): string[] =>
+      all(nodes)
+        .filter((node) => node.className === 'mg-collapsible-title')
+        .map((node) => node.textContent);
+    const summaries = (): string[] =>
+      all(nodes)
+        .filter((node) => node.className === 'mg-collapsible-summary')
+        .map((node) => node.textContent);
+
+    const workflow = byPath(nodes, 'downstream.0.workflow');
+    workflow.value = 'review';
+    bubble(nodes, workflow, 'change');
+    expect(titles()).toContain('review');
+
+    const task = byPath(nodes, 'downstream.0.task');
+    task.value = 'Check it';
+    bubble(nodes, task, 'input');
+    expect(summaries().some((text) => text.startsWith('Check it'))).toBe(true);
+
+    const artifact = byPath(nodes, 'artifacts.0.id');
+    artifact.value = 'draft';
+    bubble(nodes, artifact, 'input');
+    expect(titles()).toContain('draft');
+
+    const stage = byPath(nodes, 'stages.0.id');
+    stage.value = 'build';
+    bubble(nodes, stage, 'input');
+    expect(titles()).toContain('build');
+  });
+
+  it('keeps the card header summary quiet, with warning chips as its only framed items', () => {
+    const kit = load().form;
+    const card = kit.collapsibleCard({
+      key: 'k2',
+      number: 1,
+      title: 'Plan',
+      summary: ['planner', 'role agent', '', '6 instructions'],
+      alerts: [el('span', '2 problems', 'mg-chip mg-chip--warn')],
+    });
+    const summary = all([card]).find((n) => n.className === 'mg-collapsible-summary');
+    expect(summary?.textContent).toBe('planner \u00b7 role agent \u00b7 6 instructions');
+    const main = all([card]).find((n) => n.className === 'mg-collapsible-main');
+    expect(main?.attrs['data-tip']).toBe('Plan \u2014 planner \u00b7 role agent \u00b7 6 instructions');
+    const chips = all([card]).filter((n) => n.className.split(' ').includes('mg-chip'));
+    expect(chips.map((n) => n.textContent)).toEqual(['2 problems']);
+    const bare = kit.collapsibleCard({ key: 'k3', number: 1, title: 'Plan' });
+    expect(all([bare]).some((n) => n.className === 'mg-collapsible-summary')).toBe(false);
+    expect(all([bare]).some((n) => n.className === 'mg-collapsible-alerts')).toBe(false);
   });
 });

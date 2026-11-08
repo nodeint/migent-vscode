@@ -57,23 +57,23 @@ describe('TransitionTracker', () => {
     expect(tracker.observe('q', snapshot(blocked, 'a'), false)?.project).toBe('q');
   });
 
-  it('announces a failed execution that is a quota wait as a quota wait', () => {
+  it('announces a failed execution that hit client quota as an ordinary failure', () => {
     const exhausted = {
       status: 'active',
       latest_execution_id: '0002-plan--attempt-02',
       latest_execution_status: 'failed',
       latest_provider_event: { event: 'provider.quota', execution_id: '0002-plan--attempt-02' },
     };
-    expect(new TransitionTracker().observe('p', snapshot(exhausted), false)?.kind).toBe('quota');
+    expect(new TransitionTracker().observe('p', snapshot(exhausted), false)?.kind).toBe('failed');
   });
 
-  it('reports a quota wait and a completion, but not a pending-question session', () => {
+  it('reports a completion, but not a pending-question session or a stopped session with a quota event', () => {
     const tracker = new TransitionTracker();
-    const quota = {
+    const stoppedQuota = {
       status: 'active',
       latest_provider_event: { event: 'provider.quota', execution_id: '0001-plan--attempt-01' },
     };
-    expect(tracker.observe('p', snapshot(quota), false)?.kind).toBe('quota');
+    expect(tracker.observe('p', snapshot(stoppedQuota), false)).toBeNull();
     expect(tracker.observe('p', snapshot(completed), false)?.kind).toBe('completed');
     expect(tracker.observe('p', snapshot({ status: 'question' }), false)).toBeNull();
   });

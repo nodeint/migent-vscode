@@ -129,23 +129,27 @@
    */
   function saveFooter(options, into) {
     const footer = into || el('footer', null, 'mg-footer mg-save-footer');
-    footer.replaceChildren();
-    const state = el('span', null, 'mg-save-state');
-    if (options.stateLabel) state.append(window.MigentPage.icon('circle'), options.stateLabel);
-    const actions = el('div', null, 'mg-footer-actions');
-    actions.append(
-      button('Discard changes', {
-        kind: 'secondary',
-        onClick: options.onDiscard,
-        disabled: options.saving === true || options.busy === true || options.canDiscard !== true,
-      }),
-      button(options.saving ? 'Saving…' : options.saveLabel || 'Save workflow', {
-        kind: 'primary',
-        onClick: options.onSave,
-        disabled: options.saving === true || options.busy === true || options.canSave !== true,
-      }),
-    );
-    footer.append(state, actions);
+    // A refill keeps the same nodes. A field's `change` event fires when Save takes the focus, in the middle of the
+    // press; replacing the button then would drop the click, since it needs the press and the release on one node.
+    if (!footer.mgParts) {
+      const state = el('span', null, 'mg-save-state');
+      const actions = el('div', null, 'mg-footer-actions');
+      const parts = { state, handlers: {} };
+      parts.discard = button('Discard changes', { kind: 'secondary', onClick: (event) => parts.handlers.onDiscard(event) });
+      parts.save = button('Save workflow', { kind: 'primary', onClick: (event) => parts.handlers.onSave(event) });
+      actions.append(parts.discard, parts.save);
+      footer.replaceChildren(state, actions);
+      footer.mgParts = parts;
+    }
+    const parts = footer.mgParts;
+    parts.handlers.onDiscard = options.onDiscard || (() => undefined);
+    parts.handlers.onSave = options.onSave || (() => undefined);
+    parts.state.replaceChildren();
+    if (options.stateLabel) parts.state.append(window.MigentPage.icon('circle'), options.stateLabel);
+    const locked = options.saving === true || options.busy === true;
+    parts.discard.disabled = locked || options.canDiscard !== true;
+    parts.save.disabled = locked || options.canSave !== true;
+    parts.save.textContent = options.saving ? 'Saving…' : options.saveLabel || 'Save workflow';
     return footer;
   }
 
@@ -157,49 +161,94 @@
   }
 
   /**
-   * A collapsible card on top of `details`: a header with a number badge, a title and chips, then the body.
-   * `options`: `key` (keeps it open or closed across repaints), `number`, `title`, `chips` (nodes),
-   * `warn` (warning badge), `open` (default state), `body` (nodes). The caller may set `id` on the result.
+   * A collapsible card on top of `details`: a header with a number badge, a title, one quiet summary line and
+   * warning chips, then the body.
+   * `options`: `key` (keeps it open or closed across repaints), `number`, `title`, `summary` (strings joined into
+   * one line of muted text beside the title, cut with an ellipsis when it does not fit, the whole header's tooltip
+   * carrying it in full), `alerts` (warning chips, the only framed items in the header),
+   * `warn` (warning badge), `open` (default state), `path` (a `data-path` on the header, so a repaint can focus it
+   * without opening the card), `tools` (icon buttons at the right of the header, such as move and remove), `body`
+   * (nodes), `describe` (a function returning the current `title`, `summary`, `alerts` and `warn`; the card's
+   * `refresh()` calls it and redraws the header, so a value edited in the body shows in the header at once without
+   * rebuilding the card). The caller may set `id` on the result.
    */
   function collapsibleCard(options) {
     const head = el('div', null, 'mg-collapsible-head');
-    head.append(el('span', String(options.number), 'mg-badge' + (options.warn ? ' mg-badge--warn' : '')));
-    head.append(el('span', options.title, 'mg-collapsible-title'));
-    const chips = el('span', null, 'mg-collapsible-chips');
-    chips.append(...(options.chips || []));
-    head.append(chips);
-    const node = window.MigentPage.details(options.key, head, 'mg-collapsible', options.open === true);
+    let tools = null;
+    if (options.tools && options.tools.length > 0) {
+      tools = el('span', null, 'mg-collapsible-tools');
+      tools.append(...options.tools);
+    }
+    // The badge and the title cell are redrawn by `refresh`; the tools are the same nodes throughout, so a button
+    // that holds the focus keeps it.
+    const fill = (state) => {
+      const badge = el('span', String(options.number), 'mg-badge' + (state.warn ? ' mg-badge--warn' : ''));
+      // One line: the title, its warning chips, then the quiet summary, level with the badge and the tools. The
+      // title is never cut; the summary is what gives way, and the tooltip of the cell carries it whole.
+      const main = el('span', null, 'mg-collapsible-main');
+      main.append(el('span', state.title, 'mg-collapsible-title'));
+      const alerts = el('span', null, 'mg-collapsible-alerts');
+      alerts.append(...(state.alerts || []));
+      if (alerts.children.length > 0) main.append(alerts);
+      const parts = (state.summary || []).filter((part) => part !== '');
+      if (parts.length > 0) {
+        const text = parts.join(' \u00b7 ');
+        main.append(el('span', text, 'mg-collapsible-summary'));
+        main.setAttribute('data-tip', state.title ? state.title + ' \u2014 ' + text : text);
+      }
+      head.replaceChildren(badge, main, ...(tools === null ? [] : [tools]));
+    };
+    fill(options);
+    const node = window.MigentPage.details(options.key, head, 'mg-collapsible', options.open === true, options.path);
     const body = el('div', null, 'mg-collapsible-body');
     body.append(...(options.body || []));
     node.append(body);
+    node.refresh = () => {
+      if (typeof options.describe === 'function') fill({ ...options, ...options.describe() });
+    };
     return node;
   }
 
   // ---------- layout ----------
 
-  /** A compact hint for a control: a filled question icon whose tooltip carries the text. */
-  function hint(text, warning) {
-    const node = el('span', null, 'mg-hint-icon' + (warning ? ' mg-hint-icon--warn' : ''));
-    node.setAttribute('role', 'img');
-    node.setAttribute('aria-label', text);
-    node.title = text;
-    node.append(window.MigentPage.icon('question-filled'));
-    return node;
+  /**
+   * Give a label (or a legend's text) a hint: a dotted underline, the tooltip on hover and on keyboard focus, and
+   * a hidden node with the same text for `aria-describedby`. Returns that node, which the caller places next to
+   * the label. No icon: the underline is the only sign, so a form of hints stays quiet.
+   */
+  function hint(labelNode, text, warning, id) {
+    labelNode.classList.add('mg-has-hint');
+    if (warning) labelNode.classList.add('mg-has-hint--warn');
+    labelNode.setAttribute('data-tip', text);
+    // Focusable, so the keyboard reaches the tooltip.
+    labelNode.tabIndex = 0;
+    const description = el('span', text, 'mg-hint-text');
+    description.id = id;
+    description.hidden = true;
+    return description;
   }
 
-  /** A button; `kind` is a modifier such as primary, secondary or quiet. */
+  /**
+   * A button. `kind` is primary, secondary, quiet, link or danger; `size` is `'sm'` (compact, 24px) or `'md'`
+   * (standard, 28px). A quiet or danger button is compact unless `size` says otherwise.
+   */
   function button(label, options) {
     const settings = options || {};
-    const node = el('button', label, 'mg-btn' + (settings.kind ? ' mg-btn--' + settings.kind : ''));
+    const compact = settings.size ? settings.size === 'sm' : settings.kind === 'quiet' || settings.kind === 'danger';
+    const node = el(
+      'button',
+      label,
+      'mg-btn' + (settings.kind ? ' mg-btn--' + settings.kind : '') + (compact ? ' mg-btn--sm' : ''),
+    );
     node.type = 'button';
     node.disabled = settings.disabled === true;
-    if (settings.title) node.title = settings.title;
+    if (settings.title) node.setAttribute('data-tip', settings.title);
     node.addEventListener('click', settings.onClick || (() => undefined));
     return node;
   }
 
   /**
-   * One labelled control. `options.hint` is a tooltip icon; `options.issue` is `{ message, warning }` and sets
+   * One labelled control. `options.hint` is a tooltip on the label; `options.issue` is `{ message, warning }` and sets
    * `aria-invalid` and `aria-describedby` on the control. `options.wide` spans every column of a field grid.
    */
   function field(options) {
@@ -213,12 +262,10 @@
       const label = el('label', options.label, 'mg-label');
       label.htmlFor = id;
       head.append(label);
-    }
-    if (options.hint) {
-      const icon = hint(options.hint, options.hintWarning);
-      icon.id = id + '-hint';
-      head.append(icon);
-      described.push(icon.id);
+      if (options.hint) {
+        head.append(hint(label, options.hint, options.hintWarning, id + '-hint'));
+        described.push(id + '-hint');
+      }
     }
     if (head.children.length > 0) wrap.append(head);
     wrap.append(control);
@@ -294,8 +341,9 @@
   }
 
   /**
-   * A fieldset with a legend, for a control group inside a larger block. `options.hint` is a note tooltip and
-   * `options.issue` is rendered as in `field`, against the fieldset itself, for a group of controls with no input.
+   * A fieldset with a legend, for a control group inside a larger block. `options.count` is a chip beside the
+   * legend, `options.hint` is a tooltip on the legend text and `options.issue` is rendered as in `field`, against the fieldset
+   * itself, for a group of controls with no input.
    */
   function fieldset(legend, children, options) {
     const settings = options || {};
@@ -303,12 +351,12 @@
     const id = controlId(settings.path || legend);
     const described = [];
     const legendNode = el('legend', null, 'mg-legend');
-    legendNode.append(el('span', legend));
+    const legendText = el('span', legend);
+    legendNode.append(legendText);
+    if (settings.count !== undefined) legendNode.append(el('span', String(settings.count), 'mg-chip'));
     if (settings.hint) {
-      const icon = hint(settings.hint, settings.hintWarning);
-      icon.id = id + '-hint';
-      legendNode.append(icon);
-      described.push(icon.id);
+      legendNode.append(hint(legendText, settings.hint, settings.hintWarning, id + '-hint'));
+      described.push(id + '-hint');
     }
     node.append(legendNode);
     if (children) node.append(...children);
@@ -323,18 +371,55 @@
     return node;
   }
 
-  /** A full-width dashed row that adds an item to a list. */
+  /** A compact link-style action with a plus icon that adds an item to a list. */
   function addButton(label, onClick, disabled) {
-    const node = button(label, { onClick, disabled });
+    const node = button('', { onClick, disabled });
     node.classList.add('mg-add');
+    node.append(window.MigentPage.icon('add'), label);
     return node;
   }
 
-  /** A quiet row action. `label` is its accessible name; the visible text stays short. */
-  function removeButton(label, onClick, disabled) {
-    const node = button('Remove', { kind: 'quiet', onClick, disabled });
+  /**
+   * The add action of a whole section list: a wide button with a dashed outline and a plus icon, placed at the
+   * bottom of the list so it is a big target right where the new item appears. When the list is empty,
+   * `options.empty` is the message to show: the block then becomes one dashed frame that holds the message and,
+   * under it, the same button without an outline of its own.
+   */
+  function addBlockButton(label, onClick, disabled, options) {
+    const node = button('', { onClick, disabled });
+    node.classList.add('mg-add-block');
+    node.append(window.MigentPage.icon('add'), label);
+    const empty = options && options.empty;
+    if (!empty) return node;
+    const frame = el('div', null, 'mg-empty');
+    frame.append(el('p', empty, 'mg-empty-text'), node);
+    return frame;
+  }
+
+  /**
+   * A quiet icon-only action (move up, move down). `label` is its accessible name and tooltip (`data-tip`); the
+   * button shows no text. `path` is a `data-path`, so a repaint can put the focus back on it.
+   */
+  function iconButton(iconName, label, onClick, disabled, path) {
+    const node = button('', { kind: 'quiet', onClick, disabled });
+    if (path) node.dataset.path = path;
+    node.classList.add('mg-btn--icon');
+    node.append(window.MigentPage.icon(iconName));
     node.setAttribute('aria-label', label);
-    node.title = label;
+    node.setAttribute('data-tip', label);
+    return node;
+  }
+
+  /**
+   * A destructive row action drawn as a trash icon. `label` is its accessible name and tooltip (`data-tip`), so
+   * name the row it removes ("Remove decision 2"); the button shows no text.
+   */
+  function removeButton(label, onClick, disabled) {
+    const node = button('', { kind: 'danger', onClick, disabled });
+    node.classList.add('mg-btn--icon');
+    node.append(window.MigentPage.icon('trash'));
+    node.setAttribute('aria-label', label);
+    node.setAttribute('data-tip', label);
     return node;
   }
 
@@ -385,7 +470,9 @@
    */
   function stringList(options) {
     const values = options.values;
-    const wrap = options.label ? fieldset(options.label, []) : el('div', null, 'mg-list-editor');
+    const wrap = options.label
+      ? fieldset(options.label, [], { className: 'mg-list-editor', count: values.length })
+      : el('div', null, 'mg-list-editor');
     const itemLabel = options.itemLabel || 'item';
     values.forEach((value, index) => {
       const row = el('div', null, 'mg-inline-row');
@@ -411,7 +498,7 @@
             },
           });
       control.setAttribute('aria-label', itemLabel + ' ' + (index + 1));
-      const remove = removeButton('Remove ' + itemLabel + ' ' + (index + 1), () => {
+      const remove = removeButton(window.MigentCopy.remove(itemLabel, index + 1), () => {
         values.splice(index, 1);
         options.onEdit();
         options.onRestructure(options.path + '.' + Math.max(0, index - 1));
@@ -436,7 +523,9 @@
    */
   function pairList(options) {
     const pairs = options.pairs;
-    const wrap = options.label ? fieldset(options.label, []) : el('div', null, 'mg-list-editor');
+    const wrap = options.label
+      ? fieldset(options.label, [], { className: 'mg-list-editor', count: pairs.length })
+      : el('div', null, 'mg-list-editor');
     const itemLabel = options.itemLabel || 'item';
     pairs.forEach((pair, index) => {
       const row = el('div', null, 'mg-inline-row');
@@ -475,7 +564,7 @@
         });
       }
       value.setAttribute('aria-label', itemLabel + ' ' + (index + 1) + ' value');
-      const remove = removeButton('Remove ' + itemLabel + ' ' + (index + 1), () => {
+      const remove = removeButton(window.MigentCopy.remove(itemLabel, index + 1), () => {
         pairs.splice(index, 1);
         options.onEdit();
         options.onRestructure(options.path + '.' + Math.max(0, index - 1));
@@ -511,6 +600,8 @@
     hint,
     button,
     addButton,
+    addBlockButton,
+    iconButton,
     removeButton,
     datalist,
     checkboxList,

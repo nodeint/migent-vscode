@@ -8,18 +8,20 @@
 
   const { el, details } = window.MigentPage;
   const ui = window.MigentForm;
+  const copy = window.MigentCopy;
+  const text = window.MigentWorkflowCopy;
   const ops = window.MigentWorkflowModel;
-  const { emptyStage, emptyForm, normalizeForm, uniqueValues, artifactBaseName, agentModelLabel } = ops;
+  const { emptyStage, emptyForm, normalizeForm, uniqueValues, agentModelLabel } = ops;
 
   const ASK_OPTIONS = [
-    { value: '', label: 'No questions' },
-    { value: 'human', label: 'Ask a human' },
+    { value: '', label: text.identity.ask.options.none },
+    { value: 'human', label: text.identity.ask.options.human },
   ];
 
   const AGENT_MODES = [
-    { value: 'role', label: "Role's agent" },
-    { value: 'named', label: 'Named agent' },
-    { value: 'inline', label: 'Inline agent' },
+    { value: 'role', label: text.identity.agent.modes.role },
+    { value: 'named', label: text.identity.agent.modes.named },
+    { value: 'inline', label: text.identity.agent.modes.inline },
   ];
 
   // Effort is a suggestion only: the client reads report models and option keys, not effort values,
@@ -39,6 +41,17 @@
   function create(host) {
     const { getModel, getForm, issues, onEdit, repaint, pickModel } = host;
 
+    // The collapsible cards of the last render. A value edit does not rebuild the form, so after each one the card
+    // headers are redrawn from the draft: a title, a summary or a problem count never lags behind the controls.
+    let cards = [];
+    const track = (card) => {
+      cards.push(card);
+      return card;
+    };
+    function refreshHeaders() {
+      for (const card of cards) card.refresh();
+    }
+
     /**
      * A structural edit from a click: drop stale diagnostics through `onEdit`, then rebuild and refocus. A value
      * edit that also rebuilds calls `repaint` alone, because the form root reports the edit.
@@ -53,10 +66,16 @@
       return model.isLocked === true || !model.isSupported || model.state === 'invalid' || model.state === 'unreadable';
     }
 
-    /** The first issue that belongs to a field path, its own or a child's. */
+    /**
+     * The first issue that belongs to a field path. An issue sits on one control: the one its path names. A group
+     * of controls (a fieldset, whose path is a parent of its items) shows the issue of an item inside it.
+     */
     function issueFor(path) {
       const all = [...issues('errors'), ...issues('warnings')];
-      return all.find((issue) => issue.path === path || issue.path.startsWith(path + '.') || path.startsWith(issue.path + '.'));
+      return all.find((issue) => {
+        const own = ops.formPathOf(getForm(), issue.path);
+        return own === path || own.startsWith(path + '.');
+      });
     }
 
     /** The issue in the shape the shared form kit renders, or null. */
@@ -68,61 +87,9 @@
 
     // ---------- form controls ----------
 
-    function action(label, kind, onClick, isDisabled) {
-      return ui.button(label, { kind, onClick, disabled: Boolean(isDisabled) });
-    }
-
-    function textControl(value, path, onInput, options) {
-      const settings = options || {};
-      return ui.text({
-        value,
-        path,
-        type: settings.type,
-        placeholder: settings.placeholder,
-        list: settings.list,
-        disabled: isFormReadOnly(),
-        onInput,
-      });
-    }
-
-    function textareaControl(value, path, onInput, placeholder) {
-      return ui.textarea({
-        value,
-        path,
-        placeholder,
-        rows: 3,
-        disabled: isFormReadOnly(),
-        onInput,
-      });
-    }
-
-    function numberControl(value, path, onInput, placeholder) {
-      return ui.number({
-        value,
-        path,
-        placeholder,
-        disabled: isFormReadOnly(),
-        onInput,
-      });
-    }
-
-    function selectControl(value, path, options, onInput) {
-      return ui.select({
-        value,
-        path,
-        options,
-        disabled: isFormReadOnly(),
-        onInput,
-      });
-    }
-
-    function field(labelText, control, path, hint, wide) {
-      return ui.field({ label: labelText, control, path, hint, wide, issue: issueOf(path) });
-    }
-
-    function textList(values, options) {
+    function textList(options) {
       return ui.stringList({
-        values,
+        values: options.values,
         path: options.path,
         label: options.label,
         placeholder: options.placeholder,
@@ -135,12 +102,13 @@
       });
     }
 
-    function checkList(available, selected, path, onToggle, unknownValues) {
+    function checkList(options) {
+      const { available, selected, path, onToggle, unknownValues } = options;
       const items = available.map((value) => ({
         value,
         label: value,
         unknown: Boolean(unknownValues && unknownValues.includes(value)),
-        title: unknownValues && unknownValues.includes(value) ? value + ' is not a stage in this workflow' : '',
+        title: unknownValues && unknownValues.includes(value) ? text.dependencies.dependsOn.unknown(value) : '',
       }));
       return ui.checkboxList({
         items,
@@ -153,81 +121,78 @@
       });
     }
 
-    function pairList(pairs, path, label, keyPlaceholder, valuePlaceholder, valueOptions, keyList, addLabel) {
-      return ui.pairList({
-        pairs,
-        path,
-        label,
-        keyPlaceholder,
-        valuePlaceholder,
-        keyList,
-        valueOptions,
-        addLabel,
-        itemLabel: label.toLowerCase(),
-        disabled: isFormReadOnly(),
-        onEdit,
-        onRestructure: repaint,
-      });
-    }
-
     // ---------- sections ----------
 
     function renderBasics() {
       const form = getForm();
-      return ui.section('Basics', {
-        note: 'Workflow identity and the rules every stage follows.',
+      return ui.section(text.basics.title, {
+        note: text.basics.note,
         surface: true,
         children: [
           ui.grid([
-            field(
-              'ID',
-              textControl(form.id, 'id', (next) => {
-                form.id = next;
-              }, { placeholder: 'workflow-id' }),
-              'id',
-              'Used by session run and by other workflows. New files are named after it.',
-            ),
-            field(
-              'Concurrency',
-              numberControl(form.concurrency, 'concurrency', (next) => {
-                form.concurrency = next;
-              }, '1'),
-              'concurrency',
-              'How many stages may run at the same time.',
-            ),
+            ui.field({
+              label: text.basics.id.label,
+              control: ui.text({
+                value: form.id,
+                path: 'id',
+                placeholder: text.basics.id.placeholder,
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                    form.id = next;
+                  },
+              }),
+              path: 'id',
+              hint: text.basics.id.hint,
+              issue: issueOf('id'),
+            }),
+            ui.field({
+              label: text.basics.concurrency.label,
+              control: ui.number({
+                value: form.concurrency,
+                path: 'concurrency',
+                placeholder: text.basics.concurrency.placeholder,
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                    form.concurrency = next;
+                  },
+              }),
+              path: 'concurrency',
+              hint: text.basics.concurrency.hint,
+              issue: issueOf('concurrency'),
+            }),
           ]),
-          textList(form.constraints, {
+          textList({
+            values: form.constraints,
             path: 'constraints',
-            label: 'Constraints',
-            placeholder: 'A rule every stage must respect',
-            addLabel: 'Add constraint',
-            itemLabel: 'constraint',
+            label: text.basics.constraints.label,
+            placeholder: text.basics.constraints.placeholder,
+            addLabel: text.basics.constraints.add,
+            itemLabel: text.basics.constraints.item,
           }),
         ],
       });
     }
 
     function stageLabel(stage, index) {
-      return stage.id ? stage.id : 'untitled stage ' + (index + 1);
+      return stage.id ? stage.id : text.stages.untitled(index + 1);
     }
 
     function renderStages() {
       const form = getForm();
-      const count = form.stages.length + (form.stages.length === 1 ? ' stage' : ' stages');
+      const count = String(form.stages.length);
       const children = [];
-      if (form.stages.length === 0) {
-        children.push(el('p', 'No stages yet. A workflow needs at least one stage.', 'mg-empty'));
-      }
       form.stages.forEach((stage, index) => children.push(renderStage(stage, index)));
-      return ui.section('Stages', {
-        note: 'Open a stage to edit its identity, agent, dependencies, instructions and decisions.',
+      children.push(
+        ui.addBlockButton(text.stages.add, () => {
+          form.stages.push(emptyStage());
+          edited('stages.' + (form.stages.length - 1) + '.id');
+        }, isFormReadOnly(), {
+          empty: form.stages.length === 0 ? text.stages.empty : undefined,
+        }),
+      );
+      return ui.section(text.stages.title, {
+        note: text.stages.note,
         count,
-        actions: [
-          action('Add stage', 'secondary', () => {
-            form.stages.push(emptyStage());
-            edited('stages.' + (form.stages.length - 1) + '.id');
-          }, isFormReadOnly()),
-        ],
         children,
       });
     }
@@ -242,53 +207,144 @@
     const optionKeySuggestions = (clientName) => ops.optionKeySuggestions(getModel(), clientName);
     const isKnownModel = (clientName, modelName) => ops.isKnownModel(getModel(), clientName, modelName);
     const resumeOptions = (stage, current) => ops.resumeOptions(getForm(), stage, current);
-    const outputStageOptions = (current) => ops.outputStageOptions(getForm(), current);
-    const outputArtifactOptions = (output) => ops.outputArtifactOptions(getForm(), output);
-    const outputNameOptions = (current) => ops.outputNameOptions(getForm(), current);
+    const artifactIdOptions = (current) => ops.artifactIdOptions(getForm(), current);
     const workflowOptions = (current) => ops.workflowOptions(getModel(), current);
     const stageIds = () => ops.stageIds(getForm());
 
+    /**
+     * Move a stage and keep the focus on the button that was pressed, on the stage's new place (the opposite one
+     * when that button ends up disabled at the edge of the list). The card is not opened: the buttons are in its
+     * header, so the order can be changed on closed cards.
+     */
     function moveStage(index, delta) {
       const target = ops.moveStage(getForm(), index, delta);
-      if (target >= 0) edited('stages.' + target + '.id');
+      if (target < 0) return;
+      const last = getForm().stages.length - 1;
+      const same = delta < 0 ? 'up' : 'down';
+      const blocked = delta < 0 ? target === 0 : target === last;
+      const direction = blocked ? (same === 'up' ? 'down' : 'up') : same;
+      edited('stages.' + target + '.move-' + direction);
     }
 
+    /**
+     * The icon buttons of an item card in a list (`artifacts`, `downstream`): move up, move down and remove. They
+     * work like a stage's: the order changes on closed cards and the focus stays on the pressed button, on the
+     * item's new place.
+     */
+    function listTools(listKey, label, index, onRemove) {
+      const list = getForm()[listKey];
+      const move = (delta) => {
+        const target = ops.moveItem(list, index, delta);
+        if (target < 0) return;
+        const blocked = delta < 0 ? target === 0 : target === list.length - 1;
+        const direction = (delta < 0) !== blocked ? 'up' : 'down';
+        edited(listKey + '.' + target + '.move-' + direction);
+      };
+      return [
+        ui.iconButton(
+          'arrow-up',
+          text.stages.move(label, index + 1, 'up'),
+          () => move(-1),
+          isFormReadOnly() || index === 0,
+          listKey + '.' + index + '.move-up',
+        ),
+        ui.iconButton(
+          'arrow-down',
+          text.stages.move(label, index + 1, 'down'),
+          () => move(1),
+          isFormReadOnly() || index === list.length - 1,
+          listKey + '.' + index + '.move-down',
+        ),
+        ui.removeButton(copy.remove(label, index + 1), onRemove, isFormReadOnly()),
+      ];
+    }
+
+    /** Remove a stage and put the focus on the header of its neighbour, which stays as it was. */
     function removeStage(index) {
       ops.removeStage(getForm(), index);
-      edited('stages.' + Math.max(0, index - 1) + '.id');
+      edited('stages.' + Math.max(0, index - 1) + '.card');
     }
 
-    function stageChips(stage) {
-      const chips = [el('span', stage.role || 'verify only', 'mg-chip')];
-      chips.push(el('span', agentSummary(stage), stage.agentMode === 'inline' ? 'mg-chip mg-chip--info' : 'mg-chip'));
-      if (stage.dependsOn.length > 0) {
-        const depends = el('span', 'needs ' + stage.dependsOn.join(', '), 'mg-chip');
-        depends.title = 'Depends on ' + stage.dependsOn.join(', ');
-        chips.push(depends);
-      }
-      const duplicate = stage.id !== '' && getForm().stages.filter((candidate) => candidate.id === stage.id).length > 1;
-      if (duplicate) chips.push(el('span', 'duplicate id', 'mg-chip mg-chip--warn'));
+    /** The errors that belong to a stage (its own controls, decisions and artifact lists), however far inside. */
+    function stageErrorCount(index) {
+      const prefix = 'stages.' + index + '.';
+      return issues('errors').filter((issue) => ops.formPathOf(getForm(), issue.path).startsWith(prefix)).length;
+    }
+
+    /** The errors under a path prefix such as `artifacts.2.`, however far inside. */
+    function errorCount(prefix) {
+      return issues('errors').filter((issue) => ops.formPathOf(getForm(), issue.path).startsWith(prefix)).length;
+    }
+
+    /** The warning chips of a card header: the only framed items there, so a problem is what stands out. */
+    function alertChips(errors, extra) {
+      const chips = [];
+      if (extra) chips.push(el('span', extra, 'mg-chip mg-chip--warn'));
+      if (errors > 0) chips.push(el('span', text.stages.problems(errors), 'mg-chip mg-chip--warn'));
       return chips;
     }
 
+    function artifactSummary(item) {
+      return [item.file, item.required === null ? '' : item.required ? text.artifacts.summary.required : text.artifacts.summary.optional];
+    }
+
+    function downstreamSummary(target) {
+      return [target.task, target.artifacts === null ? text.downstream.summary.all : text.downstream.summary.mapped(target.artifacts.length)];
+    }
+
+    /**
+     * The quiet line beside a stage's title, most useful first: role, an agent that is not the role's own, what the
+     * stage needs and how many decisions it makes. What every stage has (the role's agent) or what the body shows at
+     * a glance (instructions) is left out.
+     */
+    function stageSummary(stage) {
+      const decisions = (stage.decision || []).length;
+      return [
+        stage.role || text.stages.summary.verifyOnly,
+        stage.agentMode === 'role' ? '' : agentSummary(stage),
+        stage.depends_on.length > 0 ? text.stages.summary.needs(stage.depends_on.join(', ')) : '',
+        decisions > 0 ? text.stages.summary.decisions(decisions) : '',
+      ];
+    }
+
+    function stageAlerts(stage, index) {
+      const duplicate = stage.id !== '' && getForm().stages.filter((candidate) => candidate.id === stage.id).length > 1;
+      return alertChips(stageErrorCount(index), duplicate ? text.stages.duplicateId : '');
+    }
+
+    /** The icon buttons in a stage's header: move up, move down and remove. */
     function stageTools(index) {
       const total = getForm().stages.length;
-      const tools = el('div', null, 'mg-collapsible-tools');
-      tools.append(
-        action('Move up', 'quiet', () => moveStage(index, -1), isFormReadOnly() || index === 0),
-        action('Move down', 'quiet', () => moveStage(index, 1), isFormReadOnly() || index === total - 1),
-      );
-      const remove = action('Remove stage', 'quiet', () => removeStage(index), isFormReadOnly());
-      remove.classList.add('mg-collapsible-tool-remove');
-      tools.append(remove);
-      return tools;
+      return [
+        ui.iconButton(
+          'arrow-up',
+          text.stages.move('stage', index + 1, 'up'),
+          () => moveStage(index, -1),
+          isFormReadOnly() || index === 0,
+          stagePath(index, 'move-up'),
+        ),
+        ui.iconButton(
+          'arrow-down',
+          text.stages.move('stage', index + 1, 'down'),
+          () => moveStage(index, 1),
+          isFormReadOnly() || index === total - 1,
+          stagePath(index, 'move-down'),
+        ),
+        ui.removeButton(copy.remove('stage', index + 1), () => removeStage(index), isFormReadOnly()),
+      ];
     }
 
     function identityGroup(stage, index) {
       const originalId = stage.id;
-      const idControl = textControl(stage.id, stagePath(index, 'id'), (next) => {
-        stage.id = next;
-      }, { placeholder: 'stage-id' });
+      const idControl = ui.text({
+        value: stage.id,
+        path: stagePath(index, 'id'),
+        placeholder: text.identity.id.placeholder,
+        disabled: isFormReadOnly(),
+        onInput: (next) => {
+          stage.id = next;
+        },
+      });
       idControl.addEventListener('change', () => {
         const next = idControl.value.trim();
         if (next !== idControl.value) idControl.value = next;
@@ -296,49 +352,121 @@
         ops.renameStageReferences(getForm(), originalId, next);
         repaint(stagePath(index, 'id'));
       });
-      const producesControl = textControl(stage.producesArtifact, stagePath(index, 'producesArtifact'), (next) => {
-        stage.producesArtifact = next;
-      }, { placeholder: 'stage.md' });
-      producesControl.addEventListener('change', () => repaint(stagePath(index, 'producesArtifact')));
       const fields = [
-        field('ID', idControl, stagePath(index, 'id'), 'Other stages and outputs refer to this id.'),
-        field('Description', textControl(stage.description, stagePath(index, 'description'), (next) => {
-          stage.description = next;
-        }, { placeholder: 'What this stage covers' }), stagePath(index, 'description'), undefined, true),
-        field('Role', selectControl(stage.role, stagePath(index, 'role'), roleOptions(stage.role), (next) => {
-          stage.role = next;
-          repaint(stagePath(index, 'role'));
-        }), stagePath(index, 'role'), 'The role supplies the agent unless it is overridden.'),
-        field('Agent', selectControl(stage.agentMode, stagePath(index, 'agentMode'), AGENT_MODES, (next) => {
-          stage.agentMode = next;
-          repaint(stagePath(index, 'agentMode'));
-        }), stagePath(index, 'agentMode'), 'Use the role agent, a named agent, or a complete inline agent.'),
+        ui.field({
+          label: text.identity.id.label,
+          control: idControl,
+          path: stagePath(index, 'id'),
+          hint: text.identity.id.hint,
+          issue: issueOf(stagePath(index, 'id')),
+        }),
+        ui.field({
+          label: text.identity.description.label,
+          control: ui.text({
+            value: stage.description,
+            path: stagePath(index, 'description'),
+            placeholder: text.identity.description.placeholder,
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              stage.description = next;
+            },
+          }),
+          path: stagePath(index, 'description'),
+          wide: true,
+          issue: issueOf(stagePath(index, 'description')),
+        }),
+        ui.field({
+          label: text.identity.role.label,
+          control: ui.select({
+            value: stage.role,
+            path: stagePath(index, 'role'),
+            options: roleOptions(stage.role),
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              stage.role = next;
+              repaint(stagePath(index, 'role'));
+            },
+          }),
+          path: stagePath(index, 'role'),
+          hint: text.identity.role.hint,
+          issue: issueOf(stagePath(index, 'role')),
+        }),
+        ui.field({
+          label: text.identity.agent.label,
+          control: ui.select({
+            value: stage.agentMode,
+            path: stagePath(index, 'agentMode'),
+            options: AGENT_MODES,
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              stage.agentMode = next;
+              repaint(stagePath(index, 'agentMode'));
+            },
+          }),
+          path: stagePath(index, 'agentMode'),
+          hint: text.identity.agent.hint,
+          issue: issueOf(stagePath(index, 'agentMode')),
+        }),
       ];
       if (stage.agentMode === 'named') {
         fields.push(
-          field('Agent name', selectControl(stage.agentName, stagePath(index, 'agentName'), agentNameOptions(stage.agentName), (next) => {
-            stage.agentName = next;
-          }), stagePath(index, 'agentName'), 'An agent from config.yaml.'),
+          ui.field({
+            label: text.identity.agentName.label,
+            control: ui.select({
+              value: stage.agentName,
+              path: stagePath(index, 'agentName'),
+              options: agentNameOptions(stage.agentName),
+              disabled: isFormReadOnly(),
+              onInput: (next) => {
+                stage.agentName = next;
+              },
+            }),
+            path: stagePath(index, 'agentName'),
+            hint: text.identity.agentName.hint,
+            issue: issueOf(stagePath(index, 'agentName')),
+          }),
         );
       }
       fields.push(
-        field('Ask', selectControl(stage.ask, stagePath(index, 'ask'), ASK_OPTIONS, (next) => {
-          stage.ask = next;
-        }), stagePath(index, 'ask'), 'Ask a human before the stage runs.'),
-        field('Max revisions', numberControl(stage.maxRevisions, stagePath(index, 'maxRevisions'), (next) => {
-          stage.maxRevisions = next;
-        }), stagePath(index, 'maxRevisions'), 'Only valid when a decision routes back to this stage.'),
-        field('Produces artifact', producesControl, stagePath(index, 'producesArtifact'), 'The file this stage hands to outputs and downstream workflows.'),
+        ui.field({
+          label: text.identity.ask.label,
+          control: ui.select({
+            value: stage.ask,
+            path: stagePath(index, 'ask'),
+            options: ASK_OPTIONS,
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              stage.ask = next;
+            },
+          }),
+          path: stagePath(index, 'ask'),
+          hint: text.identity.ask.hint,
+          issue: issueOf(stagePath(index, 'ask')),
+        }),
+        ui.field({
+          label: text.identity.maxRevisions.label,
+          control: ui.number({
+            value: stage.max_revisions,
+            path: stagePath(index, 'max_revisions'),
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              stage.max_revisions = next;
+            },
+          }),
+          path: stagePath(index, 'max_revisions'),
+          hint: text.identity.maxRevisions.hint,
+          issue: issueOf(stagePath(index, 'max_revisions')),
+        }),
       );
-      return ui.group('Identity', 'Name, description and how the stage runs.', {
+      return ui.group(text.identity.title, text.identity.note, {
         children: [ui.grid(fields)],
       });
     }
 
     function agentSummary(stage) {
-      if (stage.agentMode === 'named') return 'agent ' + (stage.agentName || '?');
-      if (stage.agentMode === 'inline') return 'inline agent';
-      return 'role agent';
+      if (stage.agentMode === 'named') return text.stages.summary.agentNamed(stage.agentName);
+      if (stage.agentMode === 'inline') return text.stages.summary.agentInline;
+      return text.stages.summary.agentRole;
     }
 
     /** Not a complete agent yet is fine: the CLI reports the missing client or model after Save. */
@@ -348,36 +476,58 @@
       const hasModel = agent.clientType !== '' || agent.model !== '';
       const hint =
         clientChoices().length === 0
-          ? 'Client list is not available yet; Reload to try again.'
+          ? text.inlineAgent.modelHint.noClients
           : hasModel && !known
-            ? 'Not in the client list; pick a listed model or edit the workflow file to change it.'
-            : 'Every client and model migent get models reports.';
-      return ui.group('Inline agent', 'A complete agent replaces the role agent entirely.', {
+            ? text.inlineAgent.modelHint.unknown
+            : text.inlineAgent.modelHint.known;
+      return ui.group(text.inlineAgent.title, text.inlineAgent.note, {
         children: [
           ui.grid([
-            field('Model', ui.picker({
-              value: agentModelLabel(agent),
+            ui.field({
+              label: text.inlineAgent.model.label,
+              control: ui.picker({
+                value: agentModelLabel(agent),
+                path: stagePath(index, 'agent.model'),
+                placeholder: text.inlineAgent.model.placeholder,
+                disabled: isFormReadOnly(),
+                onPick: () => {
+                  if (typeof pickModel === 'function') pickModel(index);
+                },
+              }),
               path: stagePath(index, 'agent.model'),
-              placeholder: 'Choose a model',
-              disabled: isFormReadOnly(),
-              onPick: () => {
-                if (typeof pickModel === 'function') pickModel(index);
-              },
-            }), stagePath(index, 'agent.model'), hint),
-            field('Effort', textControl(agent.effort, stagePath(index, 'agent.effort'), (next) => {
-              agent.effort = next;
-            }, { placeholder: 'high', list: 'wf-efforts' }), stagePath(index, 'agent.effort'), 'A value the client supports; doctor reports an invalid one.'),
+              hint: hint,
+              issue: issueOf(stagePath(index, 'agent.model')),
+            }),
+            ui.field({
+              label: text.inlineAgent.effort.label,
+              control: ui.text({
+                value: agent.effort,
+                path: stagePath(index, 'agent.effort'),
+                placeholder: text.inlineAgent.effort.placeholder,
+                list: 'wf-efforts',
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                  agent.effort = next;
+                },
+              }),
+              path: stagePath(index, 'agent.effort'),
+              hint: text.inlineAgent.effort.hint,
+              issue: issueOf(stagePath(index, 'agent.effort')),
+            }),
           ]),
-          pairList(
-            agent.clientOptions,
-            stagePath(index, 'agent.clientOptions'),
-            'Client options',
-            'key',
-            'value',
-            undefined,
-            'wf-option-keys-' + index,
-            'Add option',
-          ),
+          ui.pairList({
+            pairs: agent.clientOptions,
+            path: stagePath(index, 'agent.clientOptions'),
+            label: text.inlineAgent.clientOptions.label,
+            itemLabel: text.inlineAgent.clientOptions.item,
+            keyPlaceholder: 'key',
+            valuePlaceholder: 'value',
+            keyList: 'wf-option-keys-' + index,
+            addLabel: text.inlineAgent.clientOptions.add,
+            disabled: isFormReadOnly(),
+            onEdit,
+            onRestructure: repaint,
+          }),
         ],
       });
     }
@@ -389,44 +539,89 @@
         if (candidate === stage || !candidate.id || available.includes(candidate.id)) continue;
         available.push(candidate.id);
       }
-      const unknown = stage.dependsOn.filter((id) => !available.includes(id) && id !== stage.id);
+      const unknown = stage.depends_on.filter((id) => !available.includes(id) && id !== stage.id);
       const content = [
-        checkList([...available, ...unknown], stage.dependsOn, 'stages.' + index + '.dependsOn', (id, checked) => {
-          if (checked && !stage.dependsOn.includes(id)) stage.dependsOn.push(id);
-          if (!checked) stage.dependsOn = stage.dependsOn.filter((value) => value !== id);
-          if (!checked && stage.sessionResumeFrom === id) stage.sessionResumeFrom = '';
-        }, unknown),
+        checkList({
+          available: [...available, ...unknown],
+          selected: stage.depends_on,
+          path: 'stages.' + index + '.depends_on',
+          onToggle: (id, checked) => {
+            if (checked && !stage.depends_on.includes(id)) stage.depends_on.push(id);
+            if (!checked) stage.depends_on = stage.depends_on.filter((value) => value !== id);
+            if (!checked && stage.sessionResumeFrom === id) stage.sessionResumeFrom = '';
+          },
+          unknownValues: unknown,
+        }),
       ];
       if (form.stages.length < 2) {
-        return ui.fieldset('Depends on', content, {
-          hint: 'A stage can depend on another stage once one exists.',
+        return ui.fieldset(text.dependencies.dependsOn.label, content, {
+          hint: text.dependencies.dependsOn.hintNoOthers,
         });
       }
-      return ui.fieldset('Depends on', content);
+      return ui.fieldset(text.dependencies.dependsOn.label, content);
+    }
+
+    /** Registry ids this stage writes on every completion. Ids the registry lacks stay visible and flagged. */
+    function artifactsGroup(stage, index) {
+      const registry = uniqueValues(getForm().artifacts.map((item) => item.id));
+      const unknown = stage.artifacts.filter((id) => !registry.includes(id));
+      const children = [];
+      if (registry.length === 0 && unknown.length === 0) {
+        children.push(el('p', text.stageArtifacts.empty, 'mg-empty'));
+      } else {
+        children.push(
+          ui.fieldset(text.stageArtifacts.writes, [
+            checkList({
+              available: [...registry, ...unknown],
+              selected: stage.artifacts,
+              path: stagePath(index, 'artifacts'),
+              onToggle: (id, checked) => {
+                if (checked && !stage.artifacts.includes(id)) stage.artifacts.push(id);
+                if (!checked) stage.artifacts = stage.artifacts.filter((value) => value !== id);
+              },
+              unknownValues: unknown,
+            }),
+          ], { path: stagePath(index, 'artifacts'), issue: issueOf(stagePath(index, 'artifacts')) }),
+        );
+      }
+      return ui.group(text.stageArtifacts.title, text.stageArtifacts.note, { children });
     }
 
     function dependenciesGroup(stage, index) {
-      return ui.group('Dependencies', 'What must finish first, and an optional session to resume.', {
+      return ui.group(text.dependencies.title, text.dependencies.note, {
         children: [
           dependsOnEditor(stage, index),
           ui.grid([
-            field('Resume from', selectControl(stage.sessionResumeFrom, stagePath(index, 'sessionResumeFrom'), resumeOptions(stage, stage.sessionResumeFrom), (next) => {
-              stage.sessionResumeFrom = next;
-            }), stagePath(index, 'sessionResumeFrom'), 'A completed role stage in Depends on; client, model and options must match.'),
+            ui.field({
+              label: text.dependencies.resumeFrom.label,
+              control: ui.select({
+                value: stage.sessionResumeFrom,
+                path: stagePath(index, 'sessionResumeFrom'),
+                options: resumeOptions(stage, stage.sessionResumeFrom),
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                  stage.sessionResumeFrom = next;
+                },
+              }),
+              path: stagePath(index, 'sessionResumeFrom'),
+              hint: text.dependencies.resumeFrom.hint,
+              issue: issueOf(stagePath(index, 'sessionResumeFrom')),
+            }),
           ]),
         ],
       });
     }
 
     function instructionsGroup(stage, index) {
-      return ui.group('Instructions', 'One behavior per row; the agent receives them in order.', {
+      return ui.group(text.instructions.title, text.instructions.note, {
         children: [
-          textList(stage.instructions, {
+          textList({
+            values: stage.instructions,
             path: stagePath(index, 'instructions'),
             label: '',
-            placeholder: 'What this stage must do',
-            addLabel: 'Add instruction',
-            itemLabel: 'instruction',
+            placeholder: text.instructions.placeholder,
+            addLabel: text.instructions.add,
+            itemLabel: text.instructions.item,
             multiline: true,
           }),
         ],
@@ -441,20 +636,26 @@
         ...stageIds().filter((id) => id !== '' && id !== stageId),
       ]);
       const known = current === '' || destinations.includes(current);
-      const choices = [{ value: '', label: 'Choose a destination' }];
+      const choices = [{ value: '', label: text.decisions.navigate.choose }];
       for (const value of destinations) choices.push({ value, label: value });
       if (!known) choices.push({ value: current, label: navigationLabel(current, stageId) });
-      const control = selectControl(current, path, choices, (next) => {
-        route.navigate = next;
-        repaint(path);
+      const control = ui.select({
+        value: current,
+        path,
+        options: choices,
+        disabled: isFormReadOnly(),
+        onInput: (next) => {
+          route.navigate = next;
+          repaint(path);
+        },
       });
       const hint =
         current === ''
-          ? 'A decision needs one destination.'
+          ? text.decisions.navigate.needsOne
           : known
-            ? 'Route to complete or one other stage.'
+            ? text.decisions.navigate.allowed
             : navigationProblem(current, stageId);
-      const wrap = ui.fieldset('Navigate to', [control], {
+      const wrap = ui.fieldset(text.decisions.navigate.label, [control], {
         path,
         hint,
         hintWarning: !known || current === '',
@@ -465,15 +666,137 @@
 
     /** An imported value the editor cannot offer stays visible instead of being rewritten. */
     function navigationLabel(value, stageId) {
-      if (value === stageId) return value + ' (this stage)';
-      if (value.includes(',')) return value + ' (several destinations)';
-      return value + ' (not a stage in this workflow)';
+      if (value === stageId) return text.decisions.navigate.option.self(value);
+      if (value.includes(',')) return text.decisions.navigate.option.several(value);
+      return text.decisions.navigate.option.unknown(value);
     }
 
     function navigationProblem(value, stageId) {
-      if (value === stageId) return 'This file routes back to this stage; choose one destination.';
-      if (value.includes(',')) return 'This file routes to several stages; choose one destination.';
-      return 'This file routes to a stage that is not in this workflow; choose one destination.';
+      if (value === stageId) return text.decisions.navigate.problem.self;
+      if (value.includes(',')) return text.decisions.navigate.problem.several;
+      return text.decisions.navigate.problem.unknown;
+    }
+
+    /**
+     * A route's artifacts keep the shape the file used: registry ids, or decision-local definitions. The two
+     * shapes are not converted into each other; switching discards the other shape's rows.
+     */
+    function routeArtifactsEditor(route, base) {
+      const path = base + '.artifacts';
+      const shape = route.artifacts ? route.artifacts.kind : 'none';
+      const wrap = el('div', null, 'wf-route-artifacts');
+      wrap.append(
+        ui.field({
+          label: text.decisions.artifacts.label,
+          control: ui.select({
+            value: shape,
+            path: path + '.kind',
+            options: [
+              { value: 'none', label: text.decisions.artifacts.none },
+              { value: 'ids', label: text.decisions.artifacts.registry },
+              { value: 'local', label: text.decisions.artifacts.local },
+            ],
+            disabled: isFormReadOnly(),
+            onInput: (next) => {
+              if (next === 'ids') route.artifacts = { kind: 'ids', ids: [] };
+              else if (next === 'local') route.artifacts = { kind: 'local', items: [] };
+              else route.artifacts = null;
+              repaint(path + '.kind');
+            },
+          }),
+          path: path + '.kind',
+          hint: text.decisions.artifacts.hint,
+          issue: issueOf(path + '.kind'),
+        }),
+      );
+      if (shape === 'ids') {
+        const registry = uniqueValues(getForm().artifacts.map((item) => item.id));
+        const unknown = route.artifacts.ids.filter((id) => !registry.includes(id));
+        wrap.append(
+          ui.fieldset(text.stageArtifacts.writes, [
+            checkList({
+              available: [...registry, ...unknown],
+              selected: route.artifacts.ids,
+              path: path + '.ids',
+              onToggle: (id, checked) => {
+                const ids = route.artifacts.ids;
+                if (checked && !ids.includes(id)) ids.push(id);
+                if (!checked) route.artifacts.ids = ids.filter((value) => value !== id);
+              },
+              unknownValues: unknown,
+            }),
+          ], { path: path + '.ids', issue: issueOf(path + '.ids') }),
+        );
+      } else if (shape === 'local') {
+        route.artifacts.items.forEach((item, itemIndex) => {
+          const itemPath = path + '.' + itemIndex;
+          wrap.append(
+            ui.group(text.decisions.artifacts.heading(itemIndex + 1), undefined, {
+              card: true,
+              actions: [
+                ui.removeButton(copy.remove('artifact', itemIndex + 1), () => {
+                    route.artifacts.items.splice(itemIndex, 1);
+                    edited(path);
+                  }, isFormReadOnly()),
+              ],
+              children: [
+                ui.grid([
+                  ui.field({
+                    label: text.artifactFields.id.label,
+                    control: ui.text({
+                      value: item.id,
+                      path: itemPath + '.id',
+                      placeholder: text.artifactFields.id.placeholder,
+                      disabled: isFormReadOnly(),
+                      onInput: (next) => {
+                        item.id = next;
+                      },
+                    }),
+                    path: itemPath + '.id',
+                    issue: issueOf(itemPath + '.id'),
+                  }),
+                  ui.field({
+                    label: text.artifactFields.file.label,
+                    control: ui.text({
+                      value: item.file,
+                      path: itemPath + '.file',
+                      placeholder: text.artifactFields.file.placeholder,
+                      disabled: isFormReadOnly(),
+                      onInput: (next) => {
+                        item.file = next;
+                      },
+                    }),
+                    path: itemPath + '.file',
+                    issue: issueOf(itemPath + '.file'),
+                  }),
+                  ui.field({
+                    label: text.artifactFields.description.label,
+                    control: ui.text({
+                      value: item.description,
+                      path: itemPath + '.description',
+                      placeholder: text.artifactFields.description.placeholder,
+                      disabled: isFormReadOnly(),
+                      onInput: (next) => {
+                        item.description = next;
+                      },
+                    }),
+                    path: itemPath + '.description',
+                    wide: true,
+                    issue: issueOf(itemPath + '.description'),
+                  }),
+                ]),
+              ],
+            }),
+          );
+        });
+        wrap.append(
+          ui.addButton(text.decisions.artifacts.add, () => {
+            route.artifacts.items.push({ id: '', file: '', description: '' });
+            edited(path + '.' + (route.artifacts.items.length - 1) + '.id');
+          }, isFormReadOnly()),
+        );
+      }
+      return wrap;
     }
 
     function decisionEditor(stage, index) {
@@ -481,36 +804,60 @@
       (stage.decision || []).forEach((route, routeIndex) => {
         const base = stagePath(index, 'decision') + '.' + routeIndex;
         wrap.append(
-          ui.section('Decision ' + (routeIndex + 1), {
+          ui.section(text.decisions.heading(routeIndex + 1), {
             level: 3,
             variant: 'card',
             accent: true,
             actions: [
-              action('Remove decision', 'quiet', () => {
-                stage.decision.splice(routeIndex, 1);
-                edited(stagePath(index, 'decision'));
-              }, isFormReadOnly()),
+              ui.removeButton(copy.remove('decision', routeIndex + 1), () => {
+                  stage.decision.splice(routeIndex, 1);
+                  edited(stagePath(index, 'decision'));
+                }, isFormReadOnly()),
             ],
             children: [
               ui.grid([
-                field('Decision', textControl(route.value, base + '.value', (next) => {
-                  route.value = next;
-                }, { placeholder: 'approved' }), base + '.value'),
+                ui.field({
+                  label: text.decisions.decision.label,
+                  control: ui.text({
+                    value: route.value,
+                    path: base + '.value',
+                    placeholder: text.decisions.decision.placeholder,
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      route.value = next;
+                    },
+                  }),
+                  path: base + '.value',
+                  issue: issueOf(base + '.value'),
+                }),
                 navigationEditor(route, base + '.navigate', stage.id),
               ]),
               ui.grid([
-                field('Choose when', textControl(route.when, base + '.when', (next) => {
-                  route.when = next;
-                }, { placeholder: 'The work meets the task' }), base + '.when', undefined, true),
+                ui.field({
+                  label: text.decisions.when.label,
+                  control: ui.text({
+                    value: route.when,
+                    path: base + '.when',
+                    placeholder: text.decisions.when.placeholder,
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      route.when = next;
+                    },
+                  }),
+                  path: base + '.when',
+                  wide: true,
+                  issue: issueOf(base + '.when'),
+                }),
               ]),
+              routeArtifactsEditor(route, base),
             ],
           }),
         );
       });
       wrap.append(
-        ui.addButton('Add decision', () => {
+        ui.addButton(text.decisions.add, () => {
           stage.decision = stage.decision || [];
-          stage.decision.push({ value: '', when: '', navigate: '' });
+          stage.decision.push({ value: '', when: '', navigate: '', artifacts: null });
           edited(stagePath(index, 'decision') + '.' + (stage.decision.length - 1) + '.value');
         }, isFormReadOnly()),
       );
@@ -518,40 +865,71 @@
     }
 
     function decisionsGroup(stage, index) {
-      return ui.group('Decisions', 'Route the workflow from this stage; without one it completes when it finishes.', {
+      return ui.group(text.decisions.title, text.decisions.note, {
         children: [decisionEditor(stage, index)],
       });
     }
 
     function stageAdvanced(stage, index) {
-      const advanced = details('stage:' + index + ':advanced', 'Advanced settings', 'wf-advanced', false);
-      const body = el('div', null, 'wf-advanced-body');
+      const facts = [];
+      if (stage.verify.length > 0) facts.push(text.stages.advancedFacts.verifyCommands(stage.verify.length));
+      if (stage.runWhenPaths.length > 0) facts.push(text.stages.advancedFacts.pathFilters(stage.runWhenPaths.length));
+      const heading = el('span', text.advanced.title);
+      if (facts.length > 0) heading.append(el('span', facts.join(', '), 'mg-summary'));
+      const advanced = details('stage:' + index + ':advanced', heading, 'wf-advanced', false);
+      const body = el('div', null, 'wf-advanced-body mg-stack');
       body.append(
         ui.grid([
-          field('Verify timeout', numberControl(stage.verifyTimeout, stagePath(index, 'verifyTimeout'), (next) => {
-            stage.verifyTimeout = next;
-          }, 'seconds'), stagePath(index, 'verifyTimeout'), 'Requires at least one verify command.'),
-          field('Max verify runs', numberControl(stage.maxVerify, stagePath(index, 'maxVerify'), (next) => {
-            stage.maxVerify = next;
-          }, '3'), stagePath(index, 'maxVerify'), 'Requires at least one verify command.'),
+          ui.field({
+            label: text.advanced.verifyTimeout.label,
+            control: ui.number({
+              value: stage.verify_timeout,
+              path: stagePath(index, 'verify_timeout'),
+              placeholder: text.advanced.verifyTimeout.placeholder,
+              disabled: isFormReadOnly(),
+              onInput: (next) => {
+                stage.verify_timeout = next;
+              },
+            }),
+            path: stagePath(index, 'verify_timeout'),
+            hint: text.advanced.verifyTimeout.hint,
+            issue: issueOf(stagePath(index, 'verify_timeout')),
+          }),
+          ui.field({
+            label: text.advanced.maxVerify.label,
+            control: ui.number({
+              value: stage.max_verify,
+              path: stagePath(index, 'max_verify'),
+              placeholder: text.advanced.maxVerify.placeholder,
+              disabled: isFormReadOnly(),
+              onInput: (next) => {
+                stage.max_verify = next;
+              },
+            }),
+            path: stagePath(index, 'max_verify'),
+            hint: text.advanced.maxVerify.hint,
+            issue: issueOf(stagePath(index, 'max_verify')),
+          }),
         ]),
       );
       body.append(
-        textList(stage.verify, {
+        textList({
+          values: stage.verify,
           path: stagePath(index, 'verify'),
-          label: 'Verify commands',
-          placeholder: 'pnpm test',
-          addLabel: 'Add command',
-          itemLabel: 'verify command',
+          label: text.advanced.verifyCommands.label,
+          placeholder: text.advanced.verifyCommands.placeholder,
+          addLabel: text.advanced.verifyCommands.add,
+          itemLabel: text.advanced.verifyCommands.item,
         }),
       );
       body.append(
-        textList(stage.runWhenPaths, {
+        textList({
+          values: stage.runWhenPaths,
           path: stagePath(index, 'runWhenPaths'),
-          label: 'Run only when these paths changed',
-          placeholder: 'docs/**/*',
-          addLabel: 'Add path',
-          itemLabel: 'path',
+          label: text.advanced.runWhenPaths.label,
+          placeholder: text.advanced.runWhenPaths.placeholder,
+          addLabel: text.advanced.runWhenPaths.add,
+          itemLabel: text.advanced.runWhenPaths.item,
         }),
       );
       advanced.append(body);
@@ -559,135 +937,261 @@
     }
 
     function renderStage(stage, index) {
-      const box = ui.collapsibleCard({
+      const describe = () => ({
+        title: stageLabel(stage, index),
+        warn: !stage.id || stageErrorCount(index) > 0,
+        summary: stageSummary(stage),
+        alerts: stageAlerts(stage, index),
+      });
+      const box = track(ui.collapsibleCard({
         key: 'stage:' + index,
         number: index + 1,
-        title: stageLabel(stage, index),
-        warn: !stage.id,
-        chips: stageChips(stage),
-        open: index === 0,
+        path: stagePath(index, 'card'),
+        ...describe(),
+        describe,
+        tools: stageTools(index),
         body: [
-          stageTools(index),
           identityGroup(stage, index),
           ...(stage.agentMode === 'inline' ? [inlineAgentEditor(stage, index)] : []),
+          artifactsGroup(stage, index),
           dependenciesGroup(stage, index),
           instructionsGroup(stage, index),
           decisionsGroup(stage, index),
           stageAdvanced(stage, index),
         ],
-      });
+      }));
       box.id = 'stage-' + index;
       return box;
     }
 
-    function renderOutputs() {
+    function renderArtifacts() {
       const form = getForm();
       const children = [];
-      if (form.outputs.length === 0) children.push(el('p', 'No published outputs.', 'mg-empty'));
-      form.outputs.forEach((output, index) => {
+        form.artifacts.forEach((item, index) => {
+        const base = 'artifacts.' + index;
+        const originalId = item.id;
+        const idControl = ui.text({
+          value: item.id,
+          path: base + '.id',
+          placeholder: text.artifacts.id.placeholder,
+          disabled: isFormReadOnly(),
+          onInput: (next) => {
+            item.id = next;
+          },
+        });
+        idControl.addEventListener('change', () => {
+          const next = idControl.value.trim();
+          if (next !== idControl.value) idControl.value = next;
+          item.id = next;
+          ops.renameArtifactReferences(getForm(), originalId, next);
+          repaint(base + '.id');
+        });
+        const describe = () => ({
+          title: item.id || text.artifacts.heading(index + 1),
+          warn: errorCount('artifacts.' + index + '.') > 0,
+          summary: artifactSummary(item),
+          alerts: alertChips(errorCount('artifacts.' + index + '.')),
+        });
         children.push(
-          ui.group('Output ' + (index + 1), undefined, {
-            card: true,
-            actions: [
-              action('Remove output', 'quiet', () => {
-                form.outputs.splice(index, 1);
-                edited('outputs');
-              }, isFormReadOnly()),
-            ],
-            children: [
+          track(ui.collapsibleCard({
+            key: 'artifact:' + index,
+            number: index + 1,
+            ...describe(),
+            describe,
+            tools: listTools('artifacts', 'artifact', index, () => {
+              form.artifacts.splice(index, 1);
+              edited('artifacts');
+            }),
+            body: [
               ui.grid([
-                field('Name', textControl(output.name, 'outputs.' + index + '.name', (next) => {
-                  output.name = next;
-                }, { placeholder: 'plan', list: 'wf-output-names' }), 'outputs.' + index + '.name'),
-                field('From stage', selectControl(output.fromStage, 'outputs.' + index + '.fromStage', outputStageOptions(output.fromStage), (next) => {
-                  const stage = getForm().stages.find((candidate) => candidate.id === next);
-                  const artifact = stage && stage.producesArtifact !== '' ? stage.producesArtifact : '';
-                  output.fromStage = next;
-                  if (artifact !== '') {
-                    output.artifact = artifact;
-                    if (output.name === '') output.name = artifactBaseName(artifact);
-                  }
-                  repaint('outputs.' + index + '.fromStage');
-                }), 'outputs.' + index + '.fromStage'),
-                field('Artifact', selectControl(output.artifact, 'outputs.' + index + '.artifact', outputArtifactOptions(output), (next) => {
-                  output.artifact = next;
-                  if (output.name === '') output.name = artifactBaseName(next);
-                  repaint('outputs.' + index + '.artifact');
-                }), 'outputs.' + index + '.artifact', 'Must match the source stage\'s produces.artifact.'),
+                ui.field({
+                  label: text.artifacts.id.label,
+                  control: idControl,
+                  path: base + '.id',
+                  hint: text.artifacts.id.hint,
+                  issue: issueOf(base + '.id'),
+                }),
+                ui.field({
+                  label: text.artifacts.file.label,
+                  control: ui.text({
+                    value: item.file,
+                    path: base + '.file',
+                    placeholder: text.artifacts.file.placeholder,
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      item.file = next;
+                    },
+                  }),
+                  path: base + '.file',
+                  hint: text.artifacts.file.hint,
+                  issue: issueOf(base + '.file'),
+                }),
+                ui.field({
+                  label: text.artifacts.required.label,
+                  control: ui.select({
+                    value: item.required === null ? '' : String(item.required),
+                    path: base + '.required',
+                    options: [
+                      { value: '', label: text.artifacts.required.options.default },
+                      { value: 'true', label: text.artifacts.required.options.required },
+                      { value: 'false', label: text.artifacts.required.options.optional },
+                    ],
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      item.required = next === '' ? null : next === 'true';
+                    },
+                  }),
+                  path: base + '.required',
+                  hint: text.artifacts.required.hint,
+                  issue: issueOf(base + '.required'),
+                }),
+                ui.field({
+                  label: text.artifacts.description.label,
+                  control: ui.text({
+                    value: item.description,
+                    path: base + '.description',
+                    placeholder: text.artifacts.description.placeholder,
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      item.description = next;
+                    },
+                  }),
+                  path: base + '.description',
+                  wide: true,
+                  issue: issueOf(base + '.description'),
+                }),
               ]),
             ],
-          }),
+          })),
         );
       });
-      return ui.section('Outputs', {
-        note: 'Artifacts the workflow publishes and the stage each one comes from.',
-        actions: [
-          action('Add output', 'secondary', () => {
-            form.outputs.push({ name: '', fromStage: '', artifact: '' });
-            edited('outputs.' + (form.outputs.length - 1) + '.fromStage');
-          }, isFormReadOnly()),
+      const count = String(form.artifacts.length);
+      return ui.section(text.artifacts.title, {
+        count,
+        note: text.artifacts.note,
+        children: [
+          ...children,
+          ui.addBlockButton(text.artifacts.add, () => {
+            form.artifacts.push({ id: '', file: '', description: '', required: null });
+            edited('artifacts.' + (form.artifacts.length - 1) + '.id');
+          }, isFormReadOnly(), {
+            empty: form.artifacts.length === 0 ? text.artifacts.empty : undefined,
+          }),
         ],
-        children,
       });
     }
 
     function renderDownstream() {
       const form = getForm();
       const children = [];
-      if (form.downstream.length === 0) children.push(el('p', 'No downstream suggestions.', 'mg-empty'));
       form.downstream.forEach((target, index) => {
-        target.artifacts = target.artifacts || [];
+        const describe = () => ({
+          title: target.workflow || text.downstream.heading(index + 1),
+          warn: errorCount('downstream.' + index + '.') > 0,
+          summary: downstreamSummary(target),
+          alerts: alertChips(errorCount('downstream.' + index + '.')),
+        });
         children.push(
-          ui.group('Suggestion ' + (index + 1), undefined, {
-            card: true,
-            actions: [
-              action('Remove suggestion', 'quiet', () => {
-                form.downstream.splice(index, 1);
-                edited('downstream');
-              }, isFormReadOnly()),
-            ],
-            children: [
+          track(ui.collapsibleCard({
+            key: 'downstream:' + index,
+            number: index + 1,
+            ...describe(),
+            describe,
+            tools: listTools('downstream', 'suggestion', index, () => {
+              form.downstream.splice(index, 1);
+              edited('downstream');
+            }),
+            body: [
               ui.grid([
-                field('Workflow', selectControl(target.workflow, 'downstream.' + index + '.workflow', workflowOptions(target.workflow), (next) => {
-                  target.workflow = next;
-                }), 'downstream.' + index + '.workflow'),
-                field('Task', textControl(target.task, 'downstream.' + index + '.task', (next) => {
-                  target.task = next;
-                }, { placeholder: 'Implement the approved draft.' }), 'downstream.' + index + '.task', undefined, true),
+                ui.field({
+                  label: text.downstream.workflow.label,
+                  control: ui.select({
+                    value: target.workflow,
+                    path: 'downstream.' + index + '.workflow',
+                    options: workflowOptions(target.workflow),
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      target.workflow = next;
+                    },
+                  }),
+                  path: 'downstream.' + index + '.workflow',
+                  issue: issueOf('downstream.' + index + '.workflow'),
+                }),
+                ui.field({
+                  label: text.downstream.task.label,
+                  control: ui.text({
+                    value: target.task,
+                    path: 'downstream.' + index + '.task',
+                    placeholder: text.downstream.task.placeholder,
+                    disabled: isFormReadOnly(),
+                    onInput: (next) => {
+                      target.task = next;
+                    },
+                  }),
+                  path: 'downstream.' + index + '.task',
+                  wide: true,
+                  issue: issueOf('downstream.' + index + '.task'),
+                }),
               ]),
-              pairList(
-                target.artifacts,
-                'downstream.' + index + '.artifacts',
-                'Artifacts',
-                'destination key',
-                'output name',
-                outputNameOptions,
-                undefined,
-                'Add artifact',
-              ),
+              ui.field({
+                label: text.downstream.mapping.label,
+                control: ui.select({
+                  value: target.artifacts === null ? 'all' : 'map',
+                  path: 'downstream.' + index + '.mode',
+                  options: [
+                    { value: 'all', label: text.downstream.mapping.all },
+                    { value: 'map', label: text.downstream.mapping.map },
+                  ],
+                  disabled: isFormReadOnly(),
+                  onInput: (next) => {
+                    target.artifacts = next === 'all' ? null : [];
+                    repaint('downstream.' + index + '.mode');
+                  },
+                }),
+                path: 'downstream.' + index + '.mode',
+                hint: text.downstream.mapping.hint,
+                wide: true,
+                issue: issueOf('downstream.' + index + '.mode'),
+              }),
+              ...(target.artifacts === null
+                ? []
+                : [
+                    ui.pairList({
+                      pairs: target.artifacts,
+                      path: 'downstream.' + index + '.artifacts',
+                      label: text.downstream.artifacts.label,
+                      itemLabel: text.downstream.artifacts.item,
+                      keyPlaceholder: text.downstream.artifacts.keyPlaceholder,
+                      valuePlaceholder: text.downstream.artifacts.valuePlaceholder,
+                      valueOptions: artifactIdOptions,
+                      addLabel: text.downstream.artifacts.add,
+                      disabled: isFormReadOnly(),
+                      onEdit,
+                      onRestructure: repaint,
+                    }),
+                  ]),
             ],
-          }),
+          })),
         );
       });
-      return ui.section('Downstream', {
-        note: 'Workflows the reader is offered after this one completes.',
-        actions: [
-          action('Add suggestion', 'secondary', () => {
-            form.downstream.push({ workflow: '', task: '', artifacts: [] });
+      const count = String(form.downstream.length);
+      return ui.section(text.downstream.title, {
+        count,
+        note: text.downstream.note,
+        children: [
+          ...children,
+          ui.addBlockButton(text.downstream.add, () => {
+            form.downstream.push({ workflow: '', task: '', artifacts: null });
             edited('downstream.' + (form.downstream.length - 1) + '.workflow');
-          }, isFormReadOnly()),
+          }, isFormReadOnly(), {
+            empty: form.downstream.length === 0 ? text.downstream.empty : undefined,
+          }),
         ],
-        children,
       });
     }
 
     function datalists() {
       const holder = el('div');
-      const names = getForm().outputs.flatMap((output) => [
-        output.name,
-        output.artifact === '' ? '' : artifactBaseName(output.artifact),
-      ]);
-      holder.append(ui.datalist('wf-output-names', uniqueValues(names)));
       holder.append(ui.datalist('wf-efforts', EFFORT_SUGGESTIONS));
       getForm().stages.forEach((stage, index) => {
         holder.append(
@@ -698,12 +1202,20 @@
     }
 
     /**
-     * The whole Design view: datalists, Basics, Stages, Outputs and Downstream, inside one form root that reports
+     * The whole Design view: datalists, Basics, Artifacts, Stages and Downstream, inside one form root that reports
      * every value edit through `onEdit`.
      */
     function render() {
-      const nodes = [datalists(), renderBasics(), renderStages(), renderOutputs(), renderDownstream()];
-      return [ui.root(nodes, { onEdit })];
+      cards = [];
+      const nodes = [datalists(), renderBasics(), renderArtifacts(), renderStages(), renderDownstream()];
+      return [
+        ui.root(nodes, {
+          onEdit: () => {
+            onEdit();
+            refreshHeaders();
+          },
+        }),
+      ];
     }
 
     /**

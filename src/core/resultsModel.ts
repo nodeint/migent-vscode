@@ -135,6 +135,8 @@ export function targetState(workflow: string, workflows: readonly WorkflowEntry[
 }
 
 function nextModel(input: ResultsInput): ResultsNext {
+  const status = input.snapshots.find((snapshot) => snapshot.sessionId === input.sessionId)?.status;
+  const published = status === undefined || status === null ? null : status.outputs.map((output) => output.name);
   const read = readNext(input.sessionDirPath);
   const frozen = readFrozenDownstream(input.sessionDirPath);
   const base = { suggestions: [] };
@@ -156,7 +158,7 @@ function nextModel(input: ResultsInput): ResultsNext {
         ...base,
         state: 'ok',
         detail: null,
-        suggestions: markDeclared(read.suggestions, frozen).map((suggestion) => ({
+        suggestions: markDeclared(read.suggestions, frozen, published).map((suggestion) => ({
           workflow: suggestion.workflow,
           task: suggestion.task,
           declared: suggestion.declared,

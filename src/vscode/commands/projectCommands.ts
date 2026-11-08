@@ -1,13 +1,17 @@
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { configPath, MIGENT_DIR, WORKFLOWS_DIRNAME } from '../../core/paths';
+import { configPath, MIGENT_DIR, WORKFLOWS_DIRNAME, workflowsDir } from '../../core/paths';
+import { duplicateWorkflowText, workflowFileName, workflowIdProblem } from '../../core/workflowDraft';
+import type { CapabilityService } from '../capability';
 import { openFile } from '../openFile';
 import { pickProject } from '../pick';
-import type { ProjectRegistry } from '../projects';
+import type { ProjectContext, ProjectRegistry } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
 import type { WorkflowEditorPanels } from '../workflowEditor/panels';
+import { createWorkflowCopy } from './workflowCopy';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -53,11 +57,138 @@ function editWorkflow(editor: WorkflowEditorPanels, arg: unknown): void {
   editor.open({ project: arg.project, file: path.basename(arg.file) });
 }
 
+/** Ask for a workflow id that is path-safe and not used by an existing file; undefined when cancelled. */
+async function askWorkflowId(root: string, title: string, value: string): Promise<string | undefined> {
+  const id = await vscode.window.showInputBox({
+    title,
+    value,
+    prompt: 'The id is also the file name (<id>.yaml).',
+    validateInput: (text) => {
+      const problem = workflowIdProblem(text.trim());
+      if (problem !== null) return problem;
+      const file = workflowFileName(text.trim());
+      return existsSync(path.join(workflowsDir(root), file)) || existsSync(path.join(workflowsDir(root), `${text.trim()}.yml`))
+        ? `.migent/workflows/${file} already exists.`
+        : undefined;
+    },
+  });
+  return id?.trim();
+}
+
+/** Resolve the project and workflow file a command targets: the tree node, else a pick. */
+async function targetWorkflow(
+  registry: ProjectRegistry,
+  arg: unknown,
+  title: string,
+): Promise<{ context: ProjectContext; file: string } | undefined> {
+  if (isMetaFileNode(arg) && arg.kind === 'workflow') {
+    const context = registry.project(arg.project);
+    return context === undefined ? undefined : { context, file: path.basename(arg.file) };
+  }
+  const context = await pickProject(registry);
+  if (context === undefined) return undefined;
+  const { entries } = context.catalog.workflows();
+  if (entries.length === 0) {
+    vscode.window.setStatusBarMessage('This project has no workflow files.', INFO_MESSAGE_MS);
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(
+    entries.map((entry) => ({ label: entry.state === 'ok' ? entry.id : entry.file, description: entry.file, entry })),
+    { title },
+  );
+  return picked === undefined ? undefined : { context, file: picked.entry.file };
+}
+
+/** Open an unsaved starter draft; the file is written only when the user saves. */
+async function newWorkflow(registry: ProjectRegistry, editor: WorkflowEditorPanels, arg: unknown): Promise<void> {
+  const context = isMetaFileNode(arg) ? registry.project(arg.project) : await pickProject(registry);
+  if (context === undefined) return;
+  const id = await askWorkflowId(context.root, 'New workflow', '');
+  if (id === undefined) return;
+  editor.open({ project: context.key, file: workflowFileName(id) }, { isNew: true });
+}
+
+interface DuplicateDeps {
+  registry: ProjectRegistry;
+  capability: CapabilityService;
+  editor: WorkflowEditorPanels;
+}
+
+function fail(message: string): void {
+  void vscode.window.showErrorMessage(`Workflow not duplicated. ${message}`);
+}
+
+async function createCopy(
+  capability: CapabilityService,
+  context: ProjectContext,
+  draft: { file: string; text: string },
+): Promise<string | null> {
+  let state = capability.state(context.key);
+  if (state.kind === 'checking') state = await capability.windowReady();
+  if (state.kind !== 'ok' || state.launch === undefined) return 'Duplicating needs a usable Migent CLI.';
+  return createWorkflowCopy(state.launch, context.root, draft);
+}
+
+/** Copy the saved file under a new id. */
+async function duplicateWorkflow(deps: DuplicateDeps, arg: unknown): Promise<void> {
+  const target = await targetWorkflow(deps.registry, arg, 'Duplicate workflow');
+  if (target === undefined) return;
+  const { context, file } = target;
+  let text: string;
+  try {
+    text = readFileSync(path.join(workflowsDir(context.root), file), 'utf8');
+  } catch (error) {
+    fail(error instanceof Error ? error.message : 'The file cannot be read.');
+    return;
+  }
+  const id = await askWorkflowId(context.root, `Duplicate ${file}`, `${path.basename(file, path.extname(file))}-copy`);
+  if (id === undefined) return;
+  const copy = duplicateWorkflowText(text, id);
+  const newFile = workflowFileName(id);
+  const problem =
+    copy === null
+      ? 'The file is not a workflow mapping.'
+      : await createCopy(deps.capability, context, { file: newFile, text: copy });
+  if (problem !== null) {
+    fail(problem);
+    return;
+  }
+  context.catalog.reloadWorkflow(newFile);
+  deps.editor.open({ project: context.key, file: newFile });
+}
+
+/** Move the workflow file to the Trash after a modal confirmation, then close its page. */
+async function deleteWorkflow(registry: ProjectRegistry, editor: WorkflowEditorPanels, arg: unknown): Promise<void> {
+  const target = await targetWorkflow(registry, arg, 'Delete workflow');
+  if (target === undefined) return;
+  const { context, file } = target;
+  const choice = await vscode.window.showWarningMessage(
+    `Delete workflow ${file}?`,
+    { modal: true, detail: 'The file is moved to the Trash. Existing sessions keep their own frozen copy.' },
+    'Move to Trash',
+  );
+  if (choice !== 'Move to Trash') return;
+  try {
+    await vscode.workspace.fs.delete(vscode.Uri.file(path.join(workflowsDir(context.root), file)), { useTrash: true });
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Workflow not deleted. ${error instanceof Error ? error.message : 'unknown error'}`);
+    return;
+  }
+  editor.close({ project: context.key, file });
+  context.catalog.reloadWorkflow(file);
+}
+
 export function registerProjectCommands(
   registry: ProjectRegistry,
   editor: WorkflowEditorPanels,
+  capability: CapabilityService,
 ): vscode.Disposable[] {
   return [
+    vscode.commands.registerCommand('migent.workflow.new', (arg?: unknown) => newWorkflow(registry, editor, arg)),
+    vscode.commands.registerCommand('migent.workflow.duplicate', (arg?: unknown) =>
+      duplicateWorkflow({ registry, capability, editor }, arg),
+    ),
+    vscode.commands.registerCommand('migent.workflow.delete', (arg?: unknown) => deleteWorkflow(registry, editor, arg)),
     vscode.commands.registerCommand('migent.workflow.edit', (arg?: unknown) => editWorkflow(editor, arg)),
     vscode.commands.registerCommand('migent.workflow.open', (arg?: unknown) => openWorkflow(registry, arg)),
     vscode.commands.registerCommand('migent.openConfig', (arg?: unknown) => openConfig(registry, arg)),

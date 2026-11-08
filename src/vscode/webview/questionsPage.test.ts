@@ -232,7 +232,7 @@ function load() {
     }),
   });
   const media = path.join(__dirname, '../../../media');
-  for (const file of ['shared/icons.js', 'shared/page.js', 'questions/questions.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
+  for (const file of ['shared/icons.js', 'shared/copy.js', 'shared/page.js', 'questions/questions.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   const deliver = (revision: number, next: Record<string, unknown>): void => {
     for (const handler of windowListeners.message ?? []) handler({ data: { type: 'model', revision, identity: { a: 1 }, model: next } });
   };

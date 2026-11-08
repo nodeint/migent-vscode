@@ -1,13 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
-import {
-  type BlockedTarget,
-  blockedTargets,
-  blockKind,
-  describeQuotaWait,
-  quotaWait,
-} from '../../core/replyFlow';
+import { type BlockedTarget, blockedTargets, blockKind } from '../../core/replyFlow';
 import { sessionLabel } from '../../core/sessionPresentation';
 import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
@@ -21,7 +15,6 @@ import { type CommandHost, resolveWith } from './sessionCommands';
 const INFO_MESSAGE_MS = 5000;
 
 const isOrdinaryBlocker = (snapshot: SessionSnapshot): boolean => blockKind(snapshot) === 'blocker';
-const isQuota = (snapshot: SessionSnapshot): boolean => blockKind(snapshot) === 'quota';
 /** Run next stage once: any resumable session, including an ordinary blocker; never a pending human question. */
 const canRunOnce = (snapshot: SessionSnapshot): boolean =>
   blockKind(snapshot) !== 'question' && (CONTINUABLE.has(snapshot.displayState.state) || isOrdinaryBlocker(snapshot));
@@ -48,8 +41,6 @@ function explainNoReply(snapshot: SessionSnapshot): void {
   const label = sessionLabel(snapshot);
   if (kind === 'question') {
     vscode.window.setStatusBarMessage(`Session ${label} is waiting for answers. Use Answer questions.`, INFO_MESSAGE_MS);
-  } else if (kind === 'quota') {
-    vscode.window.setStatusBarMessage(`Session ${label} is waiting for provider quota. Use Retry once the wait is over.`, INFO_MESSAGE_MS);
   } else {
     vscode.window.setStatusBarMessage(`Session ${label} is not blocked, so there is nothing to reply to.`, INFO_MESSAGE_MS);
   }
@@ -136,30 +127,6 @@ async function continueWithoutReply(
   if (choice !== undefined) await control.continueSession(context, snapshot, choice);
 }
 
-/** Retry after a quota wait: never automatic, enabled at `retry_at` or on an explicit retry without one. */
-async function retryQuota(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
-  const wait = quotaWait(snapshot, Date.now());
-  if (wait === null) {
-    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} is not waiting for provider quota.`, INFO_MESSAGE_MS);
-    return;
-  }
-  if (wait.retryAt !== null && !wait.isReady) {
-    vscode.window.setStatusBarMessage(`Retry is available later: ${describeQuotaWait(wait, Date.now())}.`, INFO_MESSAGE_MS);
-    return;
-  }
-  if (!(await control.ensureWritable(context, snapshot))) return;
-  if (wait.retryAt === null) {
-    const picked = await vscode.window.showWarningMessage(
-      'No retry time was recorded for this quota wait. Retry now?',
-      { modal: true },
-      'Retry',
-    );
-    if (picked !== 'Retry') return;
-  }
-  const choice = await chooseWorkflow(control, context, snapshot);
-  if (choice !== undefined) await control.continueSession(context, snapshot, choice);
-}
-
 async function repair(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
   if (!isRepairable(snapshot)) {
     vscode.window.setStatusBarMessage('A running session cannot be repaired. Stop it first.', INFO_MESSAGE_MS);
@@ -207,11 +174,10 @@ const SESSION_ACTIONS: readonly SessionAction[] = [
     isEligible: isOrdinaryBlocker,
     act: continueWithoutReply,
   },
-  { id: 'migent.session.retryQuota', title: 'Retry which session?', isEligible: isQuota, act: retryQuota },
   { id: 'migent.session.repair', title: 'Repair which session?', isEligible: isRepairable, act: repair },
 ];
 
-/** Reply, secondary actions, quota retry and Doctor. Every write goes through `ControlService`'s runner and gate. */
+/** Reply, secondary actions and Doctor. Every write goes through `ControlService`'s runner and gate. */
 export function registerReplyCommands({ host, control, replies, capability }: Deps): vscode.Disposable[] {
   const register = (id: string, run: (arg: unknown) => Promise<void>): vscode.Disposable =>
     vscode.commands.registerCommand(id, run);

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Create, duplicate and delete workflows. New Workflow opens an unsaved starter draft that Save creates, Duplicate
+  copies a workflow's saved file under a new id, and Delete moves it to the Trash after a confirmation. They are in
+  the Workflows view title and row menu, the Command Palette, and the editor page.
+- Require Migent CLI 0.5.1. A client quota failure is now an ordinary failed stage that Continue reruns at once, so the
+  Retry After Quota Wait command, its expiry reminders and the `migent.notifications.quota` setting are removed. The
+  failed notification and the session tooltip name the reset time when the CLI recorded one. A stopped session with a
+  quota event from an older CLI shows as an ordinary stopped session.
+- Edit and save workflow schema 7 in the workflow editor and on the Session workflow page: a top-level Artifacts
+  registry replaces stage `produces` and `outputs`, stages and decisions list artifact ids (a decision may define its
+  own artifacts), and a downstream suggestion may omit its artifact mapping. Workflows on any other schema are shown
+  read-only with a pointer to `migent migrate`, and both pages refuse to save them.
+- Confirm a downstream suggestion against the session's own published outputs when the frozen workflow omits
+  `artifacts` or maps an optional artifact that was not published, so those launches are no longer blocked.
 - Add a workflow editor page whose Design form edits and saves schema 5 workflows. A stage chooses the role's agent, a
   named agent, or a complete inline agent, and Save validates and writes through
   `migent workflow save --preserve-comments` with a base hash. CLI diagnostics are shown on the page, and an invalid

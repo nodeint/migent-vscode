@@ -49,7 +49,7 @@ export function readSessionWorkflow(input: SessionWorkflowInput): SessionWorkflo
   const { snapshot } = input;
   return {
     ...base,
-    canSave: ranStages.length === 0,
+    canSave: base.canSave && ranStages.length === 0,
     sessionId: input.sessionId,
     isLocked: ranStages.length > 0,
     ranStages,

@@ -6,6 +6,7 @@
   'use strict';
 
   const { el, section, connect, details, sessionHeader, icon } = window.MigentPage;
+  const copy = window.MigentCopy;
   const root = document.getElementById('root');
   const numberFormat = new Intl.NumberFormat('en-US');
   const NONE = '—';
@@ -72,12 +73,12 @@
       current: 'metrics',
       tabs: [
         ...(model.meta.pendingQuestions > 0
-          ? [{ key: 'questions', label: 'Questions', onSelect: () => page.send({ intent: 'sessionAction', action: 'answerQuestions' }) }]
+          ? [{ key: 'questions', label: copy.tab.questions, onSelect: () => page.send({ intent: 'sessionAction', action: 'answerQuestions' }) }]
           : []),
-        { key: 'results', label: 'Results', onSelect: () => page.send({ intent: 'openResults' }) },
-        { key: 'metrics', label: 'Metrics' },
-        { key: 'workflow', label: 'Workflow', onSelect: () => page.send({ intent: 'sessionAction', action: 'openWorkflow' }) },
-        { key: 'task', label: 'Task', onSelect: () => page.send({ intent: 'sessionAction', action: 'openTask' }) },
+        { key: 'results', label: copy.tab.results, onSelect: () => page.send({ intent: 'openResults' }) },
+        { key: 'metrics', label: copy.tab.metrics },
+        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.send({ intent: 'sessionAction', action: 'openWorkflow' }) },
+        { key: 'task', label: copy.tab.task, onSelect: () => page.send({ intent: 'sessionAction', action: 'openTask' }) },
       ],
       menuItems: [{ label: 'Open metrics.json', onSelect: () => page.send({ intent: 'openMetricsFile' }) }],
     });
@@ -452,7 +453,7 @@
   }
 
   function renderDetails(model) {
-    const node = details('details', 'Details');
+    const node = details('details', copy.details);
     const body = el('div');
     const facts = el('dl', null, 'metrics-kv');
     fact(facts, 'Session', model.sessionId);
@@ -471,11 +472,11 @@
   function render(model) {
     root.replaceChildren();
     if (model.availability === 'unavailable') {
-      root.append(el('h1', 'Session unavailable', 'mg-title'));
+      root.append(el('h1', copy.sessionUnavailable.title, 'mg-title'));
       root.append(
         el(
           'p',
-          'This session is not loaded, was removed, or is hidden by the session limit. ' + model.sessionId,
+          copy.sessionUnavailable.body(model.sessionId),
           'mg-subtitle',
         ),
       );

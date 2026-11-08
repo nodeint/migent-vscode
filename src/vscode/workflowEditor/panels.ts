@@ -9,6 +9,7 @@ import type { CapabilityState } from '../../cli/version';
 import type { ClientChoice } from '../../core/controlArgs';
 import { workflowsDir } from '../../core/paths';
 import {
+  duplicateArtifactProblem,
   emptyWorkflowForm,
   parseWorkflowAuthoringEnvelope,
   readWorkflowEditor,
@@ -35,13 +36,20 @@ export const WORKFLOW_EDITOR_VIEW_TYPE = 'migent.editWorkflow';
 const PAGE: PageDescriptor = {
   folder: 'workfloweditor',
   styles: ['workflowform.css', 'workfloweditor.css'],
-  scripts: ['workflowmodel.js', 'workflowform.js', 'workfloweditor.js'],
+  scripts: ['workflowcopy.js', 'workflowmodel.js', 'workflowform.js', 'workfloweditor.js'],
   title: 'Workflow',
 };
 
 export const EMPTY_VALIDATION: WorkflowEditorModel['validation'] = { errors: [], warnings: [] };
 
 export const SAVE_TIMEOUT_MS = 30_000;
+
+const UNSAVABLE_MESSAGE =
+  'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
+
+function notifySaveFailed(message: string): void {
+  void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
+}
 
 /** Exit code of a rejected save because the file no longer matches the base hash. */
 export const EXIT_CONFLICT = 3;
@@ -81,6 +89,8 @@ class Entry {
   public validationHash: string | null = null;
   /** One save at a time per page; a second request is ignored while the first is in flight. */
   public saving = false;
+  /** The file does not exist yet; the page edits a starter draft and the first save creates it. */
+  public isNew = false;
   /** Provider suggestions for the inline-agent fields; empty until the client reads answer. */
   public clients: ClientChoice[] = [];
   #lastJson: string | null = null;
@@ -101,7 +111,8 @@ class Entry {
     void this.panel.webview.postMessage({
       type: 'model',
       revision: this.revision,
-      identity: this.identity,
+      // The page persists this identity; `isNew` lets a reloaded window restore an unsaved draft.
+      identity: this.isNew ? { ...this.identity, isNew: true } : this.identity,
       model,
       ...(transient === undefined ? {} : { transient }),
     });
@@ -164,20 +175,10 @@ export function envelopeOf(stdout: string | undefined): ReturnType<typeof parseW
   }
 }
 
-function saveArgs(file: string, baseHash: string): string[] {
-  return [
-    'workflow',
-    'save',
-    '-',
-    '--target',
-    file,
-    '--format',
-    'yaml',
-    '--base-hash',
-    baseHash,
-    '--preserve-comments',
-    '--json',
-  ];
+/** A new file is saved without a base hash, so the CLI creates it and refuses to replace one that appeared. */
+export function saveArgs(file: string, baseHash: string | null): string[] {
+  const base = ['workflow', 'save', '-', '--target', file, '--format', 'yaml'];
+  return baseHash === null ? [...base, '--json'] : [...base, '--base-hash', baseHash, '--preserve-comments', '--json'];
 }
 
 /**
@@ -227,8 +228,13 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     return this.#entries.get(keyOf(identity))?.lastModel ?? null;
   }
 
-  /** Open the page for a workflow file, or reveal the one that exists. */
-  public open(identity: WorkflowEditorIdentity): void {
+  /** Close the page of a workflow file, if open (the file was deleted). */
+  public close(identity: WorkflowEditorIdentity): void {
+    this.#entries.get(keyOf(identity))?.panel.dispose();
+  }
+
+  /** Open the page for a workflow file, or reveal the one that exists. `isNew` edits a draft with no file yet. */
+  public open(identity: WorkflowEditorIdentity, options: { isNew?: boolean } = {}): void {
     if (!isWorkflowEditorIdentity(identity)) return;
     const existing = this.#entries.get(keyOf(identity));
     if (existing !== undefined) {
@@ -245,7 +251,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
       },
     );
-    this.#adopt(panel, identity);
+    this.#adopt(panel, identity, options.isNew === true);
   }
 
   public dispose(): void {
@@ -266,11 +272,14 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       enableScripts: true,
       localResourceRoots: pageResourceRoots(this.#extensionUri, PAGE),
     };
-    this.#adopt(panel, state);
+    // A draft is restored as new; `#input` drops the flag if the file exists by now.
+    const { project, file } = state;
+    this.#adopt(panel, { project, file }, 'isNew' in state && state.isNew === true);
   }
 
-  #adopt(panel: vscode.WebviewPanel, identity: WorkflowEditorIdentity): void {
+  #adopt(panel: vscode.WebviewPanel, identity: WorkflowEditorIdentity, isNew = false): void {
     const entry = new Entry(identity, panel);
+    entry.isNew = isNew;
     const key = keyOf(identity);
     const { webview } = panel;
     this.#entries.set(key, entry);
@@ -303,6 +312,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       await this.#save(identity, message.form, message.baseHash);
       return;
     }
+    if (entry.isNew && message.type !== 'pickModel' && message.type !== 'reload') return;
     const handlers: Record<Exclude<WorkflowEditorMessageType, 'saveForm'>, () => Promise<void> | void> = {
       reload: () => {
         entry.validation = EMPTY_VALIDATION;
@@ -328,7 +338,12 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         }
       },
       pickModel: () => this.#pickInlineModel(identity, entry),
-      duplicate: () => this.#error(identity, 'Duplicating a workflow from the page is not available yet.'),
+      duplicate: async () => {
+        await vscode.commands.executeCommand('migent.workflow.duplicate', { kind: 'workflow', project: identity.project, file });
+      },
+      delete: async () => {
+        await vscode.commands.executeCommand('migent.workflow.delete', { kind: 'workflow', project: identity.project, file });
+      },
     };
     await handlers[message.type]();
   }
@@ -370,21 +385,22 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     entry: Entry,
     request: { rawForm: unknown; baseHash: string },
   ): Promise<void> {
-    if (!identity.file.endsWith('.yaml')) {
-      this.#error(identity, 'Migent can only save .yaml workflow files. Rename this file to .yaml before editing it here.');
+    const form = workflowFormFromClient(request.rawForm);
+    const refusal = saveRefusal(identity, entry.lastModel) ?? duplicateArtifactProblem(form);
+    if (refusal !== null) {
+      this.#saveError(identity, refusal);
       return;
     }
     const context = this.#registry.project(identity.project);
     if (context === undefined) {
-      this.#error(identity, 'The project is no longer available.');
+      this.#saveError(identity, 'The project is no longer available.');
       return;
     }
     const launch = await this.#launch(identity);
     if (launch === null) return;
-    const form = workflowFormFromClient(request.rawForm);
     const draft = workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null);
     entry.publish(entry.lastModel ?? unavailable(identity), true, transient(null, true));
-    const result = await invokeJson(launch, saveArgs(identity.file, request.baseHash), {
+    const result = await invokeJson(launch, saveArgs(identity.file, entry.isNew ? null : request.baseHash), {
       cwd: context.root,
       input: draft,
       timeoutMs: SAVE_TIMEOUT_MS,
@@ -406,9 +422,10 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     const entry = this.#entries.get(keyOf(identity));
     if (entry === undefined) return;
     if (!envelope?.written) {
-      this.#error(identity, 'Migent did not confirm the save.');
+      this.#saveError(identity, 'Migent did not confirm the save.');
       return;
     }
+    entry.isNew = false;
     entry.validation = splitDiagnostics(envelope.diagnostics);
     entry.validationHash = envelope.hash;
     context.catalog.reloadWorkflow(identity.file);
@@ -426,15 +443,18 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       entry.validation = splitDiagnostics(envelope.diagnostics);
       entry.validationHash = entry.lastModel?.savedHash ?? null;
       if (failure.exitCode === EXIT_CONFLICT) {
+        notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
         this.#publishLast(identity, 'The file changed on disk. Reload it from disk before saving again.');
         return;
       }
       if (entry.validation.errors.length > 0) {
+        const count = entry.validation.errors.length;
+        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
         this.#send(identity, true, transient(null));
         return;
       }
     }
-    this.#error(identity, saveFailure(failure.exitCode, failure.stderr));
+    this.#saveError(identity, saveFailure(failure.exitCode, failure.stderr));
   }
 
   /** The launch to use, or an error already posted to the page. */
@@ -443,7 +463,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     if (state.kind === 'checking') state = await this.#capability.windowReady();
     if (state.kind === 'ok' && state.launch !== undefined) return state.launch;
     const diagnostic = describeCapability(state);
-    this.#error(
+    this.#saveError(
       identity,
       `Saving needs a usable Migent CLI. ${diagnostic?.label ?? 'The CLI check has not finished; try again shortly.'}`,
     );
@@ -453,15 +473,20 @@ export class WorkflowEditorPanels implements vscode.Disposable {
   #input(identity: WorkflowEditorIdentity): WorkflowEditorModel | undefined {
     const context = this.#registry.project(identity.project);
     if (context === undefined) return undefined;
-    return readWorkflowEditor({
+    const entry = this.#entries.get(keyOf(identity));
+    const model = readWorkflowEditor({
       projectKey: identity.project,
       projectName: context.folder.name,
       projectRoot: context.root,
       file: identity.file,
       scan: context.catalog.workflows(),
       config: context.catalog.config(),
-      clients: this.#entries.get(keyOf(identity))?.clients ?? [],
+      clients: entry?.clients ?? [],
+      isNew: entry?.isNew === true,
     });
+    // The file exists (saved elsewhere, or a restored draft whose file appeared): it is an ordinary edit now.
+    if (entry !== undefined && model.mode === 'edit') entry.isNew = false;
+    return model;
   }
 
   /** Read the provider list once, then repaint with the suggestions it enables. */
@@ -485,6 +510,12 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     }
     model.validation = entry.validation;
     entry.publish(model, isForced, state);
+  }
+
+  /** A save failure: the page error line plus a toast, so it shows wherever the form is scrolled. */
+  #saveError(identity: WorkflowEditorIdentity, message: string): void {
+    notifySaveFailed(message);
+    this.#error(identity, message);
   }
 
   /** A model message with a page-level error, without replacing the saved model. */
@@ -537,6 +568,18 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       }
     }, 0);
   }
+}
+
+/**
+ * Why a save request must be refused before anything is serialized, or null. The request comes from the webview, so
+ * the page's own disabled state is not trusted: only a published model with `canSave` may be saved.
+ */
+export function saveRefusal(identity: WorkflowEditorIdentity, model: Pick<WorkflowEditorModel, 'canSave'> | null): string | null {
+  if (model?.canSave !== true) return UNSAVABLE_MESSAGE;
+  if (!identity.file.endsWith('.yaml')) {
+    return 'Migent can only save .yaml workflow files. Rename this file to .yaml before editing it here.';
+  }
+  return null;
 }
 
 /** A short, safe description of why the CLI could not save. */

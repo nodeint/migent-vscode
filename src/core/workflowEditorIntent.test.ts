@@ -6,7 +6,7 @@ const HASH = 'a'.repeat(64);
 
 describe('parseWorkflowEditorMessage', () => {
   it('accepts every closed action name', () => {
-    for (const type of ['openFile', 'reload', 'reveal', 'run', 'duplicate', 'pickModel'] as const) {
+    for (const type of ['openFile', 'reload', 'reveal', 'run', 'duplicate', 'delete', 'pickModel'] as const) {
       expect(parseWorkflowEditorMessage({ type })).toEqual({ type });
     }
   });
@@ -27,7 +27,7 @@ describe('parseWorkflowEditorMessage', () => {
   });
 
   it('rejects unknown actions and payload types', () => {
-    expect(parseWorkflowEditorMessage({ type: 'delete' })).toBeNull();
+    expect(parseWorkflowEditorMessage({ type: 'remove' })).toBeNull();
     expect(parseWorkflowEditorMessage({ type: 'path', path: '../../../etc/passwd' })).toBeNull();
     expect(parseWorkflowEditorMessage({})).toBeNull();
     expect(parseWorkflowEditorMessage({ type: 7 })).toBeNull();

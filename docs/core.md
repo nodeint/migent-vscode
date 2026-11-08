@@ -172,8 +172,10 @@ Sessions view, so they are tested without VS Code:
 - Icon: the display state's icon; Unknown uses `question` for an unsupported schema or an unrecognized
   status and `bracket-error` for a missing, unreadable or invalid file.
 - Tooltip: state, reason, workflow, stage and attempt, blockers, pending questions, foreign lock, last
-  update and the small provider-event fields. Missing values read "unavailable". Retry times for a
-  quota wait are not shown: no captured sample records them.
+  update, the small provider-event fields and, for a failed session whose latest execution hit client quota,
+  the failure cause with the reset time when `retry_at` is recorded (`Failed on client quota; resets …`).
+  Missing values read "unavailable". Quota is a failure reason, not a wait: since CLI 0.5.1 `session continue`
+  reruns the stage at once and ignores `retry_at`.
 - `contextValue`: `session.<state>` then `;questions`, `;foreign`, `;outputs`, `;reason-<reason>`.
 - Node ids never include state, and two projects with the same session id get distinct ids.
 - A project shows "No sessions yet" for a missing, empty or marker-less sessions folder, and an error row

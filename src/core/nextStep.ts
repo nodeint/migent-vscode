@@ -78,14 +78,23 @@ export type SuggestionLookup =
   | { kind: 'ok'; suggestion: NextSuggestion }
   | { kind: 'blocked'; reason: string; suggestion: NextSuggestion | null };
 
-export function lookupSuggestion(sessionDirPath: string, targetWorkflow: string): SuggestionLookup {
+/** Published output names of a session; null when the session is not loaded. */
+function publishedNames(source: SessionSnapshot | undefined): string[] | null {
+  return source?.status?.outputs.map((output) => output.name) ?? null;
+}
+
+export function lookupSuggestion(
+  sessionDirPath: string,
+  targetWorkflow: string,
+  published: readonly string[] | null,
+): SuggestionLookup {
   const read = readNext(sessionDirPath);
   if (read.kind === 'missing') return { kind: 'blocked', reason: 'next.json was not found.', suggestion: null };
   if (read.kind !== 'ok') {
     return { kind: 'blocked', reason: 'next.json is unreadable, invalid or unsupported.', suggestion: null };
   }
   const frozen = readFrozenDownstream(sessionDirPath);
-  const marked = markDeclared(read.suggestions, frozen);
+  const marked = markDeclared(read.suggestions, frozen, published);
   const suggestion = marked.find((candidate) => candidate.workflow === targetWorkflow) ?? null;
   if (suggestion === null) {
     return { kind: 'blocked', reason: `${targetWorkflow} is not a suggestion of this session.`, suggestion: null };
@@ -127,7 +136,7 @@ export function launchBlockOf(
 export function buildNextStepModel(input: NextStepInput): NextStepModel {
   const source = input.snapshots.find((candidate) => candidate.sessionId === input.sourceId);
   const target = targetOf(input.workflows, input.targetWorkflow);
-  const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow);
+  const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow, publishedNames(source));
   const suggestion = lookup.suggestion ?? null;
   const suggestedTask = suggestion?.task ?? null;
   const { override } = input;
@@ -172,7 +181,7 @@ export function resolveLaunch(
   requestedTask: string,
 ): { kind: 'ok'; launch: ResolvedLaunch } | { kind: 'blocked'; reason: string } {
   const source = input.snapshots.find((candidate) => candidate.sessionId === input.sourceId);
-  const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow);
+  const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow, publishedNames(source));
   const target = targetOf(input.workflows, input.targetWorkflow);
   const block = launchBlockOf(source, lookup, target);
   if (block !== null || lookup.kind !== 'ok' || target.file === null) {

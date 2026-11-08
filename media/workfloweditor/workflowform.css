@@ -16,12 +16,19 @@ html {
 .wf-decision-list {
   display: flex;
   flex-direction: column;
-  gap: var(--mg-space-3);
+  gap: var(--mg-gap-card);
 }
 
 /* The list spaces its cards itself, so a card's own neighbour margin would double it. */
 .wf-decision-list > .mg-section--card {
   margin-top: 0;
+}
+
+/* A route's artifact editor stacks its type select, checklist or artifact cards with the same gap. */
+.wf-route-artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mg-gap-block);
 }
 
 .wf-advanced {

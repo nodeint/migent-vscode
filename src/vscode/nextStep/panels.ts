@@ -296,7 +296,11 @@ export class NextStepPanels implements vscode.Disposable {
   }
 
   #fingerprint(context: ProjectContext, identity: NextStepIdentity): string {
-    const lookup = lookupSuggestion(sessionDir(context.root, identity.sessionId), identity.workflow);
+    const lookup = lookupSuggestion(
+      sessionDir(context.root, identity.sessionId),
+      identity.workflow,
+      context.store.snapshot(identity.sessionId)?.status?.outputs.map((output) => output.name) ?? null,
+    );
     return fingerprintOf(lookup.suggestion);
   }
 

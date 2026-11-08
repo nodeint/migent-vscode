@@ -2,7 +2,7 @@ import { formatDuration } from './duration';
 import type { ExecutionFile } from './executionFiles';
 import { parseExecutionId } from './executions';
 import type { ExecutionSnapshot, ScanOutcome, SessionSnapshot, UnknownReason } from './model';
-import { blockKind, describeQuotaWait, quotaWait } from './replyFlow';
+import { describeQuotaReset, quotaFailure } from './replyFlow';
 
 /** Plain-text presentation of sessions for tree views. Nothing here reads disk or imports `vscode`. */
 
@@ -140,9 +140,9 @@ function blockerLine(snapshot: SessionSnapshot): string | null {
   return null;
 }
 
-function quotaLine(snapshot: SessionSnapshot, now: number): string | null {
-  const wait = quotaWait(snapshot, now);
-  return wait === null ? null : `Waiting for provider quota: ${describeQuotaWait(wait, now)}`;
+function quotaLine(snapshot: SessionSnapshot): string | null {
+  const failure = quotaFailure(snapshot);
+  return failure === null ? null : `Failed on client quota; ${describeQuotaReset(failure)}`;
 }
 
 function updateLine(snapshot: SessionSnapshot, now: number): string {
@@ -161,7 +161,7 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
     `Workflow: ${snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? UNAVAILABLE}`,
     stageLine(snapshot),
     blockerLine(snapshot),
-    quotaLine(snapshot, now),
+    quotaLine(snapshot),
     questions > 0 ? `Pending questions: ${questions}` : null,
     snapshot.displayState.writable ? null : 'Lock held by another host',
     updateLine(snapshot, now),
@@ -171,11 +171,10 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
   return lines.filter((line): line is string => line !== null).join('\n');
 }
 
-/** `session.<state>` plus `;questions`, `;quota`, `;foreign`, `;outputs`, `;reason-<reason>` in that order. */
+/** `session.<state>` plus `;questions`, `;foreign`, `;outputs`, `;reason-<reason>` in that order. */
 export function sessionContextValue(snapshot: SessionSnapshot): string {
   const flags = [
     pendingQuestionTotal(snapshot) > 0 ? 'questions' : null,
-    blockKind(snapshot) === 'quota' ? 'quota' : null,
     snapshot.displayState.writable ? null : 'foreign',
     (snapshot.status?.outputs.length ?? 0) > 0 ? 'outputs' : null,
     snapshot.displayState.unknownReason === undefined ? null : `reason-${snapshot.displayState.unknownReason}`,

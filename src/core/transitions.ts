@@ -9,7 +9,7 @@ import { blockedTargets, blockKind } from './replyFlow';
 
 /** State-transition notifications (plans/03c-reply-notifications.md §3). No `vscode` import. */
 
-export type NotifyKind = 'blocked' | 'failed' | 'quota' | 'completed';
+export type NotifyKind = 'blocked' | 'failed' | 'completed';
 
 export interface Transition {
   kind: NotifyKind;
@@ -26,23 +26,12 @@ export function currentTransition(project: string, snapshot: SessionSnapshot): T
   const latest = status?.latestExecutionId ?? null;
   switch (snapshot.displayState.state) {
     case 'failed':
-      // A failed execution that is really a quota wait is announced as one, with Retry instead of Continue.
-      return blockKind(snapshot) === 'quota'
-        ? { ...base, kind: 'quota', executionId: latest }
-        : { ...base, kind: 'failed', executionId: latest };
+      return { ...base, kind: 'failed', executionId: latest };
     case 'completed':
       return { ...base, kind: 'completed', executionId: latest };
     case 'blocked':
       return blockKind(snapshot) === 'blocker'
         ? { ...base, kind: 'blocked', executionId: blockedTargets(snapshot)[0]?.executionId ?? latest }
-        : null;
-    case 'stopped':
-      return blockKind(snapshot) === 'quota'
-        ? {
-            ...base,
-            kind: 'quota',
-            executionId: [status?.latestProviderEvent?.executionId, latest].find((id) => typeof id === 'string') ?? null,
-          }
         : null;
     default:
       return null;

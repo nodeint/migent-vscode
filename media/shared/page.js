@@ -3,6 +3,8 @@
 (function () {
   'use strict';
 
+  const copy = window.MigentCopy;
+
   /** Create an element. `text` and `className` are optional. */
   function el(tag, text, className) {
     const node = document.createElement(tag);
@@ -89,12 +91,14 @@
    * A collapsible block (<details>/<summary>) that stays as the user left it across re-renders.
    * The shared chevron has a box of its own, so a header with chips or a wrapped title keeps the arrow on the
    * first line. `summary` is a string, or a node when the header needs a badge and metadata chips.
-   * It starts closed unless `isOpenByDefault` is true and the reader has not toggled it yet.
+   * It starts closed unless `isOpenByDefault` is true and the reader has not toggled it yet. `path` is a
+   * `data-path` on the summary, so a repaint can focus the header without opening the block.
    */
-  function details(key, summary, className, isOpenByDefault) {
+  function details(key, summary, className, isOpenByDefault, path) {
     const node = el('details', null, 'mg-details' + (className ? ' ' + className : ''));
     node.open = detailsOpen.has(key) ? detailsOpen.get(key) === true : isOpenByDefault === true;
     const head = el('summary', null, 'mg-details-summary');
+    if (path) head.dataset.path = path;
     const arrow = el('span', null, 'mg-details-arrow');
     arrow.append(icon('chevron-down'));
     head.append(arrow);
@@ -105,6 +109,21 @@
     node.append(head);
     node.addEventListener('toggle', () => detailsOpen.set(key, node.open));
     return node;
+  }
+
+  /**
+   * Open every collapsible block around `node`, so a control inside a closed card can be focused or scrolled to.
+   * The open state is kept by `details`, so the cards stay open across the repaint that follows. A control in a
+   * card's own header (its summary) is visible while the card is closed, so that card stays as it is; only the
+   * cards around it open.
+   */
+  function openAround(node) {
+    let card = node.closest('details');
+    const summary = node.closest('summary');
+    if (card && summary && summary.parentElement === card) card = card.parentElement && card.parentElement.closest('details');
+    for (; card; card = card.parentElement && card.parentElement.closest('details')) {
+      card.open = true;
+    }
   }
 
   let closeOpenMenu = null;
@@ -350,7 +369,7 @@
 
     const bar = el('div', null, 'mg-tabbar');
     const tabs = el('nav', null, 'mg-tabs');
-    tabs.setAttribute('aria-label', 'Session pages');
+    tabs.setAttribute('aria-label', copy.tabsLabel);
     for (const tab of options.tabs) {
       const node = el('button', tab.label, 'mg-tab');
       node.type = 'button';
@@ -362,11 +381,11 @@
       tabs,
       menuButton({
         label: '⋯',
-        ariaLabel: 'More actions',
+        ariaLabel: copy.menu.label,
         items: [
-          { label: 'View log', onSelect: send('showLog') },
-          { label: 'Copy session ID', onSelect: send('copyId') },
-          { label: 'Reveal in Explorer', onSelect: send('revealInExplorer') },
+          { label: copy.menu.viewLog, onSelect: send('showLog') },
+          { label: copy.menu.copySessionId, onSelect: send('copyId') },
+          { label: copy.menu.revealInExplorer, onSelect: send('revealInExplorer') },
           ...(options.menuItems || []),
         ],
       }),
@@ -376,5 +395,67 @@
     return header;
   }
 
-  window.MigentPage = { el, section, connect, details, menuButton, trackFooter, sessionHeader, icon, statusIndicator, sessionStates: SESSION_STATES };
+  // Tooltip. The native `title` tooltip does not reliably show in a webview, so an element that carries
+  // `data-tip` gets one shared tooltip on hover and on keyboard focus. It is fixed to the viewport, so a card's
+  // `overflow: clip` cannot cut it off. Text goes in with textContent.
+  let tipNode = null;
+  let tipAnchor = null;
+
+  function tipOf(target) {
+    return target && typeof target.closest === 'function' ? target.closest('[data-tip]') : null;
+  }
+
+  function hideTip() {
+    tipAnchor = null;
+    if (tipNode) tipNode.className = 'mg-tooltip';
+  }
+
+  function showTip(anchor) {
+    if (anchor === tipAnchor) return;
+    const text = anchor.getAttribute('data-tip');
+    if (!text) {
+      hideTip();
+      return;
+    }
+    if (!tipNode) {
+      tipNode = el('div', null, 'mg-tooltip');
+      tipNode.setAttribute('role', 'tooltip');
+      document.body.append(tipNode);
+    }
+    tipAnchor = anchor;
+    tipNode.textContent = text;
+    tipNode.className = 'mg-tooltip mg-tooltip--on';
+    const rect = anchor.getBoundingClientRect();
+    const width = tipNode.offsetWidth;
+    const height = tipNode.offsetHeight;
+    const viewport = document.documentElement.clientWidth || width;
+    const gap = 6;
+    const left = Math.max(gap, Math.min(rect.left + rect.width / 2 - width / 2, viewport - width - gap));
+    const above = rect.top - height - gap;
+    tipNode.style.left = left + 'px';
+    tipNode.style.top = (above >= gap ? above : rect.bottom + gap) + 'px';
+  }
+
+  function installTooltips() {
+    if (typeof document.addEventListener !== 'function') return;
+    document.addEventListener('mouseover', (event) => {
+      const anchor = tipOf(event.target);
+      if (anchor) showTip(anchor);
+      else hideTip();
+    });
+    document.addEventListener('focusin', (event) => {
+      const anchor = tipOf(event.target);
+      if (anchor) showTip(anchor);
+    });
+    document.addEventListener('focusout', hideTip);
+    document.addEventListener('mousedown', hideTip);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hideTip();
+    });
+    document.addEventListener('scroll', hideTip, true);
+  }
+
+  installTooltips();
+
+  window.MigentPage = { el, section, connect, details, openAround, menuButton, trackFooter, sessionHeader, icon, statusIndicator, sessionStates: SESSION_STATES };
 })();

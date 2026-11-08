@@ -26,6 +26,7 @@ vi.mock('vscode', () => ({
   },
   commands: { executeCommand: vi.fn() },
   window: {
+    showErrorMessage: vi.fn(),
     registerWebviewPanelSerializer: () => ({ dispose: () => undefined }),
     createWebviewPanel: () => ({
       title: '',
@@ -57,13 +58,13 @@ const { SessionWorkflowPanels } = await import('./panels');
 
 const HASH = 'a'.repeat(64);
 const identity = { project: 'k', sessionId: 's1' };
-const form = { stages: [{ id: 'plan', role: 'dev' }], outputs: [], downstream: [] };
+const form = { stages: [{ id: 'plan', role: 'dev' }], artifacts: [], downstream: [] };
 
-function makeRoot(withExecution: boolean): string {
+function makeRoot(withExecution: boolean, schema = 7): string {
   const root = mkdtempSync(path.join(tmpdir(), 'swp-'));
   const dir = sessionDir(root, 's1');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, 'workflow.yaml'), 'schema_version: 5\nid: a\nstages:\n  - id: plan\n    role: dev\n');
+  writeFileSync(path.join(dir, 'workflow.yaml'), `schema_version: ${schema}\nid: a\nstages:\n  - id: plan\n    role: dev\n`);
   if (withExecution) mkdirSync(path.join(dir, 'executions', '0001-plan--attempt-01'), { recursive: true });
   return root;
 }
@@ -91,9 +92,9 @@ function setup(root: string) {
     transient?: { saving: boolean; error: string | null };
   } => posted.messages.filter((m) => m.type === 'model').at(-1) as never;
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
-  const save = async (): Promise<void> => {
+  const save = async (draft: unknown = form): Promise<void> => {
     await settle();
-    await panels.handle(identity, { type: 'saveForm', form, baseHash: HASH });
+    await panels.handle(identity, { type: 'saveForm', form: draft, baseHash: HASH });
   };
   return { panels, last, save };
 }
@@ -191,6 +192,24 @@ describe('SessionWorkflowPanels save', () => {
     release({ kind: 'ok', value: envelope() });
     await first;
     expect(invoke.json).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a duplicate artifact id before serializing, keeping the draft', async () => {
+    const { save, last } = setup(makeRoot(false));
+    await save({
+      ...form,
+      artifacts: [{ id: 'plan', file: 'a.md' }, { id: 'plan', file: 'b.md' }],
+    });
+    expect(invoke.json).not.toHaveBeenCalled();
+    expect(last().transient?.error).toMatch(/"plan" is used more than once/);
+  });
+
+  it('refuses to save a workflow on an older schema, without calling the CLI', async () => {
+    const { save, last } = setup(makeRoot(false, 6));
+    await save();
+    expect(invoke.json).not.toHaveBeenCalled();
+    expect(last().model.canSave).toBe(false);
+    expect(last().transient?.error).toMatch(/migent migrate/);
   });
 
   it('refuses to save once a stage has run, without calling the CLI', async () => {

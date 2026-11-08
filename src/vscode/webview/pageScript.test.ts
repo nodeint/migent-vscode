@@ -65,7 +65,7 @@ function load() {
       setState: (state: unknown) => states.push(state),
     }),
   });
-  for (const file of ['icons.js', 'page.js']) {
+  for (const file of ['icons.js', 'copy.js', 'page.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, '../../../media/shared', file), 'utf8'), context);
   }
   const page = window.MigentPage as {

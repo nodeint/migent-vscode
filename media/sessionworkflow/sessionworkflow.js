@@ -4,6 +4,7 @@
   'use strict';
 
   const { el, connect, sessionHeader, icon, trackFooter } = window.MigentPage;
+  const copy = window.MigentCopy;
   const ui = window.MigentForm;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const root = document.getElementById('root');
@@ -114,15 +115,15 @@
       meta: model.meta,
       current: 'workflow',
       tabs: [
-        ...(model.meta.pendingQuestions > 0 ? [{ key: 'questions', label: 'Questions', onSelect: action('answerQuestions') }] : []),
-        { key: 'results', label: 'Results', onSelect: action('openResult') },
-        { key: 'metrics', label: 'Metrics', onSelect: action('openMetrics') },
-        { key: 'workflow', label: 'Workflow' },
-        { key: 'task', label: 'Task', onSelect: action('openTask') },
+        ...(model.meta.pendingQuestions > 0 ? [{ key: 'questions', label: copy.tab.questions, onSelect: action('answerQuestions') }] : []),
+        { key: 'results', label: copy.tab.results, onSelect: action('openResult') },
+        { key: 'metrics', label: copy.tab.metrics, onSelect: action('openMetrics') },
+        { key: 'workflow', label: copy.tab.workflow },
+        { key: 'task', label: copy.tab.task, onSelect: action('openTask') },
       ],
       menuItems: [
         { label: 'Open workflow.yaml', onSelect: () => post('openFile') },
-        { label: 'Reload from disk', onSelect: () => post('reload') },
+        { label: copy.menu.reloadFromDisk, onSelect: () => post('reload') },
       ],
     });
   }
@@ -167,7 +168,7 @@
   function footerOptions() {
     const dirty = isDirty();
     return {
-      stateLabel: dirty ? 'Unsaved changes' : '',
+      stateLabel: dirty ? copy.unsavedChanges : '',
       saving: transient.saving,
       canDiscard: dirty,
       canSave: dirty && issues('errors').length === 0,
@@ -193,7 +194,7 @@
     noticesHost = null;
     footerHost = null;
     if (model === null) {
-      root.append(el('p', 'Loading the workflow…', 'mg-muted'));
+      root.append(el('p', copy.loadingWorkflow, 'mg-muted'));
       return;
     }
     noticesHost = ui.notices([]);
@@ -202,7 +203,11 @@
     if (model.canSave && !model.isLocked) root.append(renderFooter());
     if (nextFocus) {
       const node = root.querySelector('[data-path="' + String(nextFocus).replaceAll('"', '') + '"]');
-      if (node) node.focus();
+      if (node) {
+        // A new item starts closed; open the cards around its first control so the reader can type into it.
+        window.MigentPage.openAround(node);
+        node.focus();
+      }
       nextFocus = null;
     }
     trackFooter();
