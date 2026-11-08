@@ -230,7 +230,8 @@ passed through as `[unrecognized] <line>`.
 
 [watchPlan.ts](../src/core/watchPlan.ts) is pure; core creates no watcher.
 `desiredWatches` returns one non-recursive watcher per folder (a folder and a
-pattern without path separators): `.migent/`, `workflows/`, `sessions/`, every
+pattern without path separators): `.migent/` (whose pattern covers `config.yaml` and
+`config.local.yaml`), `workflows/`, `sessions/`, every
 discovered session directory (eligible, hidden or pending) and, only for
 retained targets whose folder exists, `executions/`, one execution directory
 with its `artifacts/`, `turns/` and each `turns/<turn>/` (`verify.md`), and
@@ -238,7 +239,8 @@ with its `artifacts/`, `turns/` and each `turns/<turn>/` (`verify.md`), and
 the set is empty. `anchorWatch` is the registry-owned watcher on the workspace
 root. `diffWatches` compares the set with live watchers.
 
-`classifyPath` maps a changed path to a project, workflow, config or session
+`classifyPath` maps a changed path to a project, workflow, config (`config.yaml` or
+`config.local.yaml`, both a `config` change) or session
 target, or null for paths nobody displays. `routeSessionChanges` reduces the
 changes the [Coalescer](../src/core/coalescer.ts) collected for one session to
 "refresh the snapshot" (manifest, status, lock, cancel request) plus distinct

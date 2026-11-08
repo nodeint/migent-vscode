@@ -70,7 +70,7 @@ function fileItem(node: MetaFileNode): vscode.TreeItem {
   item.tooltip = view.tooltip;
   item.iconPath = icon(view.icon, view.color);
   item.contextValue = view.contextValue;
-  // A missing config has nothing to open; every other row opens its real file.
+  // A missing config has nothing to open; a workflow row opens its editor, the config row the Configuration page.
   if (view.contextValue !== 'config.missing') {
     const command = node.kind === 'workflow' ? 'migent.workflow.edit' : 'migent.openConfig';
     item.command = { command, title: 'Open', arguments: [node] };

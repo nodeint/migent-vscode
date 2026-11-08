@@ -771,6 +771,15 @@ button.mg-row:hover {
   outline-offset: -1px;
 }
 
+/* A disabled control still shows its value; it reads as inherited rather than editable. */
+input.mg-input:disabled,
+textarea.mg-input:disabled,
+select.mg-select:disabled {
+  color: var(--vscode-input-disabledForeground, var(--mg-muted));
+  background: var(--vscode-input-disabledBackground, var(--vscode-input-background));
+  cursor: default;
+}
+
 .mg-textarea {
   min-height: 4.5em;
   resize: vertical;
@@ -851,6 +860,13 @@ button.mg-row:hover {
   gap: var(--mg-space-1);
 }
 
+/* An action that belongs to the field but not to its value (an Override toggle): the far end of the label row. */
+.mg-field-action {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 .mg-label,
 .mg-legend {
   padding: 0;
@@ -859,8 +875,12 @@ button.mg-row:hover {
   font-weight: 500;
 }
 
+/* The legend spans its fieldset, so an action can sit at the far end of the legend row. A legend shrinks to its
+   text by default, so the width is explicit; border-box keeps the list editor's indent from overflowing. */
 .mg-legend {
-  display: inline-flex;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
   align-items: center;
   gap: var(--mg-space-1);
   margin-bottom: var(--mg-space-1);

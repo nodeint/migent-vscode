@@ -1,38 +1,31 @@
 import * as vscode from 'vscode';
 
-import { describeCapability } from '../../cli/capabilityText';
-import { invokeJson } from '../../cli/invoke';
-import type { LaunchSpec } from '../../cli/locate';
-import type { CapabilityState } from '../../cli/version';
 import type { ClientChoice } from '../../core/controlArgs';
 import { workflowDraftPath } from '../../core/paths';
 import { SESSION_ACTIONS } from '../../core/resultsIntent';
 import { readSessionWorkflow, type SessionWorkflowModel } from '../../core/sessionWorkflow';
 import {
   duplicateArtifactProblem,
-  parseWorkflowAuthoringEnvelope,
   workflowDraftFromForm,
   type WorkflowForm,
   workflowFormFromClient,
 } from '../../core/workflowEditor';
 import { parseWorkflowEditorMessage } from '../../core/workflowEditorIntent';
+import {
+  EMPTY_VALIDATION,
+  runAuthoringSave,
+  type SaveOutcome,
+  splitDiagnostics,
+  usableLaunch,
+} from '../authoringSave';
 import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
+import { ClientCatalog } from '../clientCatalog';
 import { pickModel } from '../modelPicker';
 import { openFile } from '../openFile';
 import type { ProjectRegistry } from '../projects';
 import { SESSION_ACTION_COMMANDS } from '../results/panels';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
-import { ClientCatalog } from '../workflowEditor/clientList';
-import {
-  EMPTY_VALIDATION,
-  envelopeOf,
-  EXIT_CONFLICT,
-  SAVE_TIMEOUT_MS,
-  saveFailure,
-  splitDiagnostics,
-} from '../workflowEditor/panels';
-
 export const SESSION_WORKFLOW_VIEW_TYPE = 'migent.sessionWorkflow';
 
 const PAGE: PageDescriptor = {
@@ -321,61 +314,45 @@ export class SessionWorkflowPanels implements vscode.Disposable {
       this.#fail(entry, refusal);
       return;
     }
-    const launch = await this.#launch(entry);
-    if (launch === null) return;
-    this.#publishLast(entry, transient(null, true));
-    const result = await invokeJson(launch, saveArgs(identity.sessionId, request.baseHash), {
-      cwd: context.root,
-      input: workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null),
-      timeoutMs: SAVE_TIMEOUT_MS,
-    });
-    if (this.#entries.get(keyOf(identity)) !== entry) return;
-    if (result.kind === 'ok') this.#saved(identity, entry, parseWorkflowAuthoringEnvelope(result.value));
-    else this.#saveFailed(entry, result.error);
-  }
-
-  #saved(
-    identity: SessionWorkflowIdentity,
-    entry: Entry,
-    envelope: ReturnType<typeof parseWorkflowAuthoringEnvelope>,
-  ): void {
-    if (!envelope?.written) {
-      this.#fail(entry, 'Migent did not confirm the save.');
+    const launched = await usableLaunch(this.capability, entry.identity.project);
+    if ('message' in launched) {
+      this.#fail(entry, launched.message);
       return;
     }
-    entry.setValidation(splitDiagnostics(envelope.diagnostics), envelope.hash);
-    this.#send(identity, true, transient(null));
+    this.#publishLast(entry, transient(null, true));
+    const outcome = await runAuthoringSave(launched.launch, saveArgs(identity.sessionId, request.baseHash), {
+      cwd: context.root,
+      input: workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null),
+    });
+    if (this.#entries.get(keyOf(identity)) !== entry) return;
+    this.#settle(identity, entry, outcome);
   }
 
-  #saveFailed(entry: Entry, error: { exitCode?: number; stderr: string; stdout?: string }): void {
-    const envelope = envelopeOf(error.stdout);
-    if (envelope !== null) {
-      entry.setValidation(splitDiagnostics(envelope.diagnostics), entry.lastModel?.savedHash ?? null);
-      if (error.exitCode === EXIT_CONFLICT) {
+  #settle(identity: SessionWorkflowIdentity, entry: Entry, outcome: SaveOutcome): void {
+    switch (outcome.kind) {
+      case 'written':
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), outcome.envelope.hash);
+        this.#send(identity, true, transient(null));
+        return;
+      case 'unconfirmed':
+        this.#fail(entry, 'Migent did not confirm the save.');
+        return;
+      case 'conflict':
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), entry.lastModel?.savedHash ?? null);
         notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
         this.#publishLast(entry, transient('The file changed on disk. Reload it from disk before saving again.'));
         return;
-      }
-      if (entry.validation.errors.length > 0) {
+      case 'invalid': {
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), entry.lastModel?.savedHash ?? null);
         const count = entry.validation.errors.length;
         notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
         this.#publishLast(entry, transient(null));
         return;
       }
+      case 'failed':
+        this.#fail(entry, outcome.message);
+        return;
     }
-    this.#fail(entry, saveFailure(error.exitCode, error.stderr));
-  }
-
-  async #launch(entry: Entry): Promise<LaunchSpec | null> {
-    let state: CapabilityState = this.capability.state(entry.identity.project);
-    if (state.kind === 'checking') state = await this.capability.windowReady();
-    if (state.kind === 'ok' && state.launch !== undefined) return state.launch;
-    const diagnostic = describeCapability(state);
-    this.#fail(
-      entry,
-      `Saving needs a usable Migent CLI. ${diagnostic?.label ?? 'The CLI check has not finished; try again shortly.'}`,
-    );
-    return null;
   }
 
   #fail(entry: Entry, message: string): void {

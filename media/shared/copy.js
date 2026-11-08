@@ -36,6 +36,23 @@
       body: (sessionId) => 'This session is not loaded, was removed, or is hidden by the session limit. ' + sessionId,
     },
 
+    /** The agent editor shared by the workflow form and the Configuration page. */
+    agent: {
+      model: { label: 'Model', placeholder: 'Choose a model' },
+      effort: {
+        label: 'Effort',
+        placeholder: 'high',
+        hint: 'A value the client supports; doctor reports an invalid one.',
+      },
+      clientOptions: { label: 'Client options', item: 'client options', add: 'Add option' },
+      modelHint: {
+        noClients: 'Client list is not available yet; Reload to try again.',
+        unknown: 'Not in the client list; pick a listed model or edit the file to change it.',
+        known: 'Every client and model migent get models reports.',
+      },
+      named: { none: 'No agents in config', choose: 'Choose an agent', unknown: ' (not in config)' },
+    },
+
     loadingWorkflow: 'Loading the workflow…',
     unsavedChanges: 'Unsaved changes',
     details: 'Details',

@@ -98,7 +98,8 @@ Start from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 | `Migent: Run Workflow…` | Choose a workflow and start a session. |
 | `Migent: Prepare Session…` | Prepare a session so you can edit its task before running. |
 | `Migent: Run Doctor` | Run project diagnostics through the CLI. |
-| `Migent: Open Project Config` | Open the project `config.yaml`. |
+| `Migent: Open Configuration File (YAML)` | Open the project `config.yaml` as a text file. |
+| `Migent: Open Configuration` | Edit `config.yaml` and `config.local.yaml` (agents and roles) in a form. |
 | `Migent: Refresh` | Re-read sessions and workflow definitions from disk. |
 
 Session actions are available from session rows, context menus, and page controls according to the session's state.

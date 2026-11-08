@@ -251,6 +251,8 @@ function load() {
     'shared/copy.js',
     'shared/page.js',
     'shared/form.js',
+    'shared/agentform.js',
+    'shared/draftpage.js',
     'workfloweditor/workflowcopy.js',
     'workfloweditor/workflowmodel.js',
     'workfloweditor/workflowform.js',

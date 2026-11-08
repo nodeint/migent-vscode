@@ -50,7 +50,7 @@ describe('desiredWatches', () => {
       '.migent/sessions/s1',
       '.migent/workflows',
     ]);
-    expect(watches.find((watch) => watch.folder === migent)?.pattern).toBe('{config.yaml,sessions,workflows}');
+    expect(watches.find((watch) => watch.folder === migent)?.pattern).toBe('{config.yaml,config.local.yaml,sessions,workflows}');
     expect(watches.find((watch) => watch.folder === sessions)?.pattern).toBe('*');
     expect(watches.find((watch) => watch.folder === path.join(sessions, 's1'))?.pattern).toBe(
       '{manifest.yaml,status.json,session.lock,cancel.requested,questions.json,next.json,workflow.frozen.yaml,metrics.json,events.jsonl,executions,outputs}',
@@ -153,6 +153,7 @@ describe('classifyPath', () => {
   it('classifies project-level paths', () => {
     expect(classifyPath(root, migent)).toEqual({ kind: 'migent-dir' });
     expect(at('config.yaml')).toEqual({ kind: 'config' });
+    expect(at('config.local.yaml')).toEqual({ kind: 'config' });
     expect(at('sessions')).toEqual({ kind: 'sessions-dir' });
     expect(at('workflows')).toEqual({ kind: 'workflows-dir' });
     expect(at('workflows', 'plan.yaml')).toEqual({ kind: 'workflow', file: 'plan.yaml' });

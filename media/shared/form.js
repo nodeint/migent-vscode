@@ -250,6 +250,8 @@
   /**
    * One labelled control. `options.hint` is a tooltip on the label; `options.issue` is `{ message, warning }` and sets
    * `aria-invalid` and `aria-describedby` on the control. `options.wide` spans every column of a field grid.
+   * `options.action` is a node at the far end of the label row, for a control or state that belongs to the field
+   * but not to its value, such as an Override toggle or an "Overridden" tag.
    */
   function field(options) {
     const wrap = el('div', null, 'mg-field' + (options.wide ? ' mg-field--wide' : ''));
@@ -266,6 +268,11 @@
         head.append(hint(label, options.hint, options.hintWarning, id + '-hint'));
         described.push(id + '-hint');
       }
+    }
+    if (options.action) {
+      const action = el('div', null, 'mg-field-action');
+      action.append(options.action);
+      head.append(action);
     }
     if (head.children.length > 0) wrap.append(head);
     wrap.append(control);
@@ -342,8 +349,9 @@
 
   /**
    * A fieldset with a legend, for a control group inside a larger block. `options.count` is a chip beside the
-   * legend, `options.hint` is a tooltip on the legend text and `options.issue` is rendered as in `field`, against the fieldset
-   * itself, for a group of controls with no input.
+   * legend, `options.hint` is a tooltip on the legend text, `options.action` is a node at the far end of the legend
+   * row and `options.issue` is rendered as in `field`, against the fieldset itself, for a group of controls with no
+   * input.
    */
   function fieldset(legend, children, options) {
     const settings = options || {};
@@ -357,6 +365,11 @@
     if (settings.hint) {
       legendNode.append(hint(legendText, settings.hint, settings.hintWarning, id + '-hint'));
       described.push(id + '-hint');
+    }
+    if (settings.action) {
+      const action = el('span', null, 'mg-field-action');
+      action.append(settings.action);
+      legendNode.append(action);
     }
     node.append(legendNode);
     if (children) node.append(...children);
@@ -471,7 +484,7 @@
   function stringList(options) {
     const values = options.values;
     const wrap = options.label
-      ? fieldset(options.label, [], { className: 'mg-list-editor', count: values.length })
+      ? fieldset(options.label, [], { className: 'mg-list-editor', count: values.length, action: options.action })
       : el('div', null, 'mg-list-editor');
     const itemLabel = options.itemLabel || 'item';
     values.forEach((value, index) => {
@@ -524,7 +537,7 @@
   function pairList(options) {
     const pairs = options.pairs;
     const wrap = options.label
-      ? fieldset(options.label, [], { className: 'mg-list-editor', count: pairs.length })
+      ? fieldset(options.label, [], { className: 'mg-list-editor', count: pairs.length, action: options.action })
       : el('div', null, 'mg-list-editor');
     const itemLabel = options.itemLabel || 'item';
     pairs.forEach((pair, index) => {

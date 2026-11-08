@@ -2,18 +2,12 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { describeCapability } from '../../cli/capabilityText';
-import { invokeJson } from '../../cli/invoke';
-import type { LaunchSpec } from '../../cli/locate';
-import type { CapabilityState } from '../../cli/version';
 import type { ClientChoice } from '../../core/controlArgs';
 import { workflowsDir } from '../../core/paths';
 import {
   duplicateArtifactProblem,
   emptyWorkflowForm,
-  parseWorkflowAuthoringEnvelope,
   readWorkflowEditor,
-  type WorkflowDiagnostic,
   workflowDraftFromForm,
   type WorkflowEditorModel,
   workflowFormFromClient,
@@ -23,13 +17,24 @@ import {
   type WorkflowEditorMessageType,
 } from '../../core/workflowEditorIntent';
 import { isWorkflowFile } from '../../core/workflows';
+import {
+  EMPTY_VALIDATION,
+  envelopeOf,
+  EXIT_CONFLICT,
+  runAuthoringSave,
+  SAVE_TIMEOUT_MS,
+  saveFailure,
+  type SaveOutcome,
+  splitDiagnostics,
+  usableLaunch,
+} from '../authoringSave';
 import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
+import { ClientCatalog } from '../clientCatalog';
 import { pickModel } from '../modelPicker';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
-import { ClientCatalog } from './clientList';
 
 export const WORKFLOW_EDITOR_VIEW_TYPE = 'migent.editWorkflow';
 
@@ -40,9 +45,7 @@ const PAGE: PageDescriptor = {
   title: 'Workflow',
 };
 
-export const EMPTY_VALIDATION: WorkflowEditorModel['validation'] = { errors: [], warnings: [] };
-
-export const SAVE_TIMEOUT_MS = 30_000;
+export { EMPTY_VALIDATION, envelopeOf, EXIT_CONFLICT, SAVE_TIMEOUT_MS, saveFailure, splitDiagnostics };
 
 const UNSAVABLE_MESSAGE =
   'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
@@ -50,9 +53,6 @@ const UNSAVABLE_MESSAGE =
 function notifySaveFailed(message: string): void {
   void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
 }
-
-/** Exit code of a rejected save because the file no longer matches the base hash. */
-export const EXIT_CONFLICT = 3;
 
 /** A workflow file inside one project's `.migent/workflows` folder. */
 export interface WorkflowEditorIdentity {
@@ -153,26 +153,6 @@ interface WorkflowTransient {
 
 function transient(error: string | null, isSaving = false): WorkflowTransient {
   return { saving: isSaving, applying: false, error };
-}
-
-export function splitDiagnostics(diagnostics: WorkflowDiagnostic[]): WorkflowEditorModel['validation'] {
-  return {
-    errors: diagnostics
-      .filter((item) => item.severity === 'error')
-      .map((item) => ({ path: item.path, message: item.message })),
-    warnings: diagnostics
-      .filter((item) => item.severity === 'warning')
-      .map((item) => ({ path: item.path, message: item.message })),
-  };
-}
-
-export function envelopeOf(stdout: string | undefined): ReturnType<typeof parseWorkflowAuthoringEnvelope> {
-  if (stdout === undefined || stdout.trim() === '') return null;
-  try {
-    return parseWorkflowAuthoringEnvelope(JSON.parse(stdout) as unknown);
-  } catch {
-    return null;
-  }
 }
 
 /** A new file is saved without a base hash, so the CLI creates it and refuses to replace one that appeared. */
@@ -396,78 +376,54 @@ export class WorkflowEditorPanels implements vscode.Disposable {
       this.#saveError(identity, 'The project is no longer available.');
       return;
     }
-    const launch = await this.#launch(identity);
-    if (launch === null) return;
+    const launched = await usableLaunch(this.#capability, identity.project);
+    if ('message' in launched) {
+      this.#saveError(identity, launched.message);
+      return;
+    }
     const draft = workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null);
     entry.publish(entry.lastModel ?? unavailable(identity), true, transient(null, true));
-    const result = await invokeJson(launch, saveArgs(identity.file, entry.isNew ? null : request.baseHash), {
-      cwd: context.root,
-      input: draft,
-      timeoutMs: SAVE_TIMEOUT_MS,
-    });
-    const envelope = result.kind === 'ok' ? parseWorkflowAuthoringEnvelope(result.value) : envelopeOf(result.error.stdout);
-    if (result.kind === 'ok') {
-      this.#saved(identity, context, envelope);
-      return;
-    }
-    this.#saveFailed(identity, { exitCode: result.error.exitCode, stderr: result.error.stderr }, envelope);
+    const outcome = await runAuthoringSave(
+      launched.launch,
+      saveArgs(identity.file, entry.isNew ? null : request.baseHash),
+      { cwd: context.root, input: draft },
+    );
+    this.#settle(identity, context, outcome);
   }
 
-  /** Accept only a written result, then repost the file from disk. */
-  #saved(
-    identity: WorkflowEditorIdentity,
-    context: ProjectContext,
-    envelope: ReturnType<typeof parseWorkflowAuthoringEnvelope>,
-  ): void {
+  /** Accept only a written result, then repost the file from disk; every other outcome keeps the draft. */
+  #settle(identity: WorkflowEditorIdentity, context: ProjectContext, outcome: SaveOutcome): void {
     const entry = this.#entries.get(keyOf(identity));
     if (entry === undefined) return;
-    if (!envelope?.written) {
-      this.#saveError(identity, 'Migent did not confirm the save.');
-      return;
-    }
-    entry.isNew = false;
-    entry.validation = splitDiagnostics(envelope.diagnostics);
-    entry.validationHash = envelope.hash;
-    context.catalog.reloadWorkflow(identity.file);
-    this.#send(identity, true, transient(null));
-  }
-
-  #saveFailed(
-    identity: WorkflowEditorIdentity,
-    failure: { exitCode: number | undefined; stderr: string },
-    envelope: ReturnType<typeof parseWorkflowAuthoringEnvelope>,
-  ): void {
-    const entry = this.#entries.get(keyOf(identity));
-    if (entry === undefined) return;
-    if (envelope !== null) {
-      entry.validation = splitDiagnostics(envelope.diagnostics);
-      entry.validationHash = entry.lastModel?.savedHash ?? null;
-      if (failure.exitCode === EXIT_CONFLICT) {
+    switch (outcome.kind) {
+      case 'written':
+        entry.isNew = false;
+        entry.validation = splitDiagnostics(outcome.envelope.diagnostics);
+        entry.validationHash = outcome.envelope.hash;
+        context.catalog.reloadWorkflow(identity.file);
+        this.#send(identity, true, transient(null));
+        return;
+      case 'unconfirmed':
+        this.#saveError(identity, 'Migent did not confirm the save.');
+        return;
+      case 'conflict':
+        entry.validation = splitDiagnostics(outcome.envelope.diagnostics);
+        entry.validationHash = entry.lastModel?.savedHash ?? null;
         notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
         this.#publishLast(identity, 'The file changed on disk. Reload it from disk before saving again.');
         return;
-      }
-      if (entry.validation.errors.length > 0) {
+      case 'invalid': {
+        entry.validation = splitDiagnostics(outcome.envelope.diagnostics);
+        entry.validationHash = entry.lastModel?.savedHash ?? null;
         const count = entry.validation.errors.length;
         notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
         this.#send(identity, true, transient(null));
         return;
       }
+      case 'failed':
+        this.#saveError(identity, outcome.message);
+        return;
     }
-    this.#saveError(identity, saveFailure(failure.exitCode, failure.stderr));
-  }
-
-  /** The launch to use, or an error already posted to the page. */
-  async #launch(identity: WorkflowEditorIdentity): Promise<LaunchSpec | null> {
-    let state: CapabilityState = this.#capability.state(identity.project);
-    if (state.kind === 'checking') state = await this.#capability.windowReady();
-    if (state.kind === 'ok' && state.launch !== undefined) return state.launch;
-    const diagnostic = describeCapability(state);
-    this.#saveError(
-      identity,
-      `Saving needs a usable Migent CLI. ${diagnostic?.label ?? 'The CLI check has not finished; try again shortly.'}`,
-    );
-    return null;
   }
 
   #input(identity: WorkflowEditorIdentity): WorkflowEditorModel | undefined {
@@ -580,15 +536,4 @@ export function saveRefusal(identity: WorkflowEditorIdentity, model: Pick<Workfl
     return 'Migent can only save .yaml workflow files. Rename this file to .yaml before editing it here.';
   }
   return null;
-}
-
-/** A short, safe description of why the CLI could not save. */
-export function saveFailure(exitCode: number | undefined, stderr: string): string {
-  const last = stderr
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
-    .at(-1);
-  if (last !== undefined) return `Could not save: ${last}`;
-  return exitCode === undefined ? 'Could not save: Migent could not be run.' : `Could not save: Migent exited with code ${exitCode}.`;
 }
