@@ -1,6 +1,19 @@
 schema_version: 7
+
+id: plan
+concurrency: 1
 constraints:
   - Plan only. Do not modify source code.
+
+artifacts:
+  plan:
+    file: plan.md
+    required: true
+    description: x
+  plan-comment:
+    file: plan-comments.md
+    required: false
+
 stages:
   - id: plan
     role: planner
@@ -14,6 +27,7 @@ stages:
       - Stay at the architecture level. Exclude implementation steps, code-level details, and test procedures.
       - Resolve substantive review findings when revising.
     artifacts: [ plan ]
+
   - id: review_plan
     role: reviewer
     depends_on:
@@ -39,18 +53,7 @@ stages:
       - approved_with_comments:
           navigate: complete
           artifacts: [ plan-comment ]
+
 downstream:
   - workflow: implement
     task: implement approved workflow
-    artifacts:
-      approved_plan: plan
-artifacts:
-  plan:
-    file: plan.md
-    required: true
-    description: x
-  plan-comment:
-    file: plan-comments.md
-    required: false
-id: plan
-concurrency: 1
