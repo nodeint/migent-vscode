@@ -15,6 +15,7 @@ import { type CommandHost, registerSessionCommands } from './vscode/commands/ses
 import { registerSessionMetricsCommands } from './vscode/commands/sessionMetricsCommands';
 import { registerSessionWorkflowCommands } from './vscode/commands/sessionWorkflowCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
+import { ConfigPanels } from './vscode/config/panels';
 import { ReadOnlyDocsProvider } from './vscode/content/readOnlyDocs';
 import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
@@ -47,6 +48,7 @@ export interface MigentApi {
   workflowsTree: WorkflowsTreeProvider;
   projectTree: ProjectTreeProvider;
   workflowEditor: WorkflowEditorPanels;
+  config: ConfigPanels;
   tails: TailManager;
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
@@ -100,10 +102,11 @@ function createWorkflowPages(
   registry: ProjectRegistry,
   capability: CapabilityService,
   extensionUri: vscode.Uri,
-): { workflowEditor: WorkflowEditorPanels; sessionWorkflow: SessionWorkflowPanels } {
+): { workflowEditor: WorkflowEditorPanels; sessionWorkflow: SessionWorkflowPanels; config: ConfigPanels } {
   return {
     workflowEditor: new WorkflowEditorPanels(registry, capability, extensionUri),
     sessionWorkflow: new SessionWorkflowPanels(registry, capability, extensionUri),
+    config: new ConfigPanels(registry, capability, extensionUri),
   };
 }
 
@@ -176,7 +179,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const contextKeys = new ContextKeys(registry, capability);
   const { sessionsTree, sessionsView } = createSessionsView(registry, capability);
   const { workflowsTree, projectTree } = createProjectTrees(registry);
-  const { workflowEditor, sessionWorkflow } = createWorkflowPages(registry, capability, context.extensionUri);
+  const pages = createWorkflowPages(registry, capability, context.extensionUri);
   const tails = new TailManager(registry);
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
@@ -193,8 +196,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionsView,
     workflowsTree,
     projectTree,
-    workflowEditor,
-    sessionWorkflow,
+    ...Object.values(pages),
     vscode.window.registerTreeDataProvider('migent.workflows', workflowsTree),
     vscode.window.registerTreeDataProvider('migent.project', projectTree),
     tails,
@@ -216,11 +218,11 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     ...registerSessionCommands(host, control.gate),
     ...registerResultsCommands(host, results, nextStep),
     ...registerSessionMetricsCommands(host, sessionMetrics),
-    ...registerSessionWorkflowCommands(host, sessionWorkflow),
+    ...registerSessionWorkflowCommands(host, pages.sessionWorkflow),
     ...registerQuestionCommands(host, answers),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
-    ...registerProjectCommands(registry, workflowEditor, capability),
+    ...registerProjectCommands({ registry, editor: pages.workflowEditor, capability, config: pages.config }),
     ...registerControlCommands(host, control, context.workspaceState),
     ...registerReplyCommands({ host, control, replies, capability }),
   );
@@ -233,8 +235,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionsView,
     workflowsTree,
     projectTree,
-    workflowEditor,
-    sessionWorkflow,
+    ...pages,
     tails,
     sessionDocs,
     logs,

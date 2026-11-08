@@ -76,7 +76,9 @@ const scenarios: Scenario[] = [
       const item = env.api.projectTree.getTreeItem(config);
       assert.equal(item.contextValue, 'config.ok');
       assert.equal(item.command?.command, 'migent.openConfig');
-      await vscode.commands.executeCommand('migent.openConfig', config);
+      await vscode.commands.executeCommand(item.command.command, ...(item.command.arguments ?? []));
+      assert.ok(env.api.config.has(project.key), 'configuration page opened');
+      await vscode.commands.executeCommand('migent.openConfigFile', config);
       assert.equal(activeFile(), vscode.Uri.file(migentPath(env.root, 'config.yaml')).fsPath.toLowerCase());
 
     },

@@ -5,59 +5,36 @@
 
   const { el, connect, sessionHeader, icon, trackFooter } = window.MigentPage;
   const copy = window.MigentCopy;
-  const ui = window.MigentForm;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
+  const draftPage = window.MigentDraftPage;
   const root = document.getElementById('root');
 
   const NO_TRANSIENT = { saving: false, applying: false, error: null };
 
   let model = null;
   let transient = NO_TRANSIENT;
-  let form = emptyForm();
-  let savedForm = emptyForm();
+  const unit = draftPage.createUnit({ empty: emptyForm, normalize: normalizeForm });
   let nextFocus = null;
-  let noticesHost = null;
-  let footerHost = null;
-  /** Stable JSON of the draft last sent to save; edits made after it must survive the save's completion. */
-  let submitted = null;
-  let pendingModelPick = null;
 
   const post = (type, payload) => page.post({ type, ...(payload || {}) });
 
-  /** Stable JSON: key order never makes two equal drafts look different. */
-  function stable(value) {
-    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
-    if (value !== null && typeof value === 'object') {
-      return (
-        '{' +
-        Object.keys(value)
-          .sort()
-          .map((key) => JSON.stringify(key) + ':' + stable(value[key]))
-          .join(',') +
-        '}'
-      );
-    }
-    return JSON.stringify(value);
-  }
-
-  const isDirty = () => model !== null && stable(form) !== stable(savedForm);
+  const isDirty = () => model !== null && unit.isDirty();
 
   const issues = (kind) => (model && model.validation && model.validation[kind]) || [];
 
   function adopt(nextModel, nextTransient) {
     // A save is pending from the click until the host posts its result; background refreshes carry no transient state.
     const hasNewFile = model !== null && model.savedHash !== nextModel.savedHash;
-    const editedSinceSubmit = submitted !== null && stable(form) !== submitted;
+    const editedSinceSubmit = unit.editedSinceSubmit();
     const keepDraft =
       model !== null &&
       !nextModel.isLocked &&
       (hasNewFile ? editedSinceSubmit : isDirty());
     model = nextModel;
     // Only the host's explicit result ends a pending save; a background refresh must not re-enable Save.
-    if (nextTransient !== undefined && !nextTransient.saving) submitted = null;
-    transient = { ...(nextTransient || NO_TRANSIENT), saving: submitted !== null };
-    if (!keepDraft) form = normalizeForm(nextModel.form);
-    savedForm = normalizeForm(nextModel.form);
+    if (nextTransient !== undefined && !nextTransient.saving) unit.submitted = null;
+    transient = { ...(nextTransient || NO_TRANSIENT), saving: unit.submitted !== null };
+    unit.adopt(nextModel.form, keepDraft);
     paint();
   }
 
@@ -65,17 +42,13 @@
     // Diagnostics describe the draft that was saved; any edit makes them stale.
     if (model !== null) model.validation = { errors: [], warnings: [] };
     // Rebuilding the form would drop the focused input; only the notices and footer depend on the edit.
-    if (noticesHost !== null) noticesHost.replaceChildren(...renderNotices());
-    if (footerHost !== null) {
-      fillFooter(footerHost);
-      trackFooter();
-    }
+    chrome.refresh();
   }
 
   function saveWorkflow() {
-    if (submitted !== null) return;
-    submitted = stable(form);
-    post('saveForm', { form, baseHash: model.savedHash });
+    if (unit.submitted !== null) return;
+    unit.markSubmitted();
+    post('saveForm', { form: unit.form, baseHash: model.savedHash });
   }
 
   function repaint(focusPath) {
@@ -85,24 +58,15 @@
 
   const designForm = window.MigentWorkflowForm.create({
     getModel: () => model,
-    getForm: () => form,
+    getForm: () => unit.form,
     issues,
     onEdit: markEdited,
     repaint,
-    pickModel: (index) => {
-      pendingModelPick = index;
-      post('pickModel');
-    },
+    pickModel: (index) => picker.request(index),
   });
 
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    if (!message || message.type !== 'modelPicked' || pendingModelPick === null) return;
-    const index = pendingModelPick;
-    pendingModelPick = null;
-    if (typeof message.client === 'string' && typeof message.model === 'string') {
-      designForm.applyModelPick(index, message.client, message.model);
-    }
+  const picker = draftPage.createPicker(post, (index, message) => {
+    designForm.applyModelPick(index, message.client, message.model);
   });
 
   const action = (name) => () => page.send({ intent: 'sessionAction', action: name });
@@ -173,34 +137,24 @@
       canDiscard: dirty,
       canSave: dirty && issues('errors').length === 0,
       onDiscard: () => {
-        form = normalizeForm(savedForm);
+        unit.discard();
         paint();
       },
       onSave: saveWorkflow,
     };
   }
 
-  function fillFooter(footer) {
-    ui.saveFooter(footerOptions(), footer);
-  }
-
-  function renderFooter() {
-    footerHost = ui.saveFooter(footerOptions());
-    return footerHost;
-  }
+  const chrome = draftPage.createChrome({ renderNotices, footerOptions });
 
   function paint() {
     root.replaceChildren();
-    noticesHost = null;
-    footerHost = null;
+    chrome.reset();
     if (model === null) {
       root.append(el('p', copy.loadingWorkflow, 'mg-muted'));
       return;
     }
-    noticesHost = ui.notices([]);
-    noticesHost.append(...renderNotices());
-    root.append(renderHeader(), noticesHost, ...designForm.render());
-    if (model.canSave && !model.isLocked) root.append(renderFooter());
+    root.append(renderHeader(), chrome.notices(), ...designForm.render());
+    if (model.canSave && !model.isLocked) root.append(chrome.footer());
     if (nextFocus) {
       const node = root.querySelector('[data-path="' + String(nextFocus).replaceAll('"', '') + '"]');
       if (node) {

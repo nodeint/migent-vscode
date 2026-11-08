@@ -4,47 +4,25 @@
 (function () {
   'use strict';
 
-  const { el, connect, menuButton, icon, trackFooter } = window.MigentPage;
+  const { el, connect, menuButton, icon, trackFooter, pageTabs } = window.MigentPage;
   const copy = window.MigentCopy;
   const ui = window.MigentForm;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
+  const draftPage = window.MigentDraftPage;
   const root = document.getElementById('root');
 
   const NO_TRANSIENT = { saving: false, applying: false, error: null };
 
   let model = null;
   let transient = NO_TRANSIENT;
-  let form = emptyForm();
-  let savedForm = emptyForm();
-  let noticesHost = null;
-  let footerHost = null;
+  const unit = draftPage.createUnit({ empty: emptyForm, normalize: normalizeForm });
   let nextFocus = null;
-  let pendingModelPick = null;
 
   const post = (type, payload) => page.post({ type, ...(payload || {}) });
 
   // ---------- plain data ----------
 
-  /** Stable JSON: key order never makes two equal drafts look different. */
-  function stable(value) {
-    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
-    if (value !== null && typeof value === 'object') {
-      return (
-        '{' +
-        Object.keys(value)
-          .sort()
-          .map((key) => JSON.stringify(key) + ':' + stable(value[key]))
-          .join(',') +
-        '}'
-      );
-    }
-    return JSON.stringify(value);
-  }
-
-  function isDirty() {
-    if (model === null) return false;
-    return stable(form) !== stable(savedForm);
-  }
+  const isDirty = () => model !== null && unit.isDirty();
 
   function issues(kind) {
     return (model && model.validation && model.validation[kind]) || [];
@@ -53,13 +31,11 @@
   // ---------- model and repaint ----------
 
   function adopt(nextModel, nextTransient) {
+    // This page keeps a dirty draft only while the file on disk is the one the draft was started from.
     const keepDraft = model !== null && isDirty() && model.savedHash === nextModel.savedHash;
     model = nextModel;
     transient = nextTransient || NO_TRANSIENT;
-    if (!keepDraft) {
-      form = normalizeForm(nextModel.form);
-    }
-    savedForm = normalizeForm(nextModel.form);
+    unit.adopt(nextModel.form, keepDraft);
     paint();
   }
 
@@ -71,64 +47,37 @@
   function paint() {
     const previous = captureFocus();
     root.replaceChildren();
-    noticesHost = null;
-    footerHost = null;
+    chrome.reset();
     if (model === null) {
       root.append(el('p', copy.loadingWorkflow, 'mg-muted'));
       return;
     }
     root.append(renderHeader());
-    noticesHost = ui.notices([]);
-    noticesHost.append(...renderNotices());
-    root.append(noticesHost);
+    root.append(chrome.notices());
     root.append(...designForm.render());
-    root.append(renderFooter());
+    root.append(chrome.footer());
     restoreFocus(nextFocus !== null ? { path: nextFocus } : previous);
     nextFocus = null;
     trackFooter();
   }
 
-  /** Update the header status and the footer without rebuilding the form. */
-  function refreshChrome() {
-    if (footerHost !== null) {
-      fillFooter(footerHost);
-      trackFooter();
-    }
-  }
-
   function markEdited() {
     // Diagnostics describe the draft that was saved; any edit makes them stale.
     if (model !== null) model.validation = { errors: [], warnings: [] };
-    if (noticesHost !== null) noticesHost.replaceChildren(...renderNotices());
-    refreshChrome();
+    chrome.refresh();
   }
 
   const designForm = window.MigentWorkflowForm.create({
     getModel: () => model,
-    getForm: () => form,
+    getForm: () => unit.form,
     issues,
     onEdit: markEdited,
     repaint,
-    pickModel: requestModelPick,
+    pickModel: (index) => picker.request(index),
   });
 
-  /** Ask the host for a model choice for one stage; the reply writes the draft and preserves every other edit. */
-  function requestModelPick(index) {
-    pendingModelPick = index;
-    post('pickModel');
-  }
-
-  function applyModelPick(message) {
-    const index = pendingModelPick;
-    pendingModelPick = null;
-    if (index === null) return;
-    if (typeof message.client !== 'string' || typeof message.model !== 'string') return;
+  const picker = draftPage.createPicker(post, (index, message) => {
     designForm.applyModelPick(index, message.client, message.model);
-  }
-
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    if (message && message.type === 'modelPicked') applyModelPick(message);
   });
 
   function captureFocus() {
@@ -155,7 +104,7 @@
 
   /** The control an issue path edits, or the nearest one around it; null when the form has none (such as roles). */
   function controlOfIssue(issue) {
-    const parts = window.MigentWorkflowModel.formPathOf(form, issue.path).split('.');
+    const parts = window.MigentWorkflowModel.formPathOf(unit.form, issue.path).split('.');
     while (parts.length > 1) {
       const node = controlAt(parts.join('.'));
       if (node) return node;
@@ -210,28 +159,28 @@
     addFact(
       subtitle,
       'checklist',
-      form.stages.length + (form.stages.length === 1 ? ' stage' : ' stages'),
+      unit.form.stages.length + (unit.form.stages.length === 1 ? ' stage' : ' stages'),
       'Stages in this workflow',
     );
     header.append(subtitle);
 
     const bar = el('div', null, 'mg-tabbar');
-    const tabs = el('nav', null, 'mg-tabs');
-    tabs.setAttribute('aria-label', 'Workflow editor views');
-    const design = el('button', 'Design', 'mg-tab');
-    design.type = 'button';
-    design.setAttribute('aria-current', 'page');
     // YAML is the file itself: the tab opens it in the VS Code editor instead of a page-made editor.
-    const yaml = el('button', 'YAML', 'mg-tab');
-    yaml.type = 'button';
-    if (model.file && model.mode !== 'new') {
-      yaml.title = 'Open the YAML file in the editor';
-      yaml.addEventListener('click', () => post('openFile'));
-    } else {
-      yaml.disabled = true;
-      yaml.title = 'Save the workflow first; it has no file yet';
-    }
-    tabs.append(design, yaml);
+    const hasFile = Boolean(model.file) && model.mode !== 'new';
+    const tabs = pageTabs({
+      label: 'Workflow editor views',
+      current: 'design',
+      tabs: [
+        { key: 'design', label: 'Design' },
+        {
+          key: 'yaml',
+          label: 'YAML',
+          disabled: !hasFile,
+          title: hasFile ? 'Open the YAML file in the editor' : 'Save the workflow first; it has no file yet',
+          onSelect: () => post('openFile'),
+        },
+      ],
+    });
     bar.append(tabs, workflowMenu());
     header.append(bar);
     return header;
@@ -311,11 +260,11 @@
   // ---------- footer ----------
 
   function saveWorkflow() {
-    post('saveForm', { form, baseHash: model.savedHash });
+    post('saveForm', { form: unit.form, baseHash: model.savedHash });
   }
 
   function discardChanges() {
-    form = normalizeForm(savedForm);
+    unit.discard();
     paint();
   }
 
@@ -337,14 +286,7 @@
     };
   }
 
-  function fillFooter(footer) {
-    ui.saveFooter(footerOptions(), footer);
-  }
-
-  function renderFooter() {
-    footerHost = ui.saveFooter(footerOptions());
-    return footerHost;
-  }
+  const chrome = draftPage.createChrome({ renderNotices, footerOptions });
 
   // ---------- start ----------
 

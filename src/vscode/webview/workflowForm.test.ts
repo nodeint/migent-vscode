@@ -176,7 +176,7 @@ function load() {
     window,
     document: { getElementById: (): null => null },
   });
-  for (const file of ['../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/workfloweditor/workflowcopy.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
+  for (const file of ['../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/shared/agentform.js', '../../../media/workfloweditor/workflowcopy.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   return {

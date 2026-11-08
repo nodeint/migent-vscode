@@ -1,0 +1,47 @@
+/* Configuration page layout only. Tokens and components live in media/shared/base.css. */
+
+/* The shared field gap is tight for a form this dense; one step up reads as a label with its own control rather
+   than a line running into it. */
+.mg-field {
+  gap: var(--mg-space-2);
+}
+
+/* Local tab: the Override toggle recedes into the field's label row. A native checkbox is taller than the label
+   line, so it is sized down; otherwise a field with a toggle would be taller than one without. */
+.mg-check--override {
+  color: var(--mg-muted);
+  font-size: 0.85em;
+}
+
+.mg-check--override input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--mg-accent);
+}
+
+/* Project tab: a unit config.local.yaml overrides is tagged at the far end of the label row, where the Local tab
+   keeps its Override toggle, in the warning tone. The warning icon carries the explanation in its tooltip. */
+.mg-override-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  color: var(--mg-warn);
+  font-size: 0.85em;
+}
+
+.mg-override-tag .mg-icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.mg-override-tag:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+  border-radius: var(--mg-radius-sm);
+}
+
+.mg-eyebrow {
+  color: var(--mg-warn);
+  font-weight: 700;
+}

@@ -261,34 +261,6 @@ function agentNameOptions(model, current) {
   return options;
 }
 
-function clientChoices(model) {
-  return model.clients || [];
-}
-
-function clientChoice(model, name) {
-  return clientChoices(model).find((choice) => choice.id === name);
-}
-
-function optionKeySuggestions(model, clientName) {
-  const choice = clientChoice(model, clientName);
-  return choice && Array.isArray(choice.optionKeys) ? choice.optionKeys : [];
-}
-
-function isKnownModel(model, clientName, modelName) {
-  const choice = clientChoice(model, clientName);
-  return Boolean(choice && modelName !== '' && (choice.models || []).includes(modelName));
-}
-
-/** The picker's value: both halves when known, and the missing half named otherwise. */
-function agentModelLabel(agent) {
-  const client = agent.clientType || '';
-  const model = agent.model || '';
-  if (client !== '' && model !== '') return client + ' · ' + model;
-  if (model !== '') return model + ' (no client)';
-  if (client !== '') return client + ' (no model)';
-  return '';
-}
-
 function resumeOptions(form, stage, current) {
   const options = [{ value: '', label: 'No resumed session' }];
   const listed = [];
@@ -338,10 +310,6 @@ function workflowOptions(model, current) {
     stageIds,
     roleOptions,
     agentNameOptions,
-    clientChoices,
-    optionKeySuggestions,
-    isKnownModel,
-    agentModelLabel,
     resumeOptions,
     artifactIdOptions,
     workflowOptions,

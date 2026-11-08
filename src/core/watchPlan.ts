@@ -4,6 +4,7 @@ import type { DirectoryState } from './model';
 import {
   CANCEL_REQUEST_FILENAME,
   CONFIG_FILENAME,
+  CONFIG_LOCAL_FILENAME,
   DIAGNOSTICS_FILENAME,
   EVENTS_FILENAME,
   EXECUTIONS_DIRNAME,
@@ -132,7 +133,7 @@ function detailWatches(input: WatchPlanInput, discovered: ReadonlySet<string>): 
 export function desiredWatches(input: WatchPlanInput): WatchSpec[] {
   if (!input.migentExists) return [];
   const migent = path.join(input.projectRoot, MIGENT_DIR);
-  const watches = [spec(migent, `{${CONFIG_FILENAME},${SESSIONS_DIRNAME},${WORKFLOWS_DIRNAME}}`)];
+  const watches = [spec(migent, `{${CONFIG_FILENAME},${CONFIG_LOCAL_FILENAME},${SESSIONS_DIRNAME},${WORKFLOWS_DIRNAME}}`)];
   if (input.workflowsState !== 'missing') watches.push(spec(path.join(migent, WORKFLOWS_DIRNAME), '*.{yaml,yml}'));
   if (input.sessionsState !== 'missing') {
     const sessions = path.join(migent, SESSIONS_DIRNAME);
@@ -225,7 +226,7 @@ export function classifyPath(projectRoot: string, changedPath: string): Classifi
   const area = at(segments, 1);
   if (area === undefined) return { kind: 'migent-dir' };
   const rest = segments.slice(AREA_DEPTH);
-  if (area === CONFIG_FILENAME) return rest.length === 0 ? { kind: 'config' } : null;
+  if (area === CONFIG_FILENAME || area === CONFIG_LOCAL_FILENAME) return rest.length === 0 ? { kind: 'config' } : null;
   if (area === WORKFLOWS_DIRNAME) {
     const file = at(rest, 0);
     if (file === undefined) return { kind: 'workflows-dir' };

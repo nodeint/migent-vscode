@@ -25,7 +25,8 @@
     "onWebviewPanel:migent.sessionMetrics",
     "onWebviewPanel:migent.nextStep",
     "onWebviewPanel:migent.answerQuestions",
-    "onWebviewPanel:migent.editWorkflow"
+    "onWebviewPanel:migent.editWorkflow",
+    "onWebviewPanel:migent.config"
   ],
   "extensionKind": [
     "workspace"
@@ -190,8 +191,14 @@
         "category": "Migent"
       },
       {
+        "command": "migent.openConfigFile",
+        "title": "Open Configuration File (YAML)",
+        "category": "Migent",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "migent.openConfig",
-        "title": "Open Project Config",
+        "title": "Open Configuration",
         "category": "Migent",
         "icon": "$(settings-gear)"
       },
@@ -371,7 +378,7 @@
         },
         {
           "id": "migent.project",
-          "name": "Project"
+          "name": "Configuration"
         }
       ]
     },

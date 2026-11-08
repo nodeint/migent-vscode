@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { invokeJson } from '../../cli/invoke';
+import { invokeJson } from '../cli/invoke';
 import {
   availableClients,
   type ClientChoice,
@@ -8,10 +8,10 @@ import {
   clientModelsArgs,
   clientOptionsArgs,
   clientsArgs,
-} from '../../core/controlArgs';
-import type { CapabilityService } from '../capability';
-import type { ProjectKey } from '../changes';
-import type { ProjectContext } from '../projects';
+} from '../core/controlArgs';
+import type { CapabilityService } from './capability';
+import type { ProjectKey } from './changes';
+import type { ProjectContext } from './projects';
 
 /** Reading a client's models and native options runs its CLI, so it is slower than a version check. */
 const CLIENTS_TIMEOUT_MS = 60_000;

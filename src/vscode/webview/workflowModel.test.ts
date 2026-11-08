@@ -38,8 +38,6 @@ interface Model {
   renameArtifactReferences: (form: Form, oldId: string, newId: string) => boolean;
   formPathOf: (form: Form, path: string) => string;
   roleOptions: (model: unknown, current: string) => Choice[];
-  isKnownModel: (model: unknown, client: string, name: string) => boolean;
-  agentModelLabel: (agent: { clientType?: string; model?: string }) => string;
   resumeOptions: (form: Form, stage: Stage, current: string) => Choice[];
   artifactIdOptions: (form: Form, current: string) => Choice[];
   workflowOptions: (model: unknown, current: string) => Choice[];
@@ -306,9 +304,5 @@ describe('option lists', () => {
 
   it('derives names and labels', () => {
     expect(model.uniqueValues(['a', '', 'a', 'b'])).toEqual(['a', 'b']);
-    expect(model.agentModelLabel({ clientType: 'codex', model: 'gpt-5' })).toBe('codex · gpt-5');
-    expect(model.agentModelLabel({ model: 'gpt-5' })).toBe('gpt-5 (no client)');
-    expect(model.isKnownModel({ clients: [{ id: 'codex', models: ['gpt-5'] }] }, 'codex', 'gpt-5')).toBe(true);
-    expect(model.isKnownModel({ clients: [] }, 'codex', 'gpt-5')).toBe(false);
   });
 });

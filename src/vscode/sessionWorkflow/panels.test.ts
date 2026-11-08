@@ -100,6 +100,7 @@ function setup(root: string) {
 }
 
 const envelope = (extra: Record<string, unknown> = {}) => ({
+  schema_version: 1,
   valid: true,
   diagnostics: [],
   hash: 'b'.repeat(64),

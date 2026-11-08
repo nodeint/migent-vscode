@@ -344,6 +344,25 @@
    *   needs no `onSelect`.
    * - `options.sendAction(name)` runs a session action; it defaults to `page.send` of a `sessionAction` intent.
    */
+  /**
+   * The page tabs: a `nav` of `mg-tab` buttons, the current one marked with `aria-current`.
+   * `tabs` is `[{ key, label, onSelect, disabled, title }]`; the current tab is not clickable.
+   */
+  function pageTabs(options) {
+    const tabs = el('nav', null, 'mg-tabs');
+    tabs.setAttribute('aria-label', options.label);
+    for (const tab of options.tabs) {
+      const node = el('button', tab.label, 'mg-tab');
+      node.type = 'button';
+      if (tab.title) node.title = tab.title;
+      if (tab.key === options.current) node.setAttribute('aria-current', 'page');
+      else if (tab.disabled) node.disabled = true;
+      else node.addEventListener('click', tab.onSelect);
+      tabs.append(node);
+    }
+    return tabs;
+  }
+
   function sessionHeader(page, options) {
     const send = (name) => () => (options.sendAction ? options.sendAction(name) : page.send(sessionAction(name)));
     const header = el('header', null, 'mg-header mg-header--session');
@@ -368,15 +387,7 @@
     if (liveChips.length > 0) keepFresh();
 
     const bar = el('div', null, 'mg-tabbar');
-    const tabs = el('nav', null, 'mg-tabs');
-    tabs.setAttribute('aria-label', copy.tabsLabel);
-    for (const tab of options.tabs) {
-      const node = el('button', tab.label, 'mg-tab');
-      node.type = 'button';
-      if (tab.key === options.current) node.setAttribute('aria-current', 'page');
-      else node.addEventListener('click', tab.onSelect);
-      tabs.append(node);
-    }
+    const tabs = pageTabs({ label: copy.tabsLabel, tabs: options.tabs, current: options.current });
     bar.append(
       tabs,
       menuButton({
@@ -457,5 +468,5 @@
 
   installTooltips();
 
-  window.MigentPage = { el, section, connect, details, openAround, menuButton, trackFooter, sessionHeader, icon, statusIndicator, sessionStates: SESSION_STATES };
+  window.MigentPage = { el, section, connect, details, openAround, menuButton, trackFooter, pageTabs, sessionHeader, icon, statusIndicator, sessionStates: SESSION_STATES };
 })();

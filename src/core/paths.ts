@@ -23,6 +23,8 @@ export const FAILURE_REPORT_FILENAME = 'failure.md';
 /** Provider failure diagnostics written by CLI 0.3.6 and later for a failed execution. */
 export const DIAGNOSTICS_FILENAME = 'diagnostics.json';
 export const CONFIG_FILENAME = 'config.yaml';
+/** The git-ignored local overlay of `config.yaml`. */
+export const CONFIG_LOCAL_FILENAME = 'config.local.yaml';
 
 export function migentDir(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR);
@@ -62,6 +64,10 @@ export function workflowsDir(projectRoot: string): string {
 
 export function configPath(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR, CONFIG_FILENAME);
+}
+
+export function configLocalPath(projectRoot: string): string {
+  return path.join(projectRoot, MIGENT_DIR, CONFIG_LOCAL_FILENAME);
 }
 
 export function questionsPath(projectRoot: string, sessionId: string): string {

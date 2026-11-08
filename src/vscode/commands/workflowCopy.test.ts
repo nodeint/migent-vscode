@@ -16,7 +16,7 @@ beforeEach(() => {
   invoke.json.mockReset();
 });
 
-const written = { valid: true, diagnostics: [], written: true };
+const written = { schema_version: 1, valid: true, diagnostics: [], written: true };
 
 describe('createWorkflowCopy', () => {
   it('saves through the CLI without a base hash, so it only creates', async () => {
@@ -37,13 +37,14 @@ describe('createWorkflowCopy', () => {
         exitCode: 1,
         stderr: '',
         stdout: JSON.stringify({
+          schema_version: 1,
           valid: false,
           diagnostics: [{ severity: 'error', code: 'duplicate-id', message: 'id used twice', path: ['id'] }],
         }),
       },
     });
     expect(await createWorkflowCopy(launch, root, { file: 'b.yaml', text })).toBe('id used twice');
-    invoke.json.mockResolvedValueOnce({ kind: 'ok', value: { valid: true, diagnostics: [], written: false } });
+    invoke.json.mockResolvedValueOnce({ kind: 'ok', value: { schema_version: 1, valid: true, diagnostics: [], written: false } });
     expect(await createWorkflowCopy(launch, root, { file: 'b.yaml', text })).toMatch(/did not confirm/);
   });
 });

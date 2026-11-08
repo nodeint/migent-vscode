@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { parse, stringify } from 'yaml';
 
+import { agentBody as agentBodyOf, type AgentForm, parseAgent } from './agentForm';
+import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope } from './authoring';
 import type { ClientChoice } from './controlArgs';
 import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
 import type { ProjectConfig } from './projectConfig';
@@ -28,23 +30,9 @@ export * from './workflowForm';
 
 export type WorkflowEditorState = 'ok' | 'invalid' | 'unreadable' | 'unsupported';
 
-/** One diagnostic from `migent workflow validate|save --json`, with its path as the page knows it. */
-export interface WorkflowDiagnostic {
-  severity: 'error' | 'warning';
-  code: string;
-  message: string;
-  path: string;
-}
+export type WorkflowDiagnostic = AuthoringDiagnostic;
 
-/** The parts of one authoring envelope the editor uses. */
-export interface WorkflowAuthoringResult {
-  valid: boolean;
-  diagnostics: WorkflowDiagnostic[];
-  file: string | null;
-  hash: string | null;
-  written: boolean;
-  currentHash: string | null;
-}
+export type WorkflowAuthoringResult = AuthoringResult;
 
 /** One other workflow file a downstream suggestion can name. */
 export interface WorkflowEditorWorkflow {
@@ -146,14 +134,14 @@ function decisions(value: unknown): WorkflowStageForm['decision'] {
   return routes;
 }
 
+/** The workflow form keeps `''` for an absent field and drops keys it does not model (see the shared codec). */
 function inlineAgent(value: unknown): WorkflowAgentForm {
-  const body = isRecord(value) ? value : {};
-  const client = isRecord(body.client) ? body.client : {};
+  const agent = parseAgent(value);
   return {
-    model: stringValue(body.model),
-    effort: stringValue(body.effort),
-    clientType: stringValue(client.type),
-    clientOptions: pairs(client.options),
+    model: agent.model ?? '',
+    effort: agent.effort ?? '',
+    clientType: agent.client?.type ?? '',
+    clientOptions: agent.client?.options ?? [],
   };
 }
 
@@ -426,15 +414,19 @@ function agentBody(stage: WorkflowStageForm): unknown {
     return name === '' ? undefined : name;
   }
   if (stage.agentMode !== 'inline') return undefined;
-  const agent: Record<string, unknown> = {};
+  const options = pairsToRecord(stage.agent.clientOptions);
+  const hasClient = stage.agent.clientType !== '' || options !== undefined;
+  const agent: AgentForm = { extra: {} };
   if (stage.agent.model !== '') agent.model = stage.agent.model;
   if (stage.agent.effort !== '') agent.effort = stage.agent.effort;
-  const client: Record<string, unknown> = {};
-  if (stage.agent.clientType !== '') client.type = stage.agent.clientType;
-  const options = pairsToRecord(stage.agent.clientOptions);
-  if (options !== undefined) client.options = options;
-  if (Object.keys(client).length > 0) agent.client = client;
-  return agent;
+  if (hasClient) {
+    agent.client = { extra: {} };
+    if (stage.agent.clientType !== '') agent.client.type = stage.agent.clientType;
+    if (options !== undefined) {
+      agent.client.options = Object.entries(options).map(([key, value]) => ({ key, value }));
+    }
+  }
+  return agentBodyOf(agent);
 }
 
 /** One destination stays a string; an imported list keeps its list shape until it is edited. */
@@ -549,27 +541,5 @@ export function workflowDraftFromForm(form: WorkflowForm, schemaVersion: number 
   return stringify(workflowBodyFromForm(form, schemaVersion), { lineWidth: 0 });
 }
 
-/** Parse one `migent workflow validate|save --json` envelope. Malformed output is reported, never trusted. */
-export function parseWorkflowAuthoringEnvelope(raw: unknown): WorkflowAuthoringResult | null {
-  if (!isRecord(raw) || typeof raw.valid !== 'boolean' || !Array.isArray(raw.diagnostics)) return null;
-  const diagnostics: WorkflowDiagnostic[] = [];
-  for (const item of raw.diagnostics) {
-    if (!isRecord(item)) continue;
-    const message = stringValue(item.message);
-    if (message === '') continue;
-    diagnostics.push({
-      severity: item.severity === 'warning' ? 'warning' : 'error',
-      code: stringValue(item.code),
-      message,
-      path: Array.isArray(item.path) ? item.path.map(String).join('.') : '',
-    });
-  }
-  return {
-    valid: raw.valid,
-    diagnostics,
-    file: typeof raw.file === 'string' ? raw.file : null,
-    hash: typeof raw.hash === 'string' ? raw.hash : null,
-    written: raw.written === true,
-    currentHash: typeof raw.current_hash === 'string' ? raw.current_hash : null,
-  };
-}
+/** Parse one `migent workflow validate|save --json` envelope. */
+export const parseWorkflowAuthoringEnvelope = parseAuthoringEnvelope;

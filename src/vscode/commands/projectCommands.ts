@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { configPath, MIGENT_DIR, WORKFLOWS_DIRNAME, workflowsDir } from '../../core/paths';
 import { duplicateWorkflowText, workflowFileName, workflowIdProblem } from '../../core/workflowDraft';
 import type { CapabilityService } from '../capability';
+import type { ConfigPanels } from '../config/panels';
 import { openFile } from '../openFile';
 import { pickProject } from '../pick';
 import type { ProjectContext, ProjectRegistry } from '../projects';
@@ -43,13 +44,22 @@ async function openWorkflow(registry: ProjectRegistry, arg: unknown): Promise<vo
   await openFile(path.join(context.root, MIGENT_DIR, WORKFLOWS_DIRNAME, picked.entry.file), 'Workflow');
 }
 
-async function openConfig(registry: ProjectRegistry, arg: unknown): Promise<void> {
+async function openConfigFile(registry: ProjectRegistry, arg: unknown): Promise<void> {
   if (isMetaFileNode(arg) && arg.kind === 'config') {
     await openFile(arg.file, 'Project config');
     return;
   }
   const context = await pickProject(registry);
   if (context !== undefined) await openFile(configPath(context.root), 'Project config');
+}
+
+async function openConfig(registry: ProjectRegistry, config: ConfigPanels, arg: unknown): Promise<void> {
+  if (isMetaFileNode(arg) && arg.kind === 'config') {
+    config.open(arg.project);
+    return;
+  }
+  const context = await pickProject(registry);
+  if (context !== undefined) config.open(context.key);
 }
 
 function editWorkflow(editor: WorkflowEditorPanels, arg: unknown): void {
@@ -178,11 +188,15 @@ async function deleteWorkflow(registry: ProjectRegistry, editor: WorkflowEditorP
   context.catalog.reloadWorkflow(file);
 }
 
-export function registerProjectCommands(
-  registry: ProjectRegistry,
-  editor: WorkflowEditorPanels,
-  capability: CapabilityService,
-): vscode.Disposable[] {
+export interface ProjectCommandHost {
+  registry: ProjectRegistry;
+  editor: WorkflowEditorPanels;
+  capability: CapabilityService;
+  config: ConfigPanels;
+}
+
+export function registerProjectCommands(host: ProjectCommandHost): vscode.Disposable[] {
+  const { registry, editor, capability, config } = host;
   return [
     vscode.commands.registerCommand('migent.workflow.new', (arg?: unknown) => newWorkflow(registry, editor, arg)),
     vscode.commands.registerCommand('migent.workflow.duplicate', (arg?: unknown) =>
@@ -191,6 +205,7 @@ export function registerProjectCommands(
     vscode.commands.registerCommand('migent.workflow.delete', (arg?: unknown) => deleteWorkflow(registry, editor, arg)),
     vscode.commands.registerCommand('migent.workflow.edit', (arg?: unknown) => editWorkflow(editor, arg)),
     vscode.commands.registerCommand('migent.workflow.open', (arg?: unknown) => openWorkflow(registry, arg)),
-    vscode.commands.registerCommand('migent.openConfig', (arg?: unknown) => openConfig(registry, arg)),
+    vscode.commands.registerCommand('migent.openConfig', (arg?: unknown) => openConfig(registry, config, arg)),
+    vscode.commands.registerCommand('migent.openConfigFile', (arg?: unknown) => openConfigFile(registry, arg)),
   ];
 }

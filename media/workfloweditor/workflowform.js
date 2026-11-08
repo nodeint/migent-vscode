@@ -11,7 +11,8 @@
   const copy = window.MigentCopy;
   const text = window.MigentWorkflowCopy;
   const ops = window.MigentWorkflowModel;
-  const { emptyStage, emptyForm, normalizeForm, uniqueValues, agentModelLabel } = ops;
+  const agents = window.MigentAgentForm;
+  const { emptyStage, emptyForm, normalizeForm, uniqueValues } = ops;
 
   const ASK_OPTIONS = [
     { value: '', label: text.identity.ask.options.none },
@@ -23,10 +24,6 @@
     { value: 'named', label: text.identity.agent.modes.named },
     { value: 'inline', label: text.identity.agent.modes.inline },
   ];
-
-  // Effort is a suggestion only: the client reads report models and option keys, not effort values,
-  // so it stays free text. Doctor reports an invalid effort for a client and model.
-  const EFFORT_SUGGESTIONS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
   /**
    * Create a form renderer.
@@ -203,9 +200,6 @@
 
     const roleOptions = (current) => ops.roleOptions(getModel(), current);
     const agentNameOptions = (current) => ops.agentNameOptions(getModel(), current);
-    const clientChoices = () => ops.clientChoices(getModel());
-    const optionKeySuggestions = (clientName) => ops.optionKeySuggestions(getModel(), clientName);
-    const isKnownModel = (clientName, modelName) => ops.isKnownModel(getModel(), clientName, modelName);
     const resumeOptions = (stage, current) => ops.resumeOptions(getForm(), stage, current);
     const artifactIdOptions = (current) => ops.artifactIdOptions(getForm(), current);
     const workflowOptions = (current) => ops.workflowOptions(getModel(), current);
@@ -469,66 +463,22 @@
       return text.stages.summary.agentRole;
     }
 
-    /** Not a complete agent yet is fine: the CLI reports the missing client or model after Save. */
     function inlineAgentEditor(stage, index) {
-      const agent = stage.agent;
-      const known = isKnownModel(agent.clientType, agent.model);
-      const hasModel = agent.clientType !== '' || agent.model !== '';
-      const hint =
-        clientChoices().length === 0
-          ? text.inlineAgent.modelHint.noClients
-          : hasModel && !known
-            ? text.inlineAgent.modelHint.unknown
-            : text.inlineAgent.modelHint.known;
-      return ui.group(text.inlineAgent.title, text.inlineAgent.note, {
-        children: [
-          ui.grid([
-            ui.field({
-              label: text.inlineAgent.model.label,
-              control: ui.picker({
-                value: agentModelLabel(agent),
-                path: stagePath(index, 'agent.model'),
-                placeholder: text.inlineAgent.model.placeholder,
-                disabled: isFormReadOnly(),
-                onPick: () => {
-                  if (typeof pickModel === 'function') pickModel(index);
-                },
-              }),
-              path: stagePath(index, 'agent.model'),
-              hint: hint,
-              issue: issueOf(stagePath(index, 'agent.model')),
-            }),
-            ui.field({
-              label: text.inlineAgent.effort.label,
-              control: ui.text({
-                value: agent.effort,
-                path: stagePath(index, 'agent.effort'),
-                placeholder: text.inlineAgent.effort.placeholder,
-                list: 'wf-efforts',
-                disabled: isFormReadOnly(),
-                onInput: (next) => {
-                  agent.effort = next;
-                },
-              }),
-              path: stagePath(index, 'agent.effort'),
-              hint: text.inlineAgent.effort.hint,
-              issue: issueOf(stagePath(index, 'agent.effort')),
-            }),
-          ]),
-          ui.pairList({
-            pairs: agent.clientOptions,
-            path: stagePath(index, 'agent.clientOptions'),
-            label: text.inlineAgent.clientOptions.label,
-            itemLabel: text.inlineAgent.clientOptions.item,
-            keyPlaceholder: 'key',
-            valuePlaceholder: 'value',
-            keyList: 'wf-option-keys-' + index,
-            addLabel: text.inlineAgent.clientOptions.add,
-            disabled: isFormReadOnly(),
-            onEdit,
-            onRestructure: repaint,
-          }),
-        ],
+      return agents.inlineEditor({
+        agent: stage.agent,
+        path: stagePath(index, 'agent'),
+        title: text.inlineAgent.title,
+        note: text.inlineAgent.note,
+        unknownHint: text.inlineAgent.modelHint.unknown,
+        model: getModel(),
+        issueOf,
+        disabled: isFormReadOnly(),
+        onPick: () => {
+          if (typeof pickModel === 'function') pickModel(index);
+        },
+        onEdit,
+        repaint,
+        optionKeysId: 'wf-option-keys-' + index,
       });
     }
 
@@ -1192,12 +1142,12 @@
 
     function datalists() {
       const holder = el('div');
-      holder.append(ui.datalist('wf-efforts', EFFORT_SUGGESTIONS));
-      getForm().stages.forEach((stage, index) => {
-        holder.append(
-          ui.datalist('wf-option-keys-' + index, optionKeySuggestions(stage.agent.clientType)),
-        );
-      });
+      holder.append(
+        ...agents.datalists(
+          getModel(),
+          getForm().stages.map((stage, index) => ({ id: 'wf-option-keys-' + index, clientType: stage.agent.clientType })),
+        ),
+      );
       return holder;
     }
 

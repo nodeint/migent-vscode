@@ -426,7 +426,7 @@ describe('parseWorkflowAuthoringEnvelope', () => {
   });
 
   it('refuses output that is not an envelope', () => {
-    expect(parseWorkflowAuthoringEnvelope({ valid: true })).toBeNull();
+    expect(parseWorkflowAuthoringEnvelope({ schema_version: 1, valid: true })).toBeNull();
     expect(parseWorkflowAuthoringEnvelope(null)).toBeNull();
   });
 });

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a Configuration page for `.migent/config.yaml` and `.migent/config.local.yaml` (schema 7). Project and Local tabs
+  edit agents and roles as forms and save through `migent config save --preserve-comments`; the YAML tab opens the
+  active file in the editor. Keys the form does not edit are kept, an empty value stays an explicit value, and on the
+  Local tab each setting can inherit from or override `config.yaml`. A first Save creates `config.local.yaml`, and an
+  edit made while the file changed on disk is kept and reported as a conflict instead of overwriting. Open it with
+  `Migent: Open Configuration`, or by clicking the config row in the Configuration view.
+- Share one agent editor, draft handling and save runner between the workflow pages and the Configuration page. The workflow
+  editor and the Session workflow page look and save as before.
+- Watch `config.local.yaml` next to `config.yaml`.
 - Create, duplicate and delete workflows. New Workflow opens an unsaved starter draft that Save creates, Duplicate
   copies a workflow's saved file under a new id, and Delete moves it to the Trash after a confirmation. They are in
   the Workflows view title and row menu, the Command Palette, and the editor page.
