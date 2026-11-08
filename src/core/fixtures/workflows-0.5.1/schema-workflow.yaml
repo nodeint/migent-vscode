@@ -1,0 +1,108 @@
+# Annotated workflow example. For validation, session drafts, and refresh,
+# see session-workflow.md. For project setup, see setup.md.
+schema_version: 7
+concurrency: 1
+
+# Optional; defaults to the file name without .yaml.
+id: reference
+
+constraints:
+  - Stay within the task.
+
+# Files the workflow produces. Every entry is published to the session's outputs/ when the
+# session completes. Reference each from exactly one stage or decision below.
+artifacts:
+  draft:
+    # Plain file name, unique across this registry; cannot be verify.md.
+    file: draft.md
+    # Optional; shown to the producer and to later stages.
+    description: The draft for review.
+    # Optional; defaults to true. A required artifact must exist when the session completes,
+    # so it cannot come from a decision or from a run_when stage.
+    required: true
+  draft-notes:
+    file: draft-notes.md
+    required: false
+
+stages:
+  - id: prepare
+    description: Check the tree before the draft.
+    # Without a role, run only these checks.
+    verify:
+      - pnpm build
+    # Seconds for the whole verify list.
+    verify_timeout: 1800
+
+  - id: draft
+    role: planner
+    # Optional recipient for questions. Only human is supported; omit to disable questions.
+    ask: human
+    # Optional agent for this stage: a name from config.yaml, or a complete inline
+    # agent (model, effort, client). Omit to use the role's agent.
+    agent: deep_reasoning
+    depends_on: [prepare]
+    # Only allowed when a route returns to this stage.
+    max_revisions: 2
+    instructions:
+      - Write the draft.
+    # Artifact ids this stage writes on every complete.
+    artifacts: [draft]
+
+  - id: review
+    role: reviewer
+    depends_on: [draft]
+    # Optional: resume a completed role stage listed in depends_on.
+    # Both stages must use compatible client, model, and conversation options.
+    session:
+      resume_from: draft
+    instructions:
+      - Review the draft.
+    # Run after agent completion. Put checks on every route to completion.
+    verify:
+      - pnpm test
+    # These fields require verify. max_verify defaults to 3.
+    max_verify: 3
+    verify_timeout: 900
+    decision:
+      # Agent guidance: return one decision name. Add when only if the label needs clarification.
+      # navigate accepts a stage ID, complete, or a non-empty list of stage IDs.
+      - approved:
+          navigate: check_docs
+          artifacts: [draft-notes]
+      - revise:
+          when: Required fixes remain. List each fix and its impact.
+          navigate: draft
+          # Either a list of registry ids (these must be required: false), or a mapping of
+          # artifacts local to this decision. Local artifacts are never published.
+          artifacts:
+            fixes:
+              file: fixes.md
+              description: Required fixes with their impact.
+
+  - id: check_docs
+    role: reviewer
+    depends_on: [review]
+    # Optional: run only if matching Git paths changed since the session started.
+    # Quote globs; paths are relative to the Git root, and ** spans directories.
+    run_when:
+      changed_paths:
+        - "docs/**/*"
+        - "**/README.md"
+    # An inline agent replaces the role's agent entirely.
+    agent:
+      model: gpt-5
+      effort: low
+      client:
+        type: codex
+    instructions:
+      - Review documentation changes.
+    # A leaf stage without a decision completes naturally, including when skipped.
+
+# Optional suggestions, available after successful completion. No automatic dispatch.
+# Each target workflow appears once. Keys name context at the destination; values name artifact ids above.
+# Omit artifacts to pass every published artifact under its own id.
+downstream:
+  - workflow: implement
+    task: Implement the approved draft.
+    artifacts:
+      plan: draft

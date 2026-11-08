@@ -258,13 +258,6 @@
         "shortTitle": "Continue without reply"
       },
       {
-        "command": "migent.session.retryQuota",
-        "title": "Retry After Quota Wait",
-        "category": "Migent",
-        "shortTitle": "Retry",
-        "icon": "$(debug-restart)"
-      },
-      {
         "command": "migent.session.repair",
         "title": "Repair Session…",
         "category": "Migent",
@@ -297,12 +290,6 @@
           "default": true,
           "scope": "resource",
           "description": "Notify when a session fails."
-        },
-        "migent.notifications.quota": {
-          "type": "boolean",
-          "default": true,
-          "scope": "resource",
-          "description": "Notify when a session waits for provider quota, and when the wait is over."
         },
         "migent.notifications.completed": {
           "type": "boolean",
@@ -515,7 +502,7 @@
         },
         {
           "command": "migent.session.continue",
-          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/ && !(viewItem =~ /;quota(;|$)/)",
+          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|cancelled|failed)/",
           "group": "inline@0"
         },
         {
@@ -531,11 +518,6 @@
         {
           "command": "migent.session.reply",
           "when": "view == migent.sessions && viewItem =~ /^session\\.blocked/ && !(viewItem =~ /;questions(;|$)/)",
-          "group": "inline@0"
-        },
-        {
-          "command": "migent.session.retryQuota",
-          "when": "view == migent.sessions && viewItem =~ /^session\\.(stopped|failed).*;quota(;|$)/",
           "group": "inline@0"
         },
         {
@@ -685,10 +667,6 @@
         },
         {
           "command": "migent.session.continueWithoutReply",
-          "when": "false"
-        },
-        {
-          "command": "migent.session.retryQuota",
           "when": "false"
         },
         {

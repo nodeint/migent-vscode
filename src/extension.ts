@@ -207,7 +207,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     nextStep,
     answers,
     new QuestionNotifier(registry),
-    new StateNotifier(registry, context.workspaceState),
+    new StateNotifier(registry),
     ...livenessSubscriptions(liveness, registry, () => {
       sessionsTree.refreshRunning();
       statusBar.update();

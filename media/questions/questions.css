@@ -12,7 +12,7 @@
   gap: var(--mg-space-1);
   margin: 0;
   padding: var(--mg-space-2) 0;
-  background: var(--vscode-editor-background);
+  background: var(--mg-bg);
   border-bottom: 1px solid var(--mg-border);
 }
 
@@ -26,7 +26,7 @@
   color: var(--mg-muted);
   background: none;
   border: 1px solid var(--mg-border);
-  border-radius: 999px;
+  border-radius: var(--mg-radius-pill);
   padding: 0 var(--mg-space-2);
   font: inherit;
   cursor: pointer;
@@ -87,8 +87,8 @@
   margin: 0 0 var(--mg-space-3);
   padding: var(--mg-space-1) var(--mg-space-3);
   color: var(--mg-muted);
-  background: var(--vscode-textBlockQuote-background, transparent);
-  border-left: 3px solid var(--vscode-textBlockQuote-border, var(--mg-border));
+  background: var(--mg-quote-bg);
+  border-left: 3px solid var(--mg-quote-border);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -123,7 +123,7 @@
 
 .q-option:has(input:checked) {
   border-color: var(--mg-focus);
-  background: var(--vscode-list-inactiveSelectionBackground, var(--mg-hover));
+  background: var(--mg-selected);
 }
 
 .q-option:has(input:focus-visible) {
@@ -172,9 +172,9 @@
 }
 
 .q-option:has(input:checked) .q-letter {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-  border-color: var(--vscode-button-background);
+  color: var(--mg-accent-fg);
+  background: var(--mg-accent);
+  border-color: var(--mg-accent);
 }
 
 .q-option-label {
@@ -194,7 +194,7 @@
 .q-recorded {
   margin: var(--mg-space-2) 0 0;
   padding: var(--mg-space-1) var(--mg-space-2);
-  background: var(--vscode-textBlockQuote-background, transparent);
+  background: var(--mg-quote-bg);
   border-left: 3px solid var(--mg-ok);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

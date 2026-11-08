@@ -9,8 +9,8 @@ import type { SessionSnapshot } from './model';
 import {
   blockedTargets,
   blockKind,
-  describeQuotaWait,
-  quotaWait,
+  describeQuotaReset,
+  quotaFailure,
   replyConsumed,
   replyHeader,
   replyResumed,
@@ -38,16 +38,16 @@ const quotaEvent = (retryAt: unknown) => ({
 });
 
 describe('blockKind', () => {
-  it('tells an ordinary blocker, a quota wait and a pending question apart', () => {
+  it('tells an ordinary blocker and a pending question apart, and never reads quota as an obstacle', () => {
     const blocker = snapshot({ status: 'blocked', blocked_by_execution_ids: ['0001-plan--attempt-01'] });
     const quota = snapshot({ status: 'active', latest_provider_event: quotaEvent('2026-11-03T12:00:00Z') });
     expect(blockKind(blocker)).toBe('blocker');
-    expect(blockKind(quota)).toBe('quota');
+    expect(blockKind(quota)).toBeNull();
     expect(blockKind(snapshot({ status: 'question' }))).toBe('question');
     expect(blockKind(snapshotFromDir(syntheticDir('blocked-questions')))).toBe('question');
   });
 
-  it('shows no obstacle for a stopped session whose latest event is not a quota wait', () => {
+  it('shows no obstacle for a stopped session whose latest event is not a quota event', () => {
     const stopped = snapshot({ status: 'active', latest_provider_event: { event: 'provider.turn_completed' } });
     expect(blockKind(stopped)).toBeNull();
   });
@@ -72,45 +72,40 @@ describe('blockedTargets', () => {
   });
 });
 
-describe('quotaWait', () => {
-  const now = Date.parse('2026-11-03T10:00:00Z');
-  const waitFor = (retryAt: unknown) =>
-    quotaWait(snapshot({ status: 'active', latest_provider_event: quotaEvent(retryAt) }), now);
+describe('quotaFailure', () => {
+  const failedWith = (retryAt: unknown, eventExecution = '0002-plan--attempt-02') =>
+    snapshot({
+      status: 'active',
+      latest_execution_id: '0002-plan--attempt-02',
+      latest_execution_status: 'failed',
+      latest_provider_event: { event: 'provider.quota', execution_id: eventExecution, details: { retry_at: retryAt } },
+    });
 
-  it('is not ready before retry_at and ready at it', () => {
-    expect(waitFor('2026-11-03T10:00:01Z')?.isReady).toBe(false);
-    expect(waitFor('2026-11-03T10:00:00Z')?.isReady).toBe(true);
+  it('reads a failed latest execution with a quota event as a quota failure, never as an obstacle', () => {
+    const failed = failedWith('2026-11-03T12:00:00Z');
+    expect(quotaFailure(failed)).toEqual({ retryAt: Date.parse('2026-11-03T12:00:00Z') });
+    expect(blockKind(failed)).toBeNull();
   });
 
-  it('does not invent a retry time when none or an unparsable one is recorded', () => {
+  it('does not invent a reset time when none or an unparsable one is recorded', () => {
     for (const retryAt of ['', 'soon', null]) {
-      const wait = waitFor(retryAt);
-      expect(wait).toEqual({ retryAt: null, isReady: false });
-      expect(wait === null ? '' : describeQuotaWait(wait, now)).toBe('No retry time was recorded.');
+      const failure = quotaFailure(failedWith(retryAt));
+      expect(failure).toEqual({ retryAt: null });
+      expect(failure === null ? '' : describeQuotaReset(failure)).toBe('no reset time was recorded');
     }
   });
 
-  it('also recognizes the persisted failed shape of an exhausted quota, but not an unrelated later failure', () => {
-    const failed = (eventExecution: string) =>
-      snapshot({
-        status: 'active',
-        latest_execution_id: '0002-plan--attempt-02',
-        latest_execution_status: 'failed',
-        latest_provider_event: { event: 'provider.quota', execution_id: eventExecution, details: { retry_at: '' } },
-      });
-    expect(blockKind(failed('0002-plan--attempt-02'))).toBe('quota');
-    expect(blockKind(failed('0001-plan--attempt-01'))).toBeNull();
+  it('ignores an unrelated later failure and sessions that are not failed', () => {
+    expect(quotaFailure(failedWith('', '0001-plan--attempt-01'))).toBeNull();
+    expect(quotaFailure(snapshot({ status: 'active' }))).toBeNull();
+    expect(quotaFailure(snapshot({ status: 'active', latest_provider_event: quotaEvent('2026-11-03T12:00:00Z') }))).toBeNull();
   });
 
-  it('is absent for a session that is not in a quota wait', () => {
-    expect(quotaWait(snapshot({ status: 'active' }), now)).toBeNull();
-  });
-
-  it('describes the absolute time with a time zone and a countdown', () => {
-    const text = describeQuotaWait({ retryAt: now + 125_000, isReady: false }, now, 'en-US');
+  it('describes the absolute reset time with a time zone', () => {
+    const text = describeQuotaReset({ retryAt: Date.parse('2026-11-03T12:00:00Z') }, 'en-US');
+    expect(text).toMatch(/^resets /);
     expect(text).toMatch(/2026/);
     expect(text).toMatch(/GMT|UTC|[A-Z]{3,4}/);
-    expect(text).toContain('in 2m 5s');
   });
 });
 

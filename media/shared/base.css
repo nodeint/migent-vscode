@@ -5,17 +5,41 @@
   --mg-fg: var(--vscode-foreground);
   --mg-muted: var(--vscode-descriptionForeground, var(--vscode-foreground));
   --mg-link: var(--vscode-textLink-foreground, var(--vscode-foreground));
-  --mg-border: var(--vscode-panelSection-border, var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)));
+  /* A field label sits between the text and its muted notes: it recedes from the value it names but stays readable. */
+  --mg-label: color-mix(in srgb, var(--mg-fg) 75%, var(--mg-muted));
+  /* Elevation is derived from the text color, so every theme gets the same steps: the page, a card one step up, its
+     head one step further, and a border that stays visible on all of them. */
+  --mg-border: color-mix(in srgb, var(--vscode-foreground) 18%, var(--vscode-editor-background, transparent));
   --mg-focus: var(--vscode-focusBorder, var(--vscode-foreground));
   --mg-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-  --mg-surface-2: var(--vscode-sideBar-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+  /* The page itself, for sticky bars that must hide what scrolls under them. */
+  --mg-bg: var(--vscode-editor-background);
+  --mg-selected: var(--vscode-list-inactiveSelectionBackground, var(--mg-hover));
+  /* A quoted block: the host's block-quote colors. */
+  --mg-quote-bg: var(--vscode-textBlockQuote-background, transparent);
+  --mg-quote-border: var(--vscode-textBlockQuote-border, var(--mg-border));
+  /* The primary action colors: the primary button, and a marker that shows a selected choice. */
+  --mg-accent: var(--vscode-button-background);
+  --mg-accent-fg: var(--vscode-button-foreground);
+  --mg-surface-2: color-mix(in srgb, var(--vscode-foreground) 6%, var(--mg-surface));
   --mg-hover: var(--vscode-list-hoverBackground, transparent);
   --mg-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
   --mg-warn: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, var(--vscode-foreground)));
   --mg-error: var(--vscode-list-errorForeground, var(--vscode-errorForeground, var(--vscode-foreground)));
   --mg-info: var(--vscode-charts-blue, var(--vscode-textLink-foreground, var(--vscode-foreground)));
   --mg-bar: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
-  --mg-radius: 4px;
+  /* Follow the host's corner radii when it exposes them (recent VS Code); fall back to its current defaults. */
+  --mg-radius: var(--vscode-cornerRadius-medium, 6px);
+  --mg-radius-sm: var(--vscode-cornerRadius-small, 4px);
+  --mg-radius-pill: 999px;
+  /* Spacing by relationship: the closer two things are related, the closer they sit. */
+  --mg-gap-field: var(--mg-space-3);
+  --mg-gap-block: var(--mg-space-4);
+  --mg-gap-card: var(--mg-space-3);
+  --mg-gap-group: var(--mg-space-5);
+  --mg-btn-height: 28px;
+  --mg-btn-pad-y: 4px;
+  --mg-btn-pad-x: 12px;
   --mg-space-1: 4px;
   --mg-space-2: 8px;
   --mg-space-3: 12px;
@@ -229,12 +253,12 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 }
 
 .mg-section--group + .mg-section--group {
-  margin-top: var(--mg-space-5);
+  margin-top: var(--mg-gap-group);
 }
 
 /* Cards in one list sit close together; the add row below them keeps its own distance. */
 .mg-section--card + .mg-section--card {
-  margin-top: var(--mg-space-2);
+  margin-top: var(--mg-gap-card);
 }
 
 /* Section head: a sticky band that titles the section and keeps its Add action in reach while the content
@@ -247,7 +271,8 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--mg-space-2);
-  padding: var(--mg-space-2) var(--mg-space-3);
+  /* No side padding: the title's bar sits on the same left edge as the cards and add buttons below it. */
+  padding: var(--mg-space-2) 0;
   background: var(--vscode-editor-background, var(--mg-surface));
   border-radius: var(--mg-radius);
   box-shadow: 0 6px 8px -8px var(--vscode-widget-shadow, transparent);
@@ -265,6 +290,8 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 
 .mg-section--group > .mg-section-head {
   margin-bottom: var(--mg-space-3);
+  padding-bottom: var(--mg-space-1);
+  border-bottom: 1px solid var(--mg-border);
 }
 
 .mg-section-heading {
@@ -280,19 +307,27 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 
 .mg-section-title {
   margin: 0;
-  font-size: 1.15em;
+  font-size: 1.3em;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-/* A nested section names itself quietly, so it does not compete with the page section it sits in. */
-.mg-section--group > .mg-section-head .mg-section-title,
-.mg-section--card > .mg-section-head .mg-section-title {
-  color: var(--mg-muted);
-  font-size: 0.8em;
+/* Hierarchy of titles, strongest first: page section, group, card, field label. A group names a block of
+   controls, so it reads above the labels inside it: bold, full text color, underlined by its head's rule.
+   A card names one item (a repeated output or decision), so it is plain title case on its own band; the two
+   never share a style. */
+.mg-section--group > .mg-section-head .mg-section-title {
+  color: var(--mg-fg);
+  font-size: 0.85em;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.mg-section--card > .mg-section-head .mg-section-title {
+  color: var(--mg-fg);
+  font-size: 1em;
+  font-weight: 600;
 }
 
 .mg-section-note {
@@ -328,7 +363,38 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 }
 
 .mg-section--card > .mg-section-head {
+  align-items: center;
   padding: var(--mg-space-2) var(--mg-space-3);
+  background: var(--mg-surface-2);
+  border-bottom: 1px solid var(--mg-border);
+}
+
+/* Level 4: a card inside an item card keeps its frame, so each item has an edge, and tells its depth by its
+   surface: the outer card is --mg-surface, the card in it is the editor background (one step down), and a card
+   in that goes back to --mg-surface. Nested heads carry no band of their own; the rule under the title is enough. */
+.mg-collapsible .mg-section--card {
+  background: var(--vscode-editor-background, var(--mg-surface));
+}
+
+.mg-collapsible .mg-section--card .mg-section--card {
+  background: var(--mg-surface);
+}
+
+.mg-collapsible .mg-section--card > .mg-section-head {
+  background: none;
+}
+
+.mg-section--accent {
+  border-left-color: var(--mg-info);
+}
+
+.mg-collapsible .mg-section--card > .mg-section-head {
+  background: none;
+  border-bottom: 0;
+}
+
+.mg-collapsible .mg-section--card > .mg-section-body {
+  padding-top: 0;
 }
 
 .mg-section--accent {
@@ -367,14 +433,23 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   align-items: center;
   gap: var(--mg-space-1);
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
-  padding: 4px 12px;
+  border-radius: var(--mg-radius-sm);
+  min-height: var(--mg-btn-height);
+  padding: var(--mg-btn-pad-y) var(--mg-btn-pad-x);
   cursor: pointer;
 }
 
+/* Two sizes. The standard button is 28px high; the compact one (--sm) is 24px, for an action that sits in a row
+   or a tool strip beside other controls. A quiet or danger button is compact unless the caller says otherwise. */
+.mg-btn--sm {
+  --mg-btn-height: 24px;
+  --mg-btn-pad-y: 2px;
+  --mg-btn-pad-x: var(--mg-space-2);
+}
+
 .mg-btn--primary {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
+  color: var(--mg-accent-fg);
+  background: var(--mg-accent);
 }
 
 .mg-btn--primary:hover {
@@ -394,6 +469,7 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   color: var(--mg-link);
   background: none;
   border-color: transparent;
+  min-height: 0;
   padding: 0;
   text-decoration: underline;
 }
@@ -556,7 +632,7 @@ button.mg-row:hover {
   color: var(--vscode-badge-foreground);
   background: var(--vscode-badge-background);
   border: 1px solid var(--vscode-contrastBorder, transparent);
-  border-radius: 10px;
+  border-radius: var(--mg-radius-pill);
   white-space: nowrap;
 }
 
@@ -686,6 +762,7 @@ button.mg-row:hover {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, var(--mg-border));
+  border-radius: var(--mg-radius-sm);
   padding: var(--mg-space-1) var(--mg-space-2);
 }
 
@@ -708,6 +785,7 @@ button.mg-row:hover {
   color: var(--vscode-dropdown-foreground);
   background: var(--vscode-dropdown-background);
   border: 1px solid var(--vscode-dropdown-border, var(--mg-border));
+  border-radius: var(--mg-radius-sm);
 }
 
 .mg-select:focus-visible {
@@ -725,6 +803,7 @@ button.mg-row:hover {
   color: var(--vscode-dropdown-foreground);
   background: var(--vscode-dropdown-background);
   border: 1px solid var(--vscode-dropdown-border, var(--mg-border));
+  border-radius: var(--mg-radius-sm);
   cursor: pointer;
 }
 
@@ -752,7 +831,7 @@ button.mg-row:hover {
 .mg-field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--mg-space-3);
+  gap: var(--mg-gap-field);
 }
 
 .mg-field {
@@ -775,9 +854,9 @@ button.mg-row:hover {
 .mg-label,
 .mg-legend {
   padding: 0;
-  color: var(--mg-fg);
-  font-size: 0.9em;
-  font-weight: 600;
+  color: var(--mg-label);
+  font-size: 0.85em;
+  font-weight: 500;
 }
 
 .mg-legend {
@@ -787,26 +866,28 @@ button.mg-row:hover {
   margin-bottom: var(--mg-space-1);
 }
 
-/* A hint is an icon whose tooltip carries the text, so it does not take a line of its own. */
-.mg-hint-icon {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  color: var(--mg-muted);
+/* A hint is the label itself: a dotted underline marks it and the shared tooltip carries the text, so it takes no
+   icon and no line of its own. */
+.mg-has-hint {
   cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 3px;
 }
 
-/* Slightly smaller than the 16px base icon, so it sits on the line of a label or legend. */
-.mg-hint-icon .mg-icon {
-  width: 14px;
-  height: 14px;
+.mg-has-hint:hover,
+.mg-has-hint:focus-visible {
+  text-decoration-color: currentColor;
 }
 
-.mg-hint-icon:hover {
-  color: var(--mg-fg);
+.mg-has-hint:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+  border-radius: var(--mg-radius-sm);
 }
 
-.mg-hint-icon--warn {
+/* A value that needs a change: the label takes the warning tone. */
+.mg-has-hint--warn {
   color: var(--mg-warn);
 }
 
@@ -823,7 +904,7 @@ button.mg-row:hover {
 }
 
 .mg-fieldset + .mg-fieldset {
-  margin-top: var(--mg-space-3);
+  margin-top: var(--mg-gap-block);
 }
 
 /* The content area under a section head: plain by default, padded by a card. */
@@ -833,9 +914,19 @@ button.mg-row:hover {
   padding: 0;
 }
 
-/* Blocks that follow one another inside a body keep a steady rhythm. */
-.mg-section-body > * + * {
-  margin-top: var(--mg-space-3);
+/* Blocks that follow one another inside a body keep a steady rhythm. A page block that stacks blocks outside a
+   section body (such as the advanced settings of a stage) adds `mg-stack` to get the same rhythm. A collapsible
+   card's body is a body too. */
+.mg-section-body > * + *,
+.mg-collapsible-body > * + *,
+.mg-stack > * + * {
+  margin-top: var(--mg-gap-block);
+}
+
+/* The first block under a head sits at the head's own distance, whatever margin that block keeps for its
+   neighbours (an item card, an empty-list frame), so every section opens with the same gap. */
+.mg-section > .mg-section-body > :first-child {
+  margin-top: 0;
 }
 
 .mg-section--card > .mg-section-body {
@@ -867,6 +958,7 @@ button.mg-row:hover {
 
 .mg-inline-row > .mg-btn {
   flex: none;
+  min-height: 28px;
 }
 
 /* Checkbox list; an unknown imported value keeps the warning tone. */
@@ -906,7 +998,7 @@ button.mg-row:hover {
   color: var(--vscode-button-secondaryForeground, var(--mg-fg));
   background: var(--vscode-button-secondaryBackground, var(--mg-hover));
   border: 1px solid var(--vscode-contrastBorder, transparent);
-  border-radius: 999px;
+  border-radius: var(--mg-radius-pill);
 }
 
 .mg-badge--warn {
@@ -924,7 +1016,7 @@ button.mg-row:hover {
   line-height: 1.7;
   color: var(--mg-muted);
   border: 1px solid var(--mg-border);
-  border-radius: 999px;
+  border-radius: var(--mg-radius-pill);
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
@@ -943,7 +1035,6 @@ button.mg-row:hover {
 
 /* Quiet row action: text without a button frame until hover. */
 .mg-btn--quiet {
-  padding: 2px var(--mg-space-1);
   color: var(--mg-muted);
   background: none;
   border-color: transparent;
@@ -954,22 +1045,120 @@ button.mg-row:hover {
   background: var(--mg-hover);
 }
 
-/* Full-width dashed row that adds an item to a list. */
-.mg-add {
-  justify-content: flex-start;
-  width: 100%;
-  min-height: 32px;
-  margin-top: var(--mg-space-1);
-  padding: var(--mg-space-2) var(--mg-space-3);
-  color: var(--mg-muted);
-  background: none;
-  border: 1px dashed var(--mg-border);
+/* One shared tooltip (see MigentPage). Fixed to the viewport so no card can clip it; it never takes the pointer. */
+.mg-tooltip {
+  position: fixed;
+  z-index: 100;
+  display: none;
+  box-sizing: border-box;
+  max-width: min(320px, calc(100vw - 12px));
+  padding: var(--mg-space-1) var(--mg-space-2);
+  color: var(--vscode-editorHoverWidget-foreground, var(--mg-fg));
+  font-size: 0.9em;
+  line-height: 1.4;
+  background: var(--vscode-editorHoverWidget-background, var(--mg-surface));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--mg-border));
+  border-radius: var(--mg-radius);
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
-.mg-add:hover {
-  color: var(--mg-fg);
+.mg-tooltip--on {
+  display: block;
+}
+
+/* A quiet summary of a closed block, beside its title. */
+.mg-summary {
+  margin-left: var(--mg-space-2);
+  color: var(--mg-muted);
+  font-size: 0.9em;
+  font-weight: 400;
+}
+
+/* An icon-only button is square: as wide as it is high, the icon centred. */
+.mg-btn--icon {
+  justify-content: center;
+  width: var(--mg-btn-height);
+  padding: 0;
+}
+
+/* Destructive action (Remove ...): muted like a quiet action until the pointer or the keyboard reaches it, then
+   the error tone, so a list of rows is not a wall of red and the one red thing on screen is the one about to act. */
+.mg-btn--danger {
+  color: var(--mg-muted);
+  background: none;
+  border-color: transparent;
+}
+
+.mg-btn--danger:hover:not(:disabled),
+.mg-btn--danger:focus-visible:not(:disabled) {
+  color: var(--mg-error);
   background: var(--mg-hover);
-  border-style: solid;
+  border-color: var(--mg-error);
+}
+
+/* A list editor (strings, key/value pairs) is one framed block: its legend carries the item count, its rows
+   sit on a left rule, so a list reads as one array and not as several unrelated fields. */
+.mg-list-editor {
+  padding-left: var(--mg-space-3);
+  border-left: 2px solid var(--mg-border);
+}
+
+.mg-list-editor > .mg-legend {
+  margin-left: calc(-1 * var(--mg-space-3));
+  padding-left: var(--mg-space-3);
+  /* A list names a block of rows, so its legend reads above the field labels inside it: full text color, semibold. */
+  color: var(--mg-fg);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+/* Add action of a list: a compact link-style button with a plus icon, so it reads as an action of the list and
+   does not repeat as a wide empty row under every list. */
+.mg-add {
+  justify-content: flex-start;
+  gap: var(--mg-space-1);
+  min-height: var(--mg-btn-height);
+  margin-top: var(--mg-space-1);
+  padding: var(--mg-btn-pad-y) var(--mg-btn-pad-x) var(--mg-btn-pad-y) 0;
+  /* One level below the section's add button: muted at rest, the link color only under the pointer or focus, so
+     it does not compete with the dashed button that closes the card. */
+  color: var(--mg-muted);
+  background: none;
+  border-color: transparent;
+}
+
+.mg-add:hover:not(:disabled),
+.mg-add:focus-visible:not(:disabled) {
+  color: var(--mg-link);
+  background: none;
+  text-decoration: underline;
+}
+
+/* Add action of a section list: full width, dashed outline, plus icon, at the bottom of the list. */
+.mg-add-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mg-space-1);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--mg-btn-height);
+  color: var(--mg-link);
+  background: none;
+  border: 1px dashed var(--mg-border);
+  border-radius: var(--mg-radius);
+}
+
+.mg-add-block:hover:not(:disabled),
+.mg-add-block:focus-visible:not(:disabled) {
+  background: var(--mg-hover);
+  border-color: var(--mg-link);
+}
+
+.mg-empty .mg-add-block:hover:not(:disabled),
+.mg-empty .mg-add-block:focus-visible:not(:disabled) {
+  border-color: transparent;
 }
 
 /* An empty block states what is missing instead of leaving a blank area. */
@@ -982,18 +1171,34 @@ button.mg-row:hover {
   text-align: center;
 }
 
-/* Sticky action footer: stays reachable while the page scrolls, wraps at narrow widths and takes its own
-   space in the flow, so it never covers content. */
+/* An empty list that can be added to: the message on top and the add button under it, inside the one frame. */
+.mg-empty-text {
+  margin: 0;
+}
+
+.mg-empty .mg-add-block {
+  width: auto;
+  margin: var(--mg-space-1) auto 0;
+  padding: var(--mg-btn-pad-y) var(--mg-btn-pad-x);
+  border-color: transparent;
+}
+
+/* Sticky action footer: stays reachable while the page scrolls and takes its own space in the flow, so it never
+   covers content. Every footer is one row: its items are vertically centred and the buttons sit on the right.
+   Buttons shrink and wrap their own text at narrow widths instead of dropping to another row. */
 .mg-footer {
   position: sticky;
   bottom: 0;
+  /* Above the sticky section heads (2) and the progress strip (1), which scroll under it; below menus (10). */
+  z-index: 5;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--mg-space-2);
   margin-top: var(--mg-space-5);
   padding: var(--mg-space-3) 0;
-  background: var(--vscode-editor-background);
+  background: var(--mg-bg);
   border-top: 1px solid var(--mg-border);
 }
 
@@ -1005,27 +1210,28 @@ button.mg-row:hover {
   text-align: left;
 }
 
-/* Save footer: the save state on the left, the actions on the right. */
+/* Save footer: the save state takes the free space on the left and is cut when short, so the actions stay
+   right-aligned, also when there is no state label. The label only shows for unsaved states, so it is a warning. */
 .mg-save-state {
   display: inline-flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--mg-space-1);
-  color: var(--mg-muted);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--mg-warn);
 }
 
 .mg-footer-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--mg-space-2);
+  min-width: 0;
   margin-left: auto;
-}
-
-@media (max-width: 640px) {
-  .mg-footer-actions {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 
 /* The area under a page header that holds banners and issue lists. */
@@ -1045,16 +1251,18 @@ button.mg-row:hover {
 /* A collapsible card holds controls, so it is not an mg-card. The header carries the number, title and
    chips; the body groups the content. */
 .mg-collapsible {
-  margin-top: var(--mg-space-3);
-  background: var(--mg-surface-2);
+  margin-top: var(--mg-gap-card);
+  background: var(--mg-surface);
   border: 1px solid var(--mg-border);
   border-radius: var(--mg-radius);
   overflow: clip;
 }
 
+/* The head is the same band as a section card's head, so every item card reads alike. */
 .mg-collapsible > summary {
   padding: var(--mg-space-2) var(--mg-space-3);
   color: var(--mg-fg);
+  background: var(--mg-surface-2);
 }
 
 .mg-collapsible > summary:hover {
@@ -1062,54 +1270,115 @@ button.mg-row:hover {
 }
 
 .mg-collapsible[open] > summary {
-  background: var(--vscode-sideBarSectionHeader-background, transparent);
   border-bottom: 1px solid var(--mg-border);
 }
 
 .mg-collapsible-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--mg-space-2);
+}
+
+/* Every part of the header's first line is centred in the same row, as high as a tool: the chevron, the number,
+   the title and the tools share one middle line, whatever the width. */
+.mg-collapsible > summary .mg-details-arrow {
+  height: var(--mg-btn-height);
+}
+
+.mg-collapsible-head > .mg-badge {
+  align-self: start;
+  margin-block: calc((var(--mg-btn-height) - 1.8em) / 2);
+  /* A framed circle on the head band, so the number reads as a marker of its own: its edge, not the digit, sets
+     the gap to the chevron and to the title. The generic badge fill is too close to the band to show. */
+  box-sizing: border-box;
+  width: 1.8em;
+  min-width: 1.8em;
+  padding: 0;
+  color: var(--mg-fg);
+  background: var(--mg-surface);
+  border-color: var(--mg-border);
+}
+
+.mg-collapsible-head > .mg-badge--warn {
+  color: var(--mg-warn);
+  border-color: var(--mg-warn);
+}
+
+/* One line: the title, its warning chips, then the quiet summary, centred on the same middle line as the chevron,
+   the number and the tools. The title is never cut. The summary takes what is left beside it and is cut with an
+   ellipsis; only when even a short summary or a warning chip has no room does it wrap to a line under the title,
+   so nothing ever runs into the tools. */
+.mg-collapsible-main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--mg-space-2);
+  column-gap: var(--mg-space-2);
+  min-width: 0;
+  min-height: var(--mg-btn-height);
 }
 
 .mg-collapsible-title {
+  flex: none;
+  max-width: 100%;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.mg-collapsible-chips {
+/* The only framed items in a card header: they ask for attention, so they stay whole. */
+.mg-collapsible-alerts {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
+  align-items: center;
   gap: var(--mg-space-1);
-  margin-left: auto;
+}
+
+.mg-collapsible-alerts .mg-chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+.mg-collapsible-summary {
+  flex: 1 1 4em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mg-muted);
+  font-size: 0.9em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mg-collapsible-body {
   padding: var(--mg-space-3) var(--mg-space-3) var(--mg-space-4);
 }
 
+/* The item's actions sit at the right of its header as icon buttons, on the title's line, so every card keeps them
+   in one place. */
 .mg-collapsible-tools {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  align-self: start;
   gap: var(--mg-space-1);
-  margin-bottom: var(--mg-space-3);
-  padding: var(--mg-space-1) 0 var(--mg-space-2);
-  border-bottom: 1px solid var(--mg-border);
+  min-height: var(--mg-btn-height);
 }
 
-.mg-collapsible-tool-remove {
-  margin-left: auto;
-}
+/* The actions appear when the pointer is over the card or focus is inside it. They keep their space, so the header
+   never shifts, and stay in the tab order, so the keyboard reaches them. Where there is no hover (touch), they
+   stay visible. */
+@media (hover: hover) {
+  .mg-collapsible-tools {
+    opacity: 0;
+  }
 
-.mg-collapsible-tool-remove:hover {
-  color: var(--mg-error);
-}
+  .mg-collapsible:hover .mg-collapsible-tools,
+  .mg-collapsible:focus-within .mg-collapsible-tools {
+    opacity: 1;
+  }
 
-@media (max-width: 640px) {
-  .mg-collapsible-chips {
-    margin-left: 0;
+  @media (prefers-reduced-motion: no-preference) {
+    .mg-collapsible-tools {
+      transition: opacity 120ms ease;
+    }
   }
 }
 

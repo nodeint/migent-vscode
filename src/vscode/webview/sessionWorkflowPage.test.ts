@@ -36,6 +36,7 @@ class FakeElement {
   public selectionEnd = 0;
   public selectionDirection = 'none';
   public offsetHeight = 0;
+  public parentElement: FakeElement | null = null;
   public readonly classList = {
     add: (...names: string[]): void => {
       const current = new Set(this.className.split(' ').filter(Boolean));
@@ -71,7 +72,16 @@ class FakeElement {
   }
 
   public append(...items: (FakeElement | string)[]): void {
-    for (const item of items) this.children.push(typeof item === 'string' ? new FakeText(item) : item);
+    for (const item of items) {
+      if (typeof item !== 'string') item.parentElement = this;
+      this.children.push(typeof item === 'string' ? new FakeText(item) : item);
+    }
+  }
+
+  /** The nearest element, this one included, with the given tag name. */
+  public closest(selector: string): FakeElement | null {
+    if (this.tagName === selector.toUpperCase()) return this;
+    return this.parentElement?.closest(selector) ?? null;
   }
 
   public replaceChildren(...items: (FakeElement | string)[]): void {
@@ -238,8 +248,10 @@ function load() {
   const media = path.join(__dirname, '../../../media');
   for (const file of [
     'shared/icons.js',
+    'shared/copy.js',
     'shared/page.js',
     'shared/form.js',
+    'workfloweditor/workflowcopy.js',
     'workfloweditor/workflowmodel.js',
     'workfloweditor/workflowform.js',
     'sessionworkflow/sessionworkflow.js',
@@ -298,6 +310,16 @@ describe('Session workflow page', () => {
     input.focus();
     input.enter('plan2');
     expect(page.doc.activeElement).toBe(page.stageId());
+  });
+
+  it('opens the card of a new item and focuses its first field when Add is clicked', () => {
+    const page = load();
+    page.deliver(model());
+    page.button('Add suggestion')?.click();
+    const field = page.find((node) => node.dataset.path === 'downstream.0.workflow');
+    expect(field).toBeDefined();
+    expect(page.doc.activeElement).toBe(field);
+    expect(field?.closest('details')?.open).toBe(true);
   });
 
   it('posts the draft with the base hash on Save', () => {

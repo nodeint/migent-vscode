@@ -7,11 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { sessionDir } from './paths';
 import { readSessionWorkflow } from './sessionWorkflow';
 
-function project(withExecution: boolean): string {
+function project(withExecution: boolean, schema = 7): string {
   const root = mkdtempSync(path.join(tmpdir(), 'sw-'));
   const dir = sessionDir(root, 's1');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, 'workflow.yaml'), 'schema_version: 5\nid: a\nstages:\n  - id: plan\n    role: dev\n');
+  writeFileSync(path.join(dir, 'workflow.yaml'), `schema_version: ${schema}\nid: a\nstages:\n  - id: plan\n    role: dev\n`);
   if (withExecution) mkdirSync(path.join(dir, 'executions', '0001-plan--attempt-01'), { recursive: true });
   return root;
 }
@@ -39,5 +39,14 @@ describe('readSessionWorkflow', () => {
     expect(model.isLocked).toBe(true);
     expect(model.ranStages).toEqual(['plan']);
     expect(model.canSave).toBe(false);
+  });
+
+  it('is read-only on an older schema, and a lock never makes it savable', () => {
+    for (const withExecution of [false, true]) {
+      const model = read(project(withExecution, 6));
+      expect(model.state).toBe('unsupported');
+      expect(model.isSupported).toBe(false);
+      expect(model.canSave).toBe(false);
+    }
   });
 });

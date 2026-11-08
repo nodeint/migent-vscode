@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 
 import type { ClientChoice } from './controlArgs';
 import { readProjectConfig } from './projectConfig';
-import { parseWorkflowAuthoringEnvelope, readWorkflowEditor, workflowBodyFromForm, workflowDraftFromForm, workflowFormFromClient } from './workflowEditor';
+import { duplicateArtifactProblem, parseWorkflowAuthoringEnvelope, readWorkflowEditor, workflowBodyFromForm, workflowDraftFromForm, workflowFormFromClient } from './workflowEditor';
 import { scanWorkflows } from './workflows';
 
 const dirs: string[] = [];
@@ -39,11 +39,18 @@ function model(root: string, file: string, clients: ClientChoice[] = []) {
   });
 }
 
-const FULL = `schema_version: 5
+const FULL = `schema_version: 7
 id: plan
 concurrency: 1
 constraints:
   - Plan only.
+artifacts:
+  plan:
+    file: plan.md
+    description: The plan
+    required: true
+  notes:
+    file: notes.md
 stages:
   - id: plan
     description: First pass
@@ -53,8 +60,7 @@ stages:
     max_revisions: 3
     instructions:
       - Write the plan.
-    produces:
-      artifact: plan.md
+    artifacts: [plan, notes]
     verify:
       - pnpm build
     verify_timeout: 120
@@ -64,9 +70,14 @@ stages:
       - approved:
           when: Ready.
           navigate: review
+          artifacts: [notes]
       - revise:
           when: More work.
           navigate: plan
+          artifacts:
+            feedback:
+              file: feedback.md
+              description: What to change
   - id: review
     role: reviewer
     depends_on: [plan]
@@ -82,26 +93,24 @@ stages:
         - "docs/**/*"
     instructions:
       - Review it.
-outputs:
-  - name: plan
-    from_stage: plan
-    artifact: plan.md
 downstream:
   - workflow: implement
     task: Implement it.
     artifacts:
       plan: plan
+  - workflow: docs
+    task: Document it.
 `;
 
 const CONFIG = 'schema_version: 5\nroles:\n  planner: {}\n  reviewer: {}\nagents:\n  deep_reasoning: {}\n';
 
 describe('readWorkflowEditor', () => {
-  it('projects a schema 5 workflow into the form model', () => {
+  it('projects a schema 7 workflow into the form model', () => {
     const result = model(
       project(
         {
           'plan.yaml': FULL,
-          'implement.yaml': 'schema_version: 5\nid: implement\nstages:\n  - id: implement\n',
+          'implement.yaml': 'schema_version: 7\nid: implement\nstages:\n  - id: implement\n',
         },
         CONFIG,
       ),
@@ -126,22 +135,27 @@ describe('readWorkflowEditor', () => {
       ask: 'human',
       agentMode: 'named',
       agentName: 'deep_reasoning',
-      maxRevisions: 3,
+      max_revisions: 3,
       instructions: ['Write the plan.'],
-      producesArtifact: 'plan.md',
+      artifacts: ['plan', 'notes'],
       verify: ['pnpm build'],
-      verifyTimeout: 120,
+      verify_timeout: 120,
       sessionResumeFrom: 'prepare',
       decision: [
-        { value: 'approved', when: 'Ready.', navigate: 'review' },
-        { value: 'revise', when: 'More work.', navigate: 'plan' },
+        { value: 'approved', when: 'Ready.', navigate: 'review', artifacts: { kind: 'ids', ids: ['notes'] } },
+        {
+          value: 'revise',
+          when: 'More work.',
+          navigate: 'plan',
+          artifacts: { kind: 'local', items: [{ id: 'feedback', file: 'feedback.md', description: 'What to change' }] },
+        },
       ],
     });
     expect(review).toMatchObject({
       id: 'review',
       role: 'reviewer',
       agentMode: 'inline',
-      dependsOn: ['plan'],
+      depends_on: ['plan'],
       runWhenPaths: ['docs/**/*'],
     });
     expect(review.agent).toEqual({
@@ -150,14 +164,51 @@ describe('readWorkflowEditor', () => {
       clientType: 'codex',
       clientOptions: [{ key: 'sandbox', value: 'read-only' }],
     });
-    expect(result.form.outputs).toEqual([{ name: 'plan', fromStage: 'plan', artifact: 'plan.md' }]);
+    expect(result.form.artifacts).toEqual([
+      { id: 'plan', file: 'plan.md', description: 'The plan', required: true },
+      { id: 'notes', file: 'notes.md', description: '', required: null },
+    ]);
     expect(result.form.downstream).toEqual([
       { workflow: 'implement', task: 'Implement it.', artifacts: [{ key: 'plan', value: 'plan' }] },
+      { workflow: 'docs', task: 'Document it.', artifacts: null },
     ]);
+    expect(result.canSave).toBe(true);
   });
 
+  it('round-trips a schema 7 file without dropping the registry, stage artifacts or an omitted mapping', () => {
+    const result = model(project({ 'plan.yaml': FULL }, CONFIG), 'plan.yaml');
+    const draft = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
+    expect(draft).toEqual(parse(FULL));
+  });
+
+  it('keeps an explicit empty mapping apart from an omitted one, through a save round trip', () => {
+    const source =
+      'schema_version: 7\nid: a\nstages:\n  - id: s\ndownstream:\n  - workflow: b\n    artifacts: {}\n  - workflow: c\n';
+    const result = model(project({ 'a.yaml': source }), 'a.yaml');
+    expect(result.form.downstream.map((target) => target.artifacts)).toEqual([[], null]);
+    const body = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
+    expect(body.downstream).toEqual([{ workflow: 'b', artifacts: {} }, { workflow: 'c' }]);
+  });
+
+  it.each(['plan.yaml', 'implement.yaml', 'schema-workflow.yaml'])(
+    'round-trips the official 0.5.1 %s without losing its registry or artifact references',
+    (file) => {
+      const text = readFileSync(path.join(__dirname, 'fixtures', 'workflows-0.5.1', file), 'utf8');
+      const result = model(project({ [file]: text }), file);
+      expect(result.state).toBe('ok');
+      expect(result.form.artifacts.length).toBeGreaterThan(0);
+      const body = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
+      expect(body.artifacts).toEqual((parse(text) as { artifacts: unknown }).artifacts);
+      const original = parse(text) as { stages: { id: string; artifacts?: string[]; decision?: unknown[] }[] };
+      const saved = body.stages as typeof original.stages;
+      expect(saved.map((stage) => stage.artifacts)).toEqual(original.stages.map((stage) => stage.artifacts));
+      expect(saved.map((stage) => stage.decision)).toEqual(original.stages.map((stage) => stage.decision));
+      expect(body.downstream).toEqual((parse(text) as { downstream?: unknown }).downstream);
+    },
+  );
+
   it('turns a list of decision destinations into comma-separated text and back', () => {
-    const source = `schema_version: 5
+    const source = `schema_version: 7
 id: routed
 stages:
   - id: review
@@ -187,13 +238,15 @@ stages:
     expect(result.form.stages).toEqual([]);
   });
 
-  it('does not gate on the schema version and projects its fields', () => {
-    const result = model(project({ 'old.yaml': 'schema_version: 4\nid: old\nstages:\n  - id: a\n' }), 'old.yaml');
-    expect(result.state).toBe('ok');
-    expect(result.isSupported).toBe(true);
-    expect(result.schemaVersion).toBe(4);
-    expect(result.readError).toBeNull();
-    expect(result.form.stages.map((stage) => stage.id)).toEqual(['a']);
+  it('reads any schema other than 7 as unsupported and cannot be saved', () => {
+    for (const text of ['schema_version: 6\nid: old\nstages:\n  - id: a\n', 'id: old\nstages:\n  - id: a\n']) {
+      const result = model(project({ 'old.yaml': text }), 'old.yaml');
+      expect(result.state).toBe('unsupported');
+      expect(result.isSupported).toBe(false);
+      expect(result.canSave).toBe(false);
+      expect(result.yaml).toBe(text);
+      expect(result.readError).toBeNull();
+    }
   });
 
   it('reports a missing file as unreadable, never creating it', () => {
@@ -204,13 +257,13 @@ stages:
   });
 
   it('lists the other files that declare the same id', () => {
-    const root = project({ 'a.yaml': 'schema_version: 5\nid: shared\n', 'b.yaml': 'schema_version: 5\nid: shared\n' });
+    const root = project({ 'a.yaml': 'schema_version: 7\nid: shared\n', 'b.yaml': 'schema_version: 7\nid: shared\n' });
     expect(model(root, 'a.yaml').duplicateOf).toEqual(['b.yaml']);
   });
 
   it('carries the client suggestions into the model', () => {
     const clients = [{ id: 'codex', models: ['gpt-5'], optionKeys: ['model_reasoning_effort'] }];
-    const result = model(project({ 'a.yaml': 'schema_version: 5\nid: a\n' }), 'a.yaml', clients);
+    const result = model(project({ 'a.yaml': 'schema_version: 7\nid: a\n' }), 'a.yaml', clients);
     expect(result.clients).toEqual(clients);
   });
 });
@@ -230,16 +283,16 @@ describe('the page draft', () => {
         },
         { id: 'b', agentMode: 'inline', agent: { clientType: 'codex', model: 'gpt-5', clientOptions: [{ key: 'k', value: 'v' }] } },
       ],
-      outputs: [],
+      artifacts: [],
       downstream: [],
     });
     expect(form.stages[0]).toMatchObject({ id: 'a', agentMode: 'named', agentName: 'fast' });
     expect(form.stages[0]).not.toHaveProperty('options');
     expect(form.stages[1].agent).toMatchObject({ clientType: 'codex', model: 'gpt-5' });
-    expect(workflowBodyFromForm(form, 5)).not.toHaveProperty('title');
+    expect(workflowBodyFromForm(form, 7)).not.toHaveProperty('title');
   });
 
-  it('serializes the form as a canonical schema 5 draft', () => {
+  it('serializes the form as a canonical schema 7 draft', () => {
     const form = workflowFormFromClient({
       id: 'plan',
       concurrency: 1,
@@ -251,31 +304,37 @@ describe('the page draft', () => {
           agentMode: 'named',
           agentName: 'deep_reasoning',
           instructions: ['Write it.'],
-          producesArtifact: 'plan.md',
+          artifacts: ['plan'],
           decision: [{ value: 'approved', when: 'Ready.', navigate: 'complete' }],
         },
       ],
-      outputs: [{ name: 'plan', fromStage: 'plan', artifact: 'plan.md' }],
-      downstream: [{ workflow: 'implement', task: 'Do it.', artifacts: [{ key: 'plan', value: 'plan' }] }],
+      artifacts: [{ id: 'plan', file: 'plan.md' }],
+      downstream: [
+        { workflow: 'implement', task: 'Do it.', artifacts: [{ key: 'plan', value: 'plan' }] },
+        { workflow: 'docs', task: 'Doc it.' },
+      ],
     });
-    const draft = workflowDraftFromForm(form, 6);
+    const draft = workflowDraftFromForm(form, 7);
     expect(parse(draft)).toEqual({
-      schema_version: 6,
+      schema_version: 7,
       id: 'plan',
       concurrency: 1,
       constraints: ['Plan only.'],
+      artifacts: { plan: { file: 'plan.md' } },
       stages: [
         {
           id: 'plan',
           role: 'planner',
           agent: 'deep_reasoning',
           instructions: ['Write it.'],
-          produces: { artifact: 'plan.md' },
+          artifacts: ['plan'],
           decision: [{ approved: { when: 'Ready.', navigate: 'complete' } }],
         },
       ],
-      outputs: [{ name: 'plan', from_stage: 'plan', artifact: 'plan.md' }],
-      downstream: [{ workflow: 'implement', task: 'Do it.', artifacts: { plan: 'plan' } }],
+      downstream: [
+        { workflow: 'implement', task: 'Do it.', artifacts: { plan: 'plan' } },
+        { workflow: 'docs', task: 'Doc it.' },
+      ],
     });
   });
 
@@ -291,7 +350,7 @@ describe('the page draft', () => {
         },
       ],
     });
-    const body = workflowBodyFromForm(form, 5);
+    const body = workflowBodyFromForm(form, 7);
     expect(body.stages).toEqual([
       {
         id: 'plan',
@@ -299,6 +358,43 @@ describe('the page draft', () => {
         agent: { model: 'gpt-5', client: { type: 'codex', options: { sandbox: 'read-only' } } },
       },
     ]);
+  });
+});
+
+describe('duplicateArtifactProblem', () => {
+  it('is null for distinct ids, including the same id in different decisions', () => {
+    const form = workflowFormFromClient({
+      artifacts: [{ id: 'a', file: 'a.md' }, { id: 'b', file: 'b.md' }],
+      stages: [
+        {
+          id: 's',
+          decision: [
+            { value: 'x', artifacts: { kind: 'local', items: [{ id: 'fixes', file: 'f.md' }] } },
+            { value: 'y', artifacts: { kind: 'local', items: [{ id: 'fixes', file: 'g.md' }] } },
+          ],
+        },
+      ],
+    });
+    expect(duplicateArtifactProblem(form)).toBeNull();
+  });
+
+  it('names a registry id used twice, which would otherwise keep only the second definition', () => {
+    const form = workflowFormFromClient({
+      artifacts: [{ id: 'plan', file: 'a.md' }, { id: 'plan', file: 'b.md' }],
+    });
+    expect(duplicateArtifactProblem(form)).toMatch(/"plan" is used more than once/);
+  });
+
+  it('names a decision-local id defined twice in one decision', () => {
+    const form = workflowFormFromClient({
+      stages: [
+        {
+          id: 'review',
+          decision: [{ value: 'revise', artifacts: { kind: 'local', items: [{ id: 'fixes', file: 'a.md' }, { id: 'fixes', file: 'b.md' }] } }],
+        },
+      ],
+    });
+    expect(duplicateArtifactProblem(form)).toMatch(/Decision "revise" of stage "review".*"fixes"/);
   });
 });
 

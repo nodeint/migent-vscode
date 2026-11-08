@@ -1,47 +1,26 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { formatDuration } from './duration';
 import { listExecutions, parseExecutionId, readExecution } from './executions';
 import type { SessionSnapshot } from './model';
 import { EXECUTIONS_DIRNAME } from './paths';
 import { isRecord } from './record';
 
-/** Rules for Reply, Continue without reply and quota waits (plans/03c-reply-notifications.md). No `vscode`. */
+/** Rules for Reply, Continue without reply and quota failures (plans/03c-reply-notifications.md). No `vscode`. */
 
-export type BlockKind = 'blocker' | 'quota' | 'question';
+export type BlockKind = 'blocker' | 'question';
 
 const QUOTA_EVENT = 'provider.quota';
 const BLOCKER_TEXT_MAX = 400;
 
-/** Whether the latest provider event is a quota wait. Quota is a reason, never a persisted status. */
-function hasQuotaEvent(snapshot: SessionSnapshot): boolean {
-  return snapshot.status?.latestProviderEvent?.event === QUOTA_EVENT;
-}
-
 /**
- * A quota wait persists as a stopped session, or as a failed one: the CLI marks the exhausted execution failed
- * (`failure_reason: quota`). A failed session counts only when the quota event belongs to its latest execution,
- * so an unrelated later failure is never read as a quota wait.
- */
-function isQuotaWait(snapshot: SessionSnapshot): boolean {
-  const { state } = snapshot.displayState;
-  if (!hasQuotaEvent(snapshot)) return false;
-  if (state === 'stopped') return true;
-  if (state !== 'failed') return false;
-  const eventExecution = snapshot.status?.latestProviderEvent?.executionId ?? null;
-  return eventExecution === null || eventExecution === (snapshot.status?.latestExecutionId ?? null);
-}
-
-/**
- * Which kind of obstacle a session shows. A pending human question is never an ordinary blocker, and a
- * quota wait (a stopped session whose latest event is a quota event) has no Reply.
+ * Which kind of obstacle a session shows. A pending human question is never an ordinary blocker. A client quota
+ * failure is an ordinary failed stage since CLI 0.5.1, so it is not an obstacle kind.
  */
 export function blockKind(snapshot: SessionSnapshot): BlockKind | null {
   const { state } = snapshot.displayState;
   if (state === 'question' || (snapshot.status?.questions.length ?? 0) > 0) return 'question';
   if (state === 'blocked') return 'blocker';
-  if (isQuotaWait(snapshot)) return 'quota';
   return null;
 }
 
@@ -63,25 +42,29 @@ export function blockedTargets(snapshot: SessionSnapshot): BlockedTarget[] {
   return targets.sort((left, right) => left.executionId.localeCompare(right.executionId));
 }
 
-export interface QuotaWait {
-  /** Epoch ms of `retry_at`, or null when the CLI recorded none (or an unparsable value). */
+export interface QuotaFailure {
+  /** Epoch ms of `retry_at`, or null when the CLI recorded none (or an unparsable value). Informational only. */
   retryAt: number | null;
-  /** True when Retry is enabled without an explicit override: `retry_at` is known and not in the future. */
-  isReady: boolean;
 }
 
-/** The quota wait of a session, or null when it is not in one. */
-export function quotaWait(snapshot: SessionSnapshot, now: number): QuotaWait | null {
-  if (blockKind(snapshot) !== 'quota') return null;
-  const raw = snapshot.status?.latestProviderEvent?.retryAt ?? null;
-  const parsed = raw === null ? Number.NaN : Date.parse(raw);
-  const retryAt = Number.isNaN(parsed) ? null : parsed;
-  return { retryAt, isReady: retryAt !== null && retryAt <= now };
+/**
+ * The client quota failure of a failed session, or null. The latest `provider.quota` event must belong to the
+ * latest execution, so an unrelated later failure is never read as a quota failure. Since CLI 0.5.1 the CLI
+ * neither waits nor retries; `session continue` reruns the stage at once and ignores `retry_at`.
+ */
+export function quotaFailure(snapshot: SessionSnapshot): QuotaFailure | null {
+  if (snapshot.displayState.state !== 'failed') return null;
+  const event = snapshot.status?.latestProviderEvent ?? null;
+  if (event?.event !== QUOTA_EVENT) return null;
+  const eventExecution = event.executionId ?? null;
+  if (eventExecution !== null && eventExecution !== (snapshot.status?.latestExecutionId ?? null)) return null;
+  const parsed = event.retryAt === null ? Number.NaN : Date.parse(event.retryAt);
+  return { retryAt: Number.isNaN(parsed) ? null : parsed };
 }
 
-/** `Nov 3, 2026, 2:05 PM GMT+7 · in 12m 3s`; says so instead of inventing a time when none is known. */
-export function describeQuotaWait(wait: QuotaWait, now: number, locale?: string): string {
-  if (wait.retryAt === null) return 'No retry time was recorded.';
+/** `Nov 3, 2026, 2:05 PM GMT+7`; says so instead of inventing a time when none is known. */
+export function describeQuotaReset(failure: QuotaFailure, locale?: string): string {
+  if (failure.retryAt === null) return 'no reset time was recorded';
   const absolute = new Intl.DateTimeFormat(locale, {
     year: 'numeric',
     month: 'short',
@@ -89,8 +72,8 @@ export function describeQuotaWait(wait: QuotaWait, now: number, locale?: string)
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
-  }).format(new Date(wait.retryAt));
-  return wait.isReady ? `${absolute} · retry available` : `${absolute} · in ${formatDuration(wait.retryAt - now)}`;
+  }).format(new Date(failure.retryAt));
+  return `resets ${absolute}`;
 }
 
 /** Stable identity of one reply draft: stage name alone is not enough once an attempt changes. */

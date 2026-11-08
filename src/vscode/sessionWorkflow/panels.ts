@@ -9,8 +9,10 @@ import { workflowDraftPath } from '../../core/paths';
 import { SESSION_ACTIONS } from '../../core/resultsIntent';
 import { readSessionWorkflow, type SessionWorkflowModel } from '../../core/sessionWorkflow';
 import {
+  duplicateArtifactProblem,
   parseWorkflowAuthoringEnvelope,
   workflowDraftFromForm,
+  type WorkflowForm,
   workflowFormFromClient,
 } from '../../core/workflowEditor';
 import { parseWorkflowEditorMessage } from '../../core/workflowEditorIntent';
@@ -41,7 +43,7 @@ const PAGE: PageDescriptor = {
   modules: {
     folder: 'workfloweditor',
     styles: ['workflowform.css'],
-    scripts: ['workflowmodel.js', 'workflowform.js'],
+    scripts: ['workflowcopy.js', 'workflowmodel.js', 'workflowform.js'],
   },
 };
 
@@ -59,6 +61,18 @@ function isIdentity(value: unknown): value is SessionWorkflowIdentity {
 const SHORT_ID = 8;
 
 const LOCKED_MESSAGE = 'A stage already ran, so this workflow can no longer be changed.';
+const UNSUPPORTED_MESSAGE =
+  'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
+
+/**
+ * Why a save request must be refused before anything is serialized, or null. The request comes from the webview, so
+ * the page's own disabled state is not trusted: the last published model must allow it (not locked, supported schema).
+ */
+function saveRefusal(model: SessionWorkflowModel | null, form: WorkflowForm): string | null {
+  if (model === null || model.isLocked) return LOCKED_MESSAGE;
+  if (!model.canSave) return UNSUPPORTED_MESSAGE;
+  return duplicateArtifactProblem(form);
+}
 
 interface SaveRequest {
   rawForm: unknown;
@@ -76,6 +90,10 @@ const transient = (error: string | null, isSaving = false): Transient => ({
   applying: false,
   error,
 });
+
+function notifySaveFailed(message: string): void {
+  void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
+}
 
 function saveArgs(sessionId: string, baseHash: string): string[] {
   return [
@@ -297,8 +315,10 @@ export class SessionWorkflowPanels implements vscode.Disposable {
       this.#fail(entry, 'The project is no longer available.');
       return;
     }
-    if (entry.lastModel?.isLocked ?? true) {
-      this.#fail(entry, LOCKED_MESSAGE);
+    const form = workflowFormFromClient(request.rawForm);
+    const refusal = saveRefusal(entry.lastModel, form);
+    if (refusal !== null) {
+      this.#fail(entry, refusal);
       return;
     }
     const launch = await this.#launch(entry);
@@ -306,7 +326,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     this.#publishLast(entry, transient(null, true));
     const result = await invokeJson(launch, saveArgs(identity.sessionId, request.baseHash), {
       cwd: context.root,
-      input: workflowDraftFromForm(workflowFormFromClient(request.rawForm), entry.lastModel?.schemaVersion ?? null),
+      input: workflowDraftFromForm(form, entry.lastModel?.schemaVersion ?? null),
       timeoutMs: SAVE_TIMEOUT_MS,
     });
     if (this.#entries.get(keyOf(identity)) !== entry) return;
@@ -332,10 +352,13 @@ export class SessionWorkflowPanels implements vscode.Disposable {
     if (envelope !== null) {
       entry.setValidation(splitDiagnostics(envelope.diagnostics), entry.lastModel?.savedHash ?? null);
       if (error.exitCode === EXIT_CONFLICT) {
+        notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
         this.#publishLast(entry, transient('The file changed on disk. Reload it from disk before saving again.'));
         return;
       }
       if (entry.validation.errors.length > 0) {
+        const count = entry.validation.errors.length;
+        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
         this.#publishLast(entry, transient(null));
         return;
       }
@@ -356,6 +379,7 @@ export class SessionWorkflowPanels implements vscode.Disposable {
   }
 
   #fail(entry: Entry, message: string): void {
+    notifySaveFailed(message);
     entry.setValidation(EMPTY_VALIDATION, null);
     this.#publishLast(entry, transient(message));
   }

@@ -41,8 +41,11 @@ export type NextRead =
 export interface DeclaredDownstream {
   workflow: string;
   task: string | null;
-  /** Target input name → source output name. */
-  artifacts: Record<string, string>;
+  /**
+   * Target input name → source output name. `null` when the entry omits `artifacts`: since CLI 0.5.1 every
+   * published artifact is then passed under its own id.
+   */
+  artifacts: Record<string, string> | null;
 }
 
 /** The `downstream` declaration shape in `workflow.frozen.yaml` has not been captured; this reader is lenient. */
@@ -50,7 +53,7 @@ export type FrozenDownstreamRead =
   | { kind: 'absent' }
   | { kind: 'unreadable'; error: string }
   | { kind: 'invalid'; error: string }
-  | { kind: 'ok'; downstream: DeclaredDownstream[] };
+  | { kind: 'ok'; downstream: DeclaredDownstream[]; optionalArtifacts: string[] };
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
@@ -121,11 +124,10 @@ function parseDownstreamEntry(entry: unknown): DeclaredDownstream | null {
   if (!isRecord(entry)) return null;
   const workflow = str(entry.workflow);
   if (workflow === null) return null;
+  if (!isRecord(entry.artifacts)) return { workflow, task: str(entry.task), artifacts: null };
   const artifacts: Record<string, string> = {};
-  if (isRecord(entry.artifacts)) {
-    for (const [name, output] of Object.entries(entry.artifacts)) {
-      if (typeof output === 'string') artifacts[name] = output;
-    }
+  for (const [name, output] of Object.entries(entry.artifacts)) {
+    if (typeof output === 'string') artifacts[name] = output;
   }
   return { workflow, task: str(entry.task), artifacts };
 }
@@ -152,27 +154,90 @@ export function readFrozenDownstream(sessionDirPath: string): FrozenDownstreamRe
   const declared = downstream
     .map((entry) => parseDownstreamEntry(entry))
     .filter((entry): entry is DeclaredDownstream => entry !== null);
-  return { kind: 'ok', downstream: declared };
+  return { kind: 'ok', downstream: declared, optionalArtifacts: optionalRegistryArtifacts(isRecord(workflow) ? workflow : {}) };
 }
 
-function sameMapping(suggestion: NextSuggestion, declared: DeclaredDownstream): boolean {
-  if (Object.keys(declared.artifacts).length !== suggestion.artifacts.length) return false;
-  return suggestion.artifacts.every((artifact) => declared.artifacts[artifact.name] === artifact.output);
+/** Ids of registry artifacts with `required: false`. A pre-schema-7 pin has no registry, so none. */
+function optionalRegistryArtifacts(workflow: Record<string, unknown>): string[] {
+  const registry = Array.isArray(workflow.artifacts) ? workflow.artifacts : [];
+  const ids: string[] = [];
+  for (const item of registry) {
+    if (isRecord(item) && item.required === false && typeof item.id === 'string') ids.push(item.id);
+  }
+  return ids;
 }
 
-function isDeclared(suggestion: NextSuggestion, downstream: readonly DeclaredDownstream[]): boolean {
-  return downstream.some((entry) => entry.workflow === suggestion.workflow && sameMapping(suggestion, entry));
+/** What the session published and which registry artifacts are optional; `published` is null when unknown. */
+interface OutputFacts {
+  published: ReadonlySet<string> | null;
+  optional: ReadonlySet<string>;
 }
 
 /**
- * Set `declared` on each suggestion: true when the frozen workflow declares the same
- * target workflow with the same artifact-to-output mapping. Without a readable
+ * Whether a `next.json` entry is what the frozen declaration resolves to, using the CLI's 0.5.1 rule
+ * (`resolveSuggestionEntries`, https://github.com/nodeint/migent/releases/tag/v0.5.1). It is checked against the
+ * session's own published outputs, never `next.json` alone. Anything that does not match stays undeclared.
+ *
+ * - Omitted `artifacts`: exactly the published outputs, each under its own name.
+ * - Explicit mapping: every suggested artifact is declared with the same output. A declared entry the suggestion
+ *   lacks is allowed only when its output is optional and was not published.
+ */
+function sameMapping(suggestion: NextSuggestion, declared: DeclaredDownstream, outputs: OutputFacts): boolean {
+  const { published, optional } = outputs;
+  if (declared.artifacts === null) {
+    if (published === null) return false;
+    const names = new Set(suggestion.artifacts.map((artifact) => artifact.name));
+    return (
+      names.size === suggestion.artifacts.length &&
+      names.size === published.size &&
+      suggestion.artifacts.every((artifact) => artifact.name === artifact.output && published.has(artifact.output))
+    );
+  }
+  const mapping = declared.artifacts;
+  const suggested = new Set(suggestion.artifacts.map((artifact) => artifact.name));
+  if (suggested.size !== suggestion.artifacts.length) return false;
+  if (!suggestion.artifacts.every((artifact) => mapping[artifact.name] === artifact.output)) return false;
+  return Object.entries(mapping).every(
+    ([name, output]) => suggested.has(name) || (optional.has(output) && published !== null && !published.has(output)),
+  );
+}
+
+function isDeclared(
+  suggestion: NextSuggestion,
+  downstream: readonly DeclaredDownstream[],
+  outputs: OutputFacts,
+): boolean {
+  return downstream.some((entry) => entry.workflow === suggestion.workflow && sameMapping(suggestion, entry, outputs));
+}
+
+/** True when the suggestion's workflow is declared with an omitted mapping that needs the unknown outputs. */
+function needsUnknownOutputs(
+  suggestion: NextSuggestion,
+  downstream: readonly DeclaredDownstream[],
+  outputs: OutputFacts,
+): boolean {
+  if (outputs.published !== null) return false;
+  return downstream.some((entry) => entry.workflow === suggestion.workflow && entry.artifacts === null);
+}
+
+/**
+ * Set `declared` on each suggestion: true when the frozen workflow declares the same target workflow and its
+ * resolution gives the suggested artifacts. `published` is the session's published output names
+ * (`status.json.outputs`); without them an omitted mapping cannot be resolved. Without a readable
  * declaration the flag stays null, never guessed.
  */
 export function markDeclared(
   suggestions: readonly NextSuggestion[],
   frozen: FrozenDownstreamRead,
+  published: readonly string[] | null,
 ): NextSuggestion[] {
   if (frozen.kind !== 'ok') return suggestions.map((suggestion) => ({ ...suggestion, declared: null }));
-  return suggestions.map((suggestion) => ({ ...suggestion, declared: isDeclared(suggestion, frozen.downstream) }));
+  const outputs: OutputFacts = {
+    published: published === null ? null : new Set(published),
+    optional: new Set(frozen.optionalArtifacts),
+  };
+  return suggestions.map((suggestion) => {
+    if (isDeclared(suggestion, frozen.downstream, outputs)) return { ...suggestion, declared: true };
+    return { ...suggestion, declared: needsUnknownOutputs(suggestion, frozen.downstream, outputs) ? null : false };
+  });
 }

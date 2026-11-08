@@ -34,7 +34,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 
 - Browse project workflows and open their definitions in the editor.
 - Run a workflow immediately, or prepare a session, edit its task, and use **Save & Run**.
-- Continue or stop a session, run the next stage once, retry after a quota wait, or repair a session.
+- Continue or stop a session, run the next stage once, or repair a session.
 - Initialize a Migent project and run Doctor from VS Code.
 
 ### Human input and agent guidance
@@ -42,7 +42,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 - Answer agent questions from the Questions page.
 - Write and send a reply when a session is blocked.
 - Keep question and reply drafts across reloads.
-- Receive notifications for questions, blocked or failed sessions, quota waits, and completed sessions.
+- Receive notifications for questions, blocked or failed sessions, and completed sessions.
 
 ### Results and workflow continuation
 
@@ -63,7 +63,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 ### Prerequisites
 
 - Install the Migent extension in VS Code.
-- Install Migent CLI v0.5.0 or newer to run workflows and control sessions:
+- Install Migent CLI v0.5.1 or newer to run workflows and control sessions:
 
   ```bash
   npm install -g @nodeint/migent
@@ -118,12 +118,11 @@ Configure the extension via VS Code settings (`Ctrl+,` or `Cmd+,`):
 | `migent.notifications.question` | `true` | Notify when a session waits for answers to human questions. |
 | `migent.notifications.blocked` | `true` | Notify when a session is blocked and needs a reply. |
 | `migent.notifications.failed` | `true` | Notify when a session fails. |
-| `migent.notifications.quota` | `true` | Notify about a quota wait and when it ends. |
 | `migent.notifications.completed` | `true` | Notify when a session completes. |
 
 ## Troubleshooting
 
-- **Cannot run workflows**: Check that Migent CLI v0.5.0 or newer is on `PATH`, then restart VS Code.
+- **Cannot run workflows**: Check that Migent CLI v0.5.1 or newer is on `PATH`, then restart VS Code.
   Use **Recheck CLI** on the CLI diagnostic row in the Sessions view to check again.
 - **"Schema is outdated" after upgrading the CLI**: Run `migent migrate` in the project. The migration
   deletes stage `options`; recreate any needed option as an inline `agent` on that stage.

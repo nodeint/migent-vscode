@@ -5,6 +5,7 @@
   'use strict';
 
   const { el, connect, menuButton, icon, trackFooter } = window.MigentPage;
+  const copy = window.MigentCopy;
   const ui = window.MigentForm;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const root = document.getElementById('root');
@@ -73,7 +74,7 @@
     noticesHost = null;
     footerHost = null;
     if (model === null) {
-      root.append(el('p', 'Loading the workflow…', 'mg-muted'));
+      root.append(el('p', copy.loadingWorkflow, 'mg-muted'));
       return;
     }
     root.append(renderHeader());
@@ -82,7 +83,7 @@
     root.append(noticesHost);
     root.append(...designForm.render());
     root.append(renderFooter());
-    restoreFocus(nextFocus || previous);
+    restoreFocus(nextFocus !== null ? { path: nextFocus } : previous);
     nextFocus = null;
     trackFooter();
   }
@@ -136,14 +137,42 @@
     return { path: active.dataset.path, start: active.selectionStart, end: active.selectionEnd };
   }
 
+  function controlAt(path) {
+    return root.querySelector('[data-path="' + String(path).replaceAll('"', '') + '"]');
+  }
+
   function restoreFocus(target) {
     if (!target) return;
-    const node = root.querySelector('[data-path="' + String(target.path).replaceAll('"', '') + '"]');
+    const node = controlAt(target.path);
     if (!node) return;
+    // A control in a closed card cannot take focus, so the cards around it open first (a new item starts closed).
+    window.MigentPage.openAround(node);
     node.focus();
     if (typeof node.setSelectionRange === 'function' && typeof target.start === 'number') {
       node.setSelectionRange(target.start, target.end);
     }
+  }
+
+  /** The control an issue path edits, or the nearest one around it; null when the form has none (such as roles). */
+  function controlOfIssue(issue) {
+    const parts = window.MigentWorkflowModel.formPathOf(form, issue.path).split('.');
+    while (parts.length > 1) {
+      const node = controlAt(parts.join('.'));
+      if (node) return node;
+      parts.pop();
+    }
+    return null;
+  }
+
+  /**
+   * Take the reader to the control an issue names. A control inside a closed card is not shown, so the cards that
+   * hold it open first (the shared `details` keeps that state across the repaint, so the card stays open), then the
+   * control is scrolled to the middle of the view and focused.
+   */
+  function revealControl(node) {
+    window.MigentPage.openAround(node);
+    node.scrollIntoView({ block: 'center' });
+    node.focus({ preventScroll: true });
   }
 
   // ---------- header ----------
@@ -159,8 +188,8 @@
     const items = [];
     items.push({ label: 'New session', onSelect: () => post('run') });
     items.push({ label: 'Duplicate workflow', onSelect: () => post('duplicate') });
-    if (model.file) items.push({ label: 'Reload from disk', onSelect: () => post('reload') });
-    if (model.file) items.push({ label: 'Reveal in Explorer', onSelect: () => post('reveal') });
+    if (model.file) items.push({ label: copy.menu.reloadFromDisk, onSelect: () => post('reload') });
+    if (model.file) items.push({ label: copy.menu.revealInExplorer, onSelect: () => post('reveal') });
     return menuButton({ label: '⋯', ariaLabel: 'Workflow actions', items });
   }
 
@@ -223,13 +252,23 @@
     const items = el('ul', null, 'mg-list mg-issue-list');
     for (const issue of list) {
       const item = el('li');
-      const jump = el('button', issue.message, 'mg-btn mg-btn--link');
-      jump.type = 'button';
-      jump.addEventListener('click', () => {
-        if (issue.path === 'yaml') post('openFile');
-        else repaint(issue.path);
-      });
-      item.append(jump);
+      if (issue.path === 'yaml') {
+        const jump = el('button', issue.message, 'mg-btn mg-btn--link');
+        jump.type = 'button';
+        jump.addEventListener('click', () => post('openFile'));
+        item.append(jump);
+      } else if (controlOfIssue(issue) !== null) {
+        const jump = el('button', issue.message, 'mg-btn mg-btn--link');
+        jump.type = 'button';
+        jump.addEventListener('click', () => {
+          const node = controlOfIssue(issue);
+          if (node) revealControl(node);
+        });
+        item.append(jump);
+      } else {
+        // No control edits this path (a role, say): plain text, not a link that goes nowhere.
+        item.append(el('span', issue.message));
+      }
       items.append(item);
     }
     body.append(items);
@@ -285,7 +324,7 @@
     const dirty = isDirty();
     return {
       // A clean, saved workflow shows nothing; only unsaved or never-saved states are worth a label.
-      stateLabel: dirty ? 'Unsaved changes' : model.mode === 'new' ? 'Not saved yet' : '',
+      stateLabel: dirty ? copy.unsavedChanges : model.mode === 'new' ? 'Not saved yet' : '',
       saving: transient.saving,
       busy: transient.applying,
       canDiscard: dirty,

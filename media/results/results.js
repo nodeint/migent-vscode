@@ -5,6 +5,7 @@
   'use strict';
 
   const { el, section, connect, details, sessionHeader } = window.MigentPage;
+  const copy = window.MigentCopy;
   const root = document.getElementById('root');
 
   /** A native button that sends `intent`. `kind` is a base.css button modifier. */
@@ -19,7 +20,7 @@
     return { intent: 'sessionAction', action: name };
   }
 
-  const FILE_STATE = { ok: '', missing: ' (file missing)', rejected: ' (path outside the session)' };
+  const FILE_STATE = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
 
   function renderHeader(model) {
     return sessionHeader(page, {
@@ -30,12 +31,12 @@
       current: 'results',
       tabs: [
         ...(model.meta.pendingQuestions > 0
-          ? [{ key: 'questions', label: 'Questions', onSelect: () => page.send(sessionAction('answerQuestions')) }]
+          ? [{ key: 'questions', label: copy.tab.questions, onSelect: () => page.send(sessionAction('answerQuestions')) }]
           : []),
-        { key: 'results', label: 'Results' },
-        { key: 'metrics', label: 'Metrics', onSelect: () => page.send(sessionAction('openMetrics')) },
-        { key: 'workflow', label: 'Workflow', onSelect: () => page.send(sessionAction('openWorkflow')) },
-        { key: 'task', label: 'Task', onSelect: () => page.send(sessionAction('openTask')) },
+        { key: 'results', label: copy.tab.results },
+        { key: 'metrics', label: copy.tab.metrics, onSelect: () => page.send(sessionAction('openMetrics')) },
+        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.send(sessionAction('openWorkflow')) },
+        { key: 'task', label: copy.tab.task, onSelect: () => page.send(sessionAction('openTask')) },
       ],
       menuItems: [{ label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) }],
     });
@@ -90,7 +91,7 @@
   };
 
   function suggestionDetails(suggestion) {
-    const node = details('card:' + suggestion.workflow, 'Details');
+    const node = details('card:' + suggestion.workflow, copy.details);
     let declared = 'Declaration could not be read.';
     if (suggestion.declared === true) declared = 'Declared by the workflow.';
     else if (suggestion.declared === false) declared = 'Not declared by the workflow.';
@@ -195,7 +196,7 @@
   }
 
   function renderDetails(source) {
-    const node = details('details', 'Details');
+    const node = details('details', copy.details);
     node.append(el('h3', 'Source session'));
     if (source.availability === 'retained') {
       const row = el('p');
@@ -217,11 +218,11 @@
   function render(model) {
     root.replaceChildren();
     if (model.availability === 'unavailable') {
-      root.append(el('h1', 'Session unavailable', 'mg-title'));
+      root.append(el('h1', copy.sessionUnavailable.title, 'mg-title'));
       root.append(
         el(
           'p',
-          'This session is not loaded, was removed, or is hidden by the session limit. ' + model.sessionId,
+          copy.sessionUnavailable.body(model.sessionId),
           'mg-subtitle',
         ),
       );

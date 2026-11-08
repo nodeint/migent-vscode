@@ -80,6 +80,7 @@ describe('readFrozenDownstream and markDeclared', () => {
     expect(readFrozenDownstream(capturedDir('handoff-source'))).toEqual({
       kind: 'ok',
       downstream: [{ workflow: 'probe-target', task: 'Acknowledge the note.', artifacts: { context_note: 'note' } }],
+      optionalArtifacts: [],
     });
   });
 
@@ -101,18 +102,82 @@ describe('readFrozenDownstream and markDeclared', () => {
   it('flags a suggestion declared only when workflow and artifact mapping match', () => {
     const read = readNext(capturedDir('handoff-source'));
     if (read.kind !== 'ok') throw new Error('next did not read');
-    expect(markDeclared(read.suggestions, readFrozenDownstream(capturedDir('handoff-source')))[0]?.declared).toBe(true);
+    expect(markDeclared(read.suggestions, readFrozenDownstream(capturedDir('handoff-source')), ['note'])[0]?.declared).toBe(true);
     // The synthetic declaration maps the same workflow to a different mapping elsewhere: not declared for other-target.
     const synthetic = readFrozenDownstream(syntheticDir('frozen-downstream'));
-    const [declared] = markDeclared(read.suggestions, synthetic);
+    const [declared] = markDeclared(read.suggestions, synthetic, ['note']);
     expect(declared?.declared).toBe(true);
-    const other = markDeclared([{ ...read.suggestions[0]!, workflow: 'other-target' }], synthetic);
+    const other = markDeclared([{ ...read.suggestions[0]!, workflow: 'other-target' }], synthetic, ['note']);
     expect(other[0]?.declared).toBe(false);
   });
 
   it('leaves declared null when the declaration cannot be read', () => {
     const read = readNext(capturedDir('handoff-source'));
     if (read.kind !== 'ok') throw new Error('next did not read');
-    expect(markDeclared(read.suggestions, { kind: 'absent' })[0]?.declared).toBeNull();
+    expect(markDeclared(read.suggestions, { kind: 'absent' }, ['note'])[0]?.declared).toBeNull();
+  });
+});
+
+describe('markDeclared with CLI 0.5.1 resolution', () => {
+  const suggestion = (artifacts: Record<string, string>) => ({
+    workflow: 'next',
+    task: null,
+    argv: [],
+    declared: null,
+    artifacts: Object.entries(artifacts).map(([name, output]) => ({
+      name,
+      output,
+      path: `outputs/${output}.md`,
+      availability: 'ok' as const,
+    })),
+  });
+  const frozen = (downstream: { artifacts: Record<string, string> | null }[], optionalArtifacts: string[] = []) => ({
+    kind: 'ok' as const,
+    downstream: downstream.map((entry) => ({ workflow: 'next', task: null, ...entry })),
+    optionalArtifacts,
+  });
+  const declared = (s: ReturnType<typeof suggestion>, f: ReturnType<typeof frozen>, published: string[] | null) =>
+    markDeclared([s], f, published)[0]?.declared;
+
+  it('reads an omitted mapping as omitted, apart from an empty one, and the optional registry ids', () => {
+    const dir = tempSession();
+    writeFileSync(
+      path.join(dir, 'workflow.frozen.yaml'),
+      'workflow:\n  artifacts:\n    - {id: a, file: a.md}\n    - {id: b, file: b.md, required: false}\n  downstream:\n    - workflow: x\n    - workflow: y\n      artifacts: {}\n',
+    );
+    expect(readFrozenDownstream(dir)).toEqual({
+      kind: 'ok',
+      downstream: [
+        { workflow: 'x', task: null, artifacts: null },
+        { workflow: 'y', task: null, artifacts: {} },
+      ],
+      optionalArtifacts: ['b'],
+    });
+  });
+
+  it('confirms an omitted mapping only when the suggestion is exactly the published outputs under their own ids', () => {
+    const f = frozen([{ artifacts: null }]);
+    expect(declared(suggestion({ a: 'a', b: 'b' }), f, ['a', 'b'])).toBe(true);
+    expect(declared(suggestion({ a: 'a' }), f, ['a', 'b'])).toBe(false);
+    expect(declared(suggestion({ a: 'a', c: 'c' }), f, ['a', 'b'])).toBe(false);
+    expect(declared(suggestion({ x: 'a' }), f, ['a'])).toBe(false);
+  });
+
+  it('does not guess an omitted mapping without the published outputs', () => {
+    expect(declared(suggestion({ a: 'a' }), frozen([{ artifacts: null }]), null)).toBeNull();
+  });
+
+  it('allows a declared optional artifact to be missing only when it was not published', () => {
+    const f = frozen([{ artifacts: { plan: 'plan', extra: 'extra' } }], ['extra']);
+    expect(declared(suggestion({ plan: 'plan' }), f, ['plan'])).toBe(true);
+    expect(declared(suggestion({ plan: 'plan' }), f, ['plan', 'extra'])).toBe(false);
+    expect(declared(suggestion({ plan: 'plan', extra: 'extra' }), f, ['plan', 'extra'])).toBe(true);
+  });
+
+  it('keeps blocking a missing required artifact, an extra artifact and a different output', () => {
+    const f = frozen([{ artifacts: { plan: 'plan', extra: 'extra' } }], []);
+    expect(declared(suggestion({ plan: 'plan' }), f, ['plan'])).toBe(false);
+    expect(declared(suggestion({ plan: 'plan', extra: 'extra', more: 'more' }), f, ['plan', 'extra'])).toBe(false);
+    expect(declared(suggestion({ plan: 'other', extra: 'extra' }), f, ['plan', 'extra'])).toBe(false);
   });
 });

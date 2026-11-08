@@ -18,21 +18,30 @@
       agentMode: 'role',
       agentName: '',
       agent: emptyAgent(),
-      dependsOn: [],
-      maxRevisions: null,
+      depends_on: [],
+      max_revisions: null,
       instructions: [],
-      producesArtifact: '',
+      artifacts: [],
       sessionResumeFrom: '',
       verify: [],
-      verifyTimeout: null,
-      maxVerify: null,
+      verify_timeout: null,
+      max_verify: null,
       runWhenPaths: [],
       decision: [],
     };
   }
 
   function emptyForm() {
-    return { id: '', concurrency: null, constraints: [], stages: [], outputs: [], downstream: [] };
+    return { id: '', concurrency: null, constraints: [], stages: [], artifacts: [], downstream: [] };
+  }
+
+  /**
+   * A copy of a list, or an empty one. The draft and the saved copy are both normalized from the same source, and
+   * the controls edit the draft's lists in place, so a list shared between them would change both and the page
+   * would never see an edit.
+   */
+  function copyList(values) {
+    return Array.isArray(values) ? values.slice() : [];
   }
 
   function normalizePairs(values) {
@@ -50,34 +59,49 @@
       clientType: typeof agent.clientType === 'string' ? agent.clientType : '',
       clientOptions: normalizePairs(agent.clientOptions),
     };
-    stage.dependsOn = Array.isArray(stage.dependsOn) ? stage.dependsOn : [];
-    stage.instructions = Array.isArray(stage.instructions) ? stage.instructions : [];
-    stage.verify = Array.isArray(stage.verify) ? stage.verify : [];
-    stage.runWhenPaths = Array.isArray(stage.runWhenPaths) ? stage.runWhenPaths : [];
+    stage.depends_on = copyList(stage.depends_on);
+    stage.instructions = copyList(stage.instructions);
+    stage.verify = copyList(stage.verify);
+    stage.runWhenPaths = copyList(stage.runWhenPaths);
+    stage.artifacts = copyList(stage.artifacts);
     stage.decision = (Array.isArray(stage.decision) ? stage.decision : []).map((route) => ({
       value: '',
       when: '',
       navigate: '',
       ...(route || {}),
+      artifacts: normalizeRouteArtifacts(route && route.artifacts),
     }));
     return stage;
   }
 
+  /** A route's artifacts keep the shape the file used: null (absent), registry ids, or decision-local items. */
+  function normalizeRouteArtifacts(value) {
+    if (!value || typeof value !== 'object') return null;
+    if (value.kind === 'ids') return { kind: 'ids', ids: copyList(value.ids) };
+    if (value.kind === 'local') {
+      const items = Array.isArray(value.items) ? value.items : [];
+      return { kind: 'local', items: items.map((item) => ({ id: '', file: '', description: '', ...(item || {}) })) };
+    }
+    return null;
+  }
+
   function normalizeForm(input) {
     const next = { ...emptyForm(), ...(input || {}) };
-    next.constraints = Array.isArray(next.constraints) ? next.constraints : [];
+    next.constraints = copyList(next.constraints);
     next.stages = (Array.isArray(next.stages) ? next.stages : []).map(normalizeStage);
-    next.outputs = (Array.isArray(next.outputs) ? next.outputs : []).map((output) => ({
-      name: '',
-      fromStage: '',
-      artifact: '',
-      ...(output || {}),
+    next.artifacts = (Array.isArray(next.artifacts) ? next.artifacts : []).map((item) => ({
+      id: '',
+      file: '',
+      description: '',
+      required: null,
+      ...(item || {}),
     }));
+    // `artifacts: null` means the key is absent: every published artifact is passed under its own id.
     next.downstream = (Array.isArray(next.downstream) ? next.downstream : []).map((target) => ({
       workflow: '',
       task: '',
       ...(target || {}),
-      artifacts: normalizePairs(target && target.artifacts),
+      artifacts: target && Array.isArray(target.artifacts) ? normalizePairs(target.artifacts) : null,
     }));
     return next;
   }
@@ -94,13 +118,18 @@
 
   // ---------- draft operations ----------
 
+  /** Move an item of `list` by `delta`; returns the new index, or -1 when it would leave the list. */
+  function moveItem(list, index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= list.length) return -1;
+    const [item] = list.splice(index, 1);
+    list.splice(target, 0, item);
+    return target;
+  }
+
   /** Move a stage by `delta`; returns the new index, or -1 when it would leave the list. */
   function moveStage(form, index, delta) {
-    const target = index + delta;
-    if (target < 0 || target >= form.stages.length) return -1;
-    const [stage] = form.stages.splice(index, 1);
-    form.stages.splice(target, 0, stage);
-    return target;
+    return moveItem(form.stages, index, delta);
   }
 
   function removeStage(form, index) {
@@ -112,7 +141,7 @@ function renameStageReferences(form, oldId, newId) {
   if (oldId === '' || newId === '' || oldId === newId) return false;
   let changed = false;
   for (const stage of form.stages) {
-    stage.dependsOn = stage.dependsOn.map((id) => {
+    stage.depends_on = stage.depends_on.map((id) => {
       if (id !== oldId) return id;
       changed = true;
       return newId;
@@ -134,11 +163,72 @@ function renameStageReferences(form, oldId, newId) {
       }
     }
   }
-  for (const output of form.outputs) {
-    if (output.fromStage === oldId) {
-      output.fromStage = newId;
-      changed = true;
+  return changed;
+}
+
+/**
+ * Translate a CLI diagnostic path to the path of the control that edits it. The CLI keys the registry and
+ * decision-local artifacts by id and nests a decision under its name (`artifacts.plan.file`,
+ * `stages.0.decision.1.revise.artifacts.fixes.file`); the form lists them by index. A list index of registry ids
+ * (`stages.0.artifacts.1`, `stages.0.decision.0.approved.artifacts.0`) becomes the checkbox of that id. Unknown shapes
+ * pass through.
+ *
+ * A diagnostic about a whole object (a stage, a decision, an artifact) is placed on the control that names it: the
+ * `id` of a stage or an artifact, the `value` of a decision. So every diagnostic lands on exactly one control and the
+ * reader sees where the problem is. A diagnostic about a whole `artifacts` block of a decision lands on its type select.
+ */
+function formPathOf(form, path) {
+  const parts = String(path).split('.');
+  if (parts[0] === 'artifacts' && parts.length > 1) {
+    const index = form.artifacts.findIndex((item) => item.id === parts[1]);
+    if (index >= 0) return ['artifacts', index, ...(parts.length === 2 ? ['id'] : parts.slice(2))].join('.');
+    return path;
+  }
+  if (parts[0] === 'stages' && parts.length === 2 && form.stages[Number(parts[1])]) return path + '.id';
+  if (parts[0] === 'stages' && parts[2] === 'artifacts' && parts.length === 4) {
+    const stage = form.stages[Number(parts[1])];
+    const id = stage && stage.artifacts[Number(parts[3])];
+    return id === undefined ? path : ['stages', parts[1], 'artifacts', id].join('.');
+  }
+  if (parts[0] !== 'stages' || parts[2] !== 'decision' || parts.length < 4) return path;
+  const stage = form.stages[Number(parts[1])];
+  const route = stage && stage.decision[Number(parts[3])];
+  if (!route) return path;
+  const rest = parts.slice(4);
+  const head = ['stages', parts[1], 'decision', parts[3]];
+  if (rest.length === 0) return [...head, 'value'].join('.');
+  if (rest[0] === route.value && !['when', 'navigate', 'artifacts'].includes(rest[0])) rest.shift();
+  if (rest.length === 0) return [...head, 'value'].join('.');
+  if (rest[0] === 'artifacts' && rest.length > 1 && route.artifacts && route.artifacts.kind === 'local') {
+    const index = route.artifacts.items.findIndex((item) => item.id === rest[1]);
+    if (index >= 0) return [...head, 'artifacts', index, ...(rest.length === 2 ? ['id'] : rest.slice(2))].join('.');
+  }
+  if (rest.length === 1 && rest[0] === 'artifacts') return [...head, 'artifacts', 'kind'].join('.');
+  // A list of registry ids: the index becomes the checkbox of that id.
+  if (rest[0] === 'artifacts' && rest.length === 2 && route.artifacts && route.artifacts.kind === 'ids') {
+    const id = route.artifacts.ids[Number(rest[1])];
+    if (id !== undefined) return [...head, 'artifacts', 'ids', id].join('.');
+  }
+  return [...head, ...rest].join('.');
+}
+
+/** Keep every in-file reference in step when a registry artifact id changes. Returns true when anything changed. */
+function renameArtifactReferences(form, oldId, newId) {
+  if (oldId === '' || newId === '' || oldId === newId) return false;
+  let changed = false;
+  const swap = (id) => {
+    if (id !== oldId) return id;
+    changed = true;
+    return newId;
+  };
+  for (const stage of form.stages) {
+    stage.artifacts = stage.artifacts.map(swap);
+    for (const route of stage.decision || []) {
+      if (route.artifacts && route.artifacts.kind === 'ids') route.artifacts.ids = route.artifacts.ids.map(swap);
     }
+  }
+  for (const target of form.downstream) {
+    for (const pair of target.artifacts || []) pair.value = swap(pair.value);
   }
   return changed;
 }
@@ -161,11 +251,6 @@ function uniqueValues(values) {
 
 function stageIds(form) {
   return uniqueValues(form.stages.map((stage) => stage.id));
-}
-
-function artifactBaseName(artifact) {
-  const base = String(artifact).split('/').pop() || String(artifact);
-  return base.replace(/\.[^.]+$/, '') || base;
 }
 
 function agentNameOptions(model, current) {
@@ -207,50 +292,25 @@ function agentModelLabel(agent) {
 function resumeOptions(form, stage, current) {
   const options = [{ value: '', label: 'No resumed session' }];
   const listed = [];
-  for (const id of uniqueValues(stage.dependsOn)) {
+  for (const id of uniqueValues(stage.depends_on)) {
     const dependency = form.stages.find((candidate) => candidate.id === id);
     if (dependency && dependency.role === '') continue;
     options.push({ value: id, label: id });
     listed.push(id);
   }
   if (current && !listed.includes(current)) {
-    const suffix = stage.dependsOn.includes(current) ? ' (no role)' : ' (not a dependency)';
+    const suffix = stage.depends_on.includes(current) ? ' (no role)' : ' (not a dependency)';
     options.push({ value: current, label: current + suffix });
   }
   return options;
 }
 
-function outputStageOptions(form, current) {
-  const options = [{ value: '', label: 'Choose a stage' }];
-  const seen = [];
-  for (const stage of form.stages) {
-    if (stage.id === '' || seen.includes(stage.id)) continue;
-    if (stage.producesArtifact === '' && stage.id !== current) continue;
-    seen.push(stage.id);
-    const suffix = stage.producesArtifact === '' ? ' (no artifact)' : ' → ' + stage.producesArtifact;
-    options.push({ value: stage.id, label: stage.id + suffix });
-  }
-  if (current && !seen.includes(current)) options.push({ value: current, label: current + ' (not a stage)' });
-  return options;
-}
-
-function outputArtifactOptions(form, output) {
-  const options = [{ value: '', label: output.fromStage === '' ? 'Choose a stage first' : 'Choose an artifact' }];
-  const stage = form.stages.find((candidate) => candidate.id === output.fromStage);
-  if (stage && stage.producesArtifact !== '') {
-    options.push({ value: stage.producesArtifact, label: stage.producesArtifact });
-  }
-  if (output.artifact !== '' && !options.some((option) => option.value === output.artifact)) {
-    options.push({ value: output.artifact, label: output.artifact + ' (does not match)' });
-  }
-  return options;
-}
-
-function outputNameOptions(form, current) {
-  const options = [{ value: '', label: 'Choose an output' }];
-  const names = uniqueValues(form.outputs.map((output) => output.name));
-  for (const name of names) options.push({ value: name, label: name });
-  if (current && !names.includes(current)) options.push({ value: current, label: current + ' (not an output)' });
+/** Registry ids for a select; an id the registry does not define stays visible and flagged. */
+function artifactIdOptions(form, current) {
+  const options = [{ value: '', label: 'Choose an artifact' }];
+  const ids = uniqueValues(form.artifacts.map((item) => item.id));
+  for (const id of ids) options.push({ value: id, label: id });
+  if (current && !ids.includes(current)) options.push({ value: current, label: current + ' (not in the registry)' });
   return options;
 }
 
@@ -268,12 +328,14 @@ function workflowOptions(model, current) {
     emptyStage,
     emptyForm,
     normalizeForm,
+    moveItem,
     moveStage,
     removeStage,
     renameStageReferences,
+    renameArtifactReferences,
+    formPathOf,
     uniqueValues,
     stageIds,
-    artifactBaseName,
     roleOptions,
     agentNameOptions,
     clientChoices,
@@ -281,9 +343,7 @@ function workflowOptions(model, current) {
     isKnownModel,
     agentModelLabel,
     resumeOptions,
-    outputStageOptions,
-    outputArtifactOptions,
-    outputNameOptions,
+    artifactIdOptions,
     workflowOptions,
   };
 })();

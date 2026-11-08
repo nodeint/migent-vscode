@@ -4,6 +4,7 @@
   'use strict';
 
   const { el, details, connect, trackFooter, sessionHeader, icon } = window.MigentPage;
+  const copy = window.MigentCopy;
   const root = document.getElementById('root');
   const CONTEXT_CLAMP_LENGTH = 240;
   // The tone of the banner for the batch's state. Anything else is plain information.
@@ -239,11 +240,11 @@
       meta: model.meta,
       current: 'questions',
       tabs: [
-        { key: 'questions', label: 'Questions' },
-        { key: 'results', label: 'Results', onSelect: () => page.post({ type: 'openResults' }) },
-        { key: 'metrics', label: 'Metrics', onSelect: () => page.post({ type: 'openMetrics' }) },
-        { key: 'workflow', label: 'Workflow', onSelect: () => page.post({ type: 'sessionAction', action: 'openWorkflow' }) },
-        { key: 'task', label: 'Task', onSelect: () => page.post({ type: 'sessionAction', action: 'openTask' }) },
+        { key: 'questions', label: copy.tab.questions },
+        { key: 'results', label: copy.tab.results, onSelect: () => page.post({ type: 'openResults' }) },
+        { key: 'metrics', label: copy.tab.metrics, onSelect: () => page.post({ type: 'openMetrics' }) },
+        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.post({ type: 'sessionAction', action: 'openWorkflow' }) },
+        { key: 'task', label: copy.tab.task, onSelect: () => page.post({ type: 'sessionAction', action: 'openTask' }) },
       ],
       sendAction: (action) => page.post({ type: 'sessionAction', action }),
     });
@@ -325,7 +326,7 @@
     if (model.state === 'stale') add('Load the new questions', 'reload', 'primary');
     if (model.state === 'unconfirmed') add('Check again', 'recheck', 'primary');
     if (model.state === 'recorded-waiting') add('Continue the stage', 'continue', 'primary');
-    if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add('View log', 'viewLog');
+    if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add(copy.menu.viewLog, 'viewLog');
     if (model.editable || model.state === 'stale') add('Discard draft', 'discard');
     if (model.editable && model.state !== 'unconfirmed') {
       const submitButton = el('button', 'Send answers', 'mg-btn mg-btn--primary');

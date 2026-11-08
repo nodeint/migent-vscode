@@ -5,6 +5,7 @@
   'use strict';
 
   const { el, section, connect, statusIndicator: indicator } = window.MigentPage;
+  const copy = window.MigentCopy;
   const root = document.getElementById('root');
   const NO_TRANSIENT = { pending: null, error: null };
 
@@ -17,7 +18,7 @@
     return node;
   }
 
-  const AVAILABILITY = { ok: '', missing: ' (file missing)', rejected: ' (path outside the session)' };
+  const AVAILABILITY = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
 
   // Launch status: icon, tone and text, so color is never the only signal.
   function statusIndicator(model, transient) {
