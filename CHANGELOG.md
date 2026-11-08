@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.4
+
 - Add a Configuration page for `.migent/config.yaml` and `.migent/config.local.yaml` (schema 7). Project and Local tabs
   edit agents and roles as forms and save through `migent config save --preserve-comments`; the YAML tab opens the
   active file in the editor. Keys the form does not edit are kept, an empty value stays an explicit value, and on the
