@@ -206,7 +206,7 @@ const scenarios: Scenario[] = [
         ['today'], ['yesterday'], ['older'],
       ]);
       const session = sessionNode(env, 'today');
-      assert.equal(itemOf(env, session).command?.command, 'migent.session.openResult');
+      assert.equal(itemOf(env, session).command?.command, 'migent.session.open');
       assert.equal(env.api.sessionsTree.getParent(session)?.id, periods[0]?.id);
     },
   },

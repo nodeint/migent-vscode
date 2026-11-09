@@ -1,16 +1,14 @@
 // Copy of the workflow form: every label, hint, placeholder, note and message the form shows, in one place, so a
-// wording is read and changed here and not in the code that builds the controls. Loaded before `workflowform.js`
+// wording is read and changed here and not in the code that builds the controls. Loaded before `workflowForm.js`
 // (see docs/ui.md). Exposes one global, `MigentWorkflowCopy`.
 // Grouped by what the text is about (the workflow, a stage, an artifact...), not by where it is drawn. A text with a
 // value in it is a function. Text that several pages show lives in `MigentCopy`.
 (function () {
   'use strict';
 
-  const plural = (count, noun) => count + ' ' + noun + (count === 1 ? '' : 's');
+  const { plural } = window.MigentUtils;
 
   window.MigentWorkflowCopy = {
-    plural,
-
     /** The workflow's own settings. */
     basics: {
       title: 'Basics',
@@ -52,8 +50,8 @@
         agentRole: 'role agent',
       },
       advancedFacts: {
-        verifyCommands: (count) => count + (count === 1 ? ' verify command' : ' verify commands'),
-        pathFilters: (count) => count + (count === 1 ? ' path filter' : ' path filters'),
+        verifyCommands: (count) => plural(count, 'verify command'),
+        pathFilters: (count) => plural(count, 'path filter'),
       },
     },
 

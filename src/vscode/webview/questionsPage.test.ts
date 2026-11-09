@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
-/* A tiny DOM, just enough for media/shared/page.js and media/questions/questions.js to run. */
+/* A tiny DOM, just enough for media/shared/page.js and media/session/session.js with the tab scripts to run. */
 type Handler = (event: Record<string, unknown>) => void;
 
 class FakeText {
@@ -188,6 +188,16 @@ function model(revision: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The Session page model of the Questions tab for an answer model, as the host builds it. */
+function sessionPage(answer: Record<string, unknown>, batches: Record<string, unknown>[] = []) {
+  const { title, workflowId, sessionState, meta } = answer;
+  return {
+    tab: 'questions',
+    header: { availability: 'ok', sessionId: 's1', title, state: sessionState, workflowId, meta },
+    questions: { model: answer, selected: { stageId: 'plan', executionId: 'e1' }, batches },
+  };
+}
+
 function load() {
   const doc = new FakeDocument();
   const windowListeners: Record<string, Handler[]> = {};
@@ -232,9 +242,18 @@ function load() {
     }),
   });
   const media = path.join(__dirname, '../../../media');
-  for (const file of ['shared/icons.js', 'shared/copy.js', 'shared/page.js', 'questions/questions.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
+  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/page.js', 'shared/form.js', 'shared/agentform.js', 'shared/draftpage.js', 'workfloweditor/workflowCopy.js', 'workfloweditor/workflowModel.js', 'workfloweditor/workflowForm.js', 'session/sessionCopy.js', 'session/resultsCopy.js', 'session/metricsCopy.js', 'session/sessionWorkflowCopy.js', 'session/questionsCopy.js', 'session/results.js', 'session/metrics.js', 'session/workflow.js', 'session/questions.js', 'session/session.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   const deliver = (revision: number, next: Record<string, unknown>): void => {
-    for (const handler of windowListeners.message ?? []) handler({ data: { type: 'model', revision, identity: { a: 1 }, model: next } });
+    const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next) };
+    for (const handler of windowListeners.message ?? []) handler({ data });
+  };
+  const deliverBatches = (
+    revision: number,
+    next: Record<string, unknown>,
+    batches: Record<string, unknown>[],
+  ): void => {
+    const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next, batches) };
+    for (const handler of windowListeners.message ?? []) handler({ data });
   };
   const byId = (id: string): FakeElement => {
     const node = doc.getElementById(id);
@@ -244,10 +263,31 @@ function load() {
   const key = (init: Record<string, unknown>): void => {
     for (const handler of windowListeners.keydown ?? []) handler(init);
   };
-  return { doc, posted, window, deliver, byId, key, observers };
+  return { doc, posted, window, deliver, deliverBatches, byId, key, observers };
 }
 
 describe('Questions page', () => {
+  it('offers a chip per pending batch only when there are several, and selecting one posts its identity', () => {
+    const page = load();
+    const batches = [
+      { stageId: 'plan', executionId: 'e1', count: 2 },
+      { stageId: null, executionId: 'e2', count: 1 },
+    ];
+    const chips = (): FakeElement[] => page.doc.root.descendants().filter((node) => node.tagName === 'BUTTON' && node.className.startsWith('q-batch'));
+    page.deliver(1, model(1));
+    expect(chips()).toEqual([]);
+    page.deliverBatches(2, model(2), batches);
+    expect(chips().map((chip) => chip.textContent)).toEqual(['plan · 2', 'Role session · 1']);
+    expect(chips()[0]?.attrs['aria-current']).toBe('true');
+    chips()[1]?.click();
+    expect(page.posted.at(-1)).toMatchObject({
+      type: 'intent',
+      intent: 'selectBatch',
+      batch: { stageId: null, executionId: 'e2' },
+    });
+  });
+
+
   it('keeps the local draft over a host echo of the same generation and fingerprint', () => {
     const page = load();
     page.deliver(1, model(1));
@@ -272,7 +312,10 @@ describe('Questions page', () => {
     expect(tabs[0]?.attrs['aria-current']).toBe('page');
     tabs[1]?.click();
     tabs[2]?.click();
-    expect(page.posted.slice(-2)).toEqual([{ type: 'openResults' }, { type: 'openMetrics' }]);
+    expect(page.posted.slice(-2)).toMatchObject([
+      { type: 'intent', intent: 'selectTab', tab: 'results' },
+      { type: 'intent', intent: 'selectTab', tab: 'metrics' },
+    ]);
     expect(page.doc.root.descendants().some((node) => node.textContent === 'implement')).toBe(true);
     const badge = page.doc.root.descendants().find((node) => node.className.startsWith('mg-status '));
     expect(badge?.textContent).toBe('Question');

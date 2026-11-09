@@ -36,7 +36,8 @@ type Build = () => Spec | null;
 interface Action {
   label: string;
   command: string;
-  target: SessionTarget;
+  /** The command target; `tab` names the Session page tab for `migent.session.open`. */
+  target: SessionTarget & { tab?: string };
 }
 
 function showSpec(spec: Spec): Thenable<string | undefined> {
@@ -176,8 +177,8 @@ export class StateNotifier implements vscode.Disposable {
       case 'completed':
         return this.#single(`Session ${sessionLabel(snapshot)} completed.`, 'info', {
           label: 'Open result',
-          command: 'migent.session.openResult',
-          target,
+          command: 'migent.session.open',
+          target: { ...target, tab: 'results' },
         });
     }
   }

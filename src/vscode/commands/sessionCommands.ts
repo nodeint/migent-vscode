@@ -11,7 +11,7 @@ import { DEFAULT_SESSION_LIMIT } from '../../core/store';
 import { openFile, openReadOnly } from '../openFile';
 import { type PickedSession,pickSession } from '../pick';
 import type { ProjectRegistry } from '../projects';
-import type { ActiveTarget } from '../results/panels';
+import type { ActiveTarget } from '../session/panels';
 import { isTreeNode } from '../views/nodes';
 import { deleteSession } from './deleteSession';
 

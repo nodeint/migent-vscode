@@ -40,8 +40,8 @@ export const WORKFLOW_EDITOR_VIEW_TYPE = 'migent.editWorkflow';
 
 const PAGE: PageDescriptor = {
   folder: 'workfloweditor',
-  styles: ['workflowform.css', 'workfloweditor.css'],
-  scripts: ['workflowcopy.js', 'workflowmodel.js', 'workflowform.js', 'workfloweditor.js'],
+  styles: ['workflowForm.css', 'workflowEditor.css'],
+  scripts: ['workflowCopy.js', 'workflowModel.js', 'workflowForm.js', 'workflowEditor.js'],
   title: 'Workflow',
 };
 

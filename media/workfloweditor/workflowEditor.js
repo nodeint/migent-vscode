@@ -1,6 +1,6 @@
 // Workflow editor page. The page edits the workflow as a form (YAML opens the file in the editor); it keeps a local draft and asks the
-// host to validate, apply or save it. The Design view's controls live in workflowform.js. Every string is set with
-// textContent. The shared helpers in media/shared/page.js and workflowform.js load first (see docs/ui.md).
+// host to validate, apply or save it. The Design view's controls live in workflowForm.js. Every string is set with
+// textContent. The shared helpers in media/shared/page.js and workflowForm.js load first (see docs/ui.md).
 (function () {
   'use strict';
 

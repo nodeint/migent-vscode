@@ -13,36 +13,24 @@ import {
   serializeAnswers,
   verifyBatch,
 } from '../../core/questionAnswers';
-import { type QuestionRecord, type QuestionsRead, readQuestions } from '../../core/questions';
+import { type QuestionRecord, type QuestionsRead,readQuestions } from '../../core/questions';
 import { titleCase } from '../../core/resultsModel';
 import { buildSessionMeta } from '../../core/sessionMeta';
-import { sessionTitle, truncate } from '../../core/sessionPresentation';
+import { sessionTitle } from '../../core/sessionPresentation';
 import type { AnswerRequest, AnswerSubmitter } from '../answers';
 import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
-import { SESSION_ACTION_COMMANDS } from '../results/panels';
-import { type PageDescriptor, pageResourceRoots, renderPage, tabIcon } from '../webview/page';
+import { SESSION_ACTION_COMMANDS } from '../sessionActions';
 import { DraftStore } from './drafts';
-import { type BatchIdentity, batchKeyOf, Entry, isBatchIdentity } from './entry';
-
-export type { BatchIdentity } from './entry';
+import { type BatchIdentity,batchKeyOf, Entry } from './entry';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
   snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null;
 
-export const ANSWER_VIEW_TYPE = 'migent.answerQuestions';
-
-const TITLE_MAX = 32;
-const PAGE: PageDescriptor = {
-  folder: 'questions',
-  styles: ['questions.css'],
-  scripts: ['questions.js'],
-  title: 'Questions',
-};
 const WAITING = 'Loading the project…';
 
 /** Pending records of one batch, in stored order. */
@@ -50,6 +38,19 @@ export function pendingBatch(snapshot: SessionSnapshot | undefined, id: BatchIde
   return (snapshot?.status?.questions ?? []).filter(
     (question) => question.executionId === id.executionId && question.stageId === id.stageId,
   );
+}
+
+/** Where a batch's model goes: the one Session panel, or nothing while another tab is shown. */
+export interface QuestionSurface {
+  post(model: AnswerModel): void;
+  /** The reader asked to put the batch away (Later). */
+  close(): void;
+}
+
+/** The collaborators a batch set needs besides the registry. */
+export interface AnswerServices {
+  control: ControlService;
+  submitter: AnswerSubmitter;
 }
 
 interface EditMessage {
@@ -71,95 +72,80 @@ interface Resolved {
   snapshot: SessionSnapshot | undefined;
 }
 
-/** The collaborators a panel set needs besides the registry. */
-export interface AnswerServices {
-  control: ControlService;
-  submitter: AnswerSubmitter;
-}
-
 /**
- * Answer panels for pending human questions: one per `(project, session, stage, execution)`. The host
- * owns drafts, validation, the CLI call and reconciliation; the page only edits and asks (§9).
+ * Question batches without a webview: the host keeps each batch's draft, validation, CLI call and
+ * reconciliation, and posts its model to whichever surface is attached. The Session panel owns the panel
+ * and switches the surface when the reader changes tab or batch.
  */
-export class AnswerPanels implements vscode.Disposable {
+export class QuestionBatches implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
   readonly #control: ControlService;
   readonly #submitter: AnswerSubmitter;
-  readonly #context: vscode.ExtensionContext;
   readonly #drafts: DraftStore;
   readonly #entries = new Map<string, Entry>();
+  readonly #surfaces = new Map<string, QuestionSurface>();
   readonly #dirty = new Set<string>();
-  /** Closed panels whose draft could not be saved; the draft is not lost until storage accepts it. */
+  /** Closed batches whose draft could not be saved; the draft is not lost until storage accepts it. */
   readonly #unsaved = new Map<string, Entry>();
   readonly #subscriptions: vscode.Disposable[];
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(registry: ProjectRegistry, services: AnswerServices, context: vscode.ExtensionContext) {
+  constructor(registry: ProjectRegistry, services: AnswerServices, state: vscode.Memento) {
     this.#registry = registry;
     this.#control = services.control;
     this.#submitter = services.submitter;
-    this.#context = context;
-    this.#drafts = new DraftStore(context.workspaceState);
+    this.#drafts = new DraftStore(state);
     this.#subscriptions = [
       registry.onDidChange((change) => {
         this.#onChange(change);
       }),
-      vscode.window.registerWebviewPanelSerializer(ANSWER_VIEW_TYPE, {
-        deserializeWebviewPanel: (panel, state: unknown) => {
-          this.#restore(panel, state);
-          return Promise.resolve();
-        },
-      }),
     ];
   }
 
-  /** Open panels (for tests). */
+  /** Batches held in memory (for tests). */
   public get count(): number {
     return this.#entries.size;
+  }
+
+  public has(identity: BatchIdentity): boolean {
+    return this.#entries.has(batchKeyOf(identity));
   }
 
   public lastModel(identity: BatchIdentity): AnswerModel | null {
     return this.#entries.get(batchKeyOf(identity))?.lastModel ?? null;
   }
 
-  /** Open the panel for a batch, or reveal the one that exists. Never called by a background change. */
-  public open(identity: BatchIdentity): void {
-    const existing = this.#entries.get(batchKeyOf(identity));
-    if (existing !== undefined) {
-      existing.panel.reveal(existing.panel.viewColumn ?? vscode.ViewColumn.Active);
-      return;
-    }
-    const panel = vscode.window.createWebviewPanel(
-      ANSWER_VIEW_TYPE,
-      'Questions',
-      vscode.ViewColumn.Active,
-      this.#webviewOptions(),
-    );
-    this.#adopt(panel, identity);
+  /** Bind a batch to a surface and publish its current model. A batch keeps its state while detached. */
+  public attach(identity: BatchIdentity, surface: QuestionSurface): void {
+    const key = batchKeyOf(identity);
+    const entry = this.#entries.get(key) ?? this.#makeEntry(identity);
+    this.#entries.set(key, entry);
+    this.#surfaces.set(key, surface);
+    this.#publish(entry, true);
+  }
+
+  /** Stop posting a batch (another tab was selected) but keep its draft and state for a later return. */
+  public detach(identity: BatchIdentity): void {
+    this.#surfaces.delete(batchKeyOf(identity));
+  }
+
+  /** The panel that showed the batch is gone: flush the draft and keep an unsaved one in memory. */
+  public async release(identity: BatchIdentity): Promise<void> {
+    const key = batchKeyOf(identity);
+    this.#surfaces.delete(key);
+    const entry = this.#entries.get(key);
+    if (entry === undefined) return;
+    this.#entries.delete(key);
+    this.#dirty.delete(key);
+    if ((await entry.flush()) === null) return;
+    this.#unsaved.set(key, entry);
   }
 
   public dispose(): void {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
-    for (const entry of [...this.#entries.values()]) entry.panel.dispose();
     this.#entries.clear();
+    this.#surfaces.clear();
     for (const subscription of this.#subscriptions.splice(0)) subscription.dispose();
-  }
-
-  #webviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
-    return {
-      enableScripts: true,
-      localResourceRoots: pageResourceRoots(this.#context.extensionUri, PAGE),
-    };
-  }
-
-  #restore(panel: vscode.WebviewPanel, state: unknown): void {
-    if (!isBatchIdentity(state) || this.#entries.has(batchKeyOf(state))) {
-      panel.dispose();
-      return;
-    }
-    // eslint-disable-next-line no-param-reassign -- a restored panel gets the same options as a new one
-    panel.webview.options = this.#webviewOptions();
-    this.#adopt(panel, state);
   }
 
   #resolve(identity: BatchIdentity): Resolved | undefined {
@@ -175,16 +161,17 @@ export class AnswerPanels implements vscode.Disposable {
     });
   }
 
-  #makeEntry(panel: vscode.WebviewPanel, identity: BatchIdentity): Entry {
+  #makeEntry(identity: BatchIdentity): Entry {
     const current = pendingBatch(this.#resolve(identity)?.snapshot, identity);
-    const kept = this.#unsaved.get(batchKeyOf(identity));
-    this.#unsaved.delete(batchKeyOf(identity));
+    const key = batchKeyOf(identity);
+    const kept = this.#unsaved.get(key);
+    this.#unsaved.delete(key);
     const stored = kept === undefined ? this.#drafts.load(identity) : { questions: kept.questions, draft: kept.draft };
     const entry = new Entry(
-      { identity, panel, questions: stored?.questions ?? current, draft: stored?.draft ?? {} },
+      { identity, questions: stored?.questions ?? current, draft: stored?.draft ?? {} },
       (target) => this.#saveDraft(target),
       () => {
-        const open = this.#entries.get(batchKeyOf(identity));
+        const open = this.#entries.get(key);
         if (open !== undefined) this.#publish(open, false);
       },
     );
@@ -207,30 +194,7 @@ export class AnswerPanels implements vscode.Disposable {
     entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
   }
 
-  #adopt(panel: vscode.WebviewPanel, identity: BatchIdentity): void {
-    const entry = this.#makeEntry(panel, identity);
-    const key = batchKeyOf(identity);
-    this.#entries.set(key, entry);
-    // eslint-disable-next-line no-param-reassign -- the panel is created by this host and owned by the entry
-    panel.webview.html = renderPage(panel.webview, this.#context.extensionUri, PAGE);
-    panel.webview.onDidReceiveMessage((raw: unknown) => {
-      void this.handle(identity, raw);
-    });
-    panel.onDidDispose(() => {
-      this.#entries.delete(key);
-      this.#dirty.delete(key);
-      void this.#retainIfUnsaved(key, entry);
-    });
-    this.#publish(entry, true);
-  }
-
-  /** A draft whose close-time save failed stays in memory and is adopted by the next panel for the batch. */
-  async #retainIfUnsaved(key: string, entry: Entry): Promise<void> {
-    if ((await entry.flush()) === null) return;
-    this.#unsaved.set(key, entry);
-  }
-
-  /** Handle a page message for the panel of `identity`. Public so tests can drive it without a webview. */
+  /** Handle a page message for the batch. Public so tests can drive it without a webview. */
   public async handle(identity: BatchIdentity, raw: unknown): Promise<void> {
     const entry = this.#entries.get(batchKeyOf(identity));
     const message = parseAnswerMessage(raw);
@@ -244,7 +208,9 @@ export class AnswerPanels implements vscode.Disposable {
         else this.#publish(entry, true);
         return;
       case 'sessionAction':
-        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS[message.action]);
+        if (SESSION_ACTION_COMMANDS[message.action] !== undefined) {
+          await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS[message.action] as string);
+        }
         return;
       default:
         await this.#command(entry, message.type);
@@ -272,20 +238,22 @@ export class AnswerPanels implements vscode.Disposable {
         await this.#openQuestions(entry);
         return;
       case 'later':
-        entry.panel.dispose();
+        this.#surfaces.get(batchKeyOf(entry.identity))?.close();
         return;
       case 'openResults':
-        await this.#runSessionCommand(entry, 'migent.session.openResult');
+        await this.#runSessionCommand(entry, 'migent.session.open');
         return;
-      case 'openMetrics':
-        await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS.openMetrics);
+      case 'openMetrics': {
+        const command = SESSION_ACTION_COMMANDS.openMetrics;
+        if (command !== undefined) await this.#runSessionCommand(entry, command);
         return;
+      }
       default:
         this.#publish(entry, true);
     }
   }
 
-  /** A session command always receives this panel's own session, never the active panel or a picker. */
+  /** A session command always receives this batch's own session, never the active panel or a picker. */
   async #runSessionCommand(entry: Entry, command: string): Promise<void> {
     const { project, sessionId } = entry.identity;
     await vscode.commands.executeCommand(command, { project, sessionId });
@@ -544,11 +512,7 @@ export class AnswerPanels implements vscode.Disposable {
     const withoutRevision = (value: AnswerModel): string => JSON.stringify({ ...value, revision: 0 });
     if (!isForced && entry.lastModel !== null && withoutRevision(entry.lastModel) === withoutRevision(model)) return;
     entry.accept(model);
-    entry.setTitle(truncate(model.title, TITLE_MAX));
-    entry.setIcon(
-      tabIcon(this.#context.extensionUri, 'questions', this.#resolve(entry.identity)?.snapshot?.displayState.state ?? ''),
-    );
-    void entry.panel.webview.postMessage({ type: 'model', revision: model.revision, identity: entry.identity, model });
+    this.#surfaces.get(batchKeyOf(entry.identity))?.post(model);
   }
 
   #onChange(change: MigentChange): void {

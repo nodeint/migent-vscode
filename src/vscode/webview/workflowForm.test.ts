@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it, vi } from 'vitest';
 
-/* A tiny DOM, just enough for media/workfloweditor/workflowform.js to render its controls. */
+/* A tiny DOM, just enough for media/workfloweditor/workflowForm.js to render its controls. */
 type Handler = () => void;
 
 class FakeNode {
@@ -176,7 +176,7 @@ function load() {
     window,
     document: { getElementById: (): null => null },
   });
-  for (const file of ['../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/shared/agentform.js', '../../../media/workfloweditor/workflowcopy.js', '../../../media/workfloweditor/workflowmodel.js', '../../../media/workfloweditor/workflowform.js']) {
+  for (const file of ['../../../media/shared/utils.js', '../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/shared/agentform.js', '../../../media/workfloweditor/workflowCopy.js', '../../../media/workfloweditor/workflowModel.js', '../../../media/workfloweditor/workflowForm.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   return {

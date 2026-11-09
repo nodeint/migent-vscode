@@ -52,9 +52,10 @@ export class QuestionNotifier implements vscode.Disposable {
       }.`;
       void vscode.window.showInformationMessage(text, 'Answer questions').then((picked) => {
         if (picked !== 'Answer questions') return;
-        void vscode.commands.executeCommand('migent.session.answerQuestions', {
+        void vscode.commands.executeCommand('migent.session.open', {
           project: context.key,
           sessionId: batch.sessionId,
+          tab: 'questions',
           stageId: batch.stageId,
           executionId: batch.executionId,
         });

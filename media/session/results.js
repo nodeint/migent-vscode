@@ -1,12 +1,14 @@
-// Results overview page. Read-only: it renders the model the extension posts and sends intents that carry
+// Results tab of the Session page. Read-only: it renders the model the extension posts and sends intents that carry
 // identity only (a key, a name or a closed action name), never a path or a command. Every string is set with
 // textContent. The shared helpers in media/shared/page.js load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, section, connect, details, sessionHeader } = window.MigentPage;
+  const { el, section, details } = window.MigentPage;
   const copy = window.MigentCopy;
-  const root = document.getElementById('root');
+  const text = window.MigentSessionResultsCopy;
+
+  let page = null;
 
   /** A native button that sends `intent`. `kind` is a base.css button modifier. */
   function action(label, intent, kind) {
@@ -16,31 +18,7 @@
     return node;
   }
 
-  function sessionAction(name) {
-    return { intent: 'sessionAction', action: name };
-  }
-
   const FILE_STATE = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
-
-  function renderHeader(model) {
-    return sessionHeader(page, {
-      state: model.state,
-      title: model.title,
-      workflowId: model.workflowId,
-      meta: model.meta,
-      current: 'results',
-      tabs: [
-        ...(model.meta.pendingQuestions > 0
-          ? [{ key: 'questions', label: copy.tab.questions, onSelect: () => page.send(sessionAction('answerQuestions')) }]
-          : []),
-        { key: 'results', label: copy.tab.results },
-        { key: 'metrics', label: copy.tab.metrics, onSelect: () => page.send(sessionAction('openMetrics')) },
-        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.send(sessionAction('openWorkflow')) },
-        { key: 'task', label: copy.tab.task, onSelect: () => page.send(sessionAction('openTask')) },
-      ],
-      menuItems: [{ label: 'Open questions', onSelect: () => page.send(sessionAction('openQuestions')) }],
-    });
-  }
 
   function outputRow(row) {
     const item = el('li');
@@ -62,50 +40,41 @@
   }
 
   function renderOutputs(model) {
-    const node = section('Outputs', 'mg-section');
+    const node = section(text.outputs.title, 'mg-section');
     if (model.outputs.rows.length === 0 && !model.outputs.directoryError) {
-      node.append(el('p', 'No published outputs.', 'mg-muted'));
+      node.append(el('p', text.outputs.empty, 'mg-muted'));
       return node;
     }
     const list = el('ul', null, 'mg-list');
     for (const row of model.outputs.rows) list.append(outputRow(row));
     node.append(list);
     if (model.outputs.directoryError) {
-      node.append(el('p', 'Cannot read outputs/ (' + model.outputs.directoryError + ')', 'mg-error'));
+      node.append(el('p', text.outputs.unreadable(model.outputs.directoryError), 'mg-error'));
     }
     return node;
   }
 
-  const NEXT_TEXT = {
-    missing: 'No next-step suggestions (next.json not found).',
-    unreadable: 'next.json is unreadable',
-    invalid: 'next.json is invalid',
-    unsupported: 'next.json has an unsupported schema version',
-  };
-
-  const TARGET_TEXT = {
-    available: '',
-    duplicate: 'More than one workflow file has this id.',
-    invalid: 'The target workflow file is invalid.',
-    'not-found': 'No workflow with this id in the project.',
-  };
-
   function suggestionDetails(suggestion) {
     const node = details('card:' + suggestion.workflow, copy.details);
-    let declared = 'Declaration could not be read.';
-    if (suggestion.declared === true) declared = 'Declared by the workflow.';
-    else if (suggestion.declared === false) declared = 'Not declared by the workflow.';
+    let declared = text.suggestion.declared.unknown;
+    if (suggestion.declared === true) declared = text.suggestion.declared.yes;
+    else if (suggestion.declared === false) declared = text.suggestion.declared.no;
     node.append(el('p', declared, 'mg-muted'));
     if (suggestion.artifacts.length > 0) {
       const list = el('ul', null, 'results-plain-list');
       for (const artifact of suggestion.artifacts) {
-        const note = artifact.availability === 'ok' ? '' : ' (' + artifact.availability + ')';
-        list.append(el('li', artifact.name + ' <- output ' + artifact.output + ' · ' + artifact.path + note, 'mg-mono'));
+        list.append(
+          el(
+            'li',
+            text.suggestion.artifactLine(artifact.name, artifact.output, artifact.path, artifact.availability),
+            'mg-mono',
+          ),
+        );
       }
       node.append(list);
     }
     if (suggestion.target !== 'not-found') {
-      node.append(action('Open workflow file', { intent: 'openTargetWorkflow', workflow: suggestion.workflow }, 'secondary'));
+      node.append(action(text.suggestion.openWorkflow, { intent: 'openTargetWorkflow', workflow: suggestion.workflow }, 'secondary'));
     }
     return node;
   }
@@ -123,40 +92,41 @@
     }
     card.addEventListener('click', () => page.send({ intent: 'openNextStep', workflow: suggestion.workflow }));
     group.append(card);
-    if (TARGET_TEXT[suggestion.target]) group.append(el('p', TARGET_TEXT[suggestion.target], 'mg-warn results-note'));
+    const targetNote = text.suggestion.target[suggestion.target];
+    if (targetNote) group.append(el('p', targetNote, 'mg-warn results-note'));
     group.append(suggestionDetails(suggestion));
     return group;
   }
 
   function renderNext(model) {
-    const node = section('Next steps', 'mg-section');
+    const node = section(text.next.title, 'mg-section');
     const next = model.next;
     if (next.state !== 'ok') {
-      const text = NEXT_TEXT[next.state] + (next.detail ? ' (' + next.detail + ')' : '');
-      node.append(el('p', text, next.state === 'missing' ? 'mg-muted' : 'mg-warn'));
+      const message = text.next.withDetail(text.next.state[next.state], next.detail);
+      node.append(el('p', message, next.state === 'missing' ? 'mg-muted' : 'mg-warn'));
     } else {
-      if (next.suggestions.length === 0) node.append(el('p', 'No suggestions in next.json.', 'mg-muted'));
+      if (next.suggestions.length === 0) node.append(el('p', text.next.none, 'mg-muted'));
       for (const suggestion of next.suggestions) node.append(renderSuggestion(suggestion));
     }
     if (next.state !== 'missing') {
-      const file = details('next-json', 'next.json');
-      file.append(action('Open next.json', { intent: 'openNextFile' }, 'secondary'));
+      const file = details('next-json', text.next.file);
+      file.append(action(text.next.openFile, { intent: 'openNextFile' }, 'secondary'));
       node.append(file);
     }
     return node;
   }
 
   function renderChildren(children) {
-    const node = section('Child sessions', 'mg-section');
+    const node = section(text.children.title, 'mg-section');
     const list = el('ul', null, 'mg-list');
     for (const child of children) {
-      const text = child.task || child.title;
+      const task = child.task || child.title;
       const row = el('button', null, 'mg-row');
       row.type = 'button';
       // The page only shortens the task visually (CSS clamp); the text and the tooltip stay complete.
-      row.title = text;
+      row.title = task;
       const main = el('span', null, 'mg-row-main');
-      main.append(el('span', text, 'results-clamp'), el('span', child.sessionId, 'results-id mg-muted mg-mono'));
+      main.append(el('span', task, 'results-clamp'), el('span', child.sessionId, 'results-id mg-muted mg-mono'));
       const meta = el('span', null, 'mg-row-meta');
       meta.append(el('span', child.state, 'mg-pill'));
       row.append(main, meta);
@@ -173,22 +143,22 @@
     const node = el('div');
     if (provenance.state === 'none') return node;
     if (provenance.state === 'invalid') {
-      node.append(el('p', 'Handoff details are not in the expected shape (' + provenance.reason + ').', 'mg-warn'));
-      node.append(action('Open manifest', { intent: 'openManifest' }, 'secondary'));
+      node.append(el('p', text.handoff.invalid(provenance.reason), 'mg-warn'));
+      node.append(action(text.handoff.openManifest, { intent: 'openManifest' }, 'secondary'));
       return node;
     }
-    node.append(el('h3', 'Handoff'));
+    node.append(el('h3', text.handoff.title));
     const list = el('ul', null, 'results-plain-list');
     for (const artifact of provenance.artifacts) {
       const item = el('li');
-      item.append(el('span', artifact.name + ' <- output ' + artifact.output + ' · ', 'mg-mono'));
+      item.append(el('span', text.handoff.artifact(artifact.name, artifact.output), 'mg-mono'));
       if (artifact.localState === 'ok') {
         item.append(action(artifact.path, { intent: 'openHandoffFile', name: artifact.name }, 'link'));
       } else {
         item.append(el('span', artifact.path + FILE_STATE[artifact.localState], 'mg-warn mg-mono'));
       }
-      item.append(el('div', 'sha256 ' + artifact.sha256, 'mg-muted mg-mono'));
-      if (artifact.sourcePath) item.append(el('div', 'source path ' + artifact.sourcePath, 'mg-muted mg-mono'));
+      item.append(el('div', text.handoff.sha256(artifact.sha256), 'mg-muted mg-mono'));
+      if (artifact.sourcePath) item.append(el('div', text.handoff.sourcePath(artifact.sourcePath), 'mg-muted mg-mono'));
       list.append(item);
     }
     node.append(list);
@@ -197,7 +167,7 @@
 
   function renderDetails(source) {
     const node = details('details', copy.details);
-    node.append(el('h3', 'Source session'));
+    node.append(el('h3', text.source.title));
     if (source.availability === 'retained') {
       const row = el('p');
       row.append(action(source.title || source.sessionId, { intent: 'openSession', sessionId: source.sessionId }, 'link'));
@@ -207,31 +177,21 @@
       node.append(el('p', source.sessionId, 'mg-mono'));
       const hint =
         source.availability === 'hidden'
-          ? 'Show more in the Sessions view to load the source.'
-          : 'The source session was not found.';
+          ? text.source.hidden
+          : text.source.notFound;
       node.append(el('p', hint, 'mg-muted'));
     }
     node.append(renderProvenance(source.provenance));
     return node;
   }
 
-  function render(model) {
+  function render(root, model, host) {
+    page = host;
     root.replaceChildren();
-    if (model.availability === 'unavailable') {
-      root.append(el('h1', copy.sessionUnavailable.title, 'mg-title'));
-      root.append(
-        el(
-          'p',
-          copy.sessionUnavailable.body(model.sessionId),
-          'mg-subtitle',
-        ),
-      );
-      return;
-    }
-    root.append(renderHeader(model), renderOutputs(model), renderNext(model));
+    root.append(renderOutputs(model), renderNext(model));
     if (model.children.length > 0) root.append(renderChildren(model.children));
     if (model.source) root.append(renderDetails(model.source));
   }
 
-  const page = connect({ render });
+  window.MigentSessionResults = { render };
 })();

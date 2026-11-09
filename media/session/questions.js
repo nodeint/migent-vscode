@@ -1,11 +1,11 @@
-// Answer-questions page. All content is rendered with textContent; the host validates every message again.
-// The shared helpers in media/shared/page.js load first (see docs/ui.md).
+// Questions tab of the Session page. All content is rendered with textContent; the host validates every message
+// again. The shared helpers in media/shared/page.js load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, details, connect, trackFooter, sessionHeader, icon } = window.MigentPage;
+  const { el, details, trackFooter, icon } = window.MigentPage;
   const copy = window.MigentCopy;
-  const root = document.getElementById('root');
+  const text = window.MigentSessionQuestionsCopy;
   const CONTEXT_CLAMP_LENGTH = 240;
   // The tone of the banner for the batch's state. Anything else is plain information.
   const BANNER_TONES = {
@@ -25,6 +25,7 @@
   // Context blocks the reader expanded; kept across re-renders.
   const expandedContext = new Set();
   let page = null;
+  let mount = null;
   let pendingFocus = null;
   // True between compositionstart and compositionend (IME input such as Telex or VNI). Replacing the text area
   // in that window cancels the composition, so a model that arrives meanwhile waits until it ends.
@@ -63,13 +64,16 @@
       if (jump) {
         jump.replaceChildren(q.id, ...(done[index] ? [icon('check')] : []));
         jump.classList.toggle('q-jump--done', done[index]);
-        jump.setAttribute('aria-label', 'Go to question ' + q.id + (done[index] ? ' (answered)' : ' (not answered)'));
+        jump.setAttribute('aria-label', text.jumps.goTo(q.id, done[index]));
       }
       const chip = document.getElementById('qs-' + q.id);
       if (chip) {
         const isRecorded = isRecordedCard(q);
         const isDone = isRecorded || done[index];
-        chip.replaceChildren(icon(isDone ? 'pass' : 'circle'), isRecorded ? 'Sent' : isDone ? 'Answered' : 'Not answered');
+        chip.replaceChildren(
+          icon(isDone ? 'pass' : 'circle'),
+          isRecorded ? text.state.sent : isDone ? text.state.answered : text.state.notAnswered,
+        );
         chip.className = 'q-state mg-status mg-status--' + (isDone ? 'ok' : 'muted');
       }
     });
@@ -77,7 +81,7 @@
     if (submitButton && model.state !== 'sending') {
       submitButton.disabled = !canSend(count);
       const left = model.questions.length - count;
-      submitButton.textContent = left > 0 ? 'Send answers · ' + left + ' left' : 'Send answers';
+      submitButton.textContent = left > 0 ? text.footer.sendLeft(left) : text.footer.send;
     }
   }
 
@@ -110,7 +114,7 @@
     const body = el('span', null, 'q-option-body');
     const head = el('span', null, 'q-option-head');
     head.append(el('span', option.label, 'q-option-label'));
-    if (q.recommended.includes(option.id)) head.append(el('span', 'Recommended', 'mg-pill'));
+    if (q.recommended.includes(option.id)) head.append(el('span', text.question.recommended, 'mg-pill'));
     body.append(head);
     if (option.description) {
       const desc = el('span', option.description, 'q-option-desc mg-muted');
@@ -129,7 +133,7 @@
     ctx.id = 'ctx-' + q.id;
     wrapper.append(ctx);
     if (isLong) {
-      const toggle = el('button', isOpen ? 'Show less' : 'Show more', 'mg-btn mg-btn--link');
+      const toggle = el('button', isOpen ? text.question.showLess : text.question.showMore, 'mg-btn mg-btn--link');
       toggle.id = 'ctxbtn-' + q.id;
       toggle.type = 'button';
       toggle.setAttribute('aria-controls', ctx.id);
@@ -139,7 +143,7 @@
         else expandedContext.add(q.id);
         const open = expandedContext.has(q.id);
         ctx.classList.toggle('q-context--clamped', !open);
-        toggle.textContent = open ? 'Show less' : 'Show more';
+        toggle.textContent = open ? text.question.showLess : text.question.showMore;
         toggle.setAttribute('aria-expanded', String(open));
       });
       wrapper.append(toggle);
@@ -163,8 +167,8 @@
     label.htmlFor = other.id;
     const body = el('span', null, 'q-option-body');
     const head = el('span', null, 'q-option-head');
-    head.append(el('span', 'Other', 'q-option-label'));
-    head.append(el('span', 'write your own answer', 'q-option-desc mg-muted'));
+    head.append(el('span', text.question.other, 'q-option-label'));
+    head.append(el('span', text.question.otherHint, 'q-option-desc mg-muted'));
     body.append(head);
     label.append(other, el('span', '…', 'q-letter'), body);
     return label;
@@ -177,7 +181,7 @@
     box.setAttribute('role', 'group');
     box.setAttribute('aria-labelledby', 'qt-' + q.id);
     const top = el('div', null, 'q-top');
-    top.append(el('span', 'Question ' + q.id + ' of ' + model.questions.length + ' · ' + (q.selection === 'single' ? 'Pick one' : 'Pick one or more'), 'q-eyebrow'));
+    top.append(el('span', text.question.eyebrow(q.id, model.questions.length, q.selection === 'single'), 'q-eyebrow'));
     const state = el('span', null, 'q-state mg-status mg-status--muted');
     state.id = 'qs-' + q.id;
     top.append(state);
@@ -198,8 +202,8 @@
     if (d.mode === 'text') {
       const area = el('textarea', null, 'mg-input q-text');
       area.id = 'text' + q.id;
-      area.placeholder = 'Type your own answer';
-      area.setAttribute('aria-label', 'Your answer to question ' + q.id);
+      area.placeholder = text.question.placeholder;
+      area.setAttribute('aria-label', text.question.answerLabel(q.id));
       area.disabled = !model.editable;
       area.value = d.text;
       area.addEventListener('input', (event) => edit(q.id, { text: event.target.value }));
@@ -213,41 +217,23 @@
           if (isComposing || deferred === null) return;
           const waiting = deferred;
           deferred = null;
-          render(waiting);
+          applyModel(waiting);
         }, 0);
       });
       box.append(area);
       if (model.ambiguous.includes(q.id)) {
         const warning = el('p', null, 'mg-alert mg-warn');
-        warning.append(icon('warning'), ' This answer is just an option letter, so it will be read as that option. Add a word to make it your own answer.');
+        warning.append(icon('warning'), ' ' + text.question.ambiguous);
         warning.setAttribute('role', 'status');
         box.append(warning);
       }
     }
     if (model.recorded && model.recorded[q.id] !== undefined) {
       const recorded = el('div', null, 'q-recorded');
-      recorded.append(icon('pass'), ' Recorded: ' + model.recorded[q.id]);
+      recorded.append(icon('pass'), ' ' + text.question.recorded(model.recorded[q.id]));
       box.append(recorded);
     }
     return box;
-  }
-
-  function header() {
-    return sessionHeader(page, {
-      state: model.sessionState,
-      title: model.title,
-      workflowId: model.workflowId,
-      meta: model.meta,
-      current: 'questions',
-      tabs: [
-        { key: 'questions', label: copy.tab.questions },
-        { key: 'results', label: copy.tab.results, onSelect: () => page.post({ type: 'openResults' }) },
-        { key: 'metrics', label: copy.tab.metrics, onSelect: () => page.post({ type: 'openMetrics' }) },
-        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.post({ type: 'sessionAction', action: 'openWorkflow' }) },
-        { key: 'task', label: copy.tab.task, onSelect: () => page.post({ type: 'sessionAction', action: 'openTask' }) },
-      ],
-      sendAction: (action) => page.post({ type: 'sessionAction', action }),
-    });
   }
 
   // The state message and block reason, as one banner whose tone follows the batch state. Sending has its own sign
@@ -270,7 +256,7 @@
   function jumps() {
     if (!ANSWERING_STATES.includes(model.state)) return null;
     const nav = el('nav', null, 'q-jumps');
-    nav.setAttribute('aria-label', 'Questions');
+    nav.setAttribute('aria-label', text.jumps.label);
     for (const q of model.questions) {
       const jump = el('button', q.id, 'q-jump');
       jump.type = 'button';
@@ -306,10 +292,10 @@
   }
 
   function archivedSection() {
-    const box = details('archived', 'Your previous draft (read-only)');
+    const box = details('archived', text.archived.title);
     box.querySelector('summary').id = 'archived-summary';
     for (const item of model.archived) {
-      box.append(el('p', item.id + '. ' + item.question + ' — ' + (item.answer || 'no answer'), 'q-archived'));
+      box.append(el('p', text.archived.line(item.id, item.question, item.answer), 'q-archived'));
     }
     return box;
   }
@@ -323,13 +309,13 @@
       node.addEventListener('click', () => page.post({ type }));
       bar.append(node);
     };
-    if (model.state === 'stale') add('Load the new questions', 'reload', 'primary');
-    if (model.state === 'unconfirmed') add('Check again', 'recheck', 'primary');
-    if (model.state === 'recorded-waiting') add('Continue the stage', 'continue', 'primary');
+    if (model.state === 'stale') add(text.footer.reload, 'reload', 'primary');
+    if (model.state === 'unconfirmed') add(text.footer.recheck, 'recheck', 'primary');
+    if (model.state === 'recorded-waiting') add(text.footer.continue, 'continue', 'primary');
     if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add(copy.menu.viewLog, 'viewLog');
-    if (model.editable || model.state === 'stale') add('Discard draft', 'discard');
+    if (model.editable || model.state === 'stale') add(text.footer.discard, 'discard');
     if (model.editable && model.state !== 'unconfirmed') {
-      const submitButton = el('button', 'Send answers', 'mg-btn mg-btn--primary');
+      const submitButton = el('button', text.footer.send, 'mg-btn mg-btn--primary');
       submitButton.type = 'button';
       submitButton.id = 'submit';
       submitButton.disabled = true;
@@ -343,7 +329,7 @@
       sending.id = 'submit';
       sending.disabled = true;
       sending.setAttribute('aria-busy', 'true');
-      sending.append(icon('sync', true), ' Sending…');
+      sending.append(icon('sync', true), ' ' + text.footer.sending);
       bar.append(sending);
     }
     return bar.children.length > 0 ? bar : null;
@@ -355,21 +341,21 @@
   }
 
   function rerender() {
-    if (!model) return;
+    if (!model || mount === null) return;
     const active = document.activeElement;
     const focusId = active && active.id;
     const area = active && active.tagName === 'TEXTAREA' ? active : null;
     const caret = area ? [area.selectionStart, area.selectionEnd, area.selectionDirection, area.scrollTop] : null;
     const scroll = window.scrollY;
-    root.replaceChildren(header());
+    mount.replaceChildren();
     const status = note();
-    if (status) root.append(status);
+    if (status) mount.append(status);
     const strip = jumps();
-    if (strip) root.append(strip);
-    for (const q of model.questions) root.append(question(q));
-    if (model.archived) root.append(archivedSection());
+    if (strip) mount.append(strip);
+    for (const q of model.questions) mount.append(question(q));
+    if (model.archived) mount.append(archivedSection());
     const actions = footer();
-    if (actions) root.append(actions);
+    if (actions) mount.append(actions);
     updateChrome();
     watchView();
     const wanted = pendingFocus || focusId;
@@ -397,7 +383,7 @@
     return JSON.stringify(value, (key, item) => (DRAFT_DERIVED.includes(key) ? undefined : item));
   }
 
-  function render(next) {
+  function applyModel(next) {
     if (!next) return;
     if (isComposing) {
       deferred = next;
@@ -418,9 +404,27 @@
     rerender();
   }
 
+  function render(container, next, host) {
+    page = host;
+    const isNewMount = container !== mount;
+    mount = container;
+    if (isNewMount) {
+      model = next;
+      rerender();
+      return;
+    }
+    applyModel(next);
+  }
+
   window.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && model && model.editable) submit();
   });
 
-  page = connect({ render });
+  // Forget the shown batch, for a session that has none left to show.
+  function reset() {
+    model = null;
+    mount = null;
+  }
+
+  window.MigentSessionQuestions = { render, reset };
 })();

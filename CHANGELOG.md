@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Open a session in one Session editor tab instead of four separate panels. A single header carries the state, the
+  more menu and the tabs Questions, Results, Metrics, Workflow and Task; each tab loads when it is opened. The commands
+  `migent.session.openResult`, `openMetrics`, `openWorkflow` and `answerQuestions` are replaced by `migent.session.open`.
+  When several question batches are pending, a chip row picks the batch.
+
 ## 0.1.5
 
 - Reply to a stopped session wherever Migent CLI 0.5.2 accepts a reply, not only a blocked one: an interrupted

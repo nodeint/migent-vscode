@@ -406,8 +406,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     item.tooltip = sessionTooltip(snapshot, now);
     item.iconPath = icon(sessionIcon(snapshot), STATE_COLORS[snapshot.displayState.state]);
     item.contextValue = sessionContextValue(snapshot);
-    // Every row opens its Results page on click and stays expandable.
-    item.command = { command: 'migent.session.openResult', title: 'Open Result', arguments: [node] };
+    // Every row opens its Session page on click and stays expandable.
+    item.command = { command: 'migent.session.open', title: 'Open Session', arguments: [node] };
     return item;
   }
 

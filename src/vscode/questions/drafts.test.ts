@@ -21,8 +21,7 @@ function memento(failing: { value: boolean }) {
 }
 
 function entry(save: (target: Entry) => Promise<void>): Entry {
-  const panel = {} as unknown as ConstructorParameters<typeof Entry>[0]['panel'];
-  return new Entry({ identity, panel, questions: [], draft: {} }, save, () => undefined);
+  return new Entry({ identity, questions: [], draft: {} }, save, () => undefined);
 }
 
 describe('DraftStore', () => {
