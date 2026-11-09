@@ -20,7 +20,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            vscode: 1.145.0
+          - os: windows-latest
+            vscode: 1.93.0
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -36,7 +40,7 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - name: Integration tests
-        run: pnpm test:integration
+        run: pnpm test:integration --versions ${{ matrix.vscode }}
       - run: pnpm package
       - uses: actions/upload-artifact@v4
         with:

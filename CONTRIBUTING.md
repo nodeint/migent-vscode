@@ -99,10 +99,12 @@ pnpm package
 ```
 
 CI runs this sequence on macOS and Windows, followed by `pnpm test:integration`
-(a failure fails the job on both systems). `pnpm lint` enforces that
-`src/core/` and `src/cli/` never import `vscode`. There are currently no separate
-lint or gate scripts. Report baseline failures separately from regressions;
-do not weaken verification to make a change pass.
+(a failure fails the job on both systems). To limit flakiness, each CI job runs the
+integration tests against one VS Code version: 1.145.0 on macOS and 1.93.0
+(the minimum) on Windows. `pnpm lint` enforces that `src/core/` and `src/cli/`
+never import `vscode`. There are currently no separate lint or gate scripts.
+Report baseline failures separately from regressions; do not weaken
+verification to make a change pass.
 
 Follow the [testing guide](docs/testing.md) when selecting test cases and
 verifying behavior changes.
