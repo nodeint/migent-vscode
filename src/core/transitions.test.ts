@@ -24,6 +24,7 @@ function snapshot(raw: Record<string, unknown>, id = 's1'): SessionSnapshot {
     statusError: false,
     lock: { kind: 'none' },
     displayState: deriveDisplayState({ status, statusError: null, manifest: 'ok' }, { kind: 'none' }),
+    replyTargets: [],
   };
 }
 

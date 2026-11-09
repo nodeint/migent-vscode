@@ -61,6 +61,7 @@ export const SESSION_ACTION_COMMANDS: Record<SessionAction, string> = {
   answerQuestions: 'migent.session.answerQuestions',
   openWorkflow: 'migent.session.openWorkflow',
   completeSession: 'migent.session.complete',
+  reply: 'migent.session.reply',
 };
 
 /** Actions the overview delegates to the Next step feature; set once by the extension. */

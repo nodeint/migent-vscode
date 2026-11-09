@@ -2,13 +2,14 @@ import * as vscode from 'vscode';
 
 import { isCompletable } from '../../core/completeEligibility';
 import type { SessionSnapshot } from '../../core/model';
-import { type BlockedTarget, blockedTargets, blockKind } from '../../core/replyFlow';
+import type { ReplyTarget } from '../../core/model';
+import { blockKind, replyPrompt } from '../../core/replyFlow';
 import { sessionLabel } from '../../core/sessionPresentation';
 import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
-import type { ReplyService, SendResult } from '../reply';
+import type { DraftSource, ReplyService, SendResult } from '../reply';
 import { chooseWorkflow, CONTINUABLE } from './controlCommands';
 import { initializeProject } from './initCommand';
 import { type CommandHost, resolveWith } from './sessionCommands';
@@ -20,37 +21,79 @@ const isOrdinaryBlocker = (snapshot: SessionSnapshot): boolean => blockKind(snap
 const canRunOnce = (snapshot: SessionSnapshot): boolean =>
   blockKind(snapshot) !== 'question' && (CONTINUABLE.has(snapshot.displayState.state) || isOrdinaryBlocker(snapshot));
 const isRepairable = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state !== 'running';
-async function pickBlocked(targets: BlockedTarget[]): Promise<BlockedTarget | undefined> {
+const hasReplyTargets = (snapshot: SessionSnapshot): boolean => snapshot.replyTargets.length > 0;
+
+const KIND_LABEL: Record<ReplyTarget['kind'], string> = {
+  blocker: 'blocked',
+  cancelled: 'interrupted',
+  roleTurn: 'role turn',
+};
+
+async function pickTarget(targets: readonly ReplyTarget[]): Promise<ReplyTarget | undefined> {
   const [only] = targets;
   if (targets.length === 1) return only;
   const picked = await vscode.window.showQuickPick(
     targets.map((target) => ({
-      label: target.stageId,
-      description: `attempt ${target.attempt}`,
+      label: target.stageId ?? target.executionId,
+      description: `attempt ${target.attempt} · ${KIND_LABEL[target.kind]}`,
       detail: target.executionId,
       target,
     })),
-    { title: 'Reply to which blocked stage?' },
+    { title: 'Reply to which stage?' },
   );
   return picked?.target;
 }
 
 /** Explain why a session has no Reply and what to use instead. */
 function explainNoReply(snapshot: SessionSnapshot): void {
-  const kind = blockKind(snapshot);
   const label = sessionLabel(snapshot);
-  if (kind === 'question') {
+  if (blockKind(snapshot) === 'question') {
     vscode.window.setStatusBarMessage(`Session ${label} is waiting for answers. Use Answer questions.`, INFO_MESSAGE_MS);
   } else {
-    vscode.window.setStatusBarMessage(`Session ${label} is not blocked, so there is nothing to reply to.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(`Session ${label} has nothing to reply to.`, INFO_MESSAGE_MS);
   }
 }
 
+type QuickReply = { kind: 'send'; text: string } | { kind: 'editor'; text: string };
+
+/** The quick reply box: short text is sent as typed, and its button moves the typed text into the draft editor. */
+function promptReply(prompt: string): Promise<QuickReply | undefined> {
+  return new Promise((resolve) => {
+    const box = vscode.window.createInputBox();
+    box.title = 'Reply';
+    box.prompt = prompt;
+    box.placeholder = 'Write a short reply, or open the editor for a long one';
+    box.ignoreFocusOut = true;
+    box.buttons = [{ iconPath: new vscode.ThemeIcon('edit'), tooltip: 'Open in editor' }];
+    let result: QuickReply | undefined;
+    box.onDidChangeValue(() => {
+      box.validationMessage = undefined;
+    });
+    box.onDidAccept(() => {
+      if (box.value.trim() === '') {
+        box.validationMessage = 'Write a reply, or open the editor.';
+        return;
+      }
+      result = { kind: 'send', text: box.value.trim() };
+      box.hide();
+    });
+    box.onDidTriggerButton(() => {
+      result = { kind: 'editor', text: box.value.trim() };
+      box.hide();
+    });
+    box.onDidHide(() => {
+      box.dispose();
+      resolve(result);
+    });
+    box.show();
+  });
+}
+
 async function reply(host: CommandHost, replies: ReplyService, arg: unknown): Promise<void> {
-  const resolved = await resolveWith(host, arg, { title: 'Reply to which session?', isEligible: isOrdinaryBlocker });
+  const resolved = await resolveWith(host, arg, { title: 'Reply to which session?', isEligible: hasReplyTargets });
   if (resolved === undefined) return;
   const { context, snapshot } = resolved;
-  const targets = blockedTargets(snapshot);
+  const targets = snapshot.replyTargets;
   if (targets.length === 0) {
     explainNoReply(snapshot);
     return;
@@ -60,8 +103,38 @@ async function reply(host: CommandHost, replies: ReplyService, arg: unknown): Pr
     typeof arg === 'object' && arg !== null && 'executionId' in arg
       ? targets.find((target) => target.executionId === arg.executionId)
       : undefined;
-  const target = named ?? (await pickBlocked(targets));
-  if (target !== undefined) await replies.open(context, snapshot, target);
+  const target = named ?? (await pickTarget(targets));
+  if (target === undefined) return;
+  await replyTo({ context, snapshot, target }, replies);
+}
+
+/** Quick box for new text; the editor when a draft already holds the user's text, so nothing is dropped. */
+async function replyTo(source: DraftSource, replies: ReplyService): Promise<void> {
+  const { context, snapshot, target } = source;
+  const identity = { project: context.key, sessionId: snapshot.sessionId, executionId: target.executionId };
+  if (replies.hasDraft(identity)) {
+    await replies.open(source);
+    return;
+  }
+  const entered = await promptReply(replyPrompt(target, snapshot.manifest?.role ?? null));
+  if (entered === undefined) return;
+  if (entered.kind === 'editor') {
+    await replies.open(source, entered.text);
+    return;
+  }
+  const meta = await replies.prepare(source, entered.text);
+  if (meta !== undefined) await runSend(replies, meta);
+}
+
+async function runSend(replies: ReplyService, meta: Parameters<ReplyService['send']>[0]): Promise<void> {
+  // The click has no other sign of life: a notification names what the send is doing until it settles. It is not
+  // cancellable, because once the CLI is running a reply cannot be taken back.
+  const run = async (progress: vscode.Progress<{ message?: string }>): Promise<SendResult> => {
+    const onPhase = (message: string): void => progress.report({ message });
+    return replies.send(meta, onPhase);
+  };
+  const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Sending reply' }, run);
+  await replies.report(meta, undefined, result);
 }
 
 async function sendReply(replies: ReplyService, arg: unknown): Promise<void> {
@@ -71,14 +144,7 @@ async function sendReply(replies: ReplyService, arg: unknown): Promise<void> {
     vscode.window.setStatusBarMessage('Open a Migent reply draft to send it.', INFO_MESSAGE_MS);
     return;
   }
-  // The click has no other sign of life: a notification names what the send is doing until it settles. It is not
-  // cancellable, because once the CLI is running a reply cannot be taken back.
-  const run = async (progress: vscode.Progress<{ message?: string }>): Promise<SendResult> => {
-    const onPhase = (message: string): void => progress.report({ message });
-    return replies.send(meta, onPhase);
-  };
-  const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Sending reply' }, run);
-  await replies.report(meta, undefined, result);
+  await runSend(replies, meta);
 }
 
 async function discardReply(replies: ReplyService, arg: unknown): Promise<void> {

@@ -93,6 +93,7 @@ describe('buildSessionMetricsModel', () => {
         isRunning: false,
         pendingQuestions: 0,
         canComplete: false,
+        canReply: false,
       },
       metrics: { kind: 'missing' },
     });

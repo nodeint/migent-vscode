@@ -15,6 +15,7 @@ function snapshot(sessionId: string, priorSessionId: string | null): SessionSnap
     statusError: false,
     lock: { kind: 'none' },
     displayState: { state: 'completed', icon: 'pass', writable: true },
+    replyTargets: [],
   };
 }
 

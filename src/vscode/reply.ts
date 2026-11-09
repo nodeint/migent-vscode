@@ -9,13 +9,11 @@ import { runLong, type RunResult } from '../cli/runner';
 import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
-import type { SessionSnapshot } from '../core/model';
+import type { ReplyTarget, ReplyTargetKind, SessionSnapshot } from '../core/model';
 import type { GateHandle } from '../core/operationGate';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../core/paths';
 import { isRecord } from '../core/record';
 import {
-  type BlockedTarget,
-  blockedTargets,
   readBlockerText,
   replyConsumed,
   replyDraftKey,
@@ -42,25 +40,56 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-/** What the sidecar next to a draft records: the exact blocked execution it answers. */
+/** What the sidecar next to a draft records: the exact execution it answers. */
 interface DraftMeta extends ReplyIdentity {
-  stageId: string;
+  /** Null for a role session, whose CLI target has no stage. */
+  stageId: string | null;
   attempt: number;
+  kind: ReplyTargetKind;
+}
+
+const TARGET_KINDS: readonly string[] = ['blocker', 'cancelled', 'roleTurn'];
+
+function isTargetKind(value: unknown): value is ReplyTargetKind {
+  return typeof value === 'string' && TARGET_KINDS.includes(value);
+}
+
+/** The execution a draft is about: the session of a project and one of its reply targets. */
+export interface DraftSource {
+  context: ProjectContext;
+  snapshot: SessionSnapshot;
+  target: ReplyTarget;
+}
+
+function metaOf({ context, snapshot, target }: DraftSource): DraftMeta {
+  return {
+    project: context.key,
+    sessionId: snapshot.sessionId,
+    executionId: target.executionId,
+    stageId: target.stageId,
+    attempt: target.attempt,
+    kind: target.kind,
+  };
 }
 
 function parseMeta(text: string): DraftMeta | undefined {
   try {
     const value: unknown = JSON.parse(text);
     if (!isRecord(value)) return undefined;
-    const { project, sessionId, executionId, stageId, attempt } = value;
-    const isText = [project, sessionId, executionId, stageId].every((part) => typeof part === 'string' && part !== '');
+    const { project, sessionId, executionId, stageId, attempt, kind } = value;
+    const isText = [project, sessionId, executionId].every((part) => typeof part === 'string' && part !== '');
     if (!isText || typeof attempt !== 'number') return undefined;
+    // A sidecar written before target kinds existed has no `kind` and answers a blocker.
+    const targetKind = isTargetKind(kind) ? kind : 'blocker';
+    const hasStage = typeof stageId === 'string' && stageId !== '';
+    if (!hasStage && targetKind !== 'roleTurn') return undefined;
     return {
       project: String(project),
       sessionId: String(sessionId),
       executionId: String(executionId),
-      stageId: String(stageId),
+      stageId: hasStage ? stageId : null,
       attempt,
+      kind: targetKind,
     };
   } catch {
     return undefined;
@@ -73,7 +102,7 @@ type ExitedRun = Extract<RunResult, { kind: 'exited' }>;
 interface SendInput {
   context: ProjectContext;
   meta: DraftMeta;
-  target: BlockedTarget;
+  target: ReplyTarget;
   text: string;
   /** The raw draft content that was submitted, to tell later edits apart. */
   content: string;
@@ -134,28 +163,38 @@ export class ReplyService implements vscode.Disposable {
     return existsSync(this.draftPath(identity));
   }
 
-  /** Open the Reply editor for one blocked execution, creating the draft with its blocker context the first time. */
-  public async open(context: ProjectContext, snapshot: SessionSnapshot, target: BlockedTarget): Promise<void> {
-    const { executionId } = target;
-    const identity: ReplyIdentity = { project: context.key, sessionId: snapshot.sessionId, executionId };
-    const file = this.draftPath(identity);
-    if (!existsSync(file) && !(await this.#createDraft(context, identity, target))) return;
-    await this.#show(file);
+  /** Open the Reply editor for one execution, creating the draft with its context (and `text`) the first time. */
+  public async open(source: DraftSource, text = ''): Promise<void> {
+    const meta = await this.prepare(source, text);
+    if (meta !== undefined) await this.#show(this.draftPath(meta));
   }
 
-  async #createDraft(context: ProjectContext, identity: ReplyIdentity, target: BlockedTarget): Promise<boolean> {
+  /**
+   * The draft of the target, created with its context and `text` when it does not exist. An existing draft is returned
+   * untouched, so typed text never overwrites or duplicates what the user already wrote.
+   */
+  public async prepare(source: DraftSource, text = ''): Promise<DraftMeta | undefined> {
+    const meta = metaOf(source);
+    if (existsSync(this.draftPath(meta))) return meta;
+    return (await this.#createDraft(source, text)) ? meta : undefined;
+  }
+
+  async #createDraft(source: DraftSource, text: string): Promise<boolean> {
+    const { context, snapshot, target } = source;
+    const identity: ReplyIdentity = metaOf(source);
     const dir = sessionDir(context.root, identity.sessionId);
     const response = path.posix.join(EXECUTIONS_DIRNAME, target.executionId, 'response.md');
     const header = replyHeader({
       target,
       blocker: readBlockerText(dir, target.executionId),
       responsePath: existsSync(path.join(dir, response)) ? response : null,
+      role: snapshot.manifest?.role ?? null,
     });
-    const meta: DraftMeta = { ...identity, stageId: target.stageId, attempt: target.attempt };
+    const meta = metaOf(source);
     try {
       await mkdir(this.#dir, { recursive: true });
       await writeFile(`${this.#base(identity)}.json`, JSON.stringify(meta), 'utf8');
-      await writeFile(this.draftPath(identity), header, { encoding: 'utf8', flag: 'wx' });
+      await writeFile(this.draftPath(identity), `${header}${text}`, { encoding: 'utf8', flag: 'wx' });
       return true;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -182,15 +221,18 @@ export class ReplyService implements vscode.Disposable {
     return readFile(file, 'utf8');
   }
 
-  /** Whether `meta` still names a blocked execution of the session; the stored target is never re-resolved. */
-  #validate(meta: DraftMeta): { context: ProjectContext; snapshot: SessionSnapshot; target: BlockedTarget } | string {
+  /**
+   * Whether `meta` still names an execution the session can take a reply for, by the store's reply targets of the
+   * freshly refreshed snapshot; the stored target is never re-resolved.
+   */
+  #validate(meta: DraftMeta): { context: ProjectContext; snapshot: SessionSnapshot; target: ReplyTarget } | string {
     const context = this.#registry.project(meta.project);
     if (context === undefined) return 'The project is no longer open.';
     context.store.refreshSession(meta.sessionId);
     const snapshot = context.store.snapshot(meta.sessionId);
     if (snapshot === undefined) return 'The session is not available.';
-    const target = blockedTargets(snapshot).find((candidate) => candidate.executionId === meta.executionId);
-    if (target === undefined) return 'The session is no longer blocked on this stage. Your draft was kept.';
+    const target = snapshot.replyTargets.find((candidate) => candidate.executionId === meta.executionId);
+    if (target === undefined) return 'The session can no longer take a reply for this stage. Your draft was kept.';
     return { context, snapshot, target };
   }
 

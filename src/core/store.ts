@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { isRetentionExempt } from './attention';
 import { deriveDisplayState } from './displayState';
+import { listExecutions } from './executions';
 import { probeLock } from './lockProbe';
 import { readManifest } from './manifest';
 import type {
@@ -22,6 +23,7 @@ import {
   statusPath,
 } from './paths';
 import { isRecord } from './record';
+import { replyNeedsExecutions, replyTargets } from './replyFlow';
 import { readStatus } from './statusReader';
 
 export const DEFAULT_SESSION_LIMIT = 50;
@@ -53,6 +55,7 @@ interface SnapshotBody {
   statusError: boolean;
   lock: SessionSnapshot['lock'];
   displayState: SessionSnapshot['displayState'];
+  replyTargets: SessionSnapshot['replyTargets'];
 }
 
 function sameJson(a: unknown = null, b: unknown = null): boolean {
@@ -68,7 +71,8 @@ function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
     sameJson(a.lock, b.lock) &&
     a.displayState.state === b.displayState.state &&
     a.displayState.unknownReason === b.displayState.unknownReason &&
-    a.displayState.writable === b.displayState.writable
+    a.displayState.writable === b.displayState.writable &&
+    sameJson(a.replyTargets, b.replyTargets)
   );
 }
 
@@ -155,8 +159,10 @@ export class SessionStore {
 
     const candidates = scan.eligible.map((sessionId) => this.buildSnapshot(sessionId));
     const keep = this.selectRetained(candidates);
-    for (const snapshot of candidates) {
-      if (!keep.has(snapshot.sessionId)) continue;
+    for (const candidate of candidates) {
+      if (!keep.has(candidate.sessionId)) continue;
+      // Reply targets read execution summaries, so only a retained session pays for them.
+      const snapshot = this.withReplyTargets(candidate);
       const current = this.#sessions.get(snapshot.sessionId);
       if (current === undefined) this.#setSession(snapshot.sessionId, snapshot, 'added');
       else if (!sameBody(snapshot, current)) this.#setSession(snapshot.sessionId, snapshot, 'updated');
@@ -180,14 +186,15 @@ export class SessionStore {
       this.removeSession(sessionId);
       return;
     }
-    const next = this.buildSnapshot(sessionId);
+    const read = this.buildSnapshot(sessionId);
     const current = this.#sessions.get(sessionId);
     if (current !== undefined) {
+      const next = this.withReplyTargets(read);
       if (!sameBody(next, current)) this.#setSession(sessionId, next, 'updated');
       return;
     }
-    if (this.#hidden.has(sessionId) && !isRetentionExempt(next)) return;
-    this.#setSession(sessionId, next, 'added');
+    if (this.#hidden.has(sessionId) && !isRetentionExempt(read)) return;
+    this.#setSession(sessionId, this.withReplyTargets(read), 'added');
     this.enforceLimit();
   }
 
@@ -360,6 +367,17 @@ export class SessionStore {
       statusError: statusRead.kind === 'error',
       lock,
       displayState,
+      replyTargets: [],
     };
+  }
+
+  /**
+   * Attach the one reply-eligibility answer every surface reads. Execution summaries are read only for a cancelled
+   * workflow session, which changes rarely while it is stopped, and never for a session the limit hides.
+   */
+  private withReplyTargets(snapshot: SessionSnapshot): SessionSnapshot {
+    const dir = sessionDir(this.projectRoot, snapshot.sessionId);
+    const executions = replyNeedsExecutions(snapshot) ? listExecutions(dir) : [];
+    return { ...snapshot, replyTargets: replyTargets(snapshot, executions) };
   }
 }

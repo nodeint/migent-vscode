@@ -16,6 +16,8 @@ export interface SessionMeta {
   pendingQuestions: number;
   /** Whether `session complete` applies (a stopped workflow session); decided by the host, not the page. */
   canComplete: boolean;
+  /** Whether a reply can be sent now (the store's `replyTargets`); decided by the host, not the page. */
+  canReply: boolean;
 }
 
 export const NO_SESSION_META: SessionMeta = {
@@ -25,6 +27,7 @@ export const NO_SESSION_META: SessionMeta = {
   isRunning: false,
   pendingQuestions: 0,
   canComplete: false,
+  canReply: false,
 };
 
 export function buildSessionMeta(snapshot: SessionSnapshot | undefined): SessionMeta {
@@ -36,5 +39,6 @@ export function buildSessionMeta(snapshot: SessionSnapshot | undefined): Session
     isRunning: snapshot.displayState.state === 'running',
     pendingQuestions: snapshot.status?.questions.length ?? 0,
     canComplete: isCompletable(snapshot),
+    canReply: snapshot.replyTargets.length > 0,
   };
 }

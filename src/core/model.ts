@@ -156,6 +156,19 @@ export interface ExecutionSnapshot {
   model: string | null;
   /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
   hasFailureReport: boolean;
+  /** `execution.json` `kind`; `verify` marks a verify-only run, which has no agent to reply to. */
+  kind: string | null;
+}
+
+/** What a reply answers: a blocker, an interrupted stage, or the next turn of a role session. */
+export type ReplyTargetKind = 'blocker' | 'cancelled' | 'roleTurn';
+
+/** One execution a reply can be sent to. `stageId` is null for a role session (the CLI target has no stage). */
+export interface ReplyTarget {
+  executionId: string;
+  stageId: string | null;
+  attempt: number;
+  kind: ReplyTargetKind;
 }
 
 export interface SessionSnapshot {
@@ -166,6 +179,8 @@ export interface SessionSnapshot {
   statusError: boolean;
   lock: LockProbe;
   displayState: DisplayState;
+  /** Executions a reply can answer now, computed by the store with the snapshot; empty when none. */
+  replyTargets: readonly ReplyTarget[];
 }
 
 export type SessionChangeKind = 'added' | 'updated' | 'removed';

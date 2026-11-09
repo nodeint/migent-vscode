@@ -15,6 +15,9 @@
     },
     tabsLabel: 'Session pages',
 
+    /** The header button that replies to a session whose reply the host can send. */
+    reply: 'Reply…',
+
     /** The more menu of a session page, and the actions several pages add to it. */
     menu: {
       label: 'More actions',

@@ -62,7 +62,7 @@ describe('listExecutions', () => {
     for (const [id, failure] of [['0001-a--attempt-01', true], ['0002-b--attempt-01', false]] as const) {
       const executionDir = path.join(dir, 'executions', id);
       mkdirSync(executionDir, { recursive: true });
-      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify({ status: 'failed' }));
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify({ status: 'failed', ...(failure ? { kind: 'verify' } : {}) }));
       if (failure) writeFileSync(path.join(executionDir, 'failure.md'), '# Failure');
     }
     expect(listExecutions(dir).map((execution) => [execution.id, execution.hasFailureReport])).toEqual([
@@ -70,6 +70,7 @@ describe('listExecutions', () => {
       ['0002-b--attempt-01', false],
     ]);
     expect(readExecutionSummary(path.join(dir, 'executions', '0001-a--attempt-01'))?.hasFailureReport).toBe(true);
+    expect(listExecutions(dir).map((execution) => execution.kind)).toEqual(['verify', null]);
     expect(readExecutionSummary(path.join(dir, 'executions', 'gone'))).toBeNull();
   });
 });

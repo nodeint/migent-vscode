@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Reply to a stopped session wherever Migent CLI 0.5.2 accepts a reply, not only a blocked one: an interrupted
+  (cancelled) workflow stage and any role session that is stopped, failed, blocked, cancelled or completed (a reply
+  to a completed role session starts a new turn). Reply opens a quick input box for short text, with an Open in
+  editor button that moves the typed text into the Markdown draft; a session that already has a draft opens the
+  draft instead. It is an inline action in the Sessions view and a Reply button in the header of the session
+  page. Continue and Reply stay separate actions on a cancelled session, and a workflow keeps running after the
+  reply. A failed or limit-stopped workflow session still has Continue only.
+
 ## 0.1.4
 
 - Add a Configuration page for `.migent/config.yaml` and `.migent/config.local.yaml` (schema 7). Project and Local tabs
