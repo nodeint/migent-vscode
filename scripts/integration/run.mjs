@@ -79,6 +79,13 @@ for (const flags of [[], ['--integration']]) {
 // --exclude: probe with the user-level exclude that silences VS Code watchers (known limitation, not required to pass).
 const isExclude = process.argv.includes('--exclude');
 
+// Pass 1 runs every suite (or the --file/--case selection) on the deterministic polling backend. Pass 2 runs only the
+// watcherProbe suite on the real VS Code watcher. Both passes get the user's filters and the extension host decides
+// what they select (src/integration/filters.ts), so runner and host cannot disagree on normalization. A bare --case
+// never selects the probe, so pass 2 is skipped then.
+const passes = [{ name: 'polling', watch: 'poll' }];
+if (!caseFilter || fileFilter) passes.push({ name: 'real-watcher', watch: 'real' });
+
 const runs = [];
 for (const version of versions) {
   // Resolve downloads sequentially: an alias and an explicit version can share one cache directory.
@@ -89,16 +96,23 @@ for (const version of versions) {
   } catch (error) {
     downloadError = error;
   }
-  runs.push(runVersion(version, executable, downloadError).catch((error) => {
-    console.error(`VS Code ${version}: integration runner failed:`, error);
-    return 1;
-  }));
+  runs.push((async () => {
+    let outcome = 0;
+    // Passes of one version run in sequence: they share no scratch folder and the log/report files are per pass.
+    for (const pass of passes) {
+      outcome |= await runVersion(version, executable, downloadError, pass).catch((error) => {
+        console.error(`VS Code ${version} [${pass.name}]: integration runner failed:`, error);
+        return 1;
+      });
+    }
+    return outcome;
+  })());
 }
 const outcomes = await Promise.all(runs);
 process.exit(outcomes.some((outcome) => outcome !== 0) ? 1 : 0);
 
-async function runVersion(version, executable, downloadError) {
-  const label = version.replace(/[^a-zA-Z0-9._-]/g, '_');
+async function runVersion(version, executable, downloadError, pass) {
+  const label = `${version.replace(/[^a-zA-Z0-9._-]/g, '_')}${pass.name === 'polling' ? '' : `-${pass.name}`}`;
   const outputDir = join(root, 'dist-test');
   mkdirSync(outputDir, { recursive: true });
   const reportPath = join(outputDir, `integration-failure-${label}.json`);
@@ -136,11 +150,11 @@ async function runVersion(version, executable, downloadError) {
       launchArgs: [workspace, `--user-data-dir=${join(scratch, 'vscode-user')}`, `--extensions-dir=${join(scratch, 'vscode-extensions')}`, '--disable-workspace-trust'],
       stdout: log,
       stderr: log,
-      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_CLI_BIN: bin, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}), ...(fileFilter ? { MIGENT_IT_FILE: fileFilter } : {}), ...(caseFilter ? { MIGENT_IT_CASE: caseFilter } : {}) },
+      extensionTestsEnv: { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ''}`, MIGENT_IT_CLI_BIN: bin, MIGENT_IT_TEMPLATE: template, MIGENT_IT_SCRATCH: join(scratch, 'cases'), MIGENT_IT_FAILURE_REPORT: reportPath, MIGENT_IT_WATCH: pass.watch, MIGENT_IT_PROBE_LABEL: label, MIGENT_IT_ERROR_PATH: join(outputDir, `last-error-${label}.txt`), ...(isExclude ? { MIGENT_IT_EXCLUDE: '1' } : {}), ...(fileFilter ? { MIGENT_IT_FILE: fileFilter } : {}), ...(caseFilter ? { MIGENT_IT_CASE: caseFilter } : {}) },
     });
     return 0;
   } catch (error) {
-    console.error(`VS Code ${version}: integration tests failed`);
+    console.error(`VS Code ${version} [${pass.name} pass]: integration tests failed`);
     try {
       const report = JSON.parse(readFileSync(reportPath, 'utf8'));
       for (const failure of report.failures) {
@@ -149,7 +163,7 @@ async function runVersion(version, executable, downloadError) {
         if (process.env.GITHUB_ACTIONS) {
           const [file, line] = String(failure.location ?? '').split(':');
           const properties = file ? `file=${file},line=${line},` : '';
-          const title = `VS Code ${version}: ${failure.name}`.replaceAll(/[\r\n:,]/g, ' ');
+          const title = `VS Code ${version} ${pass.name}: ${failure.name}`.replaceAll(/[\r\n:,]/g, ' ');
           console.error(`::error ${properties}title=${title}::${failure.message.replaceAll('\n', '%0A')}`);
         }
       }

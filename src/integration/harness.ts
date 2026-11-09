@@ -214,7 +214,7 @@ export async function openScenarioFolder(): Promise<ScenarioFolder> {
     throw new Error(`VS Code refused to add workspace folder ${root}`);
   }
   await added;
-  await waitForWatcher(uri);
+  if (process.env.MIGENT_IT_WATCH !== 'poll') await waitForWatcher(uri);
   return {
     root,
     async dispose() {
@@ -267,7 +267,7 @@ async function attempt(type: string, name: string, step: () => Promise<void>): P
   }
 }
 
-const SCENARIO_TIMEOUT_MS = 120_000;
+const SCENARIO_TIMEOUT_MS = 30_000;
 
 /** Fail a hung scenario by name instead of letting the CI job time out without a trace. */
 async function withTimeout(work: Promise<void>, ms: number): Promise<void> {
