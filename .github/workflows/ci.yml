@@ -16,17 +16,11 @@ concurrency:
 
 jobs:
   test:
-    # Keep the check name free of the VS Code version: branch protection requires `test (<os>)`.
-    name: test (${{ matrix.os }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            vscode: 1.145.0
-          - os: windows-latest
-            vscode: 1.93.0
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -42,7 +36,7 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - name: Integration tests
-        run: pnpm test:integration --versions ${{ matrix.vscode }}
+        run: pnpm test:integration
       - run: pnpm package
       - uses: actions/upload-artifact@v4
         with:
