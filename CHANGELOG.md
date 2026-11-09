@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.6
+
 - Replace the Next step page with VS Code pickers: a suggestion on Results (or `migent.session.openNextStep`) asks
   the way New session does: a quick pick for Run now or Prepare, then the task (with a Compose in
   editor button) for Run now or the title for Prepare. An edited task is remembered, and a Prepared or Running

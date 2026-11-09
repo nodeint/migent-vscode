@@ -36,6 +36,19 @@ export interface Env {
   project: () => ProjectContext | undefined;
 }
 
+/**
+ * The panel revision once it has stopped posting. The page script loads after the panel opens, and its
+ * `ready` message forces one more post, so a baseline read right after opening can still move.
+ */
+export async function settledRevision(env: Env, id: { project: string; sessionId: string }): Promise<number> {
+  let last = -1;
+  while (env.api.session.revision(id) !== last) {
+    last = env.api.session.revision(id);
+    await sleep(SETTLE_MS);
+  }
+  return last;
+}
+
 export interface Scenario {
   name: string;
   run: (env: Env) => Promise<void>;
@@ -214,7 +227,7 @@ export async function openScenarioFolder(): Promise<ScenarioFolder> {
     throw new Error(`VS Code refused to add workspace folder ${root}`);
   }
   await added;
-  await waitForWatcher(uri);
+  if (process.env.MIGENT_IT_WATCH !== 'poll') await waitForWatcher(uri);
   return {
     root,
     async dispose() {
@@ -267,7 +280,7 @@ async function attempt(type: string, name: string, step: () => Promise<void>): P
   }
 }
 
-const SCENARIO_TIMEOUT_MS = 120_000;
+const SCENARIO_TIMEOUT_MS = 30_000;
 
 /** Fail a hung scenario by name instead of letting the CI job time out without a trace. */
 async function withTimeout(work: Promise<void>, ms: number): Promise<void> {

@@ -13,7 +13,7 @@ import { groupOf, summarize } from '../core/attention';
 import type { SessionSnapshot } from '../core/model';
 import { blockedTargets } from '../core/replyFlow';
 import { ReplyService } from '../vscode/reply';
-import { createProject, type Env, manifest, migentPath, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';
+import { createProject, type Env, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
 
 const EXECUTION = '0001-plan--attempt-01';
 const ROLE_EXECUTION = '0001-reviewer--attempt-01';
@@ -107,6 +107,18 @@ const argvLog = (env: Env): string[][] =>
     .filter(Boolean)
     .map((line) => JSON.parse(line) as string[]);
 
+/** Make the fake CLI wait before answering until the returned file is deleted (it creates the file when it waits). */
+function holdAnswer(env: Env): string {
+  const hold = path.join(env.root, 'answer.hold');
+  process.env.MIGENT_FAKE_ANSWER_HOLD = hold;
+  return hold;
+}
+
+function releaseAnswer(hold: string): void {
+  delete process.env.MIGENT_FAKE_ANSWER_HOLD;
+  fs.rmSync(hold, { force: true });
+}
+
 const scenarios: Scenario[] = [
   {
     name: 'Reply: the draft keeps the blocker, survives a new service (reload), and sends with the exact argv',
@@ -173,15 +185,16 @@ const scenarios: Scenario[] = [
     async run(env) {
       const { file, meta } = await openDraft(env, 'r4');
       fs.appendFileSync(file, 'Use Postgres.\n');
-      process.env.MIGENT_FAKE_ANSWER_DELAY_MS = '800';
+      const hold = holdAnswer(env);
       try {
         const sending = env.api.replies.send(meta);
-        await sleep(300);
+        await waitFor('the CLI holds the answer', () => fs.existsSync(hold));
         fs.appendFileSync(file, 'One more thing.\n');
+        fs.rmSync(hold);
         const result = await sending;
         assert.deepEqual(result, { kind: 'sent', hasKeptEdits: true });
       } finally {
-        delete process.env.MIGENT_FAKE_ANSWER_DELAY_MS;
+        releaseAnswer(hold);
       }
       assert.match(fs.readFileSync(file, 'utf8'), /One more thing/);
     },
@@ -191,18 +204,19 @@ const scenarios: Scenario[] = [
     async run(env) {
       const { file, meta } = await openDraft(env, 'r7');
       fs.appendFileSync(file, 'Use Postgres.'+String.fromCharCode(10));
-      process.env.MIGENT_FAKE_ANSWER_DELAY_MS = '800';
+      const hold = holdAnswer(env);
       try {
         const sending = env.api.replies.send(meta);
-        await sleep(300);
+        await waitFor('the CLI holds the answer', () => fs.existsSync(hold));
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
         const edit = new vscode.WorkspaceEdit();
         edit.insert(document.uri, document.positionAt(document.getText().length), 'Unsaved thought.'+String.fromCharCode(10));
         await vscode.workspace.applyEdit(edit);
         assert.equal(document.isDirty, true);
+        fs.rmSync(hold);
         assert.deepEqual(await sending, { kind: 'sent', hasKeptEdits: true });
       } finally {
-        delete process.env.MIGENT_FAKE_ANSWER_DELAY_MS;
+        releaseAnswer(hold);
       }
       assert.ok(fs.existsSync(file), 'the draft file is kept');
       assert.ok(env.api.replies.identityOf(vscode.Uri.file(file)), 'and so is its identity');

@@ -142,12 +142,18 @@ export class Entry {
     this.clients = clients;
   }
 
+  /**
+   * Post a model. A forced publish still sends an unchanged model because a freshly loaded webview may have
+   * missed the earlier message, but it keeps the same revision: the page's revision counter restarts after a
+   * reload, while a live page has already rendered that revision.
+   */
   public publish(model: SessionPageModel, isForced: boolean, state?: Transient): void {
     const json = JSON.stringify(model) + (state === undefined ? '' : JSON.stringify(state));
-    if (!isForced && json === this.#lastJson) return;
+    const isChanged = json !== this.#lastJson;
+    if (!isForced && !isChanged) return;
     this.#lastJson = json;
     this.lastModel = model;
-    this.revision += 1;
+    if (isChanged) this.revision += 1;
     this.panel.title = sessionPageTitle(model.header);
     this.panel.iconPath = tabIcon(this.#extensionUri, iconOf(model.tab), model.header.state);
     void this.panel.webview.postMessage({

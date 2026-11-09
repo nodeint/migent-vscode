@@ -160,6 +160,12 @@ function answer(id) {
   fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
   const mode = process.env.MIGENT_FAKE_ANSWER ?? 'record';
   // `slow` records normally but only after a pause, so a test can observe the submission while it is in flight.
+  // A hold file makes the answer wait until the test deletes it, so a test can act while the CLI is surely in flight.
+  const hold = process.env.MIGENT_FAKE_ANSWER_HOLD;
+  if (hold) {
+    fs.writeFileSync(hold, 'held');
+    while (fs.existsSync(hold)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  }
   if (process.env.MIGENT_FAKE_ANSWER_DELAY_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.MIGENT_FAKE_ANSWER_DELAY_MS));
   const file = path.join(dirOf(id), 'questions.json');
   if (!fs.existsSync(file)) return replyBlocker(id);

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { runCapabilityScenarios } from './capability.integration.test';
 import { runControlScenarios } from './control.integration.test';
 import { failureCount, formatFailures, recordFailure, setFailureSuite } from './failureReport';
+import { type Filters, isEmptySelection, isFileSelected, normalizeFilter, parsePass, shouldRunProbe, shouldRunSuites } from './filters';
 import { selectedScenarioCount } from './harness';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runNextStepScenarios } from './nextStep.integration.test';
@@ -32,15 +33,6 @@ function preferFixtureCli(): void {
 
 class CasesFailedError extends Error {}
 
-/** Lower-case a `--file` filter or suite name and drop `run`, `Scenarios` and `.integration.test(.ts)` noise. */
-function normalizeFilter(text: string | undefined): string | undefined {
-  return text
-    ?.toLowerCase()
-    .replace(/\.integration\.test(\.ts)?$/, '')
-    .replace(/^run/, '')
-    .replace(/scenarios$/, '');
-}
-
 /** A failed run reports its failed cases; the stack of the summary error itself says nothing useful. */
 function describe(error: unknown): string {
   if (error instanceof CasesFailedError) return error.message;
@@ -62,22 +54,6 @@ const SUITES = [
   runReplyScenarios,
 ];
 
-/** `--file` / `--case` filters from the runner; undefined means "everything". */
-interface Filters {
-  file: string | undefined;
-  case: string | undefined;
-}
-
-function isFileSelected(filters: Filters, name: string): boolean {
-  return filters.file === undefined || (normalizeFilter(name) ?? '').includes(filters.file);
-}
-
-/** The probe has its own cases: it runs unfiltered, or when `--file` names it. */
-function shouldRunProbe(filters: Filters): boolean {
-  if (filters.file === undefined) return filters.case === undefined;
-  return isFileSelected(filters, 'watcherProbe');
-}
-
 async function runSuites(filters: Filters): Promise<number> {
   let failed = 0;
   for (const suite of SUITES) {
@@ -93,16 +69,16 @@ export async function run(): Promise<void> {
   preferFixtureCli();
   try {
     const filters: Filters = { file: normalizeFilter(process.env.MIGENT_IT_FILE), case: process.env.MIGENT_IT_CASE };
-    const isFiltered = filters.file !== undefined || filters.case !== undefined;
+    const pass = parsePass(process.env.MIGENT_IT_WATCH);
     let probeFailed = 0;
-    if (shouldRunProbe(filters)) {
+    if (shouldRunProbe(filters, pass)) {
       setFailureSuite('watcher probe');
       probeFailed = await runWatcherProbe();
     }
     // With files.watcherExclude on .migent VS Code delivers no events (known limitation): the probe only
     // reports in that mode, and the scenarios that depend on watcher events are skipped.
-    const scenariosFailed = process.env.MIGENT_IT_EXCLUDE === '1' ? 0 : await runSuites(filters);
-    if (isFiltered && selectedScenarioCount() === 0 && !shouldRunProbe(filters)) {
+    const scenariosFailed = process.env.MIGENT_IT_EXCLUDE === '1' || !shouldRunSuites(pass) ? 0 : await runSuites(filters);
+    if (isEmptySelection(filters, pass, selectedScenarioCount())) {
       throw new CasesFailedError(`No integration case matched --file ${filters.file ?? '*'} --case ${filters.case ?? '*'}`);
     }
     const failed = probeFailed + scenariosFailed;

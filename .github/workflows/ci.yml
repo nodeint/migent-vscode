@@ -36,7 +36,15 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - name: Integration tests
+        timeout-minutes: 10
         run: pnpm test:integration
+      - name: Upload integration diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-${{ matrix.os }}
+          path: dist-test/
+          if-no-files-found: ignore
       - run: pnpm package
       - uses: actions/upload-artifact@v4
         with:

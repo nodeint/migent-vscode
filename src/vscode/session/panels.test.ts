@@ -180,6 +180,26 @@ describe('SessionPanels tabs', () => {
     expect(last()?.model.tab).toBe('metrics');
   });
 
+  it('reposts an unchanged model on ready without a new revision', async () => {
+    const { panels, last } = setup(makeRoot(false), snapshot());
+    panels.open(identity);
+    const revision = panels.revision(identity);
+    const models = posted.messages.filter((message) => message.type === 'model');
+    await panels.handle(identity, { type: 'ready' });
+    expect(panels.revision(identity)).toBe(revision);
+    expect(posted.messages.filter((message) => message.type === 'model')).toHaveLength(models.length + 1);
+    expect(posted.messages.filter((message) => message.type === 'model').at(-1)?.revision).toBe(revision);
+    expect(last()?.model.tab).toBe('results');
+  });
+
+  it('bumps the revision when a publish carries a changed model', async () => {
+    const { panels } = setup(makeRoot(false), snapshot());
+    panels.open(identity);
+    const revision = panels.revision(identity);
+    await panels.handle(identity, { type: 'intent', intent: 'selectTab', tab: 'metrics' });
+    expect(panels.revision(identity)).toBe(revision + 1);
+  });
+
   it('loads the shared workflow form stylesheet, not the editor page stylesheet', () => {
     posted.html = '';
     const { panels } = setup(makeRoot(false));

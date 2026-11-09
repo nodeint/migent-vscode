@@ -55,12 +55,13 @@ supported version (`engines.vscode`) and the latest stable in separate scratch t
 folder is an empty anchor, so the window is multi-root from the start (a guard against the extension-host restart
 that adding a folder to a single-folder window can cause). Every scenario and every watcher probe case
 gets its own folder, copied from `src/integration/fixtures/workspace/` (its `.gitignore` ignores `.migent`), added with
-`updateWorkspaceFolders` and handed over once a sentinel file proves its watcher is live. Nothing is shared between
+`updateWorkspaceFolders` and, in the real-watcher pass, handed over once a sentinel file proves its watcher is live.
+Nothing is shared between
 cases, so no case waits for a previous case's `.migent/` to disappear. Folders are removed from the workspace after
 each case but deleted only when the run ends, because deleting a directory VS Code is still unwatching caused
 `EPERM`/`EBUSY` storms on Windows. `fake-migent.js` records the pid of every process it starts in
-`fake-pids.log`; a case fails if any of them is still alive after it, and a case that does not finish within two
-minutes fails by name.
+`fake-pids.log`; a case fails if any of them is still alive after it, and a case that does not finish within 30 seconds
+fails by name.
 
 When a case fails, the run reports every failed case as `[suite] case name`, the message and the
 `src/...:line:column` of the failing test line (bundle frames are mapped through the source map by
@@ -75,6 +76,18 @@ delivers no watcher events for `.migent`; this is a known limitation that the
 user controls, so that mode only reports and never fails. Reports are written to
 `dist-test/probe-report-<requested-version>.json` (for example, `stable`). On Linux, run under a display server
 (`xvfb-run -a pnpm test:integration`).
+
+Each version runs two passes, reported separately as `[polling pass]` and `[real-watcher pass]`. The polling pass
+sets `MIGENT_IT_WATCH=poll` in the extension host, so `activate` builds `ProjectRegistry` with
+`src/vscode/pollingWatchBackend.ts` instead of `vscodeWatchBackend`. That test-only backend scans each watched folder
+every 50 ms and compares `mtimeMs` and `size`, so it holds no OS watch handles and cannot fail with `EPERM`. It runs
+every suite and skips the watcher probe. The real-watcher pass runs only the `watcherProbe` suite on VS Code's own
+watcher, which keeps that behavior covered. Both passes receive `--file` and `--case`; the extension host decides what
+they select (`src/integration/filters.ts`), so `--file watcherProbe --case P1` and
+`--file watcherProbe.integration.test.ts` run the real pass, and a `--file` that names no probe makes it a no-op. A bare
+`--case` skips the real pass. Production never reads `MIGENT_IT_WATCH`. CI limits the integration step to 10 minutes,
+below the job's 15, and uploads `dist-test/` (logs and failure reports) as `integration-<os>` even when the step fails
+or times out.
 
 The watcher probe exercises VS Code's non-recursive file watchers and records
 their results in that report.

@@ -21,6 +21,7 @@ import {
   runScenarios,
   type Scenario,
   SETTLE_MS,
+  settledRevision,
   sleep,
   status,
   waitFor,
@@ -81,19 +82,6 @@ function sessionNode(env: Env, sessionId: string): TreeNode {
     if (found) return found;
   }
   throw new Error(`session ${sessionId} is not in the tree`);
-}
-
-/**
- * The revision once the panel has stopped posting. The page script loads after the panel opens and its `ready`
- * message forces one more post, so a baseline read right after opening can still move.
- */
-async function settledRevision(env: Env, id: { project: string; sessionId: string }): Promise<number> {
-  let last = -1;
-  while (env.api.session.revision(id) !== last) {
-    last = env.api.session.revision(id);
-    await sleep(SETTLE_MS);
-  }
-  return last;
 }
 
 async function closeAll(env: Env): Promise<void> {

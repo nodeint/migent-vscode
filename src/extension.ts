@@ -20,6 +20,7 @@ import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
 import { NextStepFlow } from './vscode/nextStep/flow';
 import { StateNotifier } from './vscode/notifier';
+import { pollingWatchBackend } from './vscode/pollingWatchBackend';
 import { ProjectRegistry } from './vscode/projects';
 import { QuestionNotifier } from './vscode/questionNotifier';
 import { ReplyService } from './vscode/reply';
@@ -152,7 +153,9 @@ function startRegistryLater(registry: ProjectRegistry): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): MigentApi {
-  const registry = new ProjectRegistry();
+  // Test-only: integration runs set MIGENT_IT_WATCH=poll for a deterministic backend; users get the VS Code watcher.
+  const isPolling = process.env.MIGENT_IT_WATCH === 'poll';
+  const registry = new ProjectRegistry(isPolling ? pollingWatchBackend : undefined);
   const liveness = new Liveness({ stores: () => registry.projects().map((project) => project.store) });
   const capability = new CapabilityService(registry);
   const control = new ControlService(registry, capability);
