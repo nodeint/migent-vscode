@@ -20,6 +20,7 @@ import {
   runScenarios,
   type Scenario,
   SETTLE_MS,
+  settledRevision,
   sleep,
   waitFor,
   write,
@@ -144,7 +145,7 @@ const scenarios: Scenario[] = [
       const taskFile = sessionFile(env, 'task.md');
       await vscode.window.showTextDocument(vscode.Uri.file(taskFile), { preview: false });
       await waitFor('editor focused', () => same(activeFile(), taskFile));
-      const baseline = env.api.session.revision(id);
+      const baseline = await settledRevision(env, id);
 
       fs.copyFileSync(path.join(fixtureDir(), 'metrics.json'), sessionFile(env, 'metrics.json'));
       await waitFor('created metrics.json shown', () => metricsOf(env, id)?.metrics.kind === 'ok');
@@ -160,7 +161,7 @@ const scenarios: Scenario[] = [
       const id = identity(env);
       env.api.session.open(id, { tab: 'metrics' });
       await waitFor('model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
-      const first = env.api.session.revision(id);
+      const first = await settledRevision(env, id);
 
       const changed = JSON.parse(fs.readFileSync(sessionFile(env, 'metrics.json'), 'utf8')) as {
         totals: { cost_partial: boolean };
@@ -177,7 +178,7 @@ const scenarios: Scenario[] = [
       await waitFor('invalid metrics shown', () => metricsOf(env, id)?.metrics.kind === 'invalid');
       assert.equal(metricsOf(env, id)?.state, 'Completed', 'an invalid file keeps the session Completed');
 
-      const settled = env.api.session.revision(id);
+      const settled = await settledRevision(env, id);
       write(sessionFile(env, 'outputs', 'note.md'), 'x');
       await sleep(SETTLE_MS);
       assert.equal(env.api.session.revision(id), settled, 'an unchanged model is not posted again');

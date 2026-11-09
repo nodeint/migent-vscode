@@ -36,6 +36,19 @@ export interface Env {
   project: () => ProjectContext | undefined;
 }
 
+/**
+ * The panel revision once it has stopped posting. The page script loads after the panel opens, and its
+ * `ready` message forces one more post, so a baseline read right after opening can still move.
+ */
+export async function settledRevision(env: Env, id: { project: string; sessionId: string }): Promise<number> {
+  let last = -1;
+  while (env.api.session.revision(id) !== last) {
+    last = env.api.session.revision(id);
+    await sleep(SETTLE_MS);
+  }
+  return last;
+}
+
 export interface Scenario {
   name: string;
   run: (env: Env) => Promise<void>;
