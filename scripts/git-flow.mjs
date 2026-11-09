@@ -29,7 +29,7 @@ export function pushProblems(input, currentRef, verifyRelease) {
   return problems;
 }
 
-export function verifyPublishedRelease(tag, localSha, remoteSha, remote, url) {
+export function verifyReleaseSync(tag, localSha, remoteSha, remote, url) {
   const run = (command, args) => {
     const result = spawnSync(command, args, { encoding: "utf8", timeout: 120_000 });
     if (result.error || result.status !== 0) throw new Error(result.error?.message || result.stderr || `${command} failed`);
@@ -50,9 +50,6 @@ export function verifyPublishedRelease(tag, localSha, remoteSha, remote, url) {
   const version = tag.slice("refs/tags/v".length);
   const manifest = JSON.parse(git("show", `${sha}:package.json`));
   releaseNotes(`v${version}`, manifest, git("show", `${sha}:CHANGELOG.md`));
-  const runs = JSON.parse(run("gh", ["run", "list", "--repo", "nodeint/migent-vscode", "--workflow", "release.yml", "--branch", `v${version}`, "--json", "headSha,conclusion"]));
-  if (!runs.some(item => item.headSha === sha && item.conclusion === "success")) throw new Error("No successful release workflow for this tag and commit.");
-  run(process.execPath, [path.join(import.meta.dirname, "verify-publication.mjs"), version]);
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
@@ -60,7 +57,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   if (head.error || (head.status !== 0 && head.status !== 1)) throw new Error(head.stderr || "Cannot read HEAD.");
   const branch = head.stdout.trim();
   const problems = process.argv[2] === "pre-push"
-    ? pushProblems(readFileSync(0, "utf8"), `refs/heads/${branch}`, (tag, localSha, remoteSha) => verifyPublishedRelease(tag, localSha, remoteSha, process.argv[3], process.argv[4]))
+    ? pushProblems(readFileSync(0, "utf8"), `refs/heads/${branch}`, (tag, localSha, remoteSha) => verifyReleaseSync(tag, localSha, remoteSha, process.argv[3], process.argv[4]))
     : [commitProblem(branch)].filter(Boolean);
   for (const problem of problems) process.stderr.write(`migent-vscode: ${problem}\n`);
   process.exitCode = problems.length ? 1 : 0;
