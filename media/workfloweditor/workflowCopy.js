@@ -9,6 +9,33 @@
   const { plural } = window.MigentUtils;
 
   window.MigentWorkflowCopy = {
+    /** The Workflow editor page around the form: header, menu and notices. */
+    page: {
+      eyebrow: 'Workflow',
+      newTitle: 'New workflow',
+      fallbackTitle: 'Workflow',
+      stages: (count) => plural(count, 'stage'),
+      stagesTip: 'Stages in this workflow',
+      tabsLabel: 'Workflow editor views',
+      tabs: { design: 'Design', yaml: 'YAML' },
+      yamlOpen: 'Open the YAML file in the editor',
+      yamlNoFile: 'Save the workflow first; it has no file yet',
+      menuLabel: 'Workflow actions',
+      menu: { newSession: 'New session', duplicate: 'Duplicate workflow', delete: 'Delete workflow' },
+      notSavedYet: 'Not saved yet',
+      notice: {
+        invalid: (error) => 'This file is not valid YAML: ' + error,
+        unreadable: (error) => 'This file cannot be read: ' + error,
+        unsupported: (schema) =>
+          'This workflow uses schema ' +
+          schema +
+          '. The Design view is read-only; edit the YAML file or migrate the workflow with the Migent CLI.',
+        duplicate: (id) => 'Another workflow file also declares id "' + id + '".',
+        unknownError: 'unknown error',
+        unknownSchema: 'unknown',
+      },
+    },
+
     /** The workflow's own settings. */
     basics: {
       title: 'Basics',

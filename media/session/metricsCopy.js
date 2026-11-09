@@ -37,6 +37,7 @@
 
     /** The totals grid. */
     stats: {
+      title: 'Summary',
       wallTime: 'Wall time',
       wallNote: 'first start to last finish',
       activeTime: 'Active time',
@@ -103,7 +104,8 @@
         skipped: 'Skipped',
         completed: (decision) => withDecision('Completed', decision),
       },
-      heading: (order, stageId, attempt) => '#' + order + ' ' + stageId + (attempt === null ? '' : ' · attempt ' + attempt),
+      /** The title of one execution card; its number badge carries the order. */
+      heading: (stageId, attempt) => stageId + (attempt === null ? '' : ' · attempt ' + attempt),
       didNotRun: 'did not run',
       noRole: 'no role',
       noCost: 'no cost',

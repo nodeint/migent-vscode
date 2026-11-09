@@ -4,11 +4,12 @@
 (function () {
   'use strict';
 
-  const { el, icon, trackFooter } = window.MigentPage;
+  const { el, trackFooter, controlOf, revealControl } = window.MigentPage;
   const copy = window.MigentCopy;
   const text = window.MigentSessionWorkflowCopy;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const draftPage = window.MigentDraftPage;
+  const ui = window.MigentForm;
 
   const NO_TRANSIENT = { saving: false, applying: false, error: null };
 
@@ -72,34 +73,38 @@
     designForm.applyModelPick(index, message.client, message.model);
   });
 
-  /** The shared banner: an icon and a left edge in the tone of the message, one paragraph per line. */
-  function banner(tone, title, lines) {
-    const node = el('div', null, 'mg-banner mg-banner--' + tone);
-    node.setAttribute('role', 'status');
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon(tone === 'error' ? 'error' : 'warning'));
-    const body = el('div');
-    body.append(el('p', title));
-    for (const line of lines) body.append(el('p', line, 'mg-muted'));
-    node.append(mark, body);
-    return node;
+  /**
+   * How an issue is shown: a link when the mounted form drew a control for its path, plain text otherwise. The path is
+   * mapped to the form's control path first; the form itself decides which controls exist.
+   */
+  function resolveIssue(issue) {
+    const path = window.MigentWorkflowModel.formPathOf(unit.form, issue.path);
+    if (controlOf(root, path) === null) return { text: issue.message };
+    return {
+      text: issue.message,
+      activate: () => {
+        const node = controlOf(root, path);
+        if (node) revealControl(node);
+      },
+    };
   }
 
   function renderNotices() {
     const nodes = [];
-    const add = (message, tone) => {
-      const node = el('p', message, 'mg-alert ' + tone);
-      nodes.push(node);
-    };
-    if (model.state === 'invalid') add(text.invalid(model.readError), 'mg-error');
-    if (model.state === 'unreadable') add(text.unreadable(model.readError), 'mg-error');
-    if (model.state === 'unsupported') add(text.unsupported(model.schemaVersion), 'mg-warn');
+    if (model.state === 'invalid') nodes.push(ui.alertLine(text.invalid(model.readError), 'mg-error'));
+    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.unreadable(model.readError), 'mg-error'));
+    if (model.state === 'unsupported') nodes.push(ui.alertLine(text.unsupported(model.schemaVersion), 'mg-warn'));
     if (model.isLocked) {
-      nodes.push(banner('warn', text.locked.title, [text.locked.body(model.ranStages)]));
+      nodes.push(ui.banner({ tone: 'warn', lines: [text.locked.title, text.locked.body(model.ranStages)] }));
     }
-    if (transient.error) add(transient.error, 'mg-error');
-    for (const [kind, tone] of [['errors', 'mg-error'], ['warnings', 'mg-warn']]) {
-      for (const issue of issues(kind)) add(issue.message, tone);
+    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error'));
+    const errors = issues('errors');
+    if (errors.length > 0) {
+      nodes.push(ui.issueBanner({ tone: 'error', summary: copy.issues.problems(errors.length), issues: errors, resolve: resolveIssue }));
+    }
+    const warnings = issues('warnings');
+    if (warnings.length > 0) {
+      nodes.push(ui.issueBanner({ tone: 'warn', summary: copy.issues.warnings(warnings.length), issues: warnings, resolve: resolveIssue }));
     }
     return nodes;
   }
@@ -130,6 +135,8 @@
       return;
     }
     root.append(chrome.notices(), ...designForm.render());
+    // Filled once the form is mounted, so an issue is a link only when its control was drawn.
+    chrome.fillNotices();
     if (model.canSave && !model.isLocked) root.append(chrome.footer());
     if (nextFocus) {
       const node = root.querySelector('[data-path="' + String(nextFocus).replaceAll('"', '') + '"]');

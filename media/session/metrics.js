@@ -5,7 +5,8 @@
 (function () {
   'use strict';
 
-  const { el, section, details, icon } = window.MigentPage;
+  const { el } = window.MigentPage;
+  const ui = window.MigentForm;
   const copy = window.MigentCopy;
   const text = window.MigentSessionMetricsCopy;
   const numberFormat = new Intl.NumberFormat('en-US');
@@ -13,12 +14,9 @@
 
   let page = null;
 
-  /** A native button that sends `intent`. `kind` is a base.css button modifier. */
+  /** A button that sends `intent`. `kind` is a kit button kind. */
   function action(label, intent, kind) {
-    const node = el('button', label, 'mg-btn mg-btn--' + kind);
-    node.type = 'button';
-    node.addEventListener('click', () => page.send(intent));
-    return node;
+    return ui.button(label, { kind, size: 'md', onClick: () => page.send(intent) });
   }
 
   const SECONDS_PER_MINUTE = 60;
@@ -66,35 +64,16 @@
     return date === null ? null : date.toLocaleTimeString();
   }
 
-  function banner(isError) {
-    const node = el('div', null, 'mg-banner mg-banner--' + (isError ? 'error' : 'warn'));
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon(isError ? 'error' : 'warning'));
-    const body = el('div');
-    node.append(mark, body);
-    return { node, body };
-  }
-
   function renderUnavailableMetrics(metrics) {
     if (metrics.kind === 'missing') {
-      const { node, body } = banner(false);
-      body.append(
-        el('p', text.unavailable.missingTitle),
-        el('p', text.unavailable.missingBody, 'mg-muted'),
-      );
-      return node;
+      return ui.banner({ tone: 'warn', lines: [text.unavailable.missingTitle, text.unavailable.missingBody] });
     }
-    const { node, body } = banner(true);
     const title = metrics.kind === 'unreadable' ? text.unavailable.unreadable : text.unavailable.unusable;
-    body.append(
-      el('p', title),
-      el('p', metrics.error, 'mg-muted mg-mono'),
-      el('p', text.unavailable.stays, 'mg-muted'),
-    );
-    const row = el('p', null, 'metrics-block');
-    row.append(action(text.openFile, { intent: 'openMetricsFile' }, 'secondary'));
-    body.append(row);
-    return node;
+    return ui.banner({
+      tone: 'error',
+      lines: [title, { text: metrics.error, className: 'mg-muted mg-mono' }, text.unavailable.stays],
+      actions: [action(text.openFile, { intent: 'openMetricsFile' }, 'secondary')],
+    });
   }
 
   function isSkipped(execution) {
@@ -112,20 +91,15 @@
     const totals = metrics.totals;
     const uncaptured = isNumber(totals.uncapturedTurns) && totals.uncapturedTurns > 0;
     if (totals.costPartial !== true && !uncaptured) return null;
-    const { node, body } = banner(false);
+    const lines = [];
     if (totals.costPartial === true) {
       const missing = missingCostExecutions(metrics);
       const clients = [...new Set(missing.map((execution) => execution.client).filter((name) => name))];
       const total = isNumber(totals.executions) ? totals.executions : null;
-      body.append(
-        el('p', text.costWarning.title),
-        el('p', text.costWarning.detail(missing.length, total, clients, money(totals.usage.costUsd)), 'mg-muted'),
-      );
+      lines.push(text.costWarning.title, text.costWarning.detail(missing.length, total, clients, money(totals.usage.costUsd)));
     }
-    if (uncaptured) {
-      body.append(el('p', text.costWarning.uncaptured(totals.uncapturedTurns), 'mg-warn'));
-    }
-    return node;
+    if (uncaptured) lines.push({ text: text.costWarning.uncaptured(totals.uncapturedTurns), className: 'mg-warn' });
+    return ui.banner({ tone: 'warn', lines });
   }
 
   function stat(label, value, note, tone) {
@@ -178,7 +152,7 @@
         isNumber(t.failedExecutions) && t.failedExecutions > 0 ? 'warn' : null,
       ),
     );
-    return grid;
+    return ui.section(text.stats.title, { surface: true, children: [grid] });
   }
 
   /** A bar showing `value` out of `max`. It is decorative: the number is always shown as text beside it. */
@@ -200,11 +174,7 @@
   }
 
   function renderStages(metrics) {
-    const node = section(text.stages.title, 'mg-section');
-    if (metrics.stages.length === 0) {
-      node.append(el('p', text.stages.empty, 'mg-muted'));
-      return node;
-    }
+    if (metrics.stages.length === 0) return ui.section(text.stages.title, { children: [el('p', text.stages.empty, 'mg-empty')] });
     const seconds = metrics.stages.map((stage) => stageSeconds(metrics, stage.id));
     const longest = Math.max(1, ...seconds.map((value) => (value === null ? 0 : value)));
     const list = el('ul', null, 'mg-list');
@@ -227,9 +197,7 @@
       item.append(row);
       list.append(item);
     });
-    node.append(list);
-    node.append(el('p', text.stages.note, 'mg-muted'));
-    return node;
+    return ui.section(text.stages.title, { count: String(metrics.stages.length), note: text.stages.note, children: [list] });
   }
 
   const TOKEN_FIELDS = Object.keys(text.usage.tokens);
@@ -263,7 +231,6 @@
   }
 
   function renderUsage(metrics) {
-    const node = section(text.usage.title, 'mg-section');
     const usage = metrics.totals.usage;
     const longest = Math.max(1, ...TOKEN_FIELDS.map((field) => (isNumber(usage[field]) ? usage[field] : 0)));
     const list = el('ul', null, 'mg-list');
@@ -277,15 +244,7 @@
       item.append(row);
       list.append(item);
     }
-    node.append(list);
-    node.append(el('p', text.usage.note, 'mg-muted'));
-
-    node.append(el('h3', text.usage.providers));
     const rows = clientRows(metrics);
-    if (rows.size === 0) {
-      node.append(el('p', text.usage.noProviders, 'mg-muted'));
-      return node;
-    }
     const clients = el('ul', null, 'mg-list');
     for (const [name, entry] of rows) {
       const row = el('div', null, 'mg-row');
@@ -294,8 +253,11 @@
       item.append(row);
       clients.append(item);
     }
-    node.append(clients);
-    return node;
+    const providers = rows.size === 0 ? [el('p', text.usage.noProviders, 'mg-empty')] : [clients];
+    return ui.section(text.usage.title, {
+      note: text.usage.note,
+      children: [list, ui.group(text.usage.providers, null, { children: providers })],
+    });
   }
 
   function statusLabel(execution) {
@@ -313,26 +275,27 @@
     list.append(el('dt', label), el('dd', value));
   }
 
+  /** The tone that needs attention, from the same rule as `statusLabel`; null for a neutral state (skipped too). */
+  function attentionTone(execution) {
+    if (execution.status === 'failed') return 'error';
+    if (execution.status === 'cancelled' || (execution.status === 'completed' && execution.decision === 'revise')) return 'warn';
+    return null;
+  }
+
+  /** The quiet summary of a card: role, status, client, time and cost. A skipped execution never ran. */
   function executionSummary(execution) {
-    const line = el('span', null, 'metrics-exec-summary');
-    const title = el('span', null, 'metrics-exec-title');
-    title.append(el('span', text.executions.heading(execution.order, execution.stageId, execution.attempt), 'mg-mono'));
-    if (execution.role) title.append(el('span', '  ' + execution.role, 'mg-muted'));
-    const meta = el('span', null, 'metrics-exec-meta');
-    const label = statusLabel(execution);
-    const pill = el('span', label.label, 'mg-pill');
-    meta.append(pill);
+    const parts = [execution.role || '', statusLabel(execution).label];
     if (isSkipped(execution)) {
-      meta.append(el('span', text.executions.didNotRun, 'mg-muted'));
-    } else {
-      meta.append(
-        el('span', execution.client === null ? text.executions.noRole : clientKey(execution), 'mg-muted'),
-        el('span', formatSeconds(execution.wallSeconds)),
-        el('span', isNumber(execution.usage.costUsd) ? money(execution.usage.costUsd) : text.executions.noCost, isNumber(execution.usage.costUsd) ? 'mg-muted' : 'mg-warn'),
-      );
+      parts.push(text.executions.didNotRun);
+      return parts;
     }
-    line.append(title, meta);
-    return line;
+    parts.push(
+      execution.client === null ? text.executions.noRole : clientKey(execution),
+      formatSeconds(execution.wallSeconds),
+    );
+    // A reported cost is part of the quiet line; a missing one is a warning chip (see `executionAlerts`).
+    if (isNumber(execution.usage.costUsd)) parts.push(money(execution.usage.costUsd));
+    return parts;
   }
 
   function costFact(execution) {
@@ -346,8 +309,6 @@
   }
 
   function renderVerify(verify) {
-    const block = el('div');
-    block.append(el('h3', text.verify.title));
     const list = el('dl', null, 'metrics-kv');
     fact(list, text.verify.runs, count(verify.runs));
     fact(list, text.verify.redRuns, count(verify.red));
@@ -359,13 +320,10 @@
       cell.append(commands);
       list.append(el('dt', text.verify.failedCommands), cell);
     }
-    block.append(list);
-    return block;
+    return ui.group(text.verify.title, null, { children: [list] });
   }
 
   function executionBody(execution) {
-    const body = el('div', null, 'metrics-exec-body');
-    body.append(el('h3', text.execution.timing));
     const facts = el('dl', null, 'metrics-kv');
     fact(facts, text.execution.status, text.execution.withDecision(execution.status, execution.decision));
     if (isSkipped(execution)) {
@@ -384,54 +342,62 @@
     }
     if (execution.resumesExecutionId) fact(facts, text.execution.resumes, execution.resumesExecutionId);
     if (execution.routedFrom) fact(facts, text.execution.routedFrom, execution.routedFrom);
-    body.append(facts);
-
+    const body = [ui.group(text.execution.timing, null, { children: [facts] })];
     if (isSkipped(execution)) return body;
-    body.append(el('h3', text.execution.tokens));
     const tokens = el('dl', null, 'metrics-kv');
     for (const field of TOKEN_FIELDS) fact(tokens, text.usage.tokens[field], count(execution.usage[field]));
-    body.append(tokens);
-    if (execution.verify) body.append(renderVerify(execution.verify));
+    body.push(ui.group(text.execution.tokens, null, { children: [tokens] }));
+    if (execution.verify) body.push(renderVerify(execution.verify));
     return body;
   }
 
-  function executionDetails(execution, isLast) {
-    const node = details('execution:' + execution.id, '', 'metrics-exec', isLast);
-    node.querySelector('summary').append(executionSummary(execution));
-    node.append(executionBody(execution));
-    return node;
+  /** The framed chips of a card header: the status that needs attention, and a cost the execution did not report. */
+  function executionAlerts(execution) {
+    const alerts = [];
+    const tone = attentionTone(execution);
+    if (tone !== null) alerts.push(el('span', statusLabel(execution).label, 'mg-chip mg-chip--' + tone));
+    if (!isSkipped(execution) && !isNumber(execution.usage.costUsd)) {
+      alerts.push(el('span', text.executions.noCost, 'mg-chip mg-chip--warn'));
+    }
+    return alerts;
+  }
+
+  function executionCard(execution, isLast) {
+    const tone = attentionTone(execution);
+    return ui.collapsibleCard({
+      key: 'execution:' + execution.id,
+      number: execution.order,
+      title: text.executions.heading(execution.stageId, execution.attempt),
+      summary: executionSummary(execution),
+      alerts: executionAlerts(execution),
+      warn: tone !== null,
+      open: isLast,
+      body: executionBody(execution),
+    });
   }
 
   function renderExecutions(metrics) {
-    const node = section(text.executions.title, 'mg-section');
-    if (metrics.executions.length === 0) {
-      node.append(el('p', text.executions.empty, 'mg-muted'));
-      return node;
+    const executions = metrics.executions;
+    if (executions.length === 0) {
+      return ui.section(text.executions.title, { children: [el('p', text.executions.empty, 'mg-empty')] });
     }
-    node.append(el('p', text.executions.hint, 'mg-muted'));
-    const list = el('div');
-    metrics.executions.forEach((execution, index) => {
-      list.append(executionDetails(execution, index === metrics.executions.length - 1));
+    return ui.section(text.executions.title, {
+      count: String(executions.length),
+      note: text.executions.hint,
+      children: executions.map((execution, index) => executionCard(execution, index === executions.length - 1)),
     });
-    node.append(list);
-    return node;
   }
 
   function renderDetails(model) {
-    const node = details('details', copy.details);
-    const body = el('div');
     const facts = el('dl', null, 'metrics-kv');
     fact(facts, text.details.session, model.sessionId);
     if (model.workflowId) fact(facts, text.details.workflow, model.workflowId);
     const completed = formatDateTime(model.completedAt);
     if (completed) fact(facts, text.details.completed, completed);
     fact(facts, text.details.record, text.details.recordNote);
-    body.append(facts);
     const row = el('p', null, 'metrics-block');
     row.append(action(text.openFile, { intent: 'openMetricsFile' }, 'secondary'));
-    body.append(row);
-    node.append(body);
-    return node;
+    return ui.section(copy.details, { children: [facts, row] });
   }
 
   function render(root, model, host) {

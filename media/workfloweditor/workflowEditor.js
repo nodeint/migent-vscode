@@ -4,8 +4,9 @@
 (function () {
   'use strict';
 
-  const { el, connect, menuButton, icon, trackFooter, pageTabs } = window.MigentPage;
+  const { el, connect, trackFooter, pageHeader, controlOf, revealControl } = window.MigentPage;
   const copy = window.MigentCopy;
+  const text = window.MigentWorkflowCopy.page;
   const ui = window.MigentForm;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const draftPage = window.MigentDraftPage;
@@ -55,6 +56,8 @@
     root.append(renderHeader());
     root.append(chrome.notices());
     root.append(...designForm.render());
+    // The notices are filled once the form is mounted, so an issue is a link only when its control was drawn.
+    chrome.fillNotices();
     root.append(chrome.footer());
     restoreFocus(nextFocus !== null ? { path: nextFocus } : previous);
     nextFocus = null;
@@ -102,158 +105,85 @@
     }
   }
 
-  /** The control an issue path edits, or the nearest one around it; null when the form has none (such as roles). */
-  function controlOfIssue(issue) {
-    const parts = window.MigentWorkflowModel.formPathOf(unit.form, issue.path).split('.');
-    while (parts.length > 1) {
-      const node = controlAt(parts.join('.'));
-      if (node) return node;
-      parts.pop();
-    }
-    return null;
-  }
-
-  /**
-   * Take the reader to the control an issue names. A control inside a closed card is not shown, so the cards that
-   * hold it open first (the shared `details` keeps that state across the repaint, so the card stays open), then the
-   * control is scrolled to the middle of the view and focused.
-   */
-  function revealControl(node) {
-    window.MigentPage.openAround(node);
-    node.scrollIntoView({ block: 'center' });
-    node.focus({ preventScroll: true });
-  }
-
   // ---------- header ----------
-
-  function addFact(parent, name, text, title) {
-    const item = el('span', null, 'mg-meta-item');
-    if (title) item.title = title;
-    item.append(icon(name), el('span', text));
-    parent.append(item);
-  }
 
   function workflowMenu() {
     const items = [];
     if (model.mode !== 'new') {
-      items.push({ label: 'New session', onSelect: () => post('run') });
-      items.push({ label: 'Duplicate workflow', onSelect: () => post('duplicate') });
-      items.push({ label: 'Delete workflow', onSelect: () => post('delete') });
+      items.push({ label: text.menu.newSession, onSelect: () => post('run') });
+      items.push({ label: text.menu.duplicate, onSelect: () => post('duplicate') });
+      items.push({ label: text.menu.delete, onSelect: () => post('delete') });
     }
     if (model.file && model.mode !== 'new') items.push({ label: copy.menu.reloadFromDisk, onSelect: () => post('reload') });
     if (model.file) items.push({ label: copy.menu.revealInExplorer, onSelect: () => post('reveal') });
-    return menuButton({ label: '⋯', ariaLabel: 'Workflow actions', items });
+    return { label: text.menuLabel, items };
   }
 
   function renderHeader() {
-    const header = el('header', null, 'mg-header mg-header--session');
-    const row = el('div', null, 'mg-header-row');
-    row.append(el('span', 'Workflow', 'mg-eyebrow'));
-    header.append(row);
-
-    const title = model.mode === 'new' ? 'New workflow' : model.id || 'Workflow';
-    header.append(el('h1', title, 'mg-title'));
-
-    const subtitle = el('p', null, 'mg-subtitle mg-meta');
-    if (model.file) addFact(subtitle, 'package', model.file, model.path || undefined);
-    addFact(
-      subtitle,
-      'checklist',
-      unit.form.stages.length + (unit.form.stages.length === 1 ? ' stage' : ' stages'),
-      'Stages in this workflow',
-    );
-    header.append(subtitle);
-
-    const bar = el('div', null, 'mg-tabbar');
-    // YAML is the file itself: the tab opens it in the VS Code editor instead of a page-made editor.
     const hasFile = Boolean(model.file) && model.mode !== 'new';
-    const tabs = pageTabs({
-      label: 'Workflow editor views',
-      current: 'design',
-      tabs: [
-        { key: 'design', label: 'Design' },
-        {
-          key: 'yaml',
-          label: 'YAML',
-          disabled: !hasFile,
-          title: hasFile ? 'Open the YAML file in the editor' : 'Save the workflow first; it has no file yet',
-          onSelect: () => post('openFile'),
-        },
-      ],
+    const facts = [];
+    if (model.file) facts.push({ icon: 'package', text: model.file, title: model.path || undefined });
+    facts.push({ icon: 'checklist', text: text.stages(unit.form.stages.length), title: text.stagesTip });
+    return pageHeader({
+      eyebrow: text.eyebrow,
+      title: model.mode === 'new' ? text.newTitle : model.id || text.fallbackTitle,
+      facts,
+      tabs: {
+        label: text.tabsLabel,
+        current: 'design',
+        // YAML is the file itself: the tab opens it in the VS Code editor instead of a page-made editor.
+        tabs: [
+          { key: 'design', label: text.tabs.design },
+          {
+            key: 'yaml',
+            label: text.tabs.yaml,
+            disabled: !hasFile,
+            title: hasFile ? text.yamlOpen : text.yamlNoFile,
+            onSelect: () => post('openFile'),
+          },
+        ],
+      },
+      menu: workflowMenu(),
     });
-    bar.append(tabs, workflowMenu());
-    header.append(bar);
-    return header;
   }
 
   // ---------- notices ----------
 
-  function alertLine(text, className, isAlert) {
-    const node = el('p', text, 'mg-alert ' + className);
-    if (isAlert) node.setAttribute('role', 'alert');
-    return node;
-  }
-
-  function issueBanner(list, tone, summary) {
-    const banner = el('div', null, 'mg-banner mg-banner--' + tone);
-    banner.setAttribute('role', tone === 'error' ? 'alert' : 'status');
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon(tone === 'error' ? 'error' : 'warning'));
-    const body = el('div');
-    body.append(el('p', summary));
-    const items = el('ul', null, 'mg-list mg-issue-list');
-    for (const issue of list) {
-      const item = el('li');
-      if (issue.path === 'yaml') {
-        const jump = el('button', issue.message, 'mg-btn mg-btn--link');
-        jump.type = 'button';
-        jump.addEventListener('click', () => post('openFile'));
-        item.append(jump);
-      } else if (controlOfIssue(issue) !== null) {
-        const jump = el('button', issue.message, 'mg-btn mg-btn--link');
-        jump.type = 'button';
-        jump.addEventListener('click', () => {
-          const node = controlOfIssue(issue);
-          if (node) revealControl(node);
-        });
-        item.append(jump);
-      } else {
-        // No control edits this path (a role, say): plain text, not a link that goes nowhere.
-        item.append(el('span', issue.message));
-      }
-      items.append(item);
-    }
-    body.append(items);
-    banner.append(mark, body);
-    return banner;
+  /**
+   * How an issue is shown. `yaml` opens the file; any other issue is a link only when the form drew a control for
+   * it, looked up in the mounted form, and plain text otherwise (a role, say).
+   */
+  function resolveIssue(issue) {
+    if (issue.path === 'yaml') return { text: issue.message, activate: () => post('openFile') };
+    const path = window.MigentWorkflowModel.formPathOf(unit.form, issue.path);
+    if (controlOf(root, path) === null) return { text: issue.message };
+    return {
+      text: issue.message,
+      activate: () => {
+        const node = controlOf(root, path);
+        if (node) revealControl(node);
+      },
+    };
   }
 
   function renderNotices() {
     const nodes = [];
-    if (transient.error) nodes.push(alertLine(transient.error, 'mg-error', true));
-    if (model.state === 'invalid') {
-      nodes.push(alertLine('This file is not valid YAML: ' + (model.readError || 'unknown error'), 'mg-error', true));
-    }
-    if (model.state === 'unreadable') {
-      nodes.push(alertLine('This file cannot be read: ' + (model.readError || 'unknown error'), 'mg-error', true));
-    }
+    const unknownError = text.notice.unknownError;
+    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error', true));
+    if (model.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(model.readError || unknownError), 'mg-error', true));
+    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(model.readError || unknownError), 'mg-error', true));
     if (model.state === 'unsupported') {
-      nodes.push(
-        alertLine(
-          'This workflow uses schema ' +
-            (model.schemaVersion === null ? 'unknown' : model.schemaVersion) +
-            '. The Design view is read-only; edit the YAML file or migrate the workflow with the Migent CLI.',
-          'mg-warn',
-        ),
-      );
+      nodes.push(ui.alertLine(text.notice.unsupported(model.schemaVersion === null ? text.notice.unknownSchema : model.schemaVersion), 'mg-warn'));
     }
-    if (model.duplicateOf && model.duplicateOf.length > 0) {
-      nodes.push(alertLine('Another workflow file also declares id "' + model.id + '".', 'mg-warn'));
-    }
+    if (model.duplicateOf && model.duplicateOf.length > 0) nodes.push(ui.alertLine(text.notice.duplicate(model.id), 'mg-warn'));
     const errors = issues('errors');
-    if (errors.length > 0) nodes.push(issueBanner(errors, 'error', errors.length + ' problem' + (errors.length === 1 ? '' : 's') + ' found'));
+    if (errors.length > 0) {
+      nodes.push(ui.issueBanner({ tone: 'error', summary: copy.issues.problems(errors.length), issues: errors, resolve: resolveIssue }));
+    }
     const warnings = issues('warnings');
-    if (warnings.length > 0) nodes.push(issueBanner(warnings, 'warn', warnings.length + ' warning' + (warnings.length === 1 ? '' : 's')));
+    if (warnings.length > 0) {
+      nodes.push(ui.issueBanner({ tone: 'warn', summary: copy.issues.warnings(warnings.length), issues: warnings, resolve: resolveIssue }));
+    }
     return nodes;
   }
 
@@ -276,7 +206,7 @@
     const dirty = isDirty();
     return {
       // A clean, saved workflow shows nothing; only unsaved or never-saved states are worth a label.
-      stateLabel: dirty ? copy.unsavedChanges : model.mode === 'new' ? 'Not saved yet' : '',
+      stateLabel: dirty ? copy.unsavedChanges : model.mode === 'new' ? text.notSavedYet : '',
       saving: transient.saving,
       busy: transient.applying,
       canDiscard: dirty,

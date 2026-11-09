@@ -5,6 +5,7 @@
 
   const { el, details, trackFooter, icon } = window.MigentPage;
   const copy = window.MigentCopy;
+  const ui = window.MigentForm;
   const text = window.MigentSessionQuestionsCopy;
   const CONTEXT_CLAMP_LENGTH = 240;
   // The tone of the banner for the batch's state. Anything else is plain information.
@@ -18,7 +19,6 @@
     'answered-elsewhere': 'warn',
     'recorded-waiting': 'warn',
   };
-  const BANNER_ICONS = { ok: 'pass', info: 'info', warn: 'warning', error: 'error' };
   // Shown while the batch can still be answered or is being sent; afterwards the banner says what happened.
   const ANSWERING_STATES = ['editing', 'rejected', 'sending'];
   let model = null;
@@ -241,15 +241,12 @@
   function note() {
     if (model.state === 'sending' || (!model.message && !model.blockReason)) return null;
     const tone = BANNER_TONES[model.state] || 'info';
-    const node = el('div', null, 'mg-banner mg-banner--' + tone);
-    node.setAttribute('role', 'status');
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon(BANNER_ICONS[tone]));
-    const body = el('div');
-    if (model.message) body.append(el('p', model.message));
-    if (model.blockReason && (model.editable || !model.message)) body.append(el('p', model.blockReason, model.message ? 'mg-muted' : ''));
-    node.append(mark, body);
-    return node;
+    const lines = [];
+    if (model.message) lines.push(model.message);
+    if (model.blockReason && (model.editable || !model.message)) {
+      lines.push({ text: model.blockReason, className: model.message ? 'mg-muted' : '' });
+    }
+    return ui.banner({ tone, lines });
   }
 
   // Jump chips while the batch can be answered; with the answers sent the page is a record, not a form.
@@ -303,10 +300,8 @@
   function footer() {
     const bar = el('footer', null, 'mg-footer');
     const add = (label, type, kind) => {
-      const node = el('button', label, 'mg-btn mg-btn--' + (kind || 'secondary'));
-      node.type = 'button';
+      const node = ui.button(label, { kind: kind || 'secondary', size: 'md', onClick: () => page.post({ type }) });
       node.id = 'act-' + type;
-      node.addEventListener('click', () => page.post({ type }));
       bar.append(node);
     };
     if (model.state === 'stale') add(text.footer.reload, 'reload', 'primary');
@@ -315,21 +310,16 @@
     if (['recorded-waiting', 'rejected', 'unconfirmed'].includes(model.state)) add(copy.menu.viewLog, 'viewLog');
     if (model.editable || model.state === 'stale') add(text.footer.discard, 'discard');
     if (model.editable && model.state !== 'unconfirmed') {
-      const submitButton = el('button', text.footer.send, 'mg-btn mg-btn--primary');
-      submitButton.type = 'button';
+      const submitButton = ui.button(text.footer.send, { kind: 'primary', size: 'md', disabled: true, onClick: submit });
       submitButton.id = 'submit';
-      submitButton.disabled = true;
-      submitButton.addEventListener('click', submit);
       bar.append(submitButton);
     }
     if (model.state === 'sending') {
       // The send is in flight: the button stays where it was and says so, until the state moves on.
-      const sending = el('button', null, 'mg-btn mg-btn--primary');
-      sending.type = 'button';
+      const sending = ui.button('', { kind: 'primary', size: 'md', disabled: true });
       sending.id = 'submit';
-      sending.disabled = true;
       sending.setAttribute('aria-busy', 'true');
-      sending.append(icon('sync', true), ' ' + text.footer.sending);
+      sending.replaceChildren(icon('sync', true), ' ' + text.footer.sending);
       bar.append(sending);
     }
     return bar.children.length > 0 ? bar : null;

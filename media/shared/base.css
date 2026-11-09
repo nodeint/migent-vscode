@@ -239,17 +239,6 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   margin: var(--mg-space-5) 0 0;
 }
 
-.mg-section > h2 {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin: 0 0 var(--mg-space-2);
-}
-
-.mg-section > h3 {
-  font-size: 1em;
-  margin: var(--mg-space-3) 0 var(--mg-space-1);
-}
-
 /* A section nested in another one: a group sits inline, a card is one bordered repeated item. */
 .mg-section--group,
 .mg-section--card {
@@ -1055,6 +1044,11 @@ select.mg-select:disabled {
 .mg-chip--warn {
   color: var(--mg-warn);
   border-color: var(--mg-warn);
+}
+
+.mg-chip--error {
+  color: var(--mg-error);
+  border-color: var(--mg-error);
 }
 
 /* Quiet row action: text without a button frame until hover. */
