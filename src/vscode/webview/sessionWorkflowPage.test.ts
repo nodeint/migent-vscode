@@ -106,19 +106,35 @@ class FakeElement {
     for (const handler of this.listeners.change ?? []) handler({ target: this });
   }
 
+  /** Run the handlers of `type` on this node, then on each ancestor, as a bubbling DOM event does. */
+  private dispatch(type: string): void {
+    const dispatchTarget = (node: FakeElement | null): void => {
+      if (node === null) return;
+      for (const handler of node.listeners[type] ?? []) handler({ target: this });
+      dispatchTarget(node.parentElement);
+    };
+    dispatchTarget(this);
+  }
+
   public type_(value: string): void {
     this.value = value;
-    for (const handler of this.listeners.input ?? []) handler({ target: this });
+    this.dispatch('input');
   }
 
   /** Type a value and commit it, as leaving the field does. */
   public enter(value: string): void {
     this.type_(value);
-    for (const handler of this.listeners.change ?? []) handler({ target: this });
+    this.dispatch('change');
   }
 
   public focus(): void {
     this.doc.active = this;
+  }
+
+  public scrolledTo = false;
+
+  public scrollIntoView(): void {
+    this.scrolledTo = true;
   }
 
   public setSelectionRange(start: number, end: number, direction = 'none'): void {
@@ -243,7 +259,7 @@ function load() {
   const doc = new FakeDocument();
   const listeners: Record<string, Handler[]> = {};
   const posted: Record<string, unknown>[] = [];
-  const window = {
+  const window: Record<string, unknown> = {
     scrollY: 0,
     scrollTo: (): void => undefined,
     addEventListener: (type: string, handler: Handler): void => {
@@ -294,6 +310,12 @@ function load() {
       handler({ data: { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next), transient } });
     }
   };
+  const deliverPage = (pageModel: Record<string, unknown>): void => {
+    revision += 1;
+    for (const handler of listeners.message ?? []) {
+      handler({ data: { type: 'model', revision, identity: { a: 1 }, model: pageModel } });
+    }
+  };
   const find = (predicate: (node: FakeElement) => boolean): FakeElement | undefined =>
     doc.root.descendants().find(predicate);
   const button = (label: string): FakeElement | undefined =>
@@ -303,7 +325,7 @@ function load() {
     if (node === undefined) throw new Error('no stage id input');
     return node;
   };
-  return { doc, posted, deliver, button, stageId, find };
+  return { doc, window, posted, deliver, deliverPage, button, stageId, find };
 }
 
 const lastSave = (posted: Record<string, unknown>[]) =>
@@ -457,5 +479,350 @@ describe('Session workflow page', () => {
     page.deliver(model({ isLocked: true, canSave: false, ranStages: ['plan'] }));
     expect(page.button('Save workflow')).toBeUndefined();
     expect(page.doc.root.textContent).toContain('This workflow is locked');
+  });
+
+  it('lists the issues in one banner and links only those whose control the form drew', () => {
+    const page = load();
+    page.deliver(
+      model({
+        validation: {
+          errors: [
+            { path: 'stages.0', message: 'Stage needs an id' },
+            { path: 'roles.reviewer', message: 'Role reviewer is missing' },
+            { path: 'artifacts.ghost.file', message: 'Ghost has no file' },
+          ],
+          warnings: [{ path: 'stages.0.role', message: 'Role is unused' }],
+        },
+      }),
+    );
+    const banners = page.doc.root.descendants().filter((node) => node.classList.contains('mg-banner'));
+    expect(banners).toHaveLength(2);
+    expect(banners[0].textContent).toContain('3 problems found');
+    expect(banners[1].textContent).toContain('1 warning');
+    // The first paint already links an issue to a drawn control; the others are plain text, not dead links.
+    expect(page.button('Stage needs an id')).toBeDefined();
+    expect(page.button('Role is unused')).toBeDefined();
+    expect(page.button('Role reviewer is missing')).toBeUndefined();
+    expect(page.button('Ghost has no file')).toBeUndefined();
+    expect(page.doc.root.textContent).toContain('Role reviewer is missing');
+  });
+
+  it('takes the reader to the control of an issue on click', () => {
+    const page = load();
+    page.deliver(model({ validation: { errors: [{ path: 'stages.0', message: 'Stage needs an id' }], warnings: [] } }));
+    page.button('Stage needs an id')?.click();
+    expect(page.stageId().scrolledTo).toBe(true);
+    expect(page.doc.activeElement).toBe(page.stageId());
+  });
+
+  it('keeps the notices above the form and refreshes them in place after an edit', () => {
+    const page = load();
+    page.deliver(model({ validation: { errors: [{ path: 'stages.0', message: 'Stage needs an id' }], warnings: [] } }));
+    const notices = page.find((node) => node.classList.contains('mg-notices'));
+    const form = page.find((node) => node.dataset.path === 'stages.0.description');
+    expect(notices).toBeDefined();
+    expect(form).toBeDefined();
+    const all = page.doc.root.descendants();
+    expect(all.indexOf(notices as FakeElement)).toBeLessThan(all.indexOf(form as FakeElement));
+    (form as FakeElement).type_('a note');
+    // A value edit makes the diagnostics stale and clears them without rebuilding the form.
+    expect(page.find((node) => node.classList.contains('mg-banner'))).toBeUndefined();
+    expect(page.find((node) => node.dataset.path === 'stages.0.description')).toBe(form);
+  });
+});
+
+const HEADER = {
+  availability: 'ok',
+  sessionId: 's',
+  title: 'Session',
+  state: 'Completed',
+  workflowId: 'wf',
+  meta: { stageId: null, createdAt: null, updatedAt: null, isRunning: false, pendingQuestions: 0, canComplete: false },
+};
+
+const ZERO_USAGE = {
+  inputTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  costUsd: 0,
+};
+
+function execution(overrides: Record<string, unknown>) {
+  return {
+    id: 'e1',
+    order: 1,
+    stageId: 'plan',
+    attempt: 1,
+    role: 'planner',
+    status: 'completed',
+    decision: null,
+    client: 'claude',
+    model: 'sonnet',
+    wallSeconds: 12,
+    verifySeconds: 0,
+    turns: 2,
+    usage: { ...ZERO_USAGE, costUsd: 0.5 },
+    usageMissing: { costUsd: 0 },
+    createdAt: null,
+    completedAt: null,
+    verify: null,
+    skipReason: null,
+    resumesExecutionId: null,
+    routedFrom: null,
+    ...overrides,
+  };
+}
+
+function metricsPage(executions: Record<string, unknown>[], header: Record<string, unknown> = HEADER) {
+  return {
+    tab: 'metrics',
+    header,
+    metrics: {
+      sessionId: 's',
+      workflowId: 'wf',
+      completedAt: null,
+      metrics: {
+        kind: 'ok',
+        totals: {
+          wallSeconds: 20,
+          activeSeconds: 10,
+          executions: executions.length,
+          skipped: 0,
+          turns: 2,
+          uncapturedTurns: 0,
+          revisions: 0,
+          verifySeconds: 0,
+          verifyRed: 0,
+          costPartial: false,
+          failedExecutions: 0,
+          blocked: 0,
+          cancelled: 0,
+          usage: ZERO_USAGE,
+        },
+        stages: [{ id: 'plan', executions: executions.length, skipped: 0, revisions: 0, failed: 0, blocked: 0 }],
+        executions,
+      },
+    },
+  };
+}
+
+describe('Session Results and Metrics tabs', () => {
+  it('draws a Metrics execution as a collapsible card with the last one open', () => {
+    const page = load();
+    page.deliverPage(metricsPage([execution({ id: 'e1' }), execution({ id: 'e2', order: 2, attempt: 2 })]));
+    const cards = page.doc.root.descendants().filter((node) => node.classList.contains('mg-collapsible'));
+    expect(cards).toHaveLength(2);
+    expect(cards.map((card) => card.open)).toEqual([false, true]);
+    expect(cards[1].textContent).toContain('plan · attempt 2');
+    expect(cards[1].textContent).toContain('planner');
+    const heads = page.doc.root.descendants().filter((node) => node.classList.contains('mg-section-head'));
+    expect(heads.length).toBeGreaterThanOrEqual(4);
+    expect(heads.some((head) => head.textContent.includes('Executions') && head.textContent.includes('2'))).toBe(true);
+  });
+
+  it('never shows an unreported cost as zero, and shows a skipped execution without run facts', () => {
+    const page = load();
+    page.deliverPage(
+      metricsPage([
+        execution({ id: 'e1', usage: { ...ZERO_USAGE, costUsd: null }, usageMissing: { costUsd: 2 } }),
+        execution({ id: 'e2', order: 2, status: 'skipped', skipReason: 'not needed', client: null, usage: ZERO_USAGE }),
+      ]),
+    );
+    const [ran, skipped] = page.doc.root.descendants().filter((node) => node.classList.contains('mg-collapsible'));
+    expect(ran.textContent).toContain('no cost');
+    expect(ran.textContent).not.toContain('$0.00');
+    expect(skipped.textContent).toContain('Skipped');
+    expect(skipped.textContent).toContain('did not run');
+    expect(skipped.textContent).toContain('not needed');
+    expect(skipped.textContent).not.toContain('Tokens');
+    expect(skipped.textContent).not.toContain('Wall / verify');
+  });
+
+  it('marks a failed execution in the error tone and an unreported cost in the warning tone', () => {
+    const page = load();
+    page.deliverPage(
+      metricsPage([
+        execution({ id: 'e1', status: 'failed' }),
+        execution({ id: 'e2', order: 2, usage: { ...ZERO_USAGE, costUsd: null }, usageMissing: { costUsd: 1 } }),
+        execution({ id: 'e3', order: 3, status: 'cancelled' }),
+        execution({ id: 'e4', order: 4 }),
+      ]),
+    );
+    const cards = page.doc.root.descendants().filter((node) => node.classList.contains('mg-collapsible'));
+    const chips = (card: FakeElement): FakeElement[] => card.descendants().filter((n) => n.classList.contains('mg-chip'));
+    const toneOf = (card: FakeElement, label: string): string | undefined =>
+      chips(card).find((chip) => chip.textContent === label)?.className;
+    expect(toneOf(cards[0], 'Failed')).toContain('mg-chip--error');
+    expect(toneOf(cards[1], 'no cost')).toContain('mg-chip--warn');
+    expect(toneOf(cards[2], 'Cancelled')).toContain('mg-chip--warn');
+    // A clean execution carries no chip and its cost stays in the quiet summary.
+    expect(chips(cards[3])).toHaveLength(0);
+    expect(cards[3].textContent).toContain('$0.50');
+  });
+
+  it('keeps an execution card open or closed across a re-render', () => {
+    const page = load();
+    const two = metricsPage([execution({ id: 'e1' }), execution({ id: 'e2', order: 2 })]);
+    page.deliverPage(two);
+    const cards = (): FakeElement[] => page.doc.root.descendants().filter((n) => n.classList.contains('mg-collapsible'));
+    const toggle = (card: FakeElement, open: boolean): void => {
+      card.open = open;
+      for (const handler of card.listeners.toggle ?? []) handler({ target: card });
+    };
+    expect(cards().map((card) => card.open)).toEqual([false, true]);
+    toggle(cards()[0], true);
+    toggle(cards()[1], false);
+    page.deliverPage(two);
+    expect(cards().map((card) => card.open)).toEqual([true, false]);
+  });
+
+  it('keeps the Session header tiers: state, title, facts, then tabs, Reply and the menu', () => {
+    const page = load();
+    const meta = {
+      stageId: 'plan',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:05:00.000Z',
+      isRunning: false,
+      pendingQuestions: 2,
+      canComplete: true,
+      canReply: true,
+    };
+    page.deliverPage(metricsPage([execution({})], { ...HEADER, state: 'Stopped', meta }));
+    const header = page.find((node) => node.tagName === 'HEADER' && node.classList.contains('mg-header'));
+    expect(header).toBeDefined();
+    const tiers = (header as FakeElement).children.map((child) => (child as FakeElement).className.split(' ')[0]);
+    expect(tiers).toEqual(['mg-header-row', 'mg-title', 'mg-subtitle', 'mg-tabbar']);
+    const [identity, title, facts, bar] = (header as FakeElement).children as FakeElement[];
+    expect(identity.textContent).toBe('Stoppedwf');
+    expect(title.classList.contains('mg-title--clamp')).toBe(true);
+    const chips = facts.children.map((chip) => (chip as FakeElement).textContent);
+    expect(chips[0]).toBe('plan');
+    expect(chips[1]).toBe('5m 0s');
+    expect(chips.at(-1)).toBe('2 pending');
+    const barKinds = bar.children.map((child) => (child as FakeElement).className.split(' ')[0]);
+    expect(barKinds).toEqual(['mg-tabs', 'mg-btn', 'mg-menu']);
+    const tabs = (bar.children[0] as FakeElement).children.map((tab) => (tab as FakeElement).textContent);
+    expect(tabs).toEqual(['Questions', 'Results', 'Metrics', 'Workflow', 'Task']);
+    const items = bar.descendants().filter((node) => node.classList.contains('mg-menu-item'));
+    expect(items.map((item) => item.textContent).slice(0, 4)).toEqual([
+      'View log',
+      'Copy session ID',
+      'Reveal in Explorer',
+      'Complete session…',
+    ]);
+  });
+
+  it('draws an unavailable Metrics file as one banner', () => {
+    const page = load();
+    page.deliverPage({ tab: 'metrics', header: HEADER, metrics: { metrics: { kind: 'missing' } } });
+    const banners = page.doc.root.descendants().filter((node) => node.classList.contains('mg-banner'));
+    expect(banners).toHaveLength(1);
+    expect(banners[0].classList.contains('mg-banner--warn')).toBe(true);
+  });
+
+  it('draws Results sections with counts, an empty block, and no control inside a card', () => {
+    const page = load();
+    page.deliverPage({
+      tab: 'results',
+      header: HEADER,
+      results: {
+        outputs: { rows: [], directoryError: null },
+        next: {
+          state: 'ok',
+          detail: null,
+          suggestions: [{ workflow: 'next-wf', task: 'Go', declared: true, target: 'ok', artifacts: [] }],
+        },
+        children: [],
+        source: null,
+      },
+    });
+    const { root } = page.doc;
+    expect(root.descendants().filter((node) => node.classList.contains('mg-section-head'))).toHaveLength(2);
+    expect(root.descendants().some((node) => node.classList.contains('mg-empty'))).toBe(true);
+    const card = root.descendants().find((node) => node.classList.contains('mg-card'));
+    expect(card).toBeDefined();
+    const nested = (card as FakeElement).descendants().filter((node) => ['BUTTON', 'DETAILS', 'INPUT'].includes(node.tagName));
+    expect(nested).toHaveLength(0);
+    const frame = root.descendants().find((node) => node.classList.contains('results-suggestion'));
+    expect(frame?.descendants().some((node) => node.tagName === 'DETAILS')).toBe(true);
+  });
+});
+
+interface Kit {
+  banner: (options: Record<string, unknown>) => FakeElement;
+  issueBanner: (options: Record<string, unknown>) => FakeElement;
+  alertLine: (message: string, tone: string, isAlert?: boolean) => FakeElement;
+}
+
+interface PageKit {
+  controlOf: (root: FakeElement, path: string) => FakeElement | null;
+  pageHeader: (options: Record<string, unknown>) => FakeElement;
+}
+
+describe('Shared page and form kit', () => {
+  it('builds one banner with a tone, an icon, a message, quieter lines and actions', () => {
+    const page = load();
+    const kit = page.window.MigentForm as Kit;
+    const node = kit.banner({ tone: 'error', lines: ['Broken', 'More detail'], actions: [page.doc.createElement('button')] });
+    expect(node.classList.contains('mg-banner--error')).toBe(true);
+    expect(node.attrs.role).toBe('alert');
+    expect(node.textContent).toBe('BrokenMore detail');
+    expect(node.descendants().filter((child) => child.classList.contains('mg-muted'))).toHaveLength(1);
+    expect(kit.banner({ tone: 'warn', lines: ['x'] }).attrs.role).toBe('status');
+    expect(kit.alertLine('Bad', 'mg-error', true).attrs.role).toBe('alert');
+  });
+
+  it('shows an issue as a link only when the page resolver gives it an action', () => {
+    const page = load();
+    const kit = page.window.MigentForm as Kit;
+    const activated: string[] = [];
+    const node = kit.issueBanner({
+      tone: 'warn',
+      summary: '2 warnings',
+      issues: ['a', 'b'],
+      resolve: (issue: string) => (issue === 'a' ? { text: 'Go to a', activate: () => activated.push(issue) } : { text: 'Only b' }),
+    });
+    const links = node.descendants().filter((child) => child.tagName === 'BUTTON');
+    expect(links.map((link) => link.textContent)).toEqual(['Go to a']);
+    expect(links[0].classList.contains('mg-btn--link')).toBe(true);
+    links[0].click();
+    expect(activated).toEqual(['a']);
+    expect(node.textContent).toContain('Only b');
+  });
+
+  it('finds the control of a form path or the nearest one around it, never the bare first part', () => {
+    const page = load();
+    const kit = page.window.MigentPage as PageKit;
+    const root = page.doc.createElement('div');
+    const stage = page.doc.createElement('input');
+    stage.dataset.path = 'stages.0.id';
+    const stages = page.doc.createElement('button');
+    stages.dataset.path = 'stages.0';
+    root.append(stage, stages);
+    expect(kit.controlOf(root, 'stages.0.id')).toBe(stage);
+    expect(kit.controlOf(root, 'stages.0.id.extra')).toBe(stage);
+    expect(kit.controlOf(root, 'stages.0.role')).toBe(stages);
+    expect(kit.controlOf(root, 'roles.reviewer')).toBeNull();
+    expect(kit.controlOf(root, 'artifacts.ghost.file')).toBeNull();
+  });
+
+  it('keeps the four header tiers in order for any page', () => {
+    const page = load();
+    const kit = page.window.MigentPage as PageKit;
+    const node = kit.pageHeader({
+      eyebrow: 'Workflow',
+      title: 'wf',
+      facts: [{ icon: 'package', text: 'workflow.yaml' }],
+      tabs: { label: 'Views', current: 'design', tabs: [{ key: 'design', label: 'Design' }] },
+      menu: { label: 'Actions', items: [{ label: 'Reload', onSelect: () => undefined }] },
+    });
+    const classes = node.children.map((child) => (child as FakeElement).className.split(' ')[0]);
+    expect(classes).toEqual(['mg-header-row', 'mg-title', 'mg-subtitle', 'mg-tabbar']);
+    expect(node.textContent).toContain('Workflow');
+    expect(node.textContent).toContain('workflow.yaml');
+    expect(node.descendants().some((child) => child.classList.contains('mg-menu'))).toBe(true);
+    expect(node.descendants().find((child) => child.classList.contains('mg-title'))?.classList.contains('mg-title--clamp')).toBe(false);
   });
 });

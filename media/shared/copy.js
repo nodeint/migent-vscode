@@ -57,6 +57,12 @@
       named: { none: 'No agents in config', choose: 'Choose an agent', unknown: ' (not in config)' },
     },
 
+    /** The summary line of an issue banner, shared by every page that lists CLI diagnostics. */
+    issues: {
+      problems: (count) => count + (count === 1 ? ' problem found' : ' problems found'),
+      warnings: (count) => count + (count === 1 ? ' warning' : ' warnings'),
+    },
+
     loadingWorkflow: 'Loading the workflow…',
     unsavedChanges: 'Unsaved changes',
     details: 'Details',

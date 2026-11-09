@@ -160,6 +160,56 @@
     return node;
   }
 
+  /** One line of a notice: a `mg-alert` in a tone (`mg-error` or `mg-warn`); `isAlert` adds `role="alert"`. */
+  function alertLine(message, tone, isAlert) {
+    const node = el('p', message, 'mg-alert ' + tone);
+    if (isAlert) node.setAttribute('role', 'alert');
+    return node;
+  }
+
+  /**
+   * The one banner: an icon and a left edge in the tone of the message. `options`: `tone` (`ok`, `info`, `warn` or
+   * `error`), `icon` (defaults by tone), `lines` (the first is the message, the rest are quieter; a line is a string
+   * or `{ text, className }`), `children` (nodes under the lines), `actions` (nodes under those) and `role` (`alert` for an error, `status` otherwise).
+   */
+  function banner(options) {
+    const tone = options.tone || 'info';
+    const node = el('div', null, 'mg-banner mg-banner--' + tone);
+    node.setAttribute('role', options.role || (tone === 'error' ? 'alert' : 'status'));
+    const defaults = { ok: 'pass', info: 'info', warn: 'warning', error: 'error' };
+    const mark = el('span', null, 'mg-banner__icon');
+    mark.append(window.MigentPage.icon(options.icon || defaults[tone] || 'info'));
+    const body = el('div');
+    (options.lines || []).forEach((line, index) => {
+      const spec = typeof line === 'string' ? { text: line } : line;
+      body.append(el('p', spec.text, spec.className || (index === 0 ? '' : 'mg-muted')));
+    });
+    for (const child of options.children || []) body.append(child);
+    for (const action of options.actions || []) body.append(action);
+    node.append(mark, body);
+    return node;
+  }
+
+  /**
+   * A banner with a summary and an issue list. `options.issues` is a list of issues and `options.resolve(issue)`,
+   * given by the page, returns `{ text, activate }` (a link that calls `activate`) or `{ text }` (plain text). The
+   * kit reads no DOM and knows no path, so what an issue points at stays the page's decision.
+   */
+  function issueBanner(options) {
+    const items = el('ul', null, 'mg-list mg-issue-list');
+    for (const issue of options.issues) {
+      const target = options.resolve(issue);
+      const item = el('li');
+      if (typeof target.activate === 'function') {
+        item.append(button(target.text, { kind: 'link', size: 'md', onClick: target.activate }));
+      } else {
+        item.append(el('span', target.text));
+      }
+      items.append(item);
+    }
+    return banner({ tone: options.tone, lines: [options.summary], children: [items] });
+  }
+
   /**
    * A collapsible card on top of `details`: a header with a number badge, a title, one quiet summary line and
    * warning chips, then the body.
@@ -605,6 +655,9 @@
     saveFooter,
     collapsibleCard,
     notices,
+    alertLine,
+    banner,
+    issueBanner,
     field,
     grid,
     group,

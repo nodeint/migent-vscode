@@ -5,10 +5,11 @@
 (function () {
   'use strict';
 
-  const { el, connect, menuButton, icon, pageTabs } = window.MigentPage;
+  const { el, connect, pageHeader, controlOf, revealControl } = window.MigentPage;
   const copy = window.MigentCopy;
   const text = window.MigentConfigCopy;
   const draftPage = window.MigentDraftPage;
+  const ui = window.MigentForm;
   const configForm = window.MigentConfigForm;
   const root = document.getElementById('root');
 
@@ -179,22 +180,6 @@
 
   const controlAt = (path) => root.querySelector('[data-path="' + String(path).replaceAll('"', '') + '"]');
 
-  function controlOfIssue(item) {
-    const parts = controlPath(active, item.path).split('.');
-    while (parts.length > 1) {
-      const node = controlAt(parts.join('.'));
-      if (node) return node;
-      parts.pop();
-    }
-    return null;
-  }
-
-  function revealControl(node) {
-    window.MigentPage.openAround(node);
-    node.scrollIntoView({ block: 'center' });
-    node.focus({ preventScroll: true });
-  }
-
   // ---------- forms ----------
 
   function markEdited() {
@@ -230,26 +215,17 @@
   // ---------- header ----------
 
   function renderHeader() {
-    const header = el('header', null, 'mg-header mg-header--session');
-    const row = el('div', null, 'mg-header-row');
-    row.append(el('span', text.eyebrow, 'mg-eyebrow'));
-    header.append(row, el('h1', model.project || text.eyebrow, 'mg-title'));
-    const subtitle = el('p', null, 'mg-subtitle mg-meta');
-    const item = el('span', null, 'mg-meta-item');
-    item.title = model.tabs[active].path;
-    item.append(icon('package'), el('span', FILES[active]));
-    subtitle.append(item);
-    header.append(subtitle);
-
-    const bar = el('div', null, 'mg-tabbar');
     const hasFile = model.tabs[active].exists;
     const select = (scope) => () => {
       active = scope;
       post('selectTab');
       paint();
     };
-    bar.append(
-      pageTabs({
+    return pageHeader({
+      eyebrow: text.eyebrow,
+      title: model.project || text.eyebrow,
+      facts: [{ icon: 'package', text: FILES[active], title: model.tabs[active].path }],
+      tabs: {
         label: text.tabsLabel,
         current: active,
         tabs: [
@@ -263,24 +239,12 @@
             onSelect: () => post('openFile'),
           },
         ],
-      }),
-      menuButton({
-        label: '⋯',
-        ariaLabel: text.menuLabel,
-        items: [{ label: copy.menu.reloadFromDisk, onSelect: reload }],
-      }),
-    );
-    header.append(bar);
-    return header;
+      },
+      menu: { label: text.menuLabel, items: [{ label: copy.menu.reloadFromDisk, onSelect: reload }] },
+    });
   }
 
   // ---------- notices ----------
-
-  function alertLine(message, tone, isAlert) {
-    const node = el('p', message, 'mg-alert ' + tone);
-    if (isAlert) node.setAttribute('role', 'alert');
-    return node;
-  }
 
   function changedNotice() {
     const state = tabs[active];
@@ -291,65 +255,46 @@
     let message = text.notice.changed;
     if (state.base.kind === 'replace' && !disk.exists) message = text.notice.deleted;
     else if (state.base.kind === 'create') message = text.notice.created;
-    const node = el('div', null, 'mg-banner mg-banner--warn');
-    node.setAttribute('role', 'status');
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon('warning'));
-    const body = el('div');
-    body.append(el('p', message));
-    const button = window.MigentForm.button(text.notice.reload, { kind: 'secondary', onClick: reload });
-    body.append(button);
-    node.append(mark, body);
-    return node;
+    return ui.banner({
+      tone: 'warn',
+      lines: [message],
+      actions: [ui.button(text.notice.reload, { kind: 'secondary', onClick: reload })],
+    });
   }
 
-  function issueBanner(list, tone, summary) {
-    const banner = el('div', null, 'mg-banner mg-banner--' + tone);
-    banner.setAttribute('role', tone === 'error' ? 'alert' : 'status');
-    const mark = el('span', null, 'mg-banner__icon');
-    mark.append(icon(tone === 'error' ? 'error' : 'warning'));
-    const body = el('div');
-    body.append(el('p', summary));
-    const items = el('ul', null, 'mg-list mg-issue-list');
-    for (const item of list) {
-      const line = el('li');
-      if (item.file) {
-        // From the other layer's file: labelled with it, never a control of this form.
-        line.append(el('span', text.notice.otherFile(item.file, item.message)));
-      } else if (controlOfIssue(item) !== null) {
-        const jump = el('button', item.message, 'mg-btn mg-btn--link');
-        jump.type = 'button';
-        jump.addEventListener('click', () => {
-          const node = controlOfIssue(item);
-          if (node) revealControl(node);
-        });
-        line.append(jump);
-      } else {
-        line.append(el('span', item.message));
-      }
-      items.append(line);
-    }
-    body.append(items);
-    banner.append(mark, body);
-    return banner;
+  /**
+   * How a diagnostic is shown. One from the other file is text labelled with it. Any other is a link only when the
+   * mounted form drew a control for it, and plain text otherwise.
+   */
+  function resolveIssue(item) {
+    if (item.file) return { text: text.notice.otherFile(item.file, item.message) };
+    const path = controlPath(active, item.path);
+    if (controlOf(root, path) === null) return { text: item.message };
+    return {
+      text: item.message,
+      activate: () => {
+        const node = controlOf(root, path);
+        if (node) revealControl(node);
+      },
+    };
   }
 
   function renderNotices() {
     const nodes = [];
     const tab = model.tabs[active];
     const file = FILES[active];
-    if (transient.error) nodes.push(alertLine(transient.error, 'mg-error', true));
-    if (tab.state === 'invalid') nodes.push(alertLine(text.notice.invalid(file, tab.readError || 'unknown error'), 'mg-error', true));
-    if (tab.state === 'unreadable') nodes.push(alertLine(text.notice.unreadable(file, tab.readError || 'unknown error'), 'mg-error', true));
+    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error', true));
+    if (tab.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(file, tab.readError || 'unknown error'), 'mg-error', true));
+    if (tab.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(file, tab.readError || 'unknown error'), 'mg-error', true));
     if (tab.state === 'unsupported') {
-      nodes.push(alertLine(text.notice.unsupported(file, tab.schemaVersion === null ? 'unknown' : tab.schemaVersion), 'mg-warn'));
+      nodes.push(ui.alertLine(text.notice.unsupported(file, tab.schemaVersion === null ? 'unknown' : tab.schemaVersion), 'mg-warn'));
     }
-    if (tab.state === 'missing') nodes.push(alertLine(active === 'local' ? text.notice.missingLocal : text.notice.missingProject, 'mg-warn'));
+    if (tab.state === 'missing') nodes.push(ui.alertLine(active === 'local' ? text.notice.missingLocal : text.notice.missingProject, 'mg-warn'));
     const changed = changedNotice();
     if (changed) nodes.push(changed);
     const validation = validationOf(active);
-    if (validation.errors.length > 0) nodes.push(issueBanner(validation.errors, 'error', text.notice.problems(validation.errors.length)));
-    if (validation.warnings.length > 0) nodes.push(issueBanner(validation.warnings, 'warn', text.notice.warnings(validation.warnings.length)));
+    if (validation.errors.length > 0) nodes.push(ui.issueBanner({ tone: 'error', summary: text.notice.problems(validation.errors.length), issues: validation.errors, resolve: resolveIssue }));
+    if (validation.warnings.length > 0) nodes.push(ui.issueBanner({ tone: 'warn', summary: text.notice.warnings(validation.warnings.length), issues: validation.warnings, resolve: resolveIssue }));
     return nodes;
   }
 
@@ -397,10 +342,10 @@
     root.append(renderHeader(), chrome.notices());
     // A missing Project file has no form of its own, but a draft started from it keeps its form until Reload.
     const hasForm = tab.state === 'ok' || (tab.state === 'missing' && (active === 'local' || isDirty(active)));
-    if (hasForm) {
-      root.append(...forms[active].render());
-      root.append(chrome.footer());
-    }
+    if (hasForm) root.append(...forms[active].render());
+    // The notices are filled once the form is mounted, so an issue is a link only when its control was drawn.
+    chrome.fillNotices();
+    if (hasForm) root.append(chrome.footer());
     if (nextFocus) {
       const node = controlAt(nextFocus);
       if (node) {

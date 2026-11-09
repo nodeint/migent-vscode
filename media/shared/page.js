@@ -13,12 +13,6 @@
     return node;
   }
 
-  function section(title, className) {
-    const node = el('section', null, className);
-    node.append(el('h2', title));
-    return node;
-  }
-
   let footerObserver = null;
 
   /**
@@ -334,17 +328,6 @@
   }
 
   /**
-   * The header shared by every session page, in four tiers: status badge with the workflow id
-   * (`options.workflowId`), the title (at most two lines, full text in its tooltip), metadata and one row with the
-   * page tabs followed by the more menu (View log, Copy session ID, Reveal in Explorer, then
-   * `options.menuItems`).
-   * - `options.state`: a session state name, or `{ icon, tone, text }` for a page with its own states.
-   * - Metadata is `options.meta`, the model's `SessionMeta`, and the same on every page (see `sessionFacts`).
-   * - `options.tabs` is `[{ key, label, onSelect }]`; the tab whose key is `options.current` is underlined and
-   *   needs no `onSelect`.
-   * - `options.sendAction(name)` runs a session action; it defaults to `page.send` of a `sessionAction` intent.
-   */
-  /**
    * The page tabs: a `nav` of `mg-tab` buttons, the current one marked with `aria-current`.
    * `tabs` is `[{ key, label, onSelect, disabled, title }]`; the current tab is not clickable.
    */
@@ -363,22 +346,32 @@
     return tabs;
   }
 
-  function sessionHeader(page, options) {
-    const send = (name) => () => (options.sendAction ? options.sendAction(name) : page.send(sessionAction(name)));
+  /**
+   * The header every page shares, in four tiers: the identity row, the title, the facts and one row with the page
+   * tabs, the page's own actions and the more menu.
+   * - `options.state`: a session state name or `{ icon, tone, text }` for the status badge; or `options.eyebrow`, a
+   *   plain label for a page that has no state. `options.label` is an optional secondary label (the workflow id).
+   * - `options.title`; `options.clamp` limits it to two lines and puts the full text in its tooltip.
+   * - `options.facts`: `[{ icon, text, title?, tone?, live? }]`; `live` re-computes the text twice a minute.
+   * - `options.tabs`: `{ label, tabs, current }` as for `pageTabs`. `options.actions`: nodes between tabs and menu.
+   * - `options.menu`: `{ label, items }` for the more menu.
+   */
+  function pageHeader(options) {
     const header = el('header', null, 'mg-header mg-header--session');
 
     const identity = el('div', null, 'mg-header-row');
-    identity.append(statusIndicator(options.state));
-    if (options.workflowId) identity.append(el('span', options.workflowId, 'mg-workflow'));
+    if (options.state) identity.append(statusIndicator(options.state));
+    else if (options.eyebrow) identity.append(el('span', options.eyebrow, 'mg-eyebrow'));
+    if (options.label) identity.append(el('span', options.label, 'mg-workflow'));
 
-    const title = el('h1', options.title, 'mg-title mg-title--clamp');
-    title.title = options.title;
+    const title = el('h1', options.title, 'mg-title' + (options.clamp ? ' mg-title--clamp' : ''));
+    if (options.clamp) title.title = options.title;
 
     const meta = el('p', null, 'mg-subtitle mg-meta');
     liveChips = [];
-    for (const fact of sessionFacts(options.meta)) {
+    for (const fact of options.facts || []) {
       const chip = el('span', null, 'mg-meta-item' + (fact.tone ? ' mg-status mg-status--' + fact.tone : ''));
-      chip.title = fact.title;
+      if (fact.title) chip.title = fact.title;
       const text = el('span', fact.text);
       chip.append(icon(fact.icon), text);
       meta.append(chip);
@@ -387,16 +380,39 @@
     if (liveChips.length > 0) keepFresh();
 
     const bar = el('div', null, 'mg-tabbar');
-    const tabs = pageTabs({ label: copy.tabsLabel, tabs: options.tabs, current: options.current });
+    bar.append(pageTabs(options.tabs), ...(options.actions || []));
+    if (options.menu) bar.append(menuButton({ label: '⋯', ariaLabel: options.menu.label, items: options.menu.items }));
+
+    header.append(identity, title, meta, bar);
+    return header;
+  }
+
+  /**
+   * The session page header, `pageHeader` over the session's data, in four tiers: status badge with the workflow id
+   * (`options.workflowId`), the title (at most two lines, full text in its tooltip), metadata and one row with the
+   * page tabs followed by the more menu (View log, Copy session ID, Reveal in Explorer, then
+   * `options.menuItems`).
+   * - `options.state`: a session state name, or `{ icon, tone, text }` for a page with its own states.
+   * - Metadata is `options.meta`, the model's `SessionMeta`, and the same on every page (see `sessionFacts`).
+   * - `options.tabs` is `[{ key, label, onSelect }]`; the tab whose key is `options.current` is underlined and
+   *   needs no `onSelect`.
+   * - `options.sendAction(name)` runs a session action; it defaults to `page.send` of a `sessionAction` intent.
+   */
+  function sessionHeader(page, options) {
+    const send = (name) => () => (options.sendAction ? options.sendAction(name) : page.send(sessionAction(name)));
     const replyButton = el('button', copy.reply, 'mg-btn mg-btn--secondary mg-btn--sm mg-header-reply');
     replyButton.type = 'button';
     replyButton.addEventListener('click', send('reply'));
-    bar.append(
-      tabs,
-      ...(options.meta && options.meta.canReply ? [replyButton] : []),
-      menuButton({
-        label: '⋯',
-        ariaLabel: copy.menu.label,
+    return pageHeader({
+      state: options.state,
+      label: options.workflowId,
+      title: options.title,
+      clamp: true,
+      facts: sessionFacts(options.meta),
+      tabs: { label: copy.tabsLabel, tabs: options.tabs, current: options.current },
+      actions: options.meta && options.meta.canReply ? [replyButton] : [],
+      menu: {
+        label: copy.menu.label,
         items: [
           { label: copy.menu.viewLog, onSelect: send('showLog') },
           { label: copy.menu.copySessionId, onSelect: send('copyId') },
@@ -404,11 +420,34 @@
           ...(options.meta && options.meta.canComplete ? [{ label: copy.menu.completeSession, onSelect: send('completeSession') }] : []),
           ...(options.menuItems || []),
         ],
-      }),
-    );
+      },
+    });
+  }
 
-    header.append(identity, title, meta, bar);
-    return header;
+  /**
+   * The control a form path edits inside `root`: the `[data-path]` node that matches, or the nearest one around it
+   * (the path loses its last part until a control matches). It never falls back to the first part, so a path the
+   * form has no control for (such as `roles.reviewer`) finds nothing. Returns null when there is none.
+   */
+  function controlOf(root, path) {
+    if (!root) return null;
+    const parts = String(path).split('.');
+    while (parts.length > 1) {
+      const node = root.querySelector('[data-path="' + parts.join('.').replaceAll('"', '') + '"]');
+      if (node) return node;
+      parts.pop();
+    }
+    return null;
+  }
+
+  /**
+   * Take the reader to a control: the cards around it open first (the shared `details` keeps that state across a
+   * repaint), then it is scrolled to the middle of the view and focused.
+   */
+  function revealControl(node) {
+    openAround(node);
+    node.scrollIntoView({ block: 'center' });
+    node.focus({ preventScroll: true });
   }
 
   // Tooltip. The native `title` tooltip does not reliably show in a webview, so an element that carries
@@ -473,5 +512,5 @@
 
   installTooltips();
 
-  window.MigentPage = { el, section, connect, details, openAround, menuButton, trackFooter, pageTabs, sessionHeader, icon, statusIndicator, sessionStates: SESSION_STATES };
+  window.MigentPage = { el, connect, details, openAround, menuButton, trackFooter, pageTabs, pageHeader, sessionHeader, controlOf, revealControl, icon, statusIndicator, sessionStates: SESSION_STATES };
 })();

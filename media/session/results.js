@@ -4,18 +4,16 @@
 (function () {
   'use strict';
 
-  const { el, section, details } = window.MigentPage;
+  const { el, details } = window.MigentPage;
+  const ui = window.MigentForm;
   const copy = window.MigentCopy;
   const text = window.MigentSessionResultsCopy;
 
   let page = null;
 
-  /** A native button that sends `intent`. `kind` is a base.css button modifier. */
+  /** A button that sends `intent`. `kind` is a kit button kind. */
   function action(label, intent, kind) {
-    const node = el('button', label, 'mg-btn mg-btn--' + kind);
-    node.type = 'button';
-    node.addEventListener('click', () => page.send(intent));
-    return node;
+    return ui.button(label, { kind, size: 'md', onClick: () => page.send(intent) });
   }
 
   const FILE_STATE = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
@@ -39,19 +37,22 @@
     return item;
   }
 
+  function emptyBlock(message) {
+    return el('p', message, 'mg-empty');
+  }
+
   function renderOutputs(model) {
-    const node = section(text.outputs.title, 'mg-section');
-    if (model.outputs.rows.length === 0 && !model.outputs.directoryError) {
-      node.append(el('p', text.outputs.empty, 'mg-muted'));
-      return node;
+    const rows = model.outputs.rows;
+    const children = [];
+    if (rows.length === 0 && !model.outputs.directoryError) {
+      children.push(emptyBlock(text.outputs.empty));
+    } else {
+      const list = el('ul', null, 'mg-list');
+      for (const row of rows) list.append(outputRow(row));
+      children.push(list);
     }
-    const list = el('ul', null, 'mg-list');
-    for (const row of model.outputs.rows) list.append(outputRow(row));
-    node.append(list);
-    if (model.outputs.directoryError) {
-      node.append(el('p', text.outputs.unreadable(model.outputs.directoryError), 'mg-error'));
-    }
-    return node;
+    if (model.outputs.directoryError) children.push(el('p', text.outputs.unreadable(model.outputs.directoryError), 'mg-error'));
+    return ui.section(text.outputs.title, { count: String(rows.length), children });
   }
 
   function suggestionDetails(suggestion) {
@@ -79,8 +80,9 @@
     return node;
   }
 
+  /** One frame, two regions: the clickable card on top and, inside the same frame, the Details block under it. */
   function renderSuggestion(suggestion) {
-    const group = el('div');
+    const group = el('div', null, 'results-suggestion');
     const card = el('button', null, 'mg-card');
     card.type = 'button';
     card.append(el('span', suggestion.workflow, 'mg-card-title'));
@@ -99,25 +101,26 @@
   }
 
   function renderNext(model) {
-    const node = section(text.next.title, 'mg-section');
     const next = model.next;
+    const children = [];
+    let note;
     if (next.state !== 'ok') {
-      const message = text.next.withDetail(text.next.state[next.state], next.detail);
-      node.append(el('p', message, next.state === 'missing' ? 'mg-muted' : 'mg-warn'));
+      note = text.next.withDetail(text.next.state[next.state], next.detail);
+    } else if (next.suggestions.length === 0) {
+      children.push(emptyBlock(text.next.none));
     } else {
-      if (next.suggestions.length === 0) node.append(el('p', text.next.none, 'mg-muted'));
-      for (const suggestion of next.suggestions) node.append(renderSuggestion(suggestion));
+      children.push(...next.suggestions.map(renderSuggestion));
     }
     if (next.state !== 'missing') {
       const file = details('next-json', text.next.file);
       file.append(action(text.next.openFile, { intent: 'openNextFile' }, 'secondary'));
-      node.append(file);
+      children.push(file);
     }
-    return node;
+    const count = next.state === 'ok' ? String(next.suggestions.length) : undefined;
+    return ui.section(text.next.title, { count, note, children });
   }
 
   function renderChildren(children) {
-    const node = section(text.children.title, 'mg-section');
     const list = el('ul', null, 'mg-list');
     for (const child of children) {
       const task = child.task || child.title;
@@ -135,19 +138,17 @@
       item.append(row);
       list.append(item);
     }
-    node.append(list);
-    return node;
+    return ui.section(text.children.title, { count: String(children.length), children: [list] });
   }
 
-  function renderProvenance(provenance) {
-    const node = el('div');
-    if (provenance.state === 'none') return node;
+  function renderHandoff(provenance) {
+    if (provenance.state === 'none') return null;
     if (provenance.state === 'invalid') {
-      node.append(el('p', text.handoff.invalid(provenance.reason), 'mg-warn'));
-      node.append(action(text.handoff.openManifest, { intent: 'openManifest' }, 'secondary'));
-      return node;
+      return ui.section(text.handoff.title, {
+        note: text.handoff.invalid(provenance.reason),
+        children: [action(text.handoff.openManifest, { intent: 'openManifest' }, 'secondary')],
+      });
     }
-    node.append(el('h3', text.handoff.title));
     const list = el('ul', null, 'results-plain-list');
     for (const artifact of provenance.artifacts) {
       const item = el('li');
@@ -161,28 +162,21 @@
       if (artifact.sourcePath) item.append(el('div', text.handoff.sourcePath(artifact.sourcePath), 'mg-muted mg-mono'));
       list.append(item);
     }
-    node.append(list);
-    return node;
+    return ui.section(text.handoff.title, { count: String(provenance.artifacts.length), children: [list] });
   }
 
-  function renderDetails(source) {
-    const node = details('details', copy.details);
-    node.append(el('h3', text.source.title));
+  function renderSource(source) {
+    const children = [];
     if (source.availability === 'retained') {
       const row = el('p');
       row.append(action(source.title || source.sessionId, { intent: 'openSession', sessionId: source.sessionId }, 'link'));
       row.append(el('span', ' ' + source.sessionId, 'mg-muted mg-mono'));
-      node.append(row);
+      children.push(row);
     } else {
-      node.append(el('p', source.sessionId, 'mg-mono'));
-      const hint =
-        source.availability === 'hidden'
-          ? text.source.hidden
-          : text.source.notFound;
-      node.append(el('p', hint, 'mg-muted'));
+      children.push(el('p', source.sessionId, 'mg-mono'));
+      children.push(el('p', source.availability === 'hidden' ? text.source.hidden : text.source.notFound, 'mg-muted'));
     }
-    node.append(renderProvenance(source.provenance));
-    return node;
+    return ui.section(text.source.title, { children });
   }
 
   function render(root, model, host) {
@@ -190,7 +184,11 @@
     root.replaceChildren();
     root.append(renderOutputs(model), renderNext(model));
     if (model.children.length > 0) root.append(renderChildren(model.children));
-    if (model.source) root.append(renderDetails(model.source));
+    if (model.source) {
+      root.append(renderSource(model.source));
+      const handoff = renderHandoff(model.source.provenance);
+      if (handoff) root.append(handoff);
+    }
   }
 
   window.MigentSessionResults = { render };

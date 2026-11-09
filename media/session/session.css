@@ -15,7 +15,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--mg-space-1);
-  min-height: 24px;
+  --mg-btn-height: 24px;
+  min-height: var(--mg-btn-height);
   padding: 0 var(--mg-space-2);
   color: var(--mg-muted);
   background: none;
@@ -51,6 +52,16 @@
 .results-plain-list > li {
   padding: var(--mg-space-1) 0;
   overflow-wrap: anywhere;
+}
+
+/* A next-step suggestion is one frame: the card, then its Details inside the same border. */
+.results-suggestion {
+  display: grid;
+  gap: var(--mg-space-2);
+  padding: var(--mg-space-2);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  background: var(--mg-surface);
 }
 
 .results-note {
@@ -160,50 +171,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.metrics-exec {
-  border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius);
-}
-
-.metrics-exec > summary {
-  padding: var(--mg-space-2) var(--mg-space-3);
-}
-
-.metrics-exec[open] > summary {
-  margin-bottom: 0;
-  border-bottom: 1px solid var(--mg-border);
-}
-
-.metrics-exec-body {
-  padding: var(--mg-space-3);
-}
-
-.metrics-exec-body h3:first-child {
-  margin-top: 0;
-}
-
-.metrics-exec-summary {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--mg-space-3);
-  width: 100%;
-}
-
-.metrics-exec-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.metrics-exec-meta {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--mg-space-2);
-}
-
 .metrics-kv {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -260,8 +227,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--mg-space-1);
-  min-width: 24px;
-  min-height: 24px;
+  min-width: var(--mg-btn-height);
+  --mg-btn-height: 24px;
+  min-height: var(--mg-btn-height);
   justify-content: center;
   color: var(--mg-muted);
   background: none;

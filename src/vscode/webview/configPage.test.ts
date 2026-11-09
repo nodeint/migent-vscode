@@ -132,6 +132,10 @@ class FakeElement {
     this.doc.active = this;
   }
 
+  public scrollIntoView(): void {
+    // Layout is not simulated.
+  }
+
   public setSelectionRange(start: number, end: number, direction = 'none'): void {
     this.selectionStart = start;
     this.selectionEnd = end;
@@ -655,5 +659,34 @@ describe('Configuration page', () => {
     expect(text(page)).toContain('1 problem found');
     page.at('roles.0.description')?.enter('three');
     expect(text(page)).not.toContain('1 problem found');
+  });
+
+  it('links a diagnostic only to a control the form drew, and shows the rest as text', () => {
+    const page = load();
+    page.deliver(model());
+    const issues = {
+      errors: [
+        { path: 'roles.dev.description', message: 'description is too long' },
+        { path: 'roles.ghost.description', message: 'unknown role ghost' },
+      ],
+      warnings: [],
+    };
+    page.deliver(model({ validation: issues }));
+    // The first paint already has the link; a path with no control is plain text, not a dead link.
+    expect(page.button('description is too long')).toBeDefined();
+    expect(page.button('unknown role ghost')).toBeUndefined();
+    expect(text(page)).toContain('unknown role ghost');
+    page.button('description is too long')?.click();
+    expect(page.doc.activeElement).toBe(page.at('roles.0.description'));
+  });
+
+  it('offers Reload in a banner when the file changed under a dirty draft', () => {
+    const page = load();
+    page.deliver(model());
+    page.at('roles.0.description')?.enter('mine');
+    page.deliver(model({ exists: true, hash: 'changed' }));
+    const banner = page.find((node) => node.classList.contains('mg-banner--warn'));
+    expect(banner).toBeDefined();
+    expect(banner?.descendants().some((node) => node.tagName === 'BUTTON' && node.textContent === 'Reload')).toBe(true);
   });
 });

@@ -79,7 +79,7 @@
 
   /**
    * The notices area and the sticky footer, refreshed in place after an edit so the focused input survives.
-   * options.renderNotices()  nodes of the notices area
+   * options.renderNotices()  nodes of the notices area; called after the form is mounted
    * options.footerOptions()  options of `MigentForm.saveFooter`
    */
   function createChrome(options) {
@@ -92,10 +92,17 @@
         noticesHost = null;
         footerHost = null;
       },
+      /** The empty notices host, placed under the header. `fillNotices` fills it once the form is mounted. */
       notices() {
         noticesHost = ui.notices([]);
-        noticesHost.append(...options.renderNotices());
         return noticesHost;
+      },
+      /**
+       * Fill the notices after the form is in the document, so an issue can be classified against the controls the
+       * form really drew (see `MigentPage.controlOf`).
+       */
+      fillNotices() {
+        if (noticesHost !== null) noticesHost.replaceChildren(...options.renderNotices());
       },
       footer() {
         footerHost = ui.saveFooter(options.footerOptions());
