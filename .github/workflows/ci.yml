@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   test:
+    # Keep the check name free of the VS Code version: branch protection requires `test (<os>)`.
+    name: test (${{ matrix.os }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
