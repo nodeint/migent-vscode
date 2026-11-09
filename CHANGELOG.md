@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.5
+
 - Reply to a stopped session wherever Migent CLI 0.5.2 accepts a reply, not only a blocked one: an interrupted
   (cancelled) workflow stage and any role session that is stopped, failed, blocked, cancelled or completed (a reply
   to a completed role session starts a new turn). Reply opens a quick input box for short text, with an Open in
