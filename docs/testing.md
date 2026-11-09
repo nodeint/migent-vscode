@@ -100,8 +100,8 @@ capability states and Recheck. `scripts/integration/run.mjs` creates a `migent` 
 shell's `PATH` ahead of the one the runner passes. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
-text and hidden state; `results.integration.test.ts` opens Results panels from a session row (Completed, or Running
-until it completes in place), checks that
+text and hidden state; `results.integration.test.ts` opens the Session panel on its Results tab from a session row
+(Completed, or Running until it completes in place), checks that
 reopening reuses the panel, that a `sessionAction` intent runs the session command for the panel's own session
 (and an unknown action nothing), that page intents open real files by identity (and invalid ones nothing),
 lineage navigation, background updates without focus changes, and that closing a panel releases its `outputs/`
@@ -123,11 +123,12 @@ a completed role session reopening as Running and returning to Recent with the c
 becoming the draft body without overwriting an existing draft. Notifications, Quick Picks and the input box are
 not driven; their rules are covered by `transitions.test.ts`, `notificationGate.test.ts` and `replyFlow.test.ts`.
 
-`questions.integration.test.ts` drives the answer panels through their message handler against the fixture CLI's
-`session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
+`questions.integration.test.ts` drives the Session panel's Questions tab through its message handler against the
+fixture CLI's `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
 `questions.json`), followup (exit 9 with a new batch) or fail-after-record. It covers recorded and rejected
 replies, an unconfirmed submission restored after closing the panel, stale batches and the archived draft,
-generation-checked edits, lock/recipient/schema blocks and a standalone role session. The page script is not run.
+generation-checked edits, lock/recipient/schema blocks, a standalone role session and switching between the batches of
+one session inside the same panel. The page script is not run.
 
 The fixture CLI enforces `--stage` targeting (only that stage's pending batch, answered whole) and logs each
 `session continue --reply-file` argv to `fake-argv.log` in the project, so tests assert the exact arguments (a role

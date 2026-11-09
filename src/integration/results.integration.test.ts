@@ -1,6 +1,7 @@
 /**
- * S10 Results overview scenarios (plans/02-monitoring.md §6.8, AC10, AC21 subset, §6.6 no focus stealing).
- * The page itself is not inspected: the host's last posted model and its intent handler are.
+ * S10 Results overview scenarios (plans/02-monitoring.md §6.8, AC10, AC21 subset, §6.6 no focus stealing), run
+ * on the Results tab of the Session page. The page itself is not inspected: the host's last posted model and its
+ * intent handler are.
  */
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -8,6 +9,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import type { ResultsModel } from '../core/resultsModel';
 import type { TreeNode } from '../vscode/views/nodes';
 import {
   createProject,
@@ -33,6 +35,12 @@ const identity = (env: Env, sessionId: string): { project: string; sessionId: st
   const project = env.project();
   assert.ok(project, 'project exists');
   return { project: project.key, sessionId };
+};
+
+/** The Results tab model last posted to the session's Session panel; null on any other tab or without a panel. */
+const resultsOf = (env: Env, id: { project: string; sessionId: string }): ResultsModel | null => {
+  const page = env.api.session.lastModel(id);
+  return page?.tab === 'results' ? page.results : null;
 };
 
 /** The file in the active tab: the focused part (for example the Output panel) does not change it. */
@@ -75,9 +83,22 @@ function sessionNode(env: Env, sessionId: string): TreeNode {
   throw new Error(`session ${sessionId} is not in the tree`);
 }
 
+/**
+ * The revision once the panel has stopped posting. The page script loads after the panel opens and its `ready`
+ * message forces one more post, so a baseline read right after opening can still move.
+ */
+async function settledRevision(env: Env, id: { project: string; sessionId: string }): Promise<number> {
+  let last = -1;
+  while (env.api.session.revision(id) !== last) {
+    last = env.api.session.revision(id);
+    await sleep(SETTLE_MS);
+  }
+  return last;
+}
+
 async function closeAll(env: Env): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-  await waitFor('panels closed', () => env.api.results.count === 0);
+  await waitFor('panels closed', () => env.api.session.count === 0);
   // VS Code keeps watching the folder of a closed file for a moment, which blocks deleting it on Windows.
   await sleep(CLOSE_SETTLE_MS);
 }
@@ -91,18 +112,18 @@ const scenarios: Scenario[] = [
       const item = env.api.sessionsTree.getTreeItem(sessionNode(env, SOURCE));
       const { command } = item;
       assert.ok(command, 'a Completed row has a click command');
-      assert.equal(command.command, 'migent.session.openResult');
+      assert.equal(command.command, 'migent.session.open');
 
       write(migentPath(env.root, 'sessions', 'running', 'manifest.yaml'), manifest('running'));
       write(migentPath(env.root, 'sessions', 'running', 'status.json'), status('active', { workflow_id: 'plan' }));
       write(migentPath(env.root, 'sessions', 'running', 'session.lock'), freshLock());
       await waitFor('running loaded', () => env.project()?.store.snapshot('running') !== undefined);
-      assert.equal(env.api.sessionsTree.getTreeItem(sessionNode(env, 'running')).command?.command, 'migent.session.openResult');
+      assert.equal(env.api.sessionsTree.getTreeItem(sessionNode(env, 'running')).command?.command, 'migent.session.open');
 
       await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
-      await waitFor('panel opened', () => env.api.results.has(id));
-      await waitFor('model posted', () => env.api.results.lastModel(id) !== null);
-      const model = env.api.results.lastModel(id);
+      await waitFor('panel opened', () => env.api.session.has(id));
+      await waitFor('model posted', () => resultsOf(env, id) !== null);
+      const model = resultsOf(env, id);
       assert.ok(model);
       assert.equal(model.availability, 'ok');
       assert.equal(model.state, 'Completed');
@@ -118,9 +139,9 @@ const scenarios: Scenario[] = [
       );
 
       await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
-      assert.equal(env.api.results.count, 1, 'reopening reuses the panel');
+      assert.equal(env.api.session.count, 1, 'reopening reuses the panel');
 
-      await waitFor('panel is active', () => env.api.results.activeTarget()?.sessionId === SOURCE);
+      await waitFor('panel is active', () => env.api.session.activeTarget()?.sessionId === SOURCE);
       await vscode.commands.executeCommand('migent.session.openTask');
       await waitFor('task.md of the bound session opened', () =>
         same(activeFile(), path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md')),
@@ -142,13 +163,13 @@ const scenarios: Scenario[] = [
       assert.notEqual(item.collapsibleState, vscode.TreeItemCollapsibleState.None, 'the row stays expandable');
       const { command } = item;
       assert.ok(command, 'a Running row has a click command');
-      assert.equal(command.command, 'migent.session.openResult');
+      assert.equal(command.command, 'migent.session.open');
       assert.deepEqual(command.arguments, [node]);
 
       await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
-      await waitFor('panel opened', () => env.api.results.has(id));
-      await waitFor('model posted', () => env.api.results.lastModel(id) !== null);
-      const running = env.api.results.lastModel(id);
+      await waitFor('panel opened', () => env.api.session.has(id));
+      await waitFor('model posted', () => resultsOf(env, id) !== null);
+      const running = resultsOf(env, id);
       assert.ok(running);
       assert.equal(running.availability, 'ok');
       assert.equal(running.sessionId, 'running');
@@ -157,12 +178,12 @@ const scenarios: Scenario[] = [
       assert.deepEqual(running.next.suggestions, []);
 
       await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
-      assert.equal(env.api.results.count, 1, 'reopening reuses the panel');
+      assert.equal(env.api.session.count, 1, 'reopening reuses the panel');
 
       fs.rmSync(migentPath(env.root, 'sessions', 'running', 'session.lock'));
       write(migentPath(env.root, 'sessions', 'running', 'status.json'), status('completed', { workflow_id: 'plan' }));
-      await waitFor('panel shows Completed', () => env.api.results.lastModel(id)?.state === 'Completed');
-      assert.equal(env.api.results.count, 1, 'the transition did not open another panel');
+      await waitFor('panel shows Completed', () => resultsOf(env, id)?.state === 'Completed');
+      assert.equal(env.api.session.count, 1, 'the transition did not open another panel');
       await closeAll(env);
     },
   },
@@ -173,8 +194,8 @@ const scenarios: Scenario[] = [
       const source = identity(env, SOURCE);
       const target = identity(env, TARGET);
       const baseline = env.project()?.watcher.watchCount ?? 0;
-      env.api.results.open(source);
-      await waitFor('model posted', () => env.api.results.lastModel(source) !== null);
+      env.api.session.open(source, { tab: 'results' });
+      await waitFor('model posted', () => resultsOf(env, source) !== null);
       const expectOpens = async (label: string, file: string): Promise<void> => {
         try {
           await waitFor(label, () => same(activeFile(), file));
@@ -183,40 +204,42 @@ const scenarios: Scenario[] = [
         }
       };
 
-      await env.api.results.handle(source, { type: 'intent', intent: 'openOutput', name: 'name:note' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'openOutput', name: 'name:note' });
       await expectOpens('output opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'outputs', 'note.md'));
-      await env.api.results.handle(source, { type: 'intent', intent: 'openNextFile' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'openNextFile' });
       await expectOpens('next.json opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'next.json'));
-      await env.api.results.handle(source, { type: 'intent', intent: 'openTargetWorkflow', workflow: 'probe-target' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'openTargetWorkflow', workflow: 'probe-target' });
       await expectOpens('workflow opened', path.join(env.root, '.migent', 'workflows', 'probe-target.yaml'));
       // Header actions run the existing session command for this panel's own session, never the active panel's.
-      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
       await expectOpens('task.md of the panel session opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md'));
-      await env.api.results.handle(target, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
+      env.api.session.open(target, { tab: 'results' });
+      await waitFor('target panel model', () => resultsOf(env, target) !== null);
+      await env.api.session.handle(target, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
       await expectOpens('task.md of the other panel session opened', path.join(env.root, '.migent', 'sessions', TARGET, 'task.md'));
 
       const before = activeFile();
-      await env.api.results.handle(source, { type: 'intent', intent: 'openOutput', name: 'path:../../../etc/passwd' });
-      await env.api.results.handle(source, { type: 'intent', intent: 'run', command: 'migent' });
-      await env.api.results.handle(source, { type: 'intent', intent: 'openOutput', path: 'C:/x', name: 7 });
-      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'deleteSession' });
-      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openOutput' });
-      await env.api.results.handle(source, { type: 'intent', intent: 'sessionAction' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'openOutput', name: 'path:../../../etc/passwd' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'run', command: 'migent' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'openOutput', path: 'C:/x', name: 7 });
+      await env.api.session.handle(source, { type: 'intent', intent: 'sessionAction', action: 'deleteSession' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openOutput' });
+      await env.api.session.handle(source, { type: 'intent', intent: 'sessionAction' });
       await sleep(SETTLE_MS);
       assert.equal(activeFile(), before, 'invalid intents open nothing');
 
       // Lineage: the child opens its own panel, which shows the source link and the handoff provenance.
-      await env.api.results.handle(source, { type: 'intent', intent: 'openSession', sessionId: TARGET });
-      await waitFor('child panel opened', () => env.api.results.has(target));
-      await waitFor('child model posted', () => env.api.results.lastModel(target) !== null);
-      const child = env.api.results.lastModel(target);
+      await env.api.session.handle(source, { type: 'intent', intent: 'openSession', sessionId: TARGET });
+      await waitFor('child panel opened', () => env.api.session.has(target));
+      await waitFor('child model posted', () => resultsOf(env, target) !== null);
+      const child = resultsOf(env, target);
       assert.ok(child?.source);
       assert.equal(child.source.sessionId, SOURCE);
       assert.equal(child.source.availability, 'retained');
       assert.equal(child.source.provenance.state, 'ok');
-      await env.api.results.handle(target, { type: 'intent', intent: 'openHandoffFile', name: 'context_note' });
+      await env.api.session.handle(target, { type: 'intent', intent: 'openHandoffFile', name: 'context_note' });
       await expectOpens('handoff file opened', path.join(env.root, '.migent', 'sessions', TARGET, 'handoff', '1', 'note.md'));
-      assert.equal(env.api.results.count, 2);
+      assert.equal(env.api.session.count, 2);
       await waitFor('open panels hold outputs watchers', () => (env.project()?.watcher.watchCount ?? 0) > baseline);
       await closeAll(env);
       await waitFor('outputs watchers released', () => (env.project()?.watcher.watchCount ?? 0) <= baseline);
@@ -227,42 +250,42 @@ const scenarios: Scenario[] = [
     async run(env) {
       await handoffProject(env);
       const source = identity(env, SOURCE);
-      env.api.results.open(source);
-      await waitFor('model posted', () => env.api.results.lastModel(source) !== null);
+      env.api.session.open(source, { tab: 'results' });
+      await waitFor('model posted', () => resultsOf(env, source) !== null);
       const taskFile = path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md');
       await vscode.window.showTextDocument(vscode.Uri.file(taskFile), { preview: false });
-      await waitFor('editor focused', () => same(activeFile(), taskFile) && env.api.results.activeTarget() === undefined);
-      const baseline = env.api.results.revision(source);
+      await waitFor('editor focused', () => same(activeFile(), taskFile) && env.api.session.activeTarget() === undefined);
+      const baseline = await settledRevision(env, source);
 
       // An unrelated session changes: the panel re-reads and finds nothing new, so it posts nothing.
       write(migentPath(env.root, 'sessions', 'other', 'manifest.yaml'), manifest('other'));
       write(migentPath(env.root, 'sessions', 'other', 'status.json'), status('completed', { workflow_id: 'plan' }));
       await waitFor('other loaded', () => env.project()?.store.snapshot('other') !== undefined);
       await sleep(SETTLE_MS);
-      assert.equal(env.api.results.revision(source), baseline, 'an unchanged model is not posted again');
+      assert.equal(env.api.session.revision(source), baseline, 'an unchanged model is not posted again');
 
       write(migentPath(env.root, 'sessions', SOURCE, 'outputs', 'extra.md'), 'x');
       await waitFor('new output shown', () =>
-        env.api.results.lastModel(source)?.outputs.rows.some((row) => row.key === 'path:outputs/extra.md') === true,
+        resultsOf(env, source)?.outputs.rows.some((row) => row.key === 'path:outputs/extra.md') === true,
       );
       write(migentPath(env.root, 'sessions', SOURCE, 'next.json'), '{ not json');
-      await waitFor('invalid next.json shown', () => env.api.results.lastModel(source)?.next.state === 'invalid');
-      assert.equal(env.api.results.lastModel(source)?.state, 'Completed', 'an invalid next.json keeps the session Completed');
+      await waitFor('invalid next.json shown', () => resultsOf(env, source)?.next.state === 'invalid');
+      assert.equal(resultsOf(env, source)?.state, 'Completed', 'an invalid next.json keeps the session Completed');
       fs.rmSync(migentPath(env.root, 'sessions', SOURCE, 'next.json'));
-      await waitFor('missing next.json shown', () => env.api.results.lastModel(source)?.next.state === 'missing');
-      assert.equal(env.api.results.lastModel(source)?.outputs.rows.length, 2, 'outputs stay visible');
+      await waitFor('missing next.json shown', () => resultsOf(env, source)?.next.state === 'missing');
+      assert.equal(resultsOf(env, source)?.outputs.rows.length, 2, 'outputs stay visible');
 
       assert.ok(same(activeFile(), taskFile), 'the active editor did not change');
-      assert.equal(env.api.results.activeTarget(), undefined, 'the panel was not focused');
+      assert.equal(env.api.session.activeTarget(), undefined, 'the panel was not focused');
 
       // A write the watcher did not report (simulated by a refresh) is picked up by Refresh.
       write(migentPath(env.root, 'sessions', SOURCE, 'next.json'), JSON.stringify({ schema_version: 1, next: [] }));
       await vscode.commands.executeCommand('migent.refresh');
-      await waitFor('refresh re-read next.json', () => env.api.results.lastModel(source)?.next.state === 'ok');
+      await waitFor('refresh re-read next.json', () => resultsOf(env, source)?.next.state === 'ok');
 
       fs.rmSync(migentPath(env.root, 'sessions', SOURCE), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      await waitFor('removed session shown unavailable', () => env.api.results.lastModel(source)?.availability === 'unavailable');
-      assert.ok(env.api.results.has(source), 'the panel stays open');
+      await waitFor('removed session shown unavailable', () => resultsOf(env, source)?.availability === 'unavailable');
+      assert.ok(env.api.session.has(source), 'the panel stays open');
 
       await closeAll(env);
     },

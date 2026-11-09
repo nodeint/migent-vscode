@@ -1,5 +1,3 @@
-import type * as vscode from 'vscode';
-
 import type { AnswerModel, AnswerState } from '../../core/answerModel';
 import type { StateUpdate } from '../../core/answerState';
 import type { PendingQuestion } from '../../core/model';
@@ -22,15 +20,13 @@ export interface BatchIdentity {
 
 export interface EntryInit {
   identity: BatchIdentity;
-  panel: vscode.WebviewPanel;
   questions: PendingQuestion[];
   draft: BatchDraft;
 }
 
-/** One open panel: the batch it shows, its local draft and where its submission stands. */
+/** One batch the host holds: the questions it shows, its local draft and where its submission stands. */
 export class Entry {
   public readonly identity: BatchIdentity;
-  public readonly panel: vscode.WebviewPanel;
   public revision = 0;
   /** Bumped whenever the host replaces the draft, so a delayed edit from before it can be dropped. */
   public generation = 0;
@@ -57,7 +53,6 @@ export class Entry {
     this.#save = save;
     this.#onSaved = onSaved;
     this.identity = init.identity;
-    this.panel = init.panel;
     this.questions = init.questions;
     this.fingerprint = batchFingerprint(init.questions);
     this.draft = init.draft;
@@ -102,14 +97,6 @@ export class Entry {
   public archiveCurrent(): { questions: PendingQuestion[]; draft: BatchDraft } {
     this.archive = { questions: this.questions, draft: this.draft };
     return this.archive;
-  }
-
-  public setTitle(title: string): void {
-    this.panel.title = title;
-  }
-
-  public setIcon(icon: vscode.WebviewPanel['iconPath']): void {
-    this.panel.iconPath = icon;
   }
 
   public setDraft(questionId: string, value: AnswerDraft): void {

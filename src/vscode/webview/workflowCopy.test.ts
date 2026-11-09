@@ -10,7 +10,9 @@ const dir = path.join(__dirname, '../../../media/workfloweditor');
 
 function loadCopy(): { [key: string]: Node } {
   const window: Record<string, unknown> = {};
-  vm.runInContext(readFileSync(path.join(dir, 'workflowcopy.js'), 'utf8'), vm.createContext({ window }));
+  const context = vm.createContext({ window });
+  vm.runInContext(readFileSync(path.join(dir, '../shared/utils.js'), 'utf8'), context);
+  vm.runInContext(readFileSync(path.join(dir, 'workflowCopy.js'), 'utf8'), context);
   return window.MigentWorkflowCopy as { [key: string]: Node };
 }
 
@@ -26,8 +28,8 @@ function resolve(root: { [key: string]: Node }, keys: string[]): Node | undefine
 describe('workflow form copy', () => {
   const copy = loadCopy();
 
-  it('only uses a key that exists in workflowcopy.js', () => {
-    const source = readFileSync(path.join(dir, 'workflowform.js'), 'utf8');
+  it('only uses a key that exists in workflowCopy.js', () => {
+    const source = readFileSync(path.join(dir, 'workflowForm.js'), 'utf8');
     const used = [...source.matchAll(/\btext\.([A-Za-z]+(?:\.[A-Za-z]+)*)/g)].map((match) => match[1].split('.'));
 
     expect(used.length).toBeGreaterThan(50);

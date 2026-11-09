@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
-/* media/workfloweditor/workflowmodel.js is plain data and pure functions: it loads with no DOM and no FakeNode. */
+/* media/workfloweditor/workflowModel.js is plain data and pure functions: it loads with no DOM and no FakeNode. */
 interface Stage {
   id: string;
   role: string;
@@ -46,7 +46,7 @@ interface Model {
 function load(): Model {
   const window: Record<string, unknown> = {};
   const context = vm.createContext({ window });
-  const file = path.join(__dirname, '../../../media/workfloweditor/workflowmodel.js');
+  const file = path.join(__dirname, '../../../media/workfloweditor/workflowModel.js');
   vm.runInContext(readFileSync(file, 'utf8'), context);
   return window.MigentWorkflowModel as Model;
 }

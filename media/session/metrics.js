@@ -1,15 +1,17 @@
-// Session Metrics page. Read-only: it renders the model the extension posts and sends intents that carry
+// Metrics tab of the Session page. Read-only: it renders the model the extension posts and sends intents that carry
 // identity only (a closed action name), never a path, a command or argv. Every string is set with
 // textContent; bars are <progress> elements sized through properties. The shared helpers in
 // media/shared/page.js load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, section, connect, details, sessionHeader, icon } = window.MigentPage;
+  const { el, section, details, icon } = window.MigentPage;
   const copy = window.MigentCopy;
-  const root = document.getElementById('root');
+  const text = window.MigentSessionMetricsCopy;
   const numberFormat = new Intl.NumberFormat('en-US');
   const NONE = '—';
+
+  let page = null;
 
   /** A native button that sends `intent`. `kind` is a base.css button modifier. */
   function action(label, intent, kind) {
@@ -64,26 +66,6 @@
     return date === null ? null : date.toLocaleTimeString();
   }
 
-  function renderHeader(model) {
-    return sessionHeader(page, {
-      state: model.state,
-      title: model.title,
-      workflowId: model.workflowId,
-      meta: model.meta,
-      current: 'metrics',
-      tabs: [
-        ...(model.meta.pendingQuestions > 0
-          ? [{ key: 'questions', label: copy.tab.questions, onSelect: () => page.send({ intent: 'sessionAction', action: 'answerQuestions' }) }]
-          : []),
-        { key: 'results', label: copy.tab.results, onSelect: () => page.send({ intent: 'openResults' }) },
-        { key: 'metrics', label: copy.tab.metrics },
-        { key: 'workflow', label: copy.tab.workflow, onSelect: () => page.send({ intent: 'sessionAction', action: 'openWorkflow' }) },
-        { key: 'task', label: copy.tab.task, onSelect: () => page.send({ intent: 'sessionAction', action: 'openTask' }) },
-      ],
-      menuItems: [{ label: 'Open metrics.json', onSelect: () => page.send({ intent: 'openMetricsFile' }) }],
-    });
-  }
-
   function banner(isError) {
     const node = el('div', null, 'mg-banner mg-banner--' + (isError ? 'error' : 'warn'));
     const mark = el('span', null, 'mg-banner__icon');
@@ -97,24 +79,20 @@
     if (metrics.kind === 'missing') {
       const { node, body } = banner(false);
       body.append(
-        el('p', 'No metrics recorded for this session.'),
-        el(
-          'p',
-          'Migent writes metrics.json when a workflow session completes. Sessions completed before metrics existed, or agent sessions, have none.',
-          'mg-muted',
-        ),
+        el('p', text.unavailable.missingTitle),
+        el('p', text.unavailable.missingBody, 'mg-muted'),
       );
       return node;
     }
     const { node, body } = banner(true);
-    const title = metrics.kind === 'unreadable' ? 'metrics.json cannot be read.' : 'metrics.json cannot be used.';
+    const title = metrics.kind === 'unreadable' ? text.unavailable.unreadable : text.unavailable.unusable;
     body.append(
       el('p', title),
       el('p', metrics.error, 'mg-muted mg-mono'),
-      el('p', 'The file stays on disk. The session state above comes from status.json.', 'mg-muted'),
+      el('p', text.unavailable.stays, 'mg-muted'),
     );
     const row = el('p', null, 'metrics-block');
-    row.append(action('Open metrics.json', { intent: 'openMetricsFile' }, 'secondary'));
+    row.append(action(text.openFile, { intent: 'openMetricsFile' }, 'secondary'));
     body.append(row);
     return node;
   }
@@ -138,19 +116,14 @@
     if (totals.costPartial === true) {
       const missing = missingCostExecutions(metrics);
       const clients = [...new Set(missing.map((execution) => execution.client).filter((name) => name))];
-      const total = isNumber(totals.executions) ? ' of ' + totals.executions : '';
-      const which = clients.length > 0 ? ' (' + clients.join(', ') + ')' : '';
+      const total = isNumber(totals.executions) ? totals.executions : null;
       body.append(
-        el('p', 'Cost is partial.'),
-        el(
-          'p',
-          missing.length + total + ' executions did not report a cost' + which + ', so ' + money(totals.usage.costUsd) + ' understates this session.',
-          'mg-muted',
-        ),
+        el('p', text.costWarning.title),
+        el('p', text.costWarning.detail(missing.length, total, clients, money(totals.usage.costUsd)), 'mg-muted'),
       );
     }
     if (uncaptured) {
-      body.append(el('p', totals.uncapturedTurns + ' turn(s) captured no usage at all.', 'mg-warn'));
+      body.append(el('p', text.costWarning.uncaptured(totals.uncapturedTurns), 'mg-warn'));
     }
     return node;
   }
@@ -165,9 +138,9 @@
   }
 
   /** A note for a counter: a zero claim only for an explicit 0, "not recorded" for an absent value. */
-  function counted(value, zeroText, suffix) {
-    if (!isNumber(value)) return 'not recorded';
-    return value > 0 ? value + suffix : zeroText;
+  function counted(value, zeroText, some) {
+    if (!isNumber(value)) return text.notRecorded;
+    return value > 0 ? some(value) : zeroText;
   }
 
   function renderStats(metrics) {
@@ -175,33 +148,33 @@
     const grid = el('dl', null, 'metrics-stats');
     const hasActiveShare = isNumber(t.activeSeconds) && isNumber(t.wallSeconds) && t.wallSeconds > 0;
     const missingCount = missingCostExecutions(metrics).length;
-    const skipped = counted(t.skipped, 'no skips', ' skipped');
-    const uncaptured = counted(t.uncapturedTurns, 'all captured', ' uncaptured');
+    const skipped = counted(t.skipped, text.stats.skippedNone, text.stats.skipped);
+    const uncaptured = counted(t.uncapturedTurns, text.stats.uncapturedNone, text.stats.uncaptured);
     const verifyRed = isNumber(t.verifyRed) && t.verifyRed > 0;
-    let costNote = 'not recorded';
-    if (t.costPartial === true) costNote = 'partial — ' + missingCount + ' executions missing';
-    else if (t.costPartial === false) costNote = isNumber(t.usage.costUsd) ? 'reported by every execution' : 'no execution reported a cost';
+    let costNote = text.notRecorded;
+    if (t.costPartial === true) costNote = text.stats.costPartial(missingCount);
+    else if (t.costPartial === false) costNote = isNumber(t.usage.costUsd) ? text.stats.costComplete : text.stats.costNone;
     grid.append(
-      stat('Wall time', formatSeconds(t.wallSeconds), 'first start to last finish'),
+      stat(text.stats.wallTime, formatSeconds(t.wallSeconds), text.stats.wallNote),
       stat(
-        'Active time',
+        text.stats.activeTime,
         formatSeconds(t.activeSeconds),
-        hasActiveShare ? Math.round((t.activeSeconds / t.wallSeconds) * PERCENT) + '% of wall' : null,
+        hasActiveShare ? text.stats.activeShare(Math.round((t.activeSeconds / t.wallSeconds) * PERCENT)) : null,
       ),
-      stat('Executions', count(t.executions), skipped),
-      stat('Turns', count(t.turns), uncaptured),
-      stat('Revisions', count(t.revisions), 'route backs, not retries'),
+      stat(text.stats.executions, count(t.executions), skipped),
+      stat(text.stats.turns, count(t.turns), uncaptured),
+      stat(text.stats.revisions, count(t.revisions), text.stats.revisionsNote),
       stat(
-        'Verify',
+        text.stats.verify,
         formatSeconds(t.verifySeconds),
-        verifyRed ? t.verifyRed + ' red run(s)' : counted(t.verifyRed, 'no red runs', ''),
+        verifyRed ? text.stats.redRuns(t.verifyRed) : counted(t.verifyRed, text.stats.redRunsNone, text.stats.redRuns),
         verifyRed ? 'warn' : null,
       ),
-      stat('Known cost', money(t.usage.costUsd), costNote, t.costPartial === true ? 'warn' : null),
+      stat(text.stats.knownCost, money(t.usage.costUsd), costNote, t.costPartial === true ? 'warn' : null),
       stat(
-        'Failures',
+        text.stats.failures,
         count(t.failedExecutions),
-        count(t.blocked) + ' blocked · ' + count(t.cancelled) + ' cancelled',
+        text.stats.failuresNote(count(t.blocked), count(t.cancelled)),
         isNumber(t.failedExecutions) && t.failedExecutions > 0 ? 'warn' : null,
       ),
     );
@@ -227,9 +200,9 @@
   }
 
   function renderStages(metrics) {
-    const node = section('Stages', 'mg-section');
+    const node = section(text.stages.title, 'mg-section');
     if (metrics.stages.length === 0) {
-      node.append(el('p', 'No stages recorded.', 'mg-muted'));
+      node.append(el('p', text.stages.empty, 'mg-muted'));
       return node;
     }
     const seconds = metrics.stages.map((stage) => stageSeconds(metrics, stage.id));
@@ -243,11 +216,11 @@
       if (spent !== null) main.append(bar(spent, longest, false));
       const meta = el('span', null, 'mg-row-meta');
       meta.append(el('span', formatSeconds(spent), 'metrics-row-value'));
-      const parts = [count(stage.executions) + ' executions'];
-      if (isNumber(stage.skipped) && stage.skipped > 0) parts.push(stage.skipped + ' skipped');
-      if (isNumber(stage.revisions) && stage.revisions > 0) parts.push(stage.revisions + ' revisions');
-      if (isNumber(stage.failed) && stage.failed > 0) parts.push(stage.failed + ' failed');
-      if (isNumber(stage.blocked) && stage.blocked > 0) parts.push(stage.blocked + ' blocked');
+      const parts = [text.stages.executions(count(stage.executions))];
+      if (isNumber(stage.skipped) && stage.skipped > 0) parts.push(text.stages.skipped(stage.skipped));
+      if (isNumber(stage.revisions) && stage.revisions > 0) parts.push(text.stages.revisions(stage.revisions));
+      if (isNumber(stage.failed) && stage.failed > 0) parts.push(text.stages.failed(stage.failed));
+      if (isNumber(stage.blocked) && stage.blocked > 0) parts.push(text.stages.blocked(stage.blocked));
       meta.append(el('span', parts.join(' · ')));
       row.append(main, meta);
       const item = el('li');
@@ -255,22 +228,14 @@
       list.append(item);
     });
     node.append(list);
-    node.append(
-      el('p', 'Bar length is the wall time spent in that stage across all its attempts. Skipped rows add no time.', 'mg-muted'),
-    );
+    node.append(el('p', text.stages.note, 'mg-muted'));
     return node;
   }
 
-  const TOKEN_FIELDS = [
-    ['Input', 'inputTokens'],
-    ['Output', 'outputTokens'],
-    ['Reasoning', 'reasoningTokens'],
-    ['Cache read', 'cacheReadTokens'],
-    ['Cache write', 'cacheWriteTokens'],
-  ];
+  const TOKEN_FIELDS = Object.keys(text.usage.tokens);
 
   function clientKey(execution) {
-    return execution.client === null ? 'No role' : execution.client + '/' + (execution.model || NONE);
+    return execution.client === null ? text.usage.noRole : execution.client + '/' + (execution.model || NONE);
   }
 
   function clientRows(metrics) {
@@ -291,21 +256,21 @@
   }
 
   function clientMeta(entry) {
-    const executions = entry.executions + ' executions';
-    if (entry.reported === 0) return executions + ' · no cost reported';
-    if (entry.missing === 0) return executions + ' · ' + money(entry.known);
-    return executions + ' · ' + money(entry.known) + ' known · ' + entry.missing + ' missing';
+    const executions = text.usage.provider.executions(entry.executions);
+    if (entry.reported === 0) return text.usage.provider.noCost(executions);
+    if (entry.missing === 0) return text.usage.provider.cost(executions, money(entry.known));
+    return text.usage.provider.costWithMissing(executions, money(entry.known), entry.missing);
   }
 
   function renderUsage(metrics) {
-    const node = section('Usage', 'mg-section');
+    const node = section(text.usage.title, 'mg-section');
     const usage = metrics.totals.usage;
-    const longest = Math.max(1, ...TOKEN_FIELDS.map(([, field]) => (isNumber(usage[field]) ? usage[field] : 0)));
+    const longest = Math.max(1, ...TOKEN_FIELDS.map((field) => (isNumber(usage[field]) ? usage[field] : 0)));
     const list = el('ul', null, 'mg-list');
-    for (const [label, field] of TOKEN_FIELDS) {
+    for (const field of TOKEN_FIELDS) {
       const row = el('div', null, 'mg-row');
       const main = el('div', null, 'mg-row-main');
-      main.append(el('span', label));
+      main.append(el('span', text.usage.tokens[field]));
       if (isNumber(usage[field])) main.append(bar(usage[field], longest, true));
       row.append(main, el('span', count(usage[field]), 'mg-row-meta'));
       const item = el('li');
@@ -313,12 +278,12 @@
       list.append(item);
     }
     node.append(list);
-    node.append(el('p', 'Input excludes cache reads. Reasoning is reported beside output, not added to it.', 'mg-muted'));
+    node.append(el('p', text.usage.note, 'mg-muted'));
 
-    node.append(el('h3', 'Providers'));
+    node.append(el('h3', text.usage.providers));
     const rows = clientRows(metrics);
     if (rows.size === 0) {
-      node.append(el('p', 'No execution ran.', 'mg-muted'));
+      node.append(el('p', text.usage.noProviders, 'mg-muted'));
       return node;
     }
     const clients = el('ul', null, 'mg-list');
@@ -334,14 +299,14 @@
   }
 
   function statusLabel(execution) {
-    if (execution.status === 'failed') return { text: 'Failed', tone: 'mg-error' };
-    if (execution.status === 'cancelled') return { text: 'Cancelled', tone: 'mg-warn' };
-    if (execution.status === 'skipped') return { text: 'Skipped', tone: 'mg-muted' };
+    const status = text.executions.status;
+    if (execution.status === 'failed') return { label: status.failed, tone: 'mg-error' };
+    if (execution.status === 'cancelled') return { label: status.cancelled, tone: 'mg-warn' };
+    if (execution.status === 'skipped') return { label: status.skipped, tone: 'mg-muted' };
     if (execution.status === 'completed') {
-      const decision = execution.decision ? ' · ' + execution.decision : '';
-      return { text: 'Completed' + decision, tone: execution.decision === 'revise' ? 'mg-warn' : '' };
+      return { label: status.completed(execution.decision), tone: execution.decision === 'revise' ? 'mg-warn' : '' };
     }
-    return { text: execution.status.charAt(0).toUpperCase() + execution.status.slice(1), tone: '' };
+    return { label: execution.status.charAt(0).toUpperCase() + execution.status.slice(1), tone: '' };
   }
 
   function fact(list, label, value) {
@@ -351,20 +316,19 @@
   function executionSummary(execution) {
     const line = el('span', null, 'metrics-exec-summary');
     const title = el('span', null, 'metrics-exec-title');
-    const attempt = execution.attempt === null ? '' : ' · attempt ' + execution.attempt;
-    title.append(el('span', '#' + execution.order + ' ' + execution.stageId + attempt, 'mg-mono'));
+    title.append(el('span', text.executions.heading(execution.order, execution.stageId, execution.attempt), 'mg-mono'));
     if (execution.role) title.append(el('span', '  ' + execution.role, 'mg-muted'));
     const meta = el('span', null, 'metrics-exec-meta');
     const label = statusLabel(execution);
-    const pill = el('span', label.text, 'mg-pill');
+    const pill = el('span', label.label, 'mg-pill');
     meta.append(pill);
     if (isSkipped(execution)) {
-      meta.append(el('span', 'did not run', 'mg-muted'));
+      meta.append(el('span', text.executions.didNotRun, 'mg-muted'));
     } else {
       meta.append(
-        el('span', execution.client === null ? 'no role' : clientKey(execution), 'mg-muted'),
+        el('span', execution.client === null ? text.executions.noRole : clientKey(execution), 'mg-muted'),
         el('span', formatSeconds(execution.wallSeconds)),
-        el('span', isNumber(execution.usage.costUsd) ? money(execution.usage.costUsd) : 'no cost', isNumber(execution.usage.costUsd) ? 'mg-muted' : 'mg-warn'),
+        el('span', isNumber(execution.usage.costUsd) ? money(execution.usage.costUsd) : text.executions.noCost, isNumber(execution.usage.costUsd) ? 'mg-muted' : 'mg-warn'),
       );
     }
     line.append(title, meta);
@@ -374,25 +338,26 @@
   function costFact(execution) {
     const missing = execution.usageMissing.costUsd;
     if (!isNumber(execution.usage.costUsd)) {
-      if (!isNumber(missing)) return 'Not recorded';
-      return missing > 0 ? 'Not reported (' + missing + ' turn(s) missing)' : 'None (no billable turn)';
+      if (!isNumber(missing)) return text.execution.costFact.notRecorded;
+      return missing > 0 ? text.execution.costFact.notReported(missing) : text.execution.costFact.none;
     }
-    return money(execution.usage.costUsd) + (isNumber(missing) && missing > 0 ? ' (partial: ' + missing + ' turn(s) missing)' : '');
+    const cost = money(execution.usage.costUsd);
+    return isNumber(missing) && missing > 0 ? text.execution.costFact.partial(cost, missing) : cost;
   }
 
   function renderVerify(verify) {
     const block = el('div');
-    block.append(el('h3', 'Verify'));
+    block.append(el('h3', text.verify.title));
     const list = el('dl', null, 'metrics-kv');
-    fact(list, 'Runs', count(verify.runs));
-    fact(list, 'Red runs', count(verify.red));
-    fact(list, 'First pass', verify.firstPass === null ? NONE : verify.firstPass ? 'yes' : 'no');
+    fact(list, text.verify.runs, count(verify.runs));
+    fact(list, text.verify.redRuns, count(verify.red));
+    fact(list, text.verify.firstPass, verify.firstPass === null ? NONE : verify.firstPass ? text.verify.yes : text.verify.no);
     if (verify.failedCommands.length > 0) {
       const commands = el('ul', null, 'metrics-plain');
       for (const command of verify.failedCommands) commands.append(el('li', command, 'mg-mono'));
       const cell = el('dd');
       cell.append(commands);
-      list.append(el('dt', 'Failed commands'), cell);
+      list.append(el('dt', text.verify.failedCommands), cell);
     }
     block.append(list);
     return block;
@@ -400,31 +365,31 @@
 
   function executionBody(execution) {
     const body = el('div', null, 'metrics-exec-body');
-    body.append(el('h3', 'Timing and state'));
+    body.append(el('h3', text.execution.timing));
     const facts = el('dl', null, 'metrics-kv');
-    fact(facts, 'Status', execution.status + (execution.decision ? ' · ' + execution.decision : ''));
+    fact(facts, text.execution.status, text.execution.withDecision(execution.status, execution.decision));
     if (isSkipped(execution)) {
-      fact(facts, 'Skip reason', execution.skipReason || 'No reason recorded');
+      fact(facts, text.execution.skipReason, execution.skipReason || text.execution.noSkipReason);
     } else {
-      fact(facts, 'Client', execution.client === null ? 'No role; Migent runs the verify list' : clientKey(execution));
+      fact(facts, text.execution.client, execution.client === null ? text.execution.noRoleClient : clientKey(execution));
     }
     const started = formatTime(execution.createdAt);
     const finished = formatTime(execution.completedAt);
-    if (started) fact(facts, 'Started', started);
-    if (finished) fact(facts, 'Finished', finished);
+    if (started) fact(facts, text.execution.started, started);
+    if (finished) fact(facts, text.execution.finished, finished);
     if (!isSkipped(execution)) {
-      fact(facts, 'Wall / verify', formatSeconds(execution.wallSeconds) + ' / ' + formatSeconds(execution.verifySeconds));
-      fact(facts, 'Turns', count(execution.turns));
-      fact(facts, 'Cost', costFact(execution));
+      fact(facts, text.execution.wallVerify, formatSeconds(execution.wallSeconds) + ' / ' + formatSeconds(execution.verifySeconds));
+      fact(facts, text.execution.turns, count(execution.turns));
+      fact(facts, text.execution.cost, costFact(execution));
     }
-    if (execution.resumesExecutionId) fact(facts, 'Resumes', execution.resumesExecutionId);
-    if (execution.routedFrom) fact(facts, 'Routed from', execution.routedFrom);
+    if (execution.resumesExecutionId) fact(facts, text.execution.resumes, execution.resumesExecutionId);
+    if (execution.routedFrom) fact(facts, text.execution.routedFrom, execution.routedFrom);
     body.append(facts);
 
     if (isSkipped(execution)) return body;
-    body.append(el('h3', 'Tokens'));
+    body.append(el('h3', text.execution.tokens));
     const tokens = el('dl', null, 'metrics-kv');
-    for (const [label, field] of TOKEN_FIELDS) fact(tokens, label, count(execution.usage[field]));
+    for (const field of TOKEN_FIELDS) fact(tokens, text.usage.tokens[field], count(execution.usage[field]));
     body.append(tokens);
     if (execution.verify) body.append(renderVerify(execution.verify));
     return body;
@@ -438,12 +403,12 @@
   }
 
   function renderExecutions(metrics) {
-    const node = section('Executions', 'mg-section');
+    const node = section(text.executions.title, 'mg-section');
     if (metrics.executions.length === 0) {
-      node.append(el('p', 'No executions recorded.', 'mg-muted'));
+      node.append(el('p', text.executions.empty, 'mg-muted'));
       return node;
     }
-    node.append(el('p', 'In execution order. Expand a row for timings, tokens and verify results.', 'mg-muted'));
+    node.append(el('p', text.executions.hint, 'mg-muted'));
     const list = el('div');
     metrics.executions.forEach((execution, index) => {
       list.append(executionDetails(execution, index === metrics.executions.length - 1));
@@ -456,33 +421,22 @@
     const node = details('details', copy.details);
     const body = el('div');
     const facts = el('dl', null, 'metrics-kv');
-    fact(facts, 'Session', model.sessionId);
-    if (model.workflowId) fact(facts, 'Workflow', model.workflowId);
+    fact(facts, text.details.session, model.sessionId);
+    if (model.workflowId) fact(facts, text.details.workflow, model.workflowId);
     const completed = formatDateTime(model.completedAt);
-    if (completed) fact(facts, 'Completed', completed);
-    fact(facts, 'Record', 'Written by Migent when the session completed; it does not change afterwards.');
+    if (completed) fact(facts, text.details.completed, completed);
+    fact(facts, text.details.record, text.details.recordNote);
     body.append(facts);
     const row = el('p', null, 'metrics-block');
-    row.append(action('Open metrics.json', { intent: 'openMetricsFile' }, 'secondary'));
+    row.append(action(text.openFile, { intent: 'openMetricsFile' }, 'secondary'));
     body.append(row);
     node.append(body);
     return node;
   }
 
-  function render(model) {
+  function render(root, model, host) {
+    page = host;
     root.replaceChildren();
-    if (model.availability === 'unavailable') {
-      root.append(el('h1', copy.sessionUnavailable.title, 'mg-title'));
-      root.append(
-        el(
-          'p',
-          copy.sessionUnavailable.body(model.sessionId),
-          'mg-subtitle',
-        ),
-      );
-      return;
-    }
-    root.append(renderHeader(model));
     const metrics = model.metrics;
     if (metrics.kind !== 'ok') {
       root.append(renderUnavailableMetrics(metrics));
@@ -493,5 +447,5 @@
     root.append(renderStats(metrics), renderStages(metrics), renderUsage(metrics), renderExecutions(metrics), renderDetails(model));
   }
 
-  const page = connect({ render });
+  window.MigentSessionMetrics = { render };
 })();

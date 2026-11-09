@@ -8,7 +8,7 @@ import { pageHtml } from './pageHtml';
 const NONCE_BYTES = 16;
 const SHARED_FOLDER = 'shared';
 const SHARED_STYLE = 'base.css';
-const SHARED_SCRIPTS = ['icons.js', 'copy.js', 'page.js', 'form.js', 'agentform.js', 'draftpage.js'];
+const SHARED_SCRIPTS = ['utils.js', 'icons.js', 'copy.js', 'page.js', 'form.js', 'agentform.js', 'draftpage.js'];
 
 /**
  * A webview page: the `media/<folder>` it lives in, its own asset file names and its title.

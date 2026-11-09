@@ -1,0 +1,446 @@
+/* Session page layout only. Tokens and components live in media/shared/base.css. */
+
+/* The batch chip row of the Questions tab, shown only when a session has more than one pending batch. */
+.q-batches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-1);
+  margin: 0 0 var(--mg-space-2);
+  padding: var(--mg-space-2) 0;
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.q-batch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  min-height: 24px;
+  padding: 0 var(--mg-space-2);
+  color: var(--mg-muted);
+  background: none;
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-pill);
+  font: inherit;
+  cursor: pointer;
+}
+
+.q-batch:hover {
+  color: var(--mg-fg);
+  background: var(--mg-hover);
+}
+
+.q-batch--current {
+  color: var(--mg-fg);
+  border-color: var(--mg-focus);
+  cursor: default;
+}
+
+.q-batch:focus-visible {
+  outline: 1px solid var(--mg-focus);
+}
+
+/* Results tab. */
+
+.results-plain-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--mg-space-2);
+}
+
+.results-plain-list > li {
+  padding: var(--mg-space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+.results-note {
+  margin: var(--mg-space-1) 0 0;
+}
+
+/* The task is shortened visually only; the full text stays in the DOM and in the row tooltip. */
+.results-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.results-id {
+  display: block;
+  margin-top: var(--mg-space-1);
+}
+
+/* Metrics tab. */
+
+.metrics-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--mg-space-2);
+  margin: 0;
+}
+
+.metrics-stat {
+  padding: var(--mg-space-3);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  background: var(--mg-surface);
+}
+
+.metrics-stat dt {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--mg-muted);
+}
+
+.metrics-stat dd {
+  margin: var(--mg-space-1) 0 0;
+  font-size: 1.35em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-note {
+  display: block;
+  margin-top: var(--mg-space-1);
+  font-size: 0.65em;
+  font-weight: 400;
+  color: var(--mg-muted);
+}
+
+.metrics-note--warn {
+  color: var(--mg-warn);
+}
+
+/* Bars are a visual aid only: the numeric value is always shown as text beside them. */
+.metrics-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: var(--mg-space-1);
+  border: 0;
+  border-radius: var(--mg-radius-pill);
+  background: var(--mg-border);
+  color: var(--mg-bar);
+  accent-color: var(--mg-bar);
+  overflow: hidden;
+  appearance: none;
+}
+
+.metrics-bar::-webkit-progress-bar {
+  background: var(--mg-border);
+}
+
+.metrics-bar::-webkit-progress-value {
+  background: var(--mg-bar);
+  border-radius: var(--mg-radius-pill);
+}
+
+.metrics-bar::-moz-progress-bar {
+  background: var(--mg-bar);
+}
+
+.metrics-bar--quiet {
+  color: var(--mg-info);
+  accent-color: var(--mg-info);
+}
+
+.metrics-bar--quiet::-webkit-progress-value {
+  background: var(--mg-info);
+}
+
+.metrics-bar--quiet::-moz-progress-bar {
+  background: var(--mg-info);
+}
+
+.metrics-row-value {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-exec {
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+}
+
+.metrics-exec > summary {
+  padding: var(--mg-space-2) var(--mg-space-3);
+}
+
+.metrics-exec[open] > summary {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.metrics-exec-body {
+  padding: var(--mg-space-3);
+}
+
+.metrics-exec-body h3:first-child {
+  margin-top: 0;
+}
+
+.metrics-exec-summary {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mg-space-3);
+  width: 100%;
+}
+
+.metrics-exec-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.metrics-exec-meta {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mg-space-2);
+}
+
+.metrics-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--mg-space-1) var(--mg-space-3);
+  margin: 0;
+}
+
+.metrics-kv dt {
+  color: var(--mg-muted);
+}
+
+.metrics-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.metrics-plain {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.metrics-plain > li {
+  padding: var(--mg-space-1) 0;
+}
+
+.metrics-lede {
+  margin: 0 0 var(--mg-space-2);
+}
+
+.metrics-block {
+  margin: var(--mg-space-2) 0 0;
+}
+
+/* Questions tab. */
+
+/* Progress strip: jump chips on the left, progress on the right. Sticks under the scroll so position and
+   completeness stay visible in a long form. */
+.q-jumps {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-1);
+  margin: 0;
+  padding: var(--mg-space-2) 0;
+  background: var(--mg-bg);
+  border-bottom: 1px solid var(--mg-border);
+}
+
+.q-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  min-width: 24px;
+  min-height: 24px;
+  justify-content: center;
+  color: var(--mg-muted);
+  background: none;
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-pill);
+  padding: 0 var(--mg-space-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.q-jump--done {
+  color: var(--mg-ok);
+}
+
+.q-jump:hover,
+.q-jump[aria-current='true'] {
+  color: var(--mg-fg);
+  background: var(--mg-hover);
+}
+
+.q-jump[aria-current='true'] {
+  border-color: var(--mg-focus);
+}
+
+.q-jump:focus-visible {
+  outline: 1px solid var(--mg-focus);
+}
+
+/* A question is a card: eyebrow and state, the question as a heading, context, then the options. */
+.q-question {
+  min-width: 0;
+  margin: var(--mg-space-4) 0 0;
+  padding: var(--mg-space-4);
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  scroll-margin-top: 48px;
+}
+
+.q-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mg-space-2);
+}
+
+.q-eyebrow {
+  color: var(--mg-muted);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.q-title {
+  margin: var(--mg-space-1) 0 var(--mg-space-3);
+  font-size: 1.15em;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.q-context {
+  margin: 0 0 var(--mg-space-3);
+  padding: var(--mg-space-1) var(--mg-space-3);
+  color: var(--mg-muted);
+  background: var(--mg-quote-bg);
+  border-left: 3px solid var(--mg-quote-border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.q-context--clamped {
+  max-height: 6em;
+  overflow: hidden;
+}
+
+.q-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mg-space-2);
+}
+
+/* The whole row is the control: hover, selected and focus states live on the row. */
+.q-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mg-space-3);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.q-option:hover {
+  background: var(--mg-hover);
+}
+
+.q-option:has(input:checked) {
+  border-color: var(--mg-focus);
+  background: var(--mg-selected);
+}
+
+.q-option:has(input:focus-visible) {
+  outline: 1px solid var(--mg-focus);
+}
+
+.q-option:has(input:disabled) {
+  cursor: default;
+}
+
+/* The native input stays for keyboard, screen readers and form semantics; the letter badge is its marker. */
+.q-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.q-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.q-option-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--mg-space-1) var(--mg-space-2);
+}
+
+.q-letter {
+  flex: none;
+  min-width: 1.8em;
+  line-height: 1.6;
+  padding: 0 var(--mg-space-1);
+  text-align: center;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--mg-muted);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+}
+
+.q-option:has(input:checked) .q-letter {
+  color: var(--mg-accent-fg);
+  background: var(--mg-accent);
+  border-color: var(--mg-accent);
+}
+
+.q-option-label {
+  font-weight: 500;
+}
+
+.q-option-desc {
+  overflow-wrap: anywhere;
+}
+
+.q-text {
+  min-height: 5em;
+  margin-top: var(--mg-space-2);
+  resize: vertical;
+}
+
+.q-recorded {
+  margin: var(--mg-space-2) 0 0;
+  padding: var(--mg-space-1) var(--mg-space-2);
+  background: var(--mg-quote-bg);
+  border-left: 3px solid var(--mg-ok);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.q-archived {
+  margin: var(--mg-space-1) 0;
+  overflow-wrap: anywhere;
+}

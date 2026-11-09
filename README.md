@@ -39,16 +39,16 @@ inspection even when the CLI is not installed; running workflows and controlling
 
 ### Human input and agent guidance
 
-- Answer agent questions from the Questions page.
+- Answer agent questions from the Questions tab of the Session page.
 - Write and send a reply when a session is blocked.
 - Keep question and reply drafts across reloads.
 - Receive notifications for questions, blocked or failed sessions, and completed sessions.
 
 ### Results and workflow continuation
 
-- Open a session's Results page to inspect its state, outputs, and available actions.
+- Open a session's page to inspect its state, outputs, and available actions.
 - Review suggested next workflows and run or prepare one using the source session's outputs as context.
-- Inspect completed-session metrics from the Results page or the session context menu.
+- Inspect completed-session metrics from the Session page's Metrics tab.
 
 ### Execution visibility
 
@@ -80,7 +80,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 2. If the folder has no `.migent/` project, run **Migent: Initialize Project…** from the Command Palette.
 3. In **Workflows**, open a workflow definition to review it, then select **Run** and provide your task.
    You can also use **Migent: Prepare Session…** to prepare a session and edit its task before **Save & Run**.
-4. Follow the session in **Sessions**. Open its Results page for outputs and controls, or use its context menu
+4. Follow the session in **Sessions**. Open its Session page for outputs and controls, or use its context menu
    to open the timeline and logs.
 5. When the session needs input, answer its questions or send a reply. When it completes, review its outputs
    and open any suggested next workflow to continue the work.

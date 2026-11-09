@@ -8,12 +8,9 @@ import { CapabilityService } from './vscode/capability';
 import { registerCapabilityCommands } from './vscode/commands/capabilityCommands';
 import { registerControlCommands } from './vscode/commands/controlCommands';
 import { registerProjectCommands } from './vscode/commands/projectCommands';
-import { registerQuestionCommands } from './vscode/commands/questionCommands';
 import { registerReplyCommands } from './vscode/commands/replyCommands';
-import { registerResultsCommands } from './vscode/commands/resultsCommands';
 import { type CommandHost, registerSessionCommands } from './vscode/commands/sessionCommands';
-import { registerSessionMetricsCommands } from './vscode/commands/sessionMetricsCommands';
-import { registerSessionWorkflowCommands } from './vscode/commands/sessionWorkflowCommands';
+import { registerSessionPageCommands } from './vscode/commands/sessionPageCommands';
 import { registerTimelineCommands } from './vscode/commands/timelineCommands';
 import { ConfigPanels } from './vscode/config/panels';
 import { ReadOnlyDocsProvider } from './vscode/content/readOnlyDocs';
@@ -25,11 +22,8 @@ import { NextStepPanels } from './vscode/nextStep/panels';
 import { StateNotifier } from './vscode/notifier';
 import { ProjectRegistry } from './vscode/projects';
 import { QuestionNotifier } from './vscode/questionNotifier';
-import { AnswerPanels } from './vscode/questions/panels';
 import { ReplyService } from './vscode/reply';
-import { ResultsPanels } from './vscode/results/panels';
-import { SessionMetricsPanels } from './vscode/sessionMetrics/panels';
-import { SessionWorkflowPanels } from './vscode/sessionWorkflow/panels';
+import { SessionPanels } from './vscode/session/panels';
 import { StatusBar } from './vscode/statusBar';
 import { TailManager } from './vscode/tails';
 import type { TreeNode } from './vscode/views/nodes';
@@ -53,26 +47,12 @@ export interface MigentApi {
   sessionDocs: SessionDocsProvider;
   logs: LogChannels;
   statusBar: StatusBar;
-  results: ResultsPanels;
-  sessionMetrics: SessionMetricsPanels;
-  sessionWorkflow: SessionWorkflowPanels;
+  session: SessionPanels;
   nextStep: NextStepPanels;
-  answers: AnswerPanels;
   submitter: AnswerSubmitter;
   replies: ReplyService;
   /** Resolves after the first project load, which runs after `activate()` returned. */
   ready: Promise<void>;
-}
-
-/** The Results overview and the Session Metrics page: two read-only pages of one session. */
-function createResultsPages(
-  registry: ProjectRegistry,
-  extensionUri: vscode.Uri,
-): { results: ResultsPanels; sessionMetrics: SessionMetricsPanels } {
-  return {
-    results: new ResultsPanels(registry, extensionUri),
-    sessionMetrics: new SessionMetricsPanels(registry, extensionUri),
-  };
 }
 
 /** The Sessions tree and the tree view it is attached to. */
@@ -97,15 +77,14 @@ function createProjectTrees(registry: ProjectRegistry): {
   return { workflowsTree: new WorkflowsTreeProvider(registry), projectTree: new ProjectTreeProvider(registry) };
 }
 
-/** The workflow editor and the Session workflow page, which share the capability gate. */
+/** The workflow editor and the Configuration page, which share the capability gate. */
 function createWorkflowPages(
   registry: ProjectRegistry,
   capability: CapabilityService,
   extensionUri: vscode.Uri,
-): { workflowEditor: WorkflowEditorPanels; sessionWorkflow: SessionWorkflowPanels; config: ConfigPanels } {
+): { workflowEditor: WorkflowEditorPanels; config: ConfigPanels } {
   return {
     workflowEditor: new WorkflowEditorPanels(registry, capability, extensionUri),
-    sessionWorkflow: new SessionWorkflowPanels(registry, capability, extensionUri),
     config: new ConfigPanels(registry, capability, extensionUri),
   };
 }
@@ -128,24 +107,24 @@ function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, on
   ];
 }
 
-/** Next step pages, and the Results actions that open them. */
+/** Next step pages, and the Session page actions that open them. */
 function createNextStep(
-  deps: { registry: ProjectRegistry; control: ControlService; results: ResultsPanels },
+  deps: { registry: ProjectRegistry; control: ControlService; session: SessionPanels },
   context: vscode.ExtensionContext,
 ): { nextStep: NextStepPanels; host: CommandHost } {
-  const { registry, control, results } = deps;
+  const { registry, control, session } = deps;
   const nextStep = new NextStepPanels(
     registry,
-    { control, results, memento: context.workspaceState },
+    { control, results: session, memento: context.workspaceState },
     context.extensionUri,
   );
-  results.setActions({
+  session.setActions({
     openNextStep: (identity, workflow) => {
       nextStep.open({ ...identity, workflow });
     },
   });
-  // Header actions keep targeting the source session from a Results panel or a Next step page.
-  const host = { registry, active: { activeTarget: () => results.activeTarget() ?? nextStep.activeTarget() } };
+  // Header actions keep targeting the source session from a Session page or a Next step page.
+  const host = { registry, active: { activeTarget: () => session.activeTarget() ?? nextStep.activeTarget() } };
   return { nextStep, host };
 }
 
@@ -154,11 +133,10 @@ function createAnswers(
   registry: ProjectRegistry,
   control: ControlService,
   context: vscode.ExtensionContext,
-): { answers: AnswerPanels; submitter: AnswerSubmitter; replies: ReplyService } {
+): { submitter: AnswerSubmitter; replies: ReplyService } {
   const base = context.storageUri?.fsPath ?? context.globalStorageUri.fsPath;
   const submitter = new AnswerSubmitter(control, path.join(base, 'answers'));
-  const answers = new AnswerPanels(registry, { control, submitter }, context);
-  return { answers, submitter, replies: new ReplyService(registry, control, base) };
+  return { submitter, replies: new ReplyService(registry, control, base) };
 }
 
 /** Discovery and the first load run after activation returns. */
@@ -184,9 +162,15 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
   const sessionDocs = new SessionDocsProvider(tails);
   const logs = new LogChannels(registry, tails);
   const statusBar = new StatusBar(registry);
-  const { results, sessionMetrics } = createResultsPages(registry, context.extensionUri);
-  const { answers, submitter, replies } = createAnswers(registry, control, context);
-  const { nextStep, host } = createNextStep({ registry, control, results }, context);
+  const { submitter, replies } = createAnswers(registry, control, context);
+  const session = new SessionPanels(registry, {
+    capability,
+    control,
+    submitter,
+    extensionUri: context.extensionUri,
+    memento: context.workspaceState,
+  });
+  const { nextStep, host } = createNextStep({ registry, control, session }, context);
   context.subscriptions.push(
     registry,
     capability,
@@ -204,10 +188,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     new ReadOnlyDocsProvider(),
     logs,
     statusBar,
-    results,
-    sessionMetrics,
+    session,
     nextStep,
-    answers,
     new QuestionNotifier(registry),
     new StateNotifier(registry),
     ...livenessSubscriptions(liveness, registry, () => {
@@ -216,10 +198,7 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     }),
     vscode.commands.registerCommand('migent.refresh', () => registry.refresh()),
     ...registerSessionCommands(host, control.gate),
-    ...registerResultsCommands(host, results, nextStep),
-    ...registerSessionMetricsCommands(host, sessionMetrics),
-    ...registerSessionWorkflowCommands(host, pages.sessionWorkflow),
-    ...registerQuestionCommands(host, answers),
+    ...registerSessionPageCommands(host, session, nextStep),
     ...registerTimelineCommands(host, logs),
     ...registerCapabilityCommands(capability),
     ...registerProjectCommands({ registry, editor: pages.workflowEditor, capability, config: pages.config }),
@@ -240,10 +219,8 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     sessionDocs,
     logs,
     statusBar,
-    results,
-    sessionMetrics,
+    session,
     nextStep,
-    answers,
     submitter,
     replies,
     ready,

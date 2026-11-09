@@ -40,22 +40,10 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "migent.session.openResult",
-        "title": "Open Result",
+        "command": "migent.session.open",
+        "title": "Open Session",
         "category": "Migent",
         "icon": "$(book)"
-      },
-      {
-        "command": "migent.session.openMetrics",
-        "title": "Open Metrics",
-        "category": "Migent",
-        "icon": "$(graph)"
-      },
-      {
-        "command": "migent.session.openWorkflow",
-        "title": "Open Session Workflow",
-        "category": "Migent",
-        "icon": "$(edit)"
       },
       {
         "command": "migent.session.openNextStep",
@@ -74,13 +62,6 @@
         "title": "Prepare Next Step…",
         "category": "Migent",
         "icon": "$(add)"
-      },
-      {
-        "command": "migent.session.answerQuestions",
-        "title": "Answer Questions",
-        "category": "Migent",
-        "shortTitle": "Answer questions",
-        "icon": "$(comment-discussion)"
       },
       {
         "command": "migent.session.openTask",
@@ -490,7 +471,7 @@
           "group": "inline@1"
         },
         {
-          "command": "migent.session.answerQuestions",
+          "command": "migent.session.open",
           "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
           "group": "inline@3"
         },
@@ -595,15 +576,7 @@
           "when": "false"
         },
         {
-          "command": "migent.session.openResult",
-          "when": "false"
-        },
-        {
-          "command": "migent.session.openMetrics",
-          "when": "false"
-        },
-        {
-          "command": "migent.session.openWorkflow",
+          "command": "migent.session.open",
           "when": "false"
         },
         {
@@ -616,10 +589,6 @@
         },
         {
           "command": "migent.session.prepareDownstream",
-          "when": "false"
-        },
-        {
-          "command": "migent.session.answerQuestions",
           "when": "false"
         },
         {

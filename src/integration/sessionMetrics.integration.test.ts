@@ -8,7 +8,9 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { SESSION_METRICS_VIEW_TYPE } from '../vscode/sessionMetrics/panels';
+import type { SessionMetricsModel } from '../core/sessionMetricsModel';
+import { sessionPageTitle } from '../core/sessionPageModel';
+import { SESSION_VIEW_TYPE } from '../vscode/session/panels';
 import {
   createProject,
   type Env,
@@ -44,6 +46,18 @@ function describeMigent(root: string): string {
   }
 }
 
+/** The Metrics tab model last posted to the session's Session panel; null on any other tab or without a panel. */
+const metricsOf = (env: Env, id: { project: string; sessionId: string }): SessionMetricsModel | null => {
+  const page = env.api.session.lastModel(id);
+  return page?.tab === 'metrics' ? page.metrics : null;
+};
+
+/** The editor tab title the last posted page asks for. */
+const expectedTitle = (env: Env, id: { project: string; sessionId: string }): string | null => {
+  const page = env.api.session.lastModel(id);
+  return page === null ? null : sessionPageTitle(page.header);
+};
+
 const activeFile = (): string => {
   const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
   return input instanceof vscode.TabInputText ? input.uri.fsPath.toLowerCase() : '';
@@ -65,7 +79,7 @@ async function metricsProject(env: Env, options: { isMetricsKept: boolean }): Pr
 
 async function closeAll(env: Env): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-  await waitFor('panels closed', () => env.api.sessionMetrics.count === 0 && env.api.results.count === 0);
+  await waitFor('panels closed', () => env.api.session.count === 0);
   // VS Code keeps watching the folder of a closed file for a moment, which blocks deleting it on Windows.
   await sleep(CLOSE_SETTLE_MS);
 }
@@ -83,17 +97,18 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      await vscode.commands.executeCommand('migent.session.openMetrics', id);
-      await waitFor('panel opened', () => env.api.sessionMetrics.has(id));
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id) !== null);
-      const model = env.api.sessionMetrics.lastModel(id);
+      await vscode.commands.executeCommand('migent.session.open', { ...id, tab: 'metrics' });
+      await waitFor('panel opened', () => env.api.session.has(id));
+      await waitFor('model posted', () => metricsOf(env, id) !== null);
+      const model = metricsOf(env, id);
       assert.ok(model);
       assert.equal(model.availability, 'ok');
       assert.equal(model.state, 'Completed');
       assert.equal(model.workflowId, 'plan');
+      assert.equal(env.api.session.lastModel(id)?.tab, 'metrics');
       assert.equal(
-        env.api.sessionMetrics.title(id),
-        env.api.sessionMetrics.lastModel(id)?.title,
+        env.api.session.title(id),
+        expectedTitle(env, id),
         'a session titles its tab with the session title',
       );
       assert.equal(model.metrics.kind, 'ok');
@@ -110,8 +125,8 @@ const scenarios: Scenario[] = [
         assert.ok(!json.includes(secret), `the model does not contain ${secret}`);
       }
 
-      await vscode.commands.executeCommand('migent.session.openMetrics', id);
-      assert.equal(env.api.sessionMetrics.count, 1, 'reopening reuses the panel');
+      await vscode.commands.executeCommand('migent.session.open', { ...id, tab: 'metrics' });
+      assert.equal(env.api.session.count, 1, 'reopening reuses the panel');
       await closeAll(env);
     },
   },
@@ -120,20 +135,20 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: false });
       const id = identity(env);
-      env.api.sessionMetrics.open(id);
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id) !== null);
-      assert.deepEqual(env.api.sessionMetrics.lastModel(id)?.metrics, { kind: 'missing' });
-      assert.equal(env.api.sessionMetrics.lastModel(id)?.state, 'Completed');
-      assert.equal(env.api.sessionMetrics.title(id), env.api.sessionMetrics.lastModel(id)?.title);
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id) !== null);
+      assert.deepEqual(metricsOf(env, id)?.metrics, { kind: 'missing' });
+      assert.equal(metricsOf(env, id)?.state, 'Completed');
+      assert.equal(env.api.session.title(id), expectedTitle(env, id));
 
       const taskFile = sessionFile(env, 'task.md');
       await vscode.window.showTextDocument(vscode.Uri.file(taskFile), { preview: false });
       await waitFor('editor focused', () => same(activeFile(), taskFile));
-      const baseline = env.api.sessionMetrics.revision(id);
+      const baseline = env.api.session.revision(id);
 
       fs.copyFileSync(path.join(fixtureDir(), 'metrics.json'), sessionFile(env, 'metrics.json'));
-      await waitFor('created metrics.json shown', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
-      assert.ok(env.api.sessionMetrics.revision(id) > baseline, 'the revision grew');
+      await waitFor('created metrics.json shown', () => metricsOf(env, id)?.metrics.kind === 'ok');
+      assert.ok(env.api.session.revision(id) > baseline, 'the revision grew');
       assert.ok(same(activeFile(), taskFile), 'a background change did not move the active editor');
       await closeAll(env);
     },
@@ -143,9 +158,9 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.sessionMetrics.open(id);
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
-      const first = env.api.sessionMetrics.revision(id);
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
+      const first = env.api.session.revision(id);
 
       const changed = JSON.parse(fs.readFileSync(sessionFile(env, 'metrics.json'), 'utf8')) as {
         totals: { cost_partial: boolean };
@@ -153,19 +168,19 @@ const scenarios: Scenario[] = [
       changed.totals.cost_partial = false;
       write(sessionFile(env, 'metrics.json'), JSON.stringify(changed));
       await waitFor('rewritten metrics shown', () => {
-        const metrics = env.api.sessionMetrics.lastModel(id)?.metrics;
+        const metrics = metricsOf(env, id)?.metrics;
         return metrics?.kind === 'ok' && metrics.totals.costPartial === false;
       });
-      assert.ok(env.api.sessionMetrics.revision(id) > first, 'the revision grew');
+      assert.ok(env.api.session.revision(id) > first, 'the revision grew');
 
       write(sessionFile(env, 'metrics.json'), '{ not json');
-      await waitFor('invalid metrics shown', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'invalid');
-      assert.equal(env.api.sessionMetrics.lastModel(id)?.state, 'Completed', 'an invalid file keeps the session Completed');
+      await waitFor('invalid metrics shown', () => metricsOf(env, id)?.metrics.kind === 'invalid');
+      assert.equal(metricsOf(env, id)?.state, 'Completed', 'an invalid file keeps the session Completed');
 
-      const settled = env.api.sessionMetrics.revision(id);
+      const settled = env.api.session.revision(id);
       write(sessionFile(env, 'outputs', 'note.md'), 'x');
       await sleep(SETTLE_MS);
-      assert.equal(env.api.sessionMetrics.revision(id), settled, 'an unchanged model is not posted again');
+      assert.equal(env.api.session.revision(id), settled, 'an unchanged model is not posted again');
       await closeAll(env);
     },
   },
@@ -174,21 +189,22 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.sessionMetrics.open(id);
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id) !== null);
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id) !== null);
 
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'openMetricsFile' });
+      await env.api.session.handle(id, { type: 'intent', intent: 'openMetricsFile' });
       await waitFor('metrics.json opened', () => same(activeFile(), sessionFile(env, 'metrics.json')));
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
+      await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
       await waitFor('task.md opened', () => same(activeFile(), sessionFile(env, 'task.md')));
       const before = activeFile();
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'run', command: 'migent' });
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'sessionAction', action: 'deleteSession' });
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openTask' });
+      await env.api.session.handle(id, { type: 'intent', intent: 'run', command: 'migent' });
+      await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'deleteSession' });
+      await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openTask' });
       await sleep(SETTLE_MS);
       assert.equal(activeFile(), before, 'unknown intents open nothing');
-      await env.api.sessionMetrics.handle(id, { type: 'intent', intent: 'openResults' });
-      await waitFor('results opened', () => env.api.results.has(id));
+      await env.api.session.handle(id, { type: 'intent', intent: 'openResults' });
+      await waitFor('results tab shown', () => env.api.session.lastModel(id)?.tab === 'results');
+      assert.equal(env.api.session.count, 1, 'Results replaced Metrics in the same panel');
 
       await closeAll(env);
     },
@@ -198,22 +214,29 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.results.open(id);
-      await waitFor('results model posted', () => env.api.results.lastModel(id) !== null);
-      await env.api.results.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openMetrics' });
-      await waitFor('metrics page opened', () => env.api.sessionMetrics.has(id));
+      env.api.session.open(id, { tab: 'results' });
+      await waitFor('results model posted', () => env.api.session.lastModel(id)?.tab === 'results');
+      await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openMetrics' });
+      await waitFor('metrics tab shown', () => env.api.session.lastModel(id)?.tab === 'metrics');
+      assert.equal(env.api.session.count, 1, 'the action switched tabs in place');
 
       const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot(), 'package.json'), 'utf8')) as Contribution;
       const { menus, commands } = manifest.contributes;
-      assert.ok(commands.some((item) => item.command === 'migent.session.openMetrics'));
+      const removed = [
+        'migent.session.openResult',
+        'migent.session.openMetrics',
+        'migent.session.openWorkflow',
+        'migent.session.answerQuestions',
+      ];
       assert.deepEqual(
-        menus.commandPalette?.filter((item) => item.command === 'migent.session.openMetrics').map((item) => item.when),
-        ['false'],
+        commands.filter((item) => removed.includes(item.command)).map((item) => item.command),
+        [],
+        'the per-page open commands are gone',
       );
-      assert.equal(
-        menus['view/item/context']?.some((item) => item.command === 'migent.session.openMetrics') ?? false,
-        false,
-        'the Sessions view context menu no longer offers Open Metrics',
+      assert.ok(commands.some((item) => item.command === 'migent.session.open'));
+      assert.deepEqual(
+        menus.commandPalette?.filter((item) => item.command === 'migent.session.open').map((item) => item.when),
+        ['false'],
       );
       await closeAll(env);
     },
@@ -223,33 +246,34 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.sessionMetrics.open(id);
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
       await closeAll(env);
-      assert.equal(env.api.sessionMetrics.has(id), false);
+      assert.equal(env.api.session.has(id), false);
 
+      const state = { ...id, tab: 'metrics' };
       const create = (): vscode.WebviewPanel =>
-        vscode.window.createWebviewPanel(SESSION_METRICS_VIEW_TYPE, 'Metrics', vscode.ViewColumn.Active, {
+        vscode.window.createWebviewPanel(SESSION_VIEW_TYPE, 'Session', vscode.ViewColumn.Active, {
           enableScripts: true,
         });
-      env.api.sessionMetrics.restore(create(), id);
-      assert.ok(env.api.sessionMetrics.has(id), 'the stored identity restores the panel');
-      await waitFor('restored model posted', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
+      env.api.session.restore(create(), state);
+      assert.ok(env.api.session.has(id), 'the stored identity restores the panel');
+      await waitFor('restored model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
       assert.equal(
-        env.api.sessionMetrics.title(id),
-        env.api.sessionMetrics.lastModel(id)?.title,
+        env.api.session.title(id),
+        expectedTitle(env, id),
         'the restored panel is titled again',
       );
-      env.api.sessionMetrics.restore(create(), id);
-      env.api.sessionMetrics.restore(create(), { project: '', sessionId: '' });
-      env.api.sessionMetrics.restore(create(), 'garbage');
-      assert.equal(env.api.sessionMetrics.count, 1, 'a duplicate or malformed state adopts nothing');
+      env.api.session.restore(create(), state);
+      env.api.session.restore(create(), { project: '', sessionId: '' });
+      env.api.session.restore(create(), 'garbage');
+      assert.equal(env.api.session.count, 1, 'a duplicate or malformed state adopts nothing');
 
       fs.rmSync(migentPath(env.root, 'sessions', SESSION), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      await waitFor('removed session shown unavailable', () => env.api.sessionMetrics.lastModel(id)?.availability === 'unavailable');
-      assert.ok(env.api.sessionMetrics.has(id), 'the panel stays open');
-      assert.equal(env.api.sessionMetrics.lastModel(id)?.sessionId, SESSION);
-      assert.equal(env.api.sessionMetrics.title(id), 'Metrics', 'an unavailable page has the plain title');
+      await waitFor('removed session shown unavailable', () => metricsOf(env, id)?.availability === 'unavailable');
+      assert.ok(env.api.session.has(id), 'the panel stays open');
+      assert.equal(metricsOf(env, id)?.sessionId, SESSION);
+      assert.equal(env.api.session.title(id), 'Session', 'an unavailable page has the plain title');
       await closeAll(env);
     },
   },
@@ -258,8 +282,8 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.sessionMetrics.open(id);
-      await waitFor('model posted', () => env.api.sessionMetrics.lastModel(id)?.metrics.kind === 'ok');
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
 
       removeMigent(env.root);
       // A dropped delete event is recovered by Refresh, as in the harness.
@@ -268,10 +292,10 @@ const scenarios: Scenario[] = [
         await sleep(SETTLE_MS);
       }
       assert.equal(env.project(), undefined, `the project is gone; ${describeMigent(env.root)}`);
-      await waitFor('project removal shown unavailable', () => env.api.sessionMetrics.lastModel(id)?.availability === 'unavailable');
-      assert.ok(env.api.sessionMetrics.has(id), 'the panel stays open');
-      assert.equal(env.api.sessionMetrics.title(id), 'Metrics');
-      assert.equal(env.api.sessionMetrics.lastModel(id)?.sessionId, SESSION);
+      await waitFor('project removal shown unavailable', () => metricsOf(env, id)?.availability === 'unavailable');
+      assert.ok(env.api.session.has(id), 'the panel stays open');
+      assert.equal(env.api.session.title(id), 'Session');
+      assert.equal(metricsOf(env, id)?.sessionId, SESSION);
       await closeAll(env);
     },
   },

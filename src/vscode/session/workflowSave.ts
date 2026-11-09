@@ -1,0 +1,146 @@
+import * as vscode from 'vscode';
+
+import type { SessionWorkflowModel } from '../../core/sessionWorkflow';
+import {
+  duplicateArtifactProblem,
+  workflowDraftFromForm,
+  type WorkflowForm,
+  workflowFormFromClient,
+} from '../../core/workflowEditor';
+import {
+  EMPTY_VALIDATION,
+  runAuthoringSave,
+  type SaveOutcome,
+  splitDiagnostics,
+  usableLaunch,
+} from '../authoringSave';
+import type { CapabilityService } from '../capability';
+import type { ProjectRegistry } from '../projects';
+import { type Entry, type Transient, transient } from './entry';
+
+const LOCKED_MESSAGE = 'A stage already ran, so this workflow can no longer be changed.';
+const UNSUPPORTED_MESSAGE =
+  'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
+
+export interface SaveRequest {
+  rawForm: unknown;
+  baseHash: string;
+}
+
+/** What the saver needs from the Session panel set. */
+export interface WorkflowSaverHost {
+  registry: ProjectRegistry;
+  capability: CapabilityService;
+  isCurrent: (entry: Entry) => boolean;
+  /** Repost the workflow tab from disk, with an optional transient save state. */
+  send: (entry: Entry, state?: Transient) => void;
+  /** Repost the last shown workflow model with the current diagnostics and a transient state. */
+  publishLast: (entry: Entry, state: Transient) => void;
+}
+
+function saveRefusal(model: SessionWorkflowModel | null, form: WorkflowForm): string | null {
+  if (model === null || model.isLocked) return LOCKED_MESSAGE;
+  if (!model.canSave) return UNSUPPORTED_MESSAGE;
+  return duplicateArtifactProblem(form);
+}
+
+function notifySaveFailed(message: string): void {
+  void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
+}
+
+function saveArgs(sessionId: string, baseHash: string): string[] {
+  return [
+    'workflow',
+    'save',
+    '-',
+    '--session',
+    sessionId,
+    '--format',
+    'yaml',
+    '--base-hash',
+    baseHash,
+    '--preserve-comments',
+    '--json',
+  ];
+}
+
+/** Saves the session's `workflow.yaml` through the CLI, one save at a time, and reports the diagnostics. */
+export class WorkflowSaver {
+  readonly #host: WorkflowSaverHost;
+
+  constructor(host: WorkflowSaverHost) {
+    this.#host = host;
+  }
+
+  public async save(entry: Entry, request: SaveRequest): Promise<void> {
+    if (!entry.beginSave()) return;
+    try {
+      await this.#run(entry, request);
+    } finally {
+      entry.endSave();
+    }
+  }
+
+  async #run(entry: Entry, request: SaveRequest): Promise<void> {
+    const context = this.#host.registry.project(entry.project);
+    if (context === undefined) {
+      this.#fail(entry, 'The project is no longer available.');
+      return;
+    }
+    const form = workflowFormFromClient(request.rawForm);
+    const current = this.#workflowOf(entry);
+    const refusal = saveRefusal(current, form);
+    if (refusal !== null) {
+      this.#fail(entry, refusal);
+      return;
+    }
+    const launched = await usableLaunch(this.#host.capability, entry.project);
+    if ('message' in launched) {
+      this.#fail(entry, launched.message);
+      return;
+    }
+    this.#host.publishLast(entry, transient(null, true));
+    const outcome = await runAuthoringSave(launched.launch, saveArgs(entry.sessionId, request.baseHash), {
+      cwd: context.root,
+      input: workflowDraftFromForm(form, current?.schemaVersion ?? null),
+    });
+    if (!this.#host.isCurrent(entry)) return;
+    this.#settle(entry, outcome);
+  }
+
+  #settle(entry: Entry, outcome: SaveOutcome): void {
+    switch (outcome.kind) {
+      case 'written':
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), outcome.envelope.hash);
+        this.#host.send(entry, transient(null));
+        return;
+      case 'unconfirmed':
+        this.#fail(entry, 'Migent did not confirm the save.');
+        return;
+      case 'conflict':
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), this.#workflowOf(entry)?.savedHash ?? null);
+        notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
+        this.#host.publishLast(entry, transient('The file changed on disk. Reload it from disk before saving again.'));
+        return;
+      case 'invalid': {
+        entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), this.#workflowOf(entry)?.savedHash ?? null);
+        const count = entry.validation.errors.length;
+        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
+        this.#host.publishLast(entry, transient(null));
+        return;
+      }
+      case 'failed':
+        this.#fail(entry, outcome.message);
+    }
+  }
+
+  #workflowOf(entry: Entry): SessionWorkflowModel | null {
+    return entry.lastModel?.tab === 'workflow' ? entry.lastModel.workflow : null;
+  }
+
+  #fail(entry: Entry, message: string): void {
+    notifySaveFailed(message);
+    entry.setValidation(EMPTY_VALIDATION, null);
+    this.#host.publishLast(entry, transient(message));
+  }
+}

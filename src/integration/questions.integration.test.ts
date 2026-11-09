@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 
+import * as vscode from 'vscode';
+
 import type { AnswerModel } from '../core/answerModel';
 import type { BatchIdentity } from '../vscode/questions/entry';
 import { createProject, type Env, freshLock, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
@@ -75,6 +77,11 @@ async function withAnswerMode(mode: string, body: () => Promise<void>): Promise<
   }
 }
 
+/** Open the session's panel on the Questions tab, selecting the batch the identity names. */
+const openBatch = (env: Env, batch: BatchIdentity): void => {
+  env.api.session.open(batch, { tab: 'questions', batch: { stageId: batch.stageId, executionId: batch.executionId } });
+};
+
 /** Open the panel and return helpers bound to its exact batch. */
 async function openPanel(env: Env, sessionId: string, seed: Seed = {}) {
   const project = await createProject(env);
@@ -82,14 +89,14 @@ async function openPanel(env: Env, sessionId: string, seed: Seed = {}) {
   const base = seedSession(env, sessionId, seed);
   await waitFor('session loaded', () => (project.store.snapshot(sessionId)?.status?.questions.length ?? 0) >= 2);
   const identity: BatchIdentity = { ...base, project: project.key };
-  env.api.answers.open(identity);
-  await waitFor('panel model', () => env.api.answers.lastModel(identity) !== null);
+  openBatch(env, identity);
+  await waitFor('panel model', () => env.api.session.lastAnswerModel(identity) !== null);
   const model = (): AnswerModel => {
-    const current = env.api.answers.lastModel(identity);
+    const current = env.api.session.lastAnswerModel(identity);
     assert.ok(current, 'panel has a model');
     return current;
   };
-  const send = (message: unknown): Promise<void> => env.api.answers.handle(identity, message);
+  const send = (message: unknown): Promise<void> => env.api.session.handle(identity, message);
   const edit = (questionId: string, draft: unknown): Promise<void> =>
     send({ type: 'edit', generation: model().generation, fingerprint: model().fingerprint, questionId, draft });
   const answerAll = async (): Promise<void> => {
@@ -197,9 +204,10 @@ const scenarios: Scenario[] = [
       });
       assert.equal(panel.model().state, 'unconfirmed');
       assert.ok(env.api.control.gate.current(panel.project.key, 'q5'), 'gate stays held');
-      await panel.send({ type: 'later' });
-      env.api.answers.open(panel.identity);
-      await waitFor('reopened panel', () => env.api.answers.lastModel(panel.identity) !== null);
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      await waitFor('panel closed', () => !env.api.session.has(panel.identity));
+      openBatch(env, panel.identity);
+      await waitFor('reopened panel', () => env.api.session.lastAnswerModel(panel.identity) !== null);
       assert.equal(panel.model().state, 'unconfirmed', 'restored from the persisted record');
       assert.equal(panel.model().canSubmit, false, 'no blind resend');
       // Repair the file the way a finished CLI would, then Recheck resolves it.
@@ -263,14 +271,14 @@ const scenarios: Scenario[] = [
       const project = env.project();
       assert.ok(project);
       await waitFor('agent session', () => project.store.snapshot('q9') !== undefined);
-      env.api.answers.open({ ...agent, project: project.key });
-      await waitFor('agent panel', () => env.api.answers.lastModel({ ...agent, project: project.key }) !== null);
-      assert.match(env.api.answers.lastModel({ ...agent, project: project.key })?.blockReason ?? '', /person/);
+      openBatch(env, { ...agent, project: project.key });
+      await waitFor('agent panel', () => env.api.session.lastAnswerModel({ ...agent, project: project.key }) !== null);
+      assert.match(env.api.session.lastAnswerModel({ ...agent, project: project.key })?.blockReason ?? '', /person/);
       const future = seedSession(env, 'q10', { schemaVersion: 9 });
       await waitFor('future session', () => project.store.snapshot('q10') !== undefined);
-      env.api.answers.open({ ...future, project: project.key });
-      await waitFor('future panel', () => env.api.answers.lastModel({ ...future, project: project.key }) !== null);
-      assert.match(env.api.answers.lastModel({ ...future, project: project.key })?.blockReason ?? '', /schema/);
+      openBatch(env, { ...future, project: project.key });
+      await waitFor('future panel', () => env.api.session.lastAnswerModel({ ...future, project: project.key }) !== null);
+      assert.match(env.api.session.lastAnswerModel({ ...future, project: project.key })?.blockReason ?? '', /schema/);
     },
   },
   {
@@ -304,10 +312,15 @@ const scenarios: Scenario[] = [
       assert.deepEqual(records.questions.filter((item) => item.stage_id === 'test').map((item) => item.status), ['pending', 'pending']);
       // The other stage's own batch is untouched and still answerable.
       const other: BatchIdentity = { ...panel.identity, stageId: 'test', executionId: '0001-test--attempt-01' };
-      env.api.answers.open(other);
-      await waitFor('other stage panel', () => env.api.answers.lastModel(other) !== null);
-      assert.equal(env.api.answers.lastModel(other)?.editable, true);
-      assert.equal(env.api.answers.lastModel(other)?.answered, 0, 'no answers leaked across stages');
+      // The session has one panel, so the other batch is selected in place rather than opened separately.
+      openBatch(env, other);
+      await waitFor('other stage batch selected', () => {
+        const page = env.api.session.lastModel(other);
+        return page?.tab === 'questions' && page.questions.selected?.executionId === other.executionId;
+      });
+      assert.equal(env.api.session.count, 1, 'the batch switched inside the same panel');
+      assert.equal(env.api.session.lastAnswerModel(other)?.editable, true);
+      assert.equal(env.api.session.lastAnswerModel(other)?.answered, 0, 'no answers leaked across stages');
     },
   },
   {

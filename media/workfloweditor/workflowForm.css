@@ -1,4 +1,4 @@
-/* Workflow form layout, shared by the pages that load workflowform.js. Tokens and components live in
+/* Workflow form layout, shared by the pages that load workflowForm.js. Tokens and components live in
    media/shared/base.css. */
 
 /* Keep a focused control clear of the sticky section head when the page scrolls it into view. */

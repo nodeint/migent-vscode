@@ -20,7 +20,7 @@ import type { MigentChange, ProjectKey } from '../changes';
 import type { ControlService } from '../control';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
-import type { ResultsPanels } from '../results/panels';
+import type { SessionPanels } from '../session/panels';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
 import { offerWorkflowDraft } from '../workflowDraft';
 
@@ -109,7 +109,7 @@ export class NextStepPanels implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
   readonly #extensionUri: vscode.Uri;
   readonly #control: ControlService;
-  readonly #results: ResultsPanels;
+  readonly #results: SessionPanels;
   readonly #memento: vscode.Memento;
   readonly #entries = new Map<string, Entry>();
   readonly #dirty = new Set<string>();
@@ -118,7 +118,7 @@ export class NextStepPanels implements vscode.Disposable {
 
   constructor(
     registry: ProjectRegistry,
-    deps: { control: ControlService; results: ResultsPanels; memento: vscode.Memento },
+    deps: { control: ControlService; results: SessionPanels; memento: vscode.Memento },
     extensionUri: vscode.Uri,
   ) {
     this.#registry = registry;

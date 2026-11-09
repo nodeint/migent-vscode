@@ -1,8 +1,8 @@
 // Workflow form: the Design view's controls, separated from the editor page so another page can reuse them.
 // It renders sections of controls over a draft it does not own; the data shape and pure draft operations live in
-// workflowmodel.js.
+// workflowModel.js.
 // The host page supplies the model, the draft, validation issues and two callbacks (see `create`).
-// Every string is set with textContent. Needs media/shared/page.js, media/shared/form.js and workflowmodel.js loaded first (see docs/ui.md).
+// Every string is set with textContent. Needs media/shared/page.js, media/shared/form.js and workflowModel.js loaded first (see docs/ui.md).
 (function () {
   'use strict';
 

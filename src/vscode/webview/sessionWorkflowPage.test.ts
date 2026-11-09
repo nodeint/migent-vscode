@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
-/* A tiny DOM, just enough to run media/sessionworkflow/sessionworkflow.js with the real shared scripts. */
+/* A tiny DOM, just enough to run the Workflow tab of media/session with the real shared scripts. */
 type Handler = (event: Record<string, unknown>) => void;
 
 class FakeText {
@@ -229,6 +229,16 @@ function model(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The Session page model of the Workflow tab for a workflow model, as the host builds it. */
+function sessionPage(workflow: Record<string, unknown>) {
+  const { sessionId, title, sessionState, workflowId, meta } = workflow;
+  return {
+    tab: 'workflow',
+    header: { availability: 'ok', sessionId, title, state: sessionState, workflowId, meta },
+    workflow,
+  };
+}
+
 function load() {
   const doc = new FakeDocument();
   const listeners: Record<string, Handler[]> = {};
@@ -254,16 +264,26 @@ function load() {
   });
   const media = path.join(__dirname, '../../../media');
   for (const file of [
+    'shared/utils.js',
     'shared/icons.js',
     'shared/copy.js',
     'shared/page.js',
     'shared/form.js',
     'shared/agentform.js',
     'shared/draftpage.js',
-    'workfloweditor/workflowcopy.js',
-    'workfloweditor/workflowmodel.js',
-    'workfloweditor/workflowform.js',
-    'sessionworkflow/sessionworkflow.js',
+    'workfloweditor/workflowCopy.js',
+    'workfloweditor/workflowModel.js',
+    'workfloweditor/workflowForm.js',
+    'session/sessionCopy.js',
+    'session/resultsCopy.js',
+    'session/metricsCopy.js',
+    'session/sessionWorkflowCopy.js',
+    'session/questionsCopy.js',
+    'session/results.js',
+    'session/metrics.js',
+    'session/workflow.js',
+    'session/questions.js',
+    'session/session.js',
   ]) {
     vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   }
@@ -271,7 +291,7 @@ function load() {
   const deliver = (next: Record<string, unknown>, transient?: Record<string, unknown>): void => {
     revision += 1;
     for (const handler of listeners.message ?? []) {
-      handler({ data: { type: 'model', revision, identity: { a: 1 }, model: next, transient } });
+      handler({ data: { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next), transient } });
     }
   };
   const find = (predicate: (node: FakeElement) => boolean): FakeElement | undefined =>
