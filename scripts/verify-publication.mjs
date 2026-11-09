@@ -19,7 +19,29 @@ export async function verifyPublication(version, request = fetch) {
   if (metadata.namespace !== "nodeint" || metadata.name !== "migent-vscode" || metadata.version !== version) throw new Error(`Open VSX does not expose ${version}.`);
 }
 
+export async function waitForPublication(version, {
+  request = fetch,
+  attempts = 20,
+  delayMs = 15_000,
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+} = {}) {
+  if (!Number.isInteger(attempts) || attempts < 1) throw new Error("Expected at least one publication attempt.");
+  let failure;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await verifyPublication(version, request);
+      return attempt;
+    } catch (error) {
+      failure = error;
+      if (attempt < attempts) await sleep(delayMs);
+    }
+  }
+  throw new Error(`${failure.message} Gave up after ${attempts} attempts.`);
+}
+
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  await verifyPublication(process.argv[2]);
-  console.log(`Both registries expose nodeint.migent-vscode ${process.argv[2]}.`);
+  const attempts = Number(process.env.PUBLICATION_ATTEMPTS ?? 20);
+  const delayMs = Number(process.env.PUBLICATION_DELAY_MS ?? 15_000);
+  const attempt = await waitForPublication(process.argv[2], { attempts, delayMs });
+  console.log(`Both registries expose nodeint.migent-vscode ${process.argv[2]} (attempt ${attempt}).`);
 }

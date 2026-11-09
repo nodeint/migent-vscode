@@ -60,7 +60,7 @@ gh api repos/nodeint/migent-vscode/issues/<number>/comments
 
 Use short branch names describing the change: `feat/<slug>`, `fix/<slug>`,
 `docs/<slug>`, or `chore/<slug>`. Use `release/X.Y.Z` for release preparation.
-`next` is the integration branch; `main` records verified published releases.
+`next` is the integration branch; `main` mirrors the latest release tag.
 Start work from `origin/next`. If it is missing, ask the maintainer to initialize
 it from the agreed baseline; do not silently substitute `main`.
 
@@ -81,7 +81,7 @@ Run `pnpm setup:git` once per checkout to install `.githooks/` and local branch/
 push defaults. It refuses to replace a different hooks path and removes
 incorrect main/next upstreams from working branches. The hooks block protected
 branch commits, direct protected branch pushes, and mismatched branch names.
-The sole main update exception is the guarded release synchronization below.
+The sole main update exception is the guarded sync and the release workflow.
 Local hooks complement server-side protection; they do not replace it.
 If a hook blocks an operation, resolve the cause with the maintainer; do not
 bypass safeguards.
@@ -145,33 +145,41 @@ approval; do not force-push or bypass branch protection.
 
 ## Releasing
 
-The tag-triggered `.github/workflows/release.yml` publishes the VSIX
-to VS Code Marketplace, Open VSX, and GitHub Releases. It validates the tag,
-then builds and packages the VSIX without rerunning tests; the release PR's CI
-on Windows and macOS is the test gate. `main` advances only after publication
-is verified.
+Merging a `release/X.Y.Z` pull request into `next` publishes the extension.
+`.github/workflows/release.yml` validates the merged commit, creates the
+`vX.Y.Z` tag, fast-forwards `main` to it, and then builds and publishes the
+VSIX to VS Code Marketplace, Open VSX, and GitHub Releases. `main` follows the
+release tag; it never waits for registry propagation.
+
+The release pull request stays the human gate: it sets the version, writes the
+changelog notes, and passes CI before merging. Tagging, main synchronization,
+and publication are automatic.
 
 ### One-time maintainer setup
 
 Before the first release:
 
 1. Initialize remote `next` from the agreed baseline. Protect `next` with PR
-   review and both CI matrix checks. Protect `main` against force-push/deletion
-   and allow the designated release maintainer to perform the guarded
-   fast-forward. A PR-only main rule will block that operation; agree on the
-   policy before release rather than bypassing it during publication.
-2. Create the GitHub environment **release**, restrict it to `v*` tags, and
-   configure required reviewers for publication approval.
-3. Create/verify Marketplace publisher **nodeint**. Under Trusted Publishing,
+   review, both CI matrix checks, and "require branches to be up to date before
+   merging", so the squash-merged release commit matches the tested merge ref.
+2. Protect `main` against force-push and deletion, and add the **GitHub
+   Actions** app to its push restrictions so the workflow can fast-forward it.
+   A PR-only main rule will block that operation; agree on the exception before
+   the first automated release.
+3. Create the GitHub environment **release**. Leave its deployment branch
+   policy open: the workflow deploys from pull-request, tag, and branch refs.
+   Restrict who can merge release PRs instead of relying on reviewers.
+4. Create/verify Marketplace publisher **nodeint**. Under Trusted Publishing,
    authorize GitHub owner **nodeint**, repository **migent-vscode**, workflow
    **release.yml**, environment **release**.
-4. Create/claim Open VSX namespace **nodeint**, complete its publisher agreement,
+5. Create/claim Open VSX namespace **nodeint**, complete its publisher agreement,
    and configure a trusted publisher for the same owner, repository, workflow,
    and environment. Ensure the publishing account has namespace rights.
-5. Allow GitHub Actions OIDC requests and GitHub Release creation. The publish
-   job requests `id-token: write` and `contents: write`; no PAT secrets are
-   required. Install and authenticate GitHub CLI locally for release observation
-   and the final synchronization hook.
+6. Allow GitHub Actions OIDC requests and GitHub Release creation. The job
+   requests `id-token: write` and `contents: write`; no PAT secrets are
+   required. Install and authenticate GitHub CLI locally for release observation.
+7. Set the repository variable `RELEASE_PAUSED` to `true` to stop automatic
+   publication, and unset it to resume.
 
 See the official [Marketplace Trusted Publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)
 and [Open VSX CLI Trusted Publishing guide](https://github.com/eclipse-openvsx/openvsx/blob/master/cli/README.md#trusted-publishing).
@@ -199,45 +207,44 @@ declares `extensionKind: ["workspace"]`, so remote behavior must be checked
 in the workspace extension host.
 
 Open the release PR against `next` with the release notes and verification
-results. Both CI jobs must pass. Obtain approval before merging or publishing.
+results. Both CI jobs must pass. Merging publishes the release.
 
-### Publish and verify
+### Automatic publication
 
-After merging, fetch origin and identify the PR's exact merge SHA on next.
-Verify its root version and nonempty `## X.Y.Z` changelog section. With
-authorization, create and push a new lightweight stable tag:
-
-```bash
-git tag vX.Y.Z <merged-release-sha>
-git push origin refs/tags/vX.Y.Z:refs/tags/vX.Y.Z
-```
-
-The workflow accepts stable `vX.Y.Z` tags only and rejects tags outside next,
-version mismatches, missing notes, and unexpected extension identity. It does
-not rerun tests; confirm the release PR's CI passed before tagging. Approve the
-environment-gated publishing job when ready. It builds and publishes the VSIX to Marketplace, then
-Open VSX, then creates the GitHub Release using the matching changelog section.
-Keep tag references immutable and do not tag an unmerged branch.
+`release.yml` starts when a `release/*` pull request is merged into `next`. It
+checks that the merged commit carries a newer version, a nonempty `## X.Y.Z`
+changelog section, and no existing tag, then creates and pushes `vX.Y.Z`,
+fast-forwards `main` to that commit, and publishes the VSIX to Marketplace, then
+Open VSX, then a GitHub Release. It does not rerun the tests: the release PR's
+CI and the up-to-date merge requirement are the test gate.
 
 Watch the run through completion and check the GitHub Release:
 
 ```bash
-gh run list --workflow release.yml --branch vX.Y.Z --json databaseId,status,conclusion,url
+gh run list --workflow release.yml --event pull_request --json databaseId,status,conclusion,url
 gh run watch <databaseId> --exit-status
 gh release view vX.Y.Z
-node scripts/verify-publication.mjs X.Y.Z
 ```
 
-The public registry check can lag publication; wait and recheck if propagation
-is incomplete. Install the exact version from Marketplace and the Open VSX
-VSIX in a suitable client and verify the affected behavior. Metadata checks
-alone do not establish successful installation.
+The workflow verifies both registries itself, retrying while propagation lags.
+Install the exact version from Marketplace and the Open VSX VSIX in a suitable
+client and verify the affected behavior. Metadata checks alone do not establish
+successful installation.
+
+To publish an existing tag again, or to recover after a failed run, dispatch the
+workflow for that tag:
+
+```bash
+gh workflow run release.yml -f tag=vX.Y.Z --ref next
+```
+
+Keep tags immutable. Never delete, move, or reuse a released version.
 
 ### Synchronize main
 
-After the workflow succeeds and both registry/install checks pass, fetch refs
-and confirm that main is an ancestor of the tagged SHA and the tag is on next.
-With authorization to finish the release, run:
+`main` is fast-forwarded by the workflow before publication; it does not wait
+for either registry. Manual synchronization is only a recovery path. Run it
+from a clean checkout with `pnpm setup:git` installed:
 
 ```bash
 git fetch origin --tags
@@ -247,21 +254,28 @@ git push origin refs/tags/vX.Y.Z:refs/heads/main
 git ls-remote origin refs/heads/main refs/tags/vX.Y.Z
 ```
 
-Run from a clean checkout with `pnpm setup:git` installed. The pre-push hook
-requires the configured origin, unchanged remote refs, a lightweight tag,
-matching version/notes, fast-forward ancestry, a successful release workflow
-for the same tag and SHA, and that version exposed by both public registries.
-The two remote hashes must match afterward. Do not advance main to a newer
-next HEAD, force-push, or create a separate merge commit. If protection blocks
-the update, report the configuration blocker and leave main unchanged.
+The pre-push hook requires the configured origin, unchanged remote refs, a
+lightweight tag, matching version/notes, and fast-forward ancestry. The two
+remote hashes must match afterward. Do not advance main to a newer next HEAD,
+force-push, or create a separate merge commit. If protection blocks the update,
+report the configuration blocker and leave main unchanged.
 
 ### Failed or partial releases
 
-On failure, leave main and the tag unchanged. Report the failing step and
-which registries or GitHub assets already exist. Do not blindly rerun a
-partially published release, skip duplicate-version errors, or overwrite a
-released version. Agree on recovery with the maintainer. If a version reached
-either registry, prepare the next patch through a new release PR and tag.
-When only registry propagation is pending, recheck publication rather than
-republishing. If nothing was published, a maintainer may authorize rerunning
-the same immutable tag after fixing external configuration.
+The tag and `main` may already point at a release whose publication failed; that
+is expected, because source state no longer depends on the registries. Report the
+failing step and which registries or GitHub assets already exist. If nothing
+reached either registry, dispatch the same tag again after fixing external
+configuration. When a version already reached a registry, prepare the next patch
+through a new release PR; never delete or overwrite a released version. If the
+run failed only at "Verify main advanced", publication succeeded: fix the main
+push restriction and re-run, or run the guarded synchronization above.
+
+If `RELEASE_PAUSED` skipped a merged release, create the tag on the merged
+commit that the release PR produced and dispatch it:
+
+```bash
+git tag vX.Y.Z <merged-release-sha>
+git push origin refs/tags/vX.Y.Z:refs/tags/vX.Y.Z
+gh workflow run release.yml -f tag=vX.Y.Z --ref next
+```
