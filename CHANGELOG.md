@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.7
+
+- Synchronize session page UI components and styles with the configuration page for consistent visual appearance and user experience.
+
 ## 0.1.6
 
 - Replace the Next step page with VS Code pickers: a suggestion on Results (or `migent.session.openNextStep`) asks
