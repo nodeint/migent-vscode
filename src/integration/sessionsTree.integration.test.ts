@@ -398,7 +398,9 @@ const scenarios: Scenario[] = [
         await sleep(SETTLE_MS);
 
         assert.equal(vscode.window.activeTextEditor?.document.uri.toString(), editorBefore, 'active editor unchanged');
-        assert.equal(env.api.sessionsView.selection[0]?.id, selected.id, 'selection unchanged');
+        // A full refresh makes VS Code drop its element handles until the tree is re-read, so `selection` is briefly
+        // empty even though the row stays selected; a lost or moved selection never comes back and still fails here.
+        await waitFor('selection unchanged', () => env.api.sessionsView.selection[0]?.id === selected.id);
       } finally {
         await vscode.commands.executeCommand('workbench.action.closeAllEditors');
         fs.rmSync(note, { force: true });
