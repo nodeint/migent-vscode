@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../../core/model';
 import { isRecord } from '../../core/record';
 import { SESSION_TABS, type SessionBatchRef, type SessionTab } from '../../core/sessionPageModel';
-import type { NextStepPanels } from '../nextStep/panels';
+import type { NextStepFlow } from '../nextStep/flow';
 import type { SessionOpenOptions, SessionPanels } from '../session/panels';
 import { registerNextStepCommands } from './nextStepCommands';
 import { type CommandHost, resolve } from './sessionCommands';
@@ -54,7 +54,7 @@ function optionsFor(snapshot: SessionSnapshot, requested: Requested, executionId
 export function registerSessionPageCommands(
   host: CommandHost,
   session: SessionPanels,
-  nextStep: NextStepPanels,
+  nextStep: NextStepFlow,
 ): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('migent.session.open', async (arg: unknown) => {

@@ -18,7 +18,7 @@ import { SessionDocsProvider } from './vscode/content/sessionDocs';
 import { ContextKeys } from './vscode/contextKeys';
 import { ControlService } from './vscode/control';
 import { LogChannels } from './vscode/log/channels';
-import { NextStepPanels } from './vscode/nextStep/panels';
+import { NextStepFlow } from './vscode/nextStep/flow';
 import { StateNotifier } from './vscode/notifier';
 import { ProjectRegistry } from './vscode/projects';
 import { QuestionNotifier } from './vscode/questionNotifier';
@@ -48,7 +48,7 @@ export interface MigentApi {
   logs: LogChannels;
   statusBar: StatusBar;
   session: SessionPanels;
-  nextStep: NextStepPanels;
+  nextStep: NextStepFlow;
   submitter: AnswerSubmitter;
   replies: ReplyService;
   /** Resolves after the first project load, which runs after `activate()` returned. */
@@ -107,24 +107,26 @@ function livenessSubscriptions(liveness: Liveness, registry: ProjectRegistry, on
   ];
 }
 
-/** Next step pages, and the Session page actions that open them. */
+/** The Next step flow, and the Session page action that starts it. */
 function createNextStep(
   deps: { registry: ProjectRegistry; control: ControlService; session: SessionPanels },
   context: vscode.ExtensionContext,
-): { nextStep: NextStepPanels; host: CommandHost } {
+): { nextStep: NextStepFlow; host: CommandHost } {
   const { registry, control, session } = deps;
-  const nextStep = new NextStepPanels(
-    registry,
-    { control, results: session, memento: context.workspaceState },
-    context.extensionUri,
-  );
-  session.setActions({
-    openNextStep: (identity, workflow) => {
-      nextStep.open({ ...identity, workflow });
+  const nextStep = new NextStepFlow(registry, {
+    control,
+    memento: context.workspaceState,
+    openSession: (project, sessionId) => {
+      session.open({ project, sessionId });
     },
   });
-  // Header actions keep targeting the source session from a Session page or a Next step page.
-  const host = { registry, active: { activeTarget: () => session.activeTarget() ?? nextStep.activeTarget() } };
+  session.setActions({
+    openNextStep: (identity, workflow) => {
+      void nextStep.start({ ...identity, workflow });
+    },
+  });
+  // Header actions target the session of the Session page in focus.
+  const host = { registry, active: { activeTarget: () => session.activeTarget() } };
   return { nextStep, host };
 }
 
@@ -189,7 +191,6 @@ export function activate(context: vscode.ExtensionContext): MigentApi {
     logs,
     statusBar,
     session,
-    nextStep,
     new QuestionNotifier(registry),
     new StateNotifier(registry),
     ...livenessSubscriptions(liveness, registry, () => {

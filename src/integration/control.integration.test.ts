@@ -71,7 +71,7 @@ async function withPrompts(answers: Answers, body: (prompts: string[]) => Promis
     const title = options.title ?? '';
     prompts.push(`pick:${title}`);
     const key = wanted(title);
-    return Promise.resolve(items.find((item) => item.label === key || item.description === key));
+    return Promise.resolve(items.find((item) => item.label.replace(/^\$\([^)]+\) /, '') === key || item.description === key));
   };
   window.showErrorMessage = (message: string): Promise<undefined> => {
     prompts.push(`error:${message}`);

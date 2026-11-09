@@ -105,13 +105,15 @@ text and hidden state; `results.integration.test.ts` opens the Session panel on 
 reopening reuses the panel, that a `sessionAction` intent runs the session command for the panel's own session
 (and an unknown action nothing), that page intents open real files by identity (and invalid ones nothing),
 lineage navigation, background updates without focus changes, and that closing a panel releases its `outputs/`
-watcher. The page script itself is not driven; the host's last posted model and message handler are. They are
+watcher. The pickers are driven through the flow's replaceable `NextStepUi`. They are
 skipped in `--exclude` mode, where no events arrive.
 
-`nextStep.integration.test.ts` drives the Next step host through the fixture CLI, which records
+`nextStep.integration.test.ts` drives the Next step flow through the fixture CLI, which records
 `prior_session_id` and logs the argv of `session run` and `session prepare`. It covers one child from concurrent
-Run calls, `--prior` without `--task` for the default task, Prepare writing the chosen task to `task.md`, and
-hostile or whitespace-only requests reaching no CLI call.
+Run calls, `--prior` without `--task` for the default task, Prepare writing the chosen task to `task.md`, a
+whitespace-only Run task reaching no CLI call, the entered Prepare title, cancelling, the remembered task, Compose in editor
+and Open existing session creating no new session. One scenario also drives the real quick pick and input boxes through
+VS Code's quick-open commands: Escape on each prompt, then Prepare with the prefilled title.
 
 `reply.integration.test.ts` drives `ReplyService` against the fixture CLI's ordinary-blocker reply
 (`MIGENT_FAKE_REPLY`: consume, ignore or reject): the draft keeps the blocker and is found again by a new service,
@@ -157,7 +159,7 @@ prepared so the fixed draft can run, and a failed execution writing `failure.md`
 them by hand in VS Code:
 
 1. Prepare a session from the Sessions view or the Command Palette: no notification appears, `task.md` opens, and the
-   session's `workflow.yaml` opens from the session's files in the Sessions tree. The Next step page's Prepare still
+   session's `workflow.yaml` opens from the session's files in the Sessions tree. The Next step flow's Prepare still
    shows a notification offering **Open workflow.yaml**.
 2. Edit the draft's `id`, then Save & Run: the error names `workflow.yaml`, the session stays prepared, and after
    fixing the `id` Save & Run starts it.
