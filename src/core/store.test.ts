@@ -26,6 +26,20 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
+// Counts the sessions whose execution summaries were read, to show a hidden session pays nothing for reply targets.
+const reads = vi.hoisted(() => ({ dirs: [] as string[] }));
+
+vi.mock('./executions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./executions')>();
+  return {
+    ...actual,
+    listExecutions: (dir: string) => {
+      reads.dirs.push(dir);
+      return actual.listExecutions(dir);
+    },
+  };
+});
+
 const dirs: string[] = [];
 
 beforeEach(() => {
@@ -34,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   fault.code = null;
+  reads.dirs.length = 0;
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -456,5 +471,71 @@ describe('SessionStore single-directory updates', () => {
     s.refreshSession('blocked');
     expect(s.scanOutcome.eligible).not.toContain('blocked');
     expect(s.snapshot('blocked')).toBeUndefined();
+  });
+});
+
+describe('replyTargets', () => {
+  function writeCancelled(sessionId: string, executions: Record<string, Record<string, unknown>>): void {
+    const dir = sessionDir(sessionId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'manifest.yaml'), `session_id: ${sessionId}
+schema_version: 2
+`);
+    writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ status: 'cancelled', workflow_id: 'w' }));
+    for (const [id, record] of Object.entries(executions)) {
+      mkdirSync(path.join(dir, 'executions', id), { recursive: true });
+      writeFileSync(path.join(dir, 'executions', id, 'execution.json'), JSON.stringify(record));
+    }
+  }
+
+  it('attaches the targets of a blocked session and none for a completed one', () => {
+    const s = store();
+    s.load();
+    expect(s.snapshot('blocked')?.replyTargets.map((target) => target.kind)).toEqual(['blocker']);
+    expect(s.snapshot('completed')?.replyTargets).toEqual([]);
+  });
+
+  it('reads the executions of a cancelled workflow once and leaves out a verify-only one', () => {
+    writeCancelled('cancelled-one', {
+      '0001-code--attempt-01': { status: 'cancelled', stage_id: 'code' },
+      '0002-test--attempt-01': { status: 'cancelled', stage_id: 'test', kind: 'verify' },
+    });
+    const s = store();
+    s.load();
+    expect(s.snapshot('cancelled-one')?.replyTargets).toEqual([
+      { executionId: '0001-code--attempt-01', stageId: 'code', attempt: 1, kind: 'cancelled' },
+    ]);
+  });
+
+  it('emits updated when only the targets change', () => {
+    writeCancelled('cancelled-two', { '0001-code--attempt-01': { status: 'cancelled', stage_id: 'code' } });
+    const s = store();
+    s.load();
+    const events: SessionChangeEvent[] = [];
+    s.onDidChange((event) => events.push(event));
+    writeFileSync(
+      path.join(sessionDir('cancelled-two'), 'executions', '0001-code--attempt-01', 'execution.json'),
+      JSON.stringify({ status: 'completed', stage_id: 'code' }),
+    );
+    s.refreshSession('cancelled-two');
+    expect(events).toEqual([expect.objectContaining({ sessionId: 'cancelled-two', kind: 'updated' })]);
+    expect(s.snapshot('cancelled-two')?.replyTargets).toEqual([]);
+  });
+
+  it('reads no executions for a cancelled session the limit hides, and reads them once it is retained', () => {
+    writeCancelled('cancelled-old', { '0001-code--attempt-01': { status: 'cancelled', stage_id: 'code' } });
+    writeFileSync(
+      path.join(sessionDir('cancelled-old'), 'manifest.yaml'),
+      'session_id: cancelled-old\nschema_version: 2\ncreated_at: 2000-01-01T00:00:00Z\n',
+    );
+    const s = new SessionStore(dirs[0], { limit: 1 });
+    s.load();
+    expect(s.snapshot('cancelled-old')).toBeUndefined();
+    expect(reads.dirs.filter((dir) => dir.includes('cancelled-old'))).toEqual([]);
+    s.refreshSession('cancelled-old');
+    expect(reads.dirs.filter((dir) => dir.includes('cancelled-old'))).toEqual([]);
+    s.setLimit(500);
+    expect(s.snapshot('cancelled-old')?.replyTargets).toHaveLength(1);
+    expect(reads.dirs.filter((dir) => dir.includes('cancelled-old'))).toHaveLength(1);
   });
 });

@@ -250,7 +250,7 @@
       },
       {
         "command": "migent.session.reply",
-        "title": "Reply to Blocked Session",
+        "title": "Reply to Session",
         "category": "Migent",
         "shortTitle": "Reply",
         "icon": "$(reply)"
@@ -561,7 +561,7 @@
         },
         {
           "command": "migent.session.reply",
-          "when": "view == migent.sessions && viewItem =~ /^session\\.blocked/ && !(viewItem =~ /;questions(;|$)/)",
+          "when": "view == migent.sessions && viewItem =~ /;reply(;|$)/",
           "group": "inline@0"
         },
         {

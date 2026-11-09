@@ -64,6 +64,12 @@ describe('session rows', () => {
     expect(sessionContextValue(snapshot)).toBe('session.running;questions');
   });
 
+  it('flags a row that can take a reply, whatever else it shows', () => {
+    const snapshot = snapshotFromDir(syntheticDir('running-questions'), alive);
+    const target = { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, kind: 'blocker' as const };
+    expect(sessionContextValue({ ...snapshot, replyTargets: [target] })).toBe('session.running;questions;reply');
+  });
+
   it('describes Question sessions by their pending questions', () => {
     const snapshot = snapshotFromDir(capturedDir('question-pending'));
     expect(snapshot.displayState.state).toBe('question');
@@ -118,6 +124,7 @@ describe('execution rows', () => {
     client: 'claude',
     model: 'sonnet',
     hasFailureReport: false,
+    kind: null,
   };
 
   it('labels by stage and attempt, describes by provider and decision', () => {

@@ -65,6 +65,7 @@ function summaryFrom(
     client: str(record?.client),
     model: str(record?.model),
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
+    kind: str(record?.kind),
   };
 }
 

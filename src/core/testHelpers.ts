@@ -4,8 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { deriveDisplayState } from './displayState';
+import { listExecutions } from './executions';
 import { readManifest } from './manifest';
 import type { LockProbe, SessionSnapshot } from './model';
+import { replyNeedsExecutions, replyTargets } from './replyFlow';
 import { readStatus } from './statusReader';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -47,7 +49,7 @@ export function snapshotFromDir(dir: string, lock: LockProbe = { kind: 'none' })
   const status = read.kind === 'ok' ? read.status : null;
   let manifestState: 'ok' | 'invalid' | 'unsupported' = 'invalid';
   if (manifest !== null) manifestState = manifest.schemaSupported ? 'ok' : 'unsupported';
-  return {
+  const body = {
     sessionId: path.basename(dir),
     manifest,
     status,
@@ -58,4 +60,5 @@ export function snapshotFromDir(dir: string, lock: LockProbe = { kind: 'none' })
       lock,
     ),
   };
+  return { ...body, replyTargets: replyTargets(body, replyNeedsExecutions(body) ? listExecutions(dir) : []) };
 }

@@ -115,6 +115,27 @@ function prepare() {
 }
 
 
+// What a reply resumes, read from the session like the real CLI does: a role session names its role in the manifest
+// (and takes no `--stage`), a cancelled session's reply is an interrupted turn, and a blocked one resumes its blocker.
+function replyContext(id) {
+  const manifestFile = path.join(dirOf(id), 'manifest.yaml');
+  const role = fs.existsSync(manifestFile) ? /^role: (.+)$/m.exec(fs.readFileSync(manifestFile, 'utf8'))?.[1] ?? null : null;
+  const status = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8'));
+  return {
+    role,
+    stage: option('--stage') ?? role ?? 'plan',
+    interrupted: status.status === 'cancelled',
+    resumes: status.blocked_by_execution_ids?.[0] ?? status.latest_execution_id ?? null,
+  };
+}
+
+// The user turn the real CLI records (`stage-reply` template, with the `role-run` responsibilities for a role).
+function replyTurn(context, text) {
+  const lead = context.interrupted ? 'Your previous turn was stopped by the human before it finished. Their message:\n\n' : '';
+  const body = `## Human reply\n\n${lead}${text.trim()}`;
+  return context.role === null ? body : `## Role\n\n- Be terse.\n\n${body}`;
+}
+
 // An ordinary blocker has no questions: the reply becomes the prompt of the stage's next attempt.
 function replyBlocker(id) {
   const mode = process.env.MIGENT_FAKE_REPLY ?? 'consume';
@@ -123,13 +144,13 @@ function replyBlocker(id) {
     process.exit(2);
   }
   const text = fs.readFileSync(option('--reply-file'), 'utf8');
-  const stage = option('--stage') ?? 'plan';
+  const context = replyContext(id);
+  const stage = context.stage;
   const dir = path.join(dirOf(id), 'executions', `0002-${stage}--attempt-02`);
   fs.mkdirSync(dir, { recursive: true });
-  const blockedBy = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8')).blocked_by_execution_ids?.[0] ?? null;
-  fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: blockedBy }));
+  fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: context.resumes }));
   // The real CLI records the reply as its own user turn (`## Human reply`) in the execution's conversation.json history.
-  const turn = mode === 'ignore' ? 'Continue.' : `## Human reply\n\n${text.trim()}`;
+  const turn = mode === 'ignore' ? 'Continue.' : replyTurn(context, text);
   fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
 }
 
@@ -230,14 +251,15 @@ function run() {
   const beat = () =>
     writeJson(lockFile, { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
   beat();
-  const executionId = option('--reply-file') === undefined ? '0001-plan--attempt-01' : '0002-plan--attempt-02';
+  const replyStage = option('--reply-file') === undefined ? 'plan' : replyContext(id).stage;
+  const executionId = option('--reply-file') === undefined ? '0001-plan--attempt-01' : `0002-${replyStage}--attempt-02`;
   if (option('--reply-file') !== undefined) {
     const dir = path.join(dirOf(id), 'executions', executionId);
     fs.mkdirSync(dir, { recursive: true });
     // Keep what `replyBlocker` recorded (the execution it resumes) instead of overwriting it.
     const recordFile = path.join(dir, 'execution.json');
     const kept = fs.existsSync(recordFile) ? JSON.parse(fs.readFileSync(recordFile, 'utf8')) : {};
-    writeJson(recordFile, { execution_id: executionId, stage_id: option('--stage') ?? 'plan', status: 'running', ...kept });
+    writeJson(recordFile, { execution_id: executionId, stage_id: replyStage, status: 'running', ...kept });
   }
   writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: executionId });
   console.error(`[migent] session_id: ${id}`);

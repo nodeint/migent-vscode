@@ -178,6 +178,7 @@ export function sessionContextValue(snapshot: SessionSnapshot): string {
     snapshot.displayState.writable ? null : 'foreign',
     (snapshot.status?.outputs.length ?? 0) > 0 ? 'outputs' : null,
     (snapshot.manifest?.role ?? null) === null ? null : 'role',
+    snapshot.replyTargets.length > 0 ? 'reply' : null,
     snapshot.displayState.unknownReason === undefined ? null : `reason-${snapshot.displayState.unknownReason}`,
   ].filter((flag): flag is string => flag !== null);
   return [`session.${snapshot.displayState.state}`, ...flags].join(';');

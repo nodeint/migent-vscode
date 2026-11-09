@@ -117,8 +117,11 @@ hostile or whitespace-only requests reaching no CLI call.
 (`MIGENT_FAKE_REPLY`: consume, ignore or reject): the draft keeps the blocker and is found again by a new service,
 the exact argv of a send, a rejected send keeping the draft, a superseding execution without the reply being
 unconfirmed, edits made while sending (on disk or unsaved in the editor) being kept, a no longer blocked session and
-an empty reply. Notifications and Quick Picks are not driven; their rules are covered by `transitions.test.ts`,
-`notificationGate.test.ts` and `replyFlow.test.ts`.
+an empty reply. The fixture CLI also answers a reply to a cancelled workflow stage (interrupted wording) and to a role
+session (no `--stage`, `## Role` prefix), so the suite covers their argv, draft settlement, a stale target being refused,
+a completed role session reopening as Running and returning to Recent with the counts following, and quick text
+becoming the draft body without overwriting an existing draft. Notifications, Quick Picks and the input box are
+not driven; their rules are covered by `transitions.test.ts`, `notificationGate.test.ts` and `replyFlow.test.ts`.
 
 `questions.integration.test.ts` drives the answer panels through their message handler against the fixture CLI's
 `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable

@@ -153,18 +153,23 @@ describe('MigentPage.details', () => {
   });
 });
 
+function buttons(node: FakeElement): FakeElement[] {
+  const own = node.tagName.toLowerCase() === 'button' ? [node] : [];
+  return [...own, ...node.children.flatMap((child) => (typeof child === 'string' ? [] : buttons(child)))];
+}
+
 function menuItems(node: FakeElement): FakeElement[] {
   const own = node.attrs.role === 'menuitem' ? [node] : [];
   return [...own, ...node.children.flatMap((child) => (typeof child === 'string' ? [] : menuItems(child)))];
 }
 
 describe('MigentPage.sessionHeader', () => {
-  const header = (state: string, canComplete: boolean) => {
+  const header = (state: string, canComplete: boolean, canReply = false) => {
     const { page, posted } = load();
     const connected = page.connect({ render: () => undefined });
-    const meta = { canComplete };
+    const meta = { canComplete, canReply };
     const node = page.sessionHeader(connected, { state, title: 't', meta, tabs: [], current: 'results' });
-    return { items: menuItems(node), posted };
+    return { items: menuItems(node), node, posted };
   };
 
   it('offers Complete session in the more menu of a stopped session and sends its session action', () => {
@@ -173,6 +178,16 @@ describe('MigentPage.sessionHeader', () => {
     expect(complete).toBeDefined();
     complete?.handlers.click?.[0]();
     expect(posted.at(-1)).toMatchObject({ type: 'intent', intent: 'sessionAction', action: 'completeSession' });
+  });
+
+  it('shows a Reply button in the header only when the host says a reply can be sent, and sends its session action', () => {
+    const labels = (state: string, canReply: boolean): string[] =>
+      buttons(header(state, false, canReply).node).map((node) => node.textContent);
+    expect(labels('Stopped', false)).not.toContain('Reply…');
+    expect(labels('Cancelled', true)).toContain('Reply…');
+    const { node, posted } = header('Cancelled', false, true);
+    buttons(node).find((button) => button.textContent === 'Reply…')?.handlers.click?.[0]();
+    expect(posted.at(-1)).toMatchObject({ type: 'intent', intent: 'sessionAction', action: 'reply' });
   });
 
   it.each(['Running', 'Completed', 'Prepared', 'Unknown'])('does not offer Complete session for a %s session', (state) => {

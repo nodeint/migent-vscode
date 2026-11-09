@@ -388,8 +388,12 @@
 
     const bar = el('div', null, 'mg-tabbar');
     const tabs = pageTabs({ label: copy.tabsLabel, tabs: options.tabs, current: options.current });
+    const replyButton = el('button', copy.reply, 'mg-btn mg-btn--secondary mg-btn--sm mg-header-reply');
+    replyButton.type = 'button';
+    replyButton.addEventListener('click', send('reply'));
     bar.append(
       tabs,
+      ...(options.meta && options.meta.canReply ? [replyButton] : []),
       menuButton({
         label: '⋯',
         ariaLabel: copy.menu.label,

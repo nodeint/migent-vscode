@@ -179,6 +179,10 @@ body {
   gap: var(--mg-space-1);
 }
 
+.mg-tabbar > .mg-header-reply {
+  margin-left: auto;
+}
+
 .mg-tabbar .mg-menu > .mg-btn {
   color: var(--vscode-panelTitle-inactiveForeground, var(--mg-muted));
   background: none;
