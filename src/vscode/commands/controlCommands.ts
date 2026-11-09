@@ -7,6 +7,7 @@ import type { SessionSnapshot } from '../../core/model';
 import { sessionDir, TASK_FILENAME, workflowDraftPath } from '../../core/paths';
 import type { WorkflowEntry } from '../../core/workflows';
 import type { ControlService, WorkflowChoice } from '../control';
+import { askTask, askTitle, LAUNCH_MODE_ITEMS, titleOf } from '../launchPrompts';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
@@ -15,46 +16,11 @@ import { type CommandHost, resolveWith } from './sessionCommands';
 const INFO_MESSAGE_MS = 5000;
 
 const LAST_WORKFLOW_KEY = 'migent.lastWorkflow';
-const TITLE_MAX_LENGTH = 60;
 
 const isPrepared = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state === 'prepared';
 const isRunning = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state === 'running';
 export const CONTINUABLE = new Set(['stopped', 'cancelled', 'failed']);
 const isContinuable = (snapshot: SessionSnapshot): boolean => CONTINUABLE.has(snapshot.displayState.state);
-
-type TaskInput = { kind: 'task'; text: string } | { kind: 'compose'; text: string };
-
-/** Input Box for the task; its button hands the text over to an editor (the real `task.md`). */
-function askTask(workflowId: string): Promise<TaskInput | undefined> {
-  return new Promise((resolveInput) => {
-    const box = vscode.window.createInputBox();
-    box.title = `Run ${workflowId}`;
-    box.prompt = 'Describe the task';
-    box.buttons = [{ iconPath: new vscode.ThemeIcon('edit'), tooltip: 'Compose in editor' }];
-    let isDone = false;
-    const finish = (value: TaskInput | undefined): void => {
-      if (isDone) return;
-      isDone = true;
-      box.dispose();
-      resolveInput(value);
-    };
-    box.onDidAccept(() => {
-      const text = box.value.trim();
-      if (text.length === 0) {
-        box.validationMessage = 'Enter a task, or use Compose in editor.';
-        return;
-      }
-      finish({ kind: 'task', text });
-    });
-    box.onDidTriggerButton(() => {
-      finish({ kind: 'compose', text: box.value });
-    });
-    box.onDidHide(() => {
-      finish(undefined);
-    });
-    box.show();
-  });
-}
 
 function runnable(context: ProjectContext): WorkflowEntry[] {
   return context.catalog.workflows().entries.filter((entry) => entry.state === 'ok' && !entry.duplicate);
@@ -83,11 +49,6 @@ async function pickWorkflow(
   return picked?.entry;
 }
 
-function titleOf(text: string): string {
-  const line = text.split(/\r?\n/).find((candidate) => candidate.trim().length > 0)?.trim() ?? 'Untitled task';
-  return line.length > TITLE_MAX_LENGTH ? `${line.slice(0, TITLE_MAX_LENGTH - 1)}…` : line;
-}
-
 async function readTask(context: ProjectContext, sessionId: string): Promise<string | undefined> {
   try {
     return await readFile(path.join(sessionDir(context.root, sessionId), TASK_FILENAME), 'utf8');
@@ -103,7 +64,7 @@ async function openTask(file: string): Promise<void> {
 
 /** Task entry for a chosen workflow: a one-line task runs now; Compose in editor prepares `task.md`. */
 async function runWorkflow(control: ControlService, context: ProjectContext, workflow: WorkflowEntry): Promise<void> {
-  const input = await askTask(workflow.id);
+  const input = await askTask(`Run ${workflow.id}`);
   if (input === undefined) return;
   if (input.kind === 'task') {
     await control.runNew(context, workflow.id, input.text);
@@ -176,13 +137,9 @@ async function prepareWorkflow(
   context: ProjectContext,
   workflow: WorkflowEntry,
 ): Promise<void> {
-  const title = await vscode.window.showInputBox({
-    title: `Prepare ${workflow.id}`,
-    prompt: 'Session title',
-    validateInput: (value) => (value.trim().length === 0 ? 'Enter a title.' : undefined),
-  });
+  const title = await askTitle(`Prepare ${workflow.id}`);
   if (title === undefined) return;
-  const prepared = await control.prepare(context, { workflowId: workflow.id, title: title.trim() });
+  const prepared = await control.prepare(context, { workflowId: workflow.id, title });
   if (prepared === undefined) return;
   await openTask(prepared.taskFile);
 }
@@ -194,9 +151,6 @@ async function prepare(control: ControlService, memento: vscode.Memento, registr
   if (workflow !== undefined) await prepareWorkflow(control, context, workflow);
 }
 
-const RUN_NOW = 'Run now';
-const PREPARE = 'Prepare';
-
 /** Ask whether to run the chosen workflow now or prepare a session for it. */
 async function launchWorkflow(
   control: ControlService,
@@ -204,14 +158,11 @@ async function launchWorkflow(
   workflow: WorkflowEntry,
 ): Promise<void> {
   const mode = await vscode.window.showQuickPick(
-    [
-      { label: RUN_NOW, description: 'Describe a task and start the workflow now' },
-      { label: PREPARE, description: 'Create a session to start later' },
-    ],
+    LAUNCH_MODE_ITEMS,
     { title: `New session · ${workflow.id}`, placeHolder: 'Run now or prepare' },
   );
-  if (mode?.label === RUN_NOW) await runWorkflow(control, context, workflow);
-  else if (mode?.label === PREPARE) await prepareWorkflow(control, context, workflow);
+  if (mode?.mode === 'run') await runWorkflow(control, context, workflow);
+  else if (mode?.mode === 'prepare') await prepareWorkflow(control, context, workflow);
 }
 
 /** Sessions view entry: project, workflow, then Run now or Prepare, reusing the choices made. */

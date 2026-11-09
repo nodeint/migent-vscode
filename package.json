@@ -23,7 +23,6 @@
     "workspaceContains:.migent/config.yaml",
     "onWebviewPanel:migent.results",
     "onWebviewPanel:migent.sessionMetrics",
-    "onWebviewPanel:migent.nextStep",
     "onWebviewPanel:migent.answerQuestions",
     "onWebviewPanel:migent.editWorkflow",
     "onWebviewPanel:migent.config"
@@ -50,18 +49,6 @@
         "title": "Open Next Step…",
         "category": "Migent",
         "icon": "$(arrow-right)"
-      },
-      {
-        "command": "migent.session.runDownstream",
-        "title": "Run Next Step…",
-        "category": "Migent",
-        "icon": "$(play)"
-      },
-      {
-        "command": "migent.session.prepareDownstream",
-        "title": "Prepare Next Step…",
-        "category": "Migent",
-        "icon": "$(add)"
       },
       {
         "command": "migent.session.openTask",
@@ -584,14 +571,6 @@
           "when": "false"
         },
         {
-          "command": "migent.session.runDownstream",
-          "when": "false"
-        },
-        {
-          "command": "migent.session.prepareDownstream",
-          "when": "false"
-        },
-        {
           "command": "migent.session.openTask",
           "when": "false"
         },
@@ -697,26 +676,6 @@
         }
       ],
       "editor/title": [
-        {
-          "command": "migent.session.openOutput",
-          "when": "activeWebviewPanelId == 'migent.nextStep'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "migent.session.openTask",
-          "when": "activeWebviewPanelId == 'migent.nextStep'",
-          "group": "navigation@2"
-        },
-        {
-          "command": "migent.session.showLog",
-          "when": "activeWebviewPanelId == 'migent.nextStep'",
-          "group": "navigation@3"
-        },
-        {
-          "submenu": "migent.results.more",
-          "when": "activeWebviewPanelId == 'migent.nextStep'",
-          "group": "navigation@4"
-        },
         {
           "command": "migent.session.start",
           "when": "resourceFilename == task.md && resourcePath =~ /[\\\\/]\\.migent[\\\\/]sessions[\\\\/]/",

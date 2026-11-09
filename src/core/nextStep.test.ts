@@ -5,8 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { SessionSnapshot } from './model';
-import { buildNextStepModel, fingerprintOf, type NextStepInput,resolveLaunch } from './nextStep';
-import { parseNextStepMessage } from './nextStepIntent';
+import { type NextStepInput, previewNextStep, resolveLaunch, storedTask } from './nextStep';
 import { capturedDir, snapshotFromDir } from './testHelpers';
 import type { WorkflowEntry } from './workflows';
 
@@ -44,41 +43,31 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
     snapshots: snapshots(),
     workflows: [workflow('probe-target')],
     targetWorkflow: 'probe-target',
-    override: null,
     ...overrides,
   };
 }
 
-describe('buildNextStepModel', () => {
-  it('prefills the canonical task, lists the context mapping and the observed child', () => {
-    const model = buildNextStepModel(input());
-    expect(model).toMatchObject({
-      availability: 'ok',
-      sourceState: 'Completed',
+describe('previewNextStep', () => {
+  it('offers the canonical task and the target file', () => {
+    expect(previewNextStep(input())).toMatchObject({
       target: { workflow: 'probe-target', state: 'available', file: 'probe-target.yaml' },
       suggestedTask: 'Acknowledge the note.',
-      task: 'Acknowledge the note.',
-      isOverridden: false,
       launchBlock: null,
     });
-    expect(model.artifacts).toMatchObject([{ name: 'context_note', output: 'note', path: 'outputs/note.md' }]);
-    expect(model.children).toMatchObject([{ sessionId: TARGET, isActive: false }]);
-    expect(JSON.stringify(model)).not.toContain('argv');
   });
 
-  it('keeps a local override and flags a changed suggestion instead of resetting it', () => {
-    const kept = buildNextStepModel(input({ override: { task: 'My task', fingerprint: 'old' } }));
-    expect(kept).toMatchObject({ task: 'My task', isOverridden: true, suggestionChanged: true });
-    const dir = copiedSource();
-    const same = buildNextStepModel(
-      input({ sessionDirPath: dir, override: { task: 'My task', fingerprint: fingerprintOfSource(dir) } }),
+  it('lists only Prepared or Running children of the target as active', () => {
+    expect(previewNextStep(input()).activeChildren).toEqual([]);
+    const prepared = snapshots().map((snapshot) =>
+      snapshot.sessionId === TARGET ? { ...snapshot, displayState: { ...snapshot.displayState, state: 'prepared' as const } } : snapshot,
     );
-    expect(same.suggestionChanged).toBe(false);
+    expect(previewNextStep(input({ snapshots: prepared })).activeChildren).toMatchObject([
+      { sessionId: TARGET, state: 'prepared' },
+    ]);
   });
 
   it('disables launching for each missing precondition', () => {
-    const block = (overrides: Partial<NextStepInput>): string | null =>
-      buildNextStepModel(input(overrides)).launchBlock;
+    const block = (overrides: Partial<NextStepInput>): string | null => previewNextStep(input(overrides)).launchBlock;
     expect(block({ workflows: [] })).toMatch(/No workflow/);
     expect(block({ workflows: [workflow('probe-target'), workflow('probe-target', { file: 'b.yaml' })] })).toMatch(
       /More than one/,
@@ -102,25 +91,14 @@ describe('buildNextStepModel', () => {
         next: [{ workflow: 'probe-target', task: 'Evil', artifacts: { x: { output: 'secret', path: 'outputs/s.md' } } }],
       }),
     );
-    expect(buildNextStepModel(input({ sessionDirPath: dir })).launchBlock).toMatch(/not declared/);
+    expect(previewNextStep(input({ sessionDirPath: dir })).launchBlock).toMatch(/not declared/);
     writeFileSync(next, '{ nope');
-    expect(buildNextStepModel(input({ sessionDirPath: dir })).launchBlock).toMatch(/unreadable, invalid/);
+    expect(previewNextStep(input({ sessionDirPath: dir })).launchBlock).toMatch(/unreadable, invalid/);
   });
 });
 
-function fingerprintOfSource(dir: string): string {
-  const model = buildNextStepModel(input({ sessionDirPath: dir }));
-  return fingerprintOf({
-    workflow: 'probe-target',
-    task: model.suggestedTask,
-    artifacts: model.artifacts,
-    argv: [],
-    declared: true,
-  });
-}
-
 describe('resolveLaunch', () => {
-  const base = { ...input(), override: undefined };
+  const base = input();
 
   it('leaves --task out when the task is the canonical default and sends an override otherwise', () => {
     expect(resolveLaunch(base, '  Acknowledge the note. ')).toMatchObject({
@@ -137,17 +115,20 @@ describe('resolveLaunch', () => {
     expect(resolveLaunch(base, '   ')).toEqual({ kind: 'blocked', reason: 'Enter a task.' });
     expect(resolveLaunch({ ...base, workflows: [] }, 'x').kind).toBe('blocked');
   });
+
+  it('accepts a blank task for Prepare only', () => {
+    expect(resolveLaunch(base, '   ', { allowEmpty: true })).toMatchObject({ kind: 'ok', launch: { taskText: '' } });
+    expect(resolveLaunch({ ...base, workflows: [] }, '', { allowEmpty: true }).kind).toBe('blocked');
+  });
 });
 
-describe('parseNextStepMessage', () => {
-  it('accepts supported intents and drops anything carrying a path, command or unknown intent', () => {
-    expect(parseNextStepMessage({ type: 'intent', intent: 'run', task: 'a' })).toEqual({
-      type: 'intent',
-      value: { intent: 'run', task: 'a' },
-    });
-    expect(parseNextStepMessage({ type: 'intent', intent: 'run' })).toBeNull();
-    expect(parseNextStepMessage({ type: 'intent', intent: 'exec', command: 'rm' })).toBeNull();
-    expect(parseNextStepMessage({ type: 'intent', intent: 'openSession', sessionId: '' })).toBeNull();
-    expect(parseNextStepMessage('x')).toBeNull();
+describe('storedTask', () => {
+  it('reads the current string and the former page object { task, fingerprint }', () => {
+    expect(storedTask('Edited')).toBe('Edited');
+    expect(storedTask({ task: 'Legacy task', fingerprint: 'x' })).toBe('Legacy task');
+  });
+
+  it('ignores blank, missing or malformed values', () => {
+    for (const value of [undefined, null, '', '  ', {}, { task: 3 }, 7, ['a']]) expect(storedTask(value)).toBeUndefined();
   });
 });

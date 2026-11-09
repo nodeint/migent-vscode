@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Replace the Next step page with VS Code pickers: a suggestion on Results (or `migent.session.openNextStep`) asks
+  the way New session does: a quick pick for Run now or Prepare, then the task (with a Compose in
+  editor button) for Run now or the title for Prepare. An edited task is remembered, and a Prepared or Running
+  child is offered as Open existing session. The commands `migent.session.runDownstream` and
+  `prepareDownstream` and the page's artifact mapping are removed.
 - Open a session in one Session editor tab instead of four separate panels. A single header carries the state, the
   more menu and the tabs Questions, Results, Metrics, Workflow and Task; each tab loads when it is opened. The commands
   `migent.session.openResult`, `openMetrics`, `openWorkflow` and `answerQuestions` are replaced by `migent.session.open`.

@@ -1,23 +1,15 @@
 import { childrenOf } from './handoff';
 import type { SessionSnapshot } from './model';
-import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
+import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext } from './nextWorkflows';
 import { targetState, type TargetWorkflowState } from './resultsModel';
 import { sessionTitle } from './sessionPresentation';
 import type { WorkflowEntry } from './workflows';
 
 /**
- * The data a Next step page shows (plans/03b-downstream-handoff.md §5), as inert JSON. The suggestion is
- * presentation only: `launchBlock` is derived from the frozen declaration, the source state and the
- * current target workflow, and a launch is re-derived from fresh data by `resolveLaunch` before dispatch.
+ * The Next step flow's data (plans/03b-downstream-handoff.md §5). The suggestion is presentation only: a launch is
+ * re-derived from the frozen declaration, the source state and the current target workflow by `resolveLaunch`
+ * immediately before dispatch.
  */
-
-export interface NextStepChild {
-  sessionId: string;
-  title: string;
-  state: string;
-  /** Prepared or Running: reopen instead of creating another by accident. */
-  isActive: boolean;
-}
 
 export interface NextStepTarget {
   workflow: string;
@@ -27,50 +19,12 @@ export interface NextStepTarget {
   error: string | null;
 }
 
-export interface NextStepModel {
-  availability: 'ok' | 'unavailable';
-  sourceId: string;
-  sourceTitle: string;
-  sourceState: string;
-  target: NextStepTarget;
-  /** The canonical default task of the suggestion; null when it has none or it is not listed. */
-  suggestedTask: string | null;
-  /** The effective task: the user's override, else the suggestion. */
-  task: string;
-  isOverridden: boolean;
-  /** The suggestion changed since the override was typed. The override is kept. */
-  suggestionChanged: boolean;
-  artifacts: SuggestionArtifact[];
-  /** Why Run and Prepare are disabled; null when launching is allowed. */
-  launchBlock: string | null;
-  children: NextStepChild[];
-}
-
-export interface TaskOverride {
-  task: string;
-  /** Suggestion fingerprint at the time the override was typed. */
-  fingerprint: string;
-}
-
 export interface NextStepInput {
   sourceId: string;
   sessionDirPath: string;
   snapshots: readonly SessionSnapshot[];
   workflows: readonly WorkflowEntry[];
   targetWorkflow: string;
-  override: TaskOverride | null;
-}
-
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-export function fingerprintOf(suggestion: NextSuggestion | null): string {
-  if (suggestion === null) return '';
-  return JSON.stringify([
-    suggestion.task,
-    suggestion.artifacts.map((artifact) => [artifact.name, artifact.output, artifact.path]),
-  ]);
 }
 
 /** A suggestion that the frozen declaration confirms, or the reason it cannot be launched. */
@@ -133,34 +87,41 @@ export function launchBlockOf(
   return target.error;
 }
 
-export function buildNextStepModel(input: NextStepInput): NextStepModel {
+/** A session already created from this source and target that is still Prepared or Running. */
+export interface NextStepActiveChild {
+  sessionId: string;
+  title: string;
+  state: string;
+}
+
+/** What the flow shows before it asks for a task. */
+export interface NextStepPreview {
+  /** Prepared or Running children: the flow offers to open one instead of creating another by accident. */
+  activeChildren: NextStepActiveChild[];
+  sourceTitle: string;
+  /** The canonical default task of the suggestion; null when it has none or it is not listed. */
+  suggestedTask: string | null;
+  target: NextStepTarget;
+  /** Why Run and Prepare are not allowed; null when launching is allowed. */
+  launchBlock: string | null;
+}
+
+export function previewNextStep(input: NextStepInput): NextStepPreview {
   const source = input.snapshots.find((candidate) => candidate.sessionId === input.sourceId);
   const target = targetOf(input.workflows, input.targetWorkflow);
   const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow, publishedNames(source));
-  const suggestion = lookup.suggestion ?? null;
-  const suggestedTask = suggestion?.task ?? null;
-  const { override } = input;
-  const task = override?.task ?? suggestedTask ?? '';
   return {
-    availability: source === undefined ? 'unavailable' : 'ok',
-    sourceId: input.sourceId,
+    activeChildren: childrenOf(input.snapshots, input.sourceId)
+      .filter(
+        (child) =>
+          child.manifest?.workflowId === input.targetWorkflow &&
+          (child.displayState.state === 'prepared' || child.displayState.state === 'running'),
+      )
+      .map((child) => ({ sessionId: child.sessionId, title: sessionTitle(child), state: child.displayState.state })),
     sourceTitle: source === undefined ? input.sourceId : sessionTitle(source),
-    sourceState: source === undefined ? 'Unavailable' : titleCase(source.displayState.state),
+    suggestedTask: lookup.suggestion?.task ?? null,
     target,
-    suggestedTask,
-    task,
-    isOverridden: override !== null && override.task !== (suggestedTask ?? ''),
-    suggestionChanged: override !== null && override.fingerprint !== fingerprintOf(suggestion),
-    artifacts: suggestion?.artifacts ?? [],
     launchBlock: launchBlockOf(source, lookup, target),
-    children: childrenOf(input.snapshots, input.sourceId)
-      .filter((child) => child.manifest?.workflowId === input.targetWorkflow)
-      .map((child) => ({
-        sessionId: child.sessionId,
-        title: sessionTitle(child),
-        state: titleCase(child.displayState.state),
-        isActive: child.displayState.state === 'prepared' || child.displayState.state === 'running',
-      })),
   };
 }
 
@@ -175,10 +136,14 @@ export interface ResolvedLaunch {
   workflowFile: string;
 }
 
-/** Re-derive a launch from fresh data immediately before dispatch. Errors are specific and user-facing. */
+/**
+ * Re-derive a launch from fresh data immediately before dispatch. Errors are specific and user-facing. A blank task
+ * is refused unless `allowEmpty` is set (Prepare, whose `task.md` the user writes afterwards).
+ */
 export function resolveLaunch(
-  input: Omit<NextStepInput, 'override'>,
+  input: NextStepInput,
   requestedTask: string,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {},
 ): { kind: 'ok'; launch: ResolvedLaunch } | { kind: 'blocked'; reason: string } {
   const source = input.snapshots.find((candidate) => candidate.sessionId === input.sourceId);
   const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow, publishedNames(source));
@@ -188,7 +153,7 @@ export function resolveLaunch(
     return { kind: 'blocked', reason: block ?? 'The suggestion is no longer available.' };
   }
   const taskText = requestedTask.trim();
-  if (taskText.length === 0) return { kind: 'blocked', reason: 'Enter a task.' };
+  if (taskText.length === 0 && !allowEmpty) return { kind: 'blocked', reason: 'Enter a task.' };
   return {
     kind: 'ok',
     launch: {
@@ -199,4 +164,14 @@ export function resolveLaunch(
       workflowFile: target.file,
     },
   };
+}
+
+/**
+ * The task stored under a task key. The page this flow replaced stored `{ task, fingerprint }` under the same key,
+ * so both shapes are read; anything else, or a blank task, is no remembered task.
+ */
+export function storedTask(value: unknown): string | undefined {
+  const task =
+    typeof value === 'object' && value !== null ? (value as { task?: unknown }).task : value;
+  return typeof task === 'string' && task.trim().length > 0 ? task : undefined;
 }
