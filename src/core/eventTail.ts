@@ -144,6 +144,74 @@ export function tailEvents(filePath: string, offset: number): TailRead {
   return { events, offset: offset + Buffer.byteLength(consumed, 'utf8'), truncated: false };
 }
 
+/**
+ * Read the newest `limit` complete lines from `events.jsonl` without reading the
+ * whole file. Walks backward in `CHUNK_SIZE` blocks until `limit + 1` newlines are
+ * seen, joins the buffers and decodes once (so a multi-byte character split by a
+ * block boundary is not corrupted), drops a possibly partial first line when the
+ * walk stopped before byte 0, and ignores a torn final line. Returns `[]` for a
+ * missing or unreadable file, a non-positive `limit`, or a file with no complete
+ * line; never throws.
+ */
+export function readRecentEvents(filePath: string, limit: number): TailEvent[] {
+  if (!Number.isInteger(limit) || limit <= 0) return [];
+  let fd: number;
+  try {
+    fd = openSync(filePath, 'r');
+  } catch {
+    return [];
+  }
+  try {
+    const {size} = fstatSync(fd);
+    if (size <= 0) return [];
+    const { text, start } = readTailText(fd, size, limit + 1);
+    return recentLines(text, start, limit);
+  } catch {
+    return [];
+  } finally {
+    closeSync(fd);
+  }
+}
+
+const NEWLINE = 0x0a;
+
+function countNewlines(chunk: Buffer): number {
+  let count = 0;
+  for (const byte of chunk) if (byte === NEWLINE) count += 1;
+  return count;
+}
+
+/** Collect backward blocks until `wanted` newlines or byte 0; decode once. */
+function readTailText(fd: number, size: number, wanted: number): { text: string; start: number } {
+  const chunks: Buffer[] = [];
+  let newlines = 0;
+  let position = size;
+  while (position > 0 && newlines < wanted) {
+    const length = Math.min(CHUNK_SIZE, position);
+    const chunkStart = position - length;
+    const buffer = Buffer.alloc(length);
+    const read = readSync(fd, buffer, 0, length, chunkStart);
+    if (read <= 0) break;
+    const chunk = buffer.subarray(0, read);
+    chunks.unshift(chunk);
+    newlines += countNewlines(chunk);
+    position = chunkStart;
+  }
+  return { text: Buffer.concat(chunks).toString('utf8'), start: position };
+}
+
+function recentLines(text: string, start: number, limit: number): TailEvent[] {
+  const lastNewline = text.lastIndexOf('\n');
+  if (lastNewline === -1) return [];
+  const lines = text.slice(0, lastNewline).split('\n');
+  // A backward read that stopped before byte 0 starts mid-line.
+  const complete = start > 0 ? lines.slice(1) : lines;
+  return complete
+    .filter((line) => line !== '')
+    .slice(-limit)
+    .map(parseLine);
+}
+
 /** Most recent events an `EventTail` keeps; older ones are dropped and counted. */
 export const DEFAULT_MAX_HISTORY = 5000;
 

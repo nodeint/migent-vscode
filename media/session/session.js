@@ -1,4 +1,4 @@
-// The one Session page: a single header and the body of the tab the host last posted. Results, Metrics, Workflow
+// The one Session page: a single header and the body of the tab the host last posted. Overview, Metrics, Workflow
 // and Questions each keep their own renderer in this folder; the shell only draws the shared header, the batch
 // selector and the tab switch. The shared UI kit and host adapter in media/shared load first (see docs/ui.md).
 (function () {
@@ -24,7 +24,7 @@
 
   function menuFor(model) {
     switch (model.tab) {
-      case 'results':
+      case 'overview':
         return [{ label: text.menu.openQuestions, onSelect: () => page.send(sessionAction('openQuestions')) }];
       case 'metrics':
         return [{ label: text.menu.openMetricsFile, onSelect: () => page.send({ intent: 'openMetricsFile' }) }];
@@ -44,7 +44,7 @@
     const tabs = [];
     if (questionsVisible) tabs.push({ key: 'questions', label: copy.tab.questions, onSelect: selectTab('questions') });
     tabs.push(
-      { key: 'results', label: copy.tab.results, onSelect: selectTab('results') },
+      { key: 'overview', label: copy.tab.overview, onSelect: selectTab('overview') },
       { key: 'metrics', label: copy.tab.metrics, onSelect: selectTab('metrics') },
       { key: 'workflow', label: copy.tab.workflow, onSelect: selectTab('workflow') },
       { key: 'task', label: copy.tab.task, onSelect: () => page.send(sessionAction('openTask')) },
@@ -126,8 +126,8 @@
     isQuestionsBody = false;
     bodyHost.replaceChildren(container);
     switch (model.tab) {
-      case 'results':
-        window.MigentSessionResults.render(container, model.results, page);
+      case 'overview':
+        window.MigentSessionOverview.render(container, model.overview, page);
         break;
       case 'metrics':
         window.MigentSessionMetrics.render(container, model.metrics, page);

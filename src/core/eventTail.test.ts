@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { EventTail, tailEvents } from './eventTail';
+import { EventTail, readRecentEvents, tailEvents } from './eventTail';
 
 const dirs: string[] = [];
 
@@ -112,6 +112,78 @@ describe('tailEvents', () => {
     expect(read.offset).toBe(Buffer.byteLength(`${line1}\n`));
     writeFileSync(file, '');
     expect(tailEvents(file, read.offset)).toEqual({ events: [], offset: 0, truncated: true });
+  });
+});
+
+describe('readRecentEvents', () => {
+  function numbered(count: number): string[] {
+    return Array.from({ length: count }, (_, index) =>
+      JSON.stringify({
+        v: 2,
+        seq: index + 1,
+        event: 'execution.started',
+        timestamp: 't',
+        summary: `line-${index + 1}`,
+        data: {},
+      }));
+  }
+
+  it('returns the newest complete lines within the limit, oldest first', () => {
+    const file = tmpFile('events.jsonl', `${numbered(10).join('\n')}\n`);
+    expect(readRecentEvents(file, 5).map((event) => event.seq)).toEqual([6, 7, 8, 9, 10]);
+  });
+
+  it('reads only the tail of a large file', () => {
+    const file = tmpFile('events.jsonl', `${numbered(10_000).join('\n')}\n`);
+    const events = readRecentEvents(file, 5);
+    expect(events.map((event) => event.seq)).toEqual([9996, 9997, 9998, 9999, 10_000]);
+    expect(events[0]?.summary).toBe('line-9996');
+  });
+
+  it('ignores a torn final line', () => {
+    const file = tmpFile('events.jsonl', `${line1}\n${line2}\n${line2.slice(0, 20)}`);
+    expect(readRecentEvents(file, 5).map((event) => event.seq)).toEqual([1, 2]);
+  });
+
+  it('drops a partial first line when the backward read stops mid-file', () => {
+    const lines = Array.from({ length: 2000 }, (_, index) =>
+      JSON.stringify({
+        v: 2,
+        seq: index + 1,
+        event: 'execution.started',
+        timestamp: 't',
+        summary: `padded-${index + 1}-${'x'.repeat(40)}`,
+        data: {},
+      }));
+    const file = tmpFile('events.jsonl', `${lines.join('\n')}\n`);
+    const events = readRecentEvents(file, 5);
+    expect(events.map((event) => event.seq)).toEqual([1996, 1997, 1998, 1999, 2000]);
+    expect(events.every((event) => event.rawLine === null && event.event === 'execution.started')).toBe(true);
+  });
+
+  it('decodes a multi-byte summary read across chunks', () => {
+    const filler = numbered(2000);
+    const last = JSON.stringify({
+      v: 2,
+      seq: 2001,
+      event: 'provider.turn_completed',
+      timestamp: 't',
+      summary: '日本語 — claude/sonnet',
+      data: {},
+    });
+    const file = tmpFile('events.jsonl', `${filler.join('\n')}\n${last}\n`);
+    const events = readRecentEvents(file, 1);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.summary).toBe('日本語 — claude/sonnet');
+  });
+
+  it('returns nothing for a missing file, an empty file, a torn line or a non-positive limit', () => {
+    expect(readRecentEvents(path.join(os.tmpdir(), 'does-not-exist-recent.jsonl'), 5)).toEqual([]);
+    expect(readRecentEvents(tmpFile('events.jsonl', ''), 5)).toEqual([]);
+    expect(readRecentEvents(tmpFile('events.jsonl', line2.slice(0, 20)), 5)).toEqual([]);
+    const file = tmpFile('events.jsonl', `${line1}\n`);
+    expect(readRecentEvents(file, 0)).toEqual([]);
+    expect(readRecentEvents(file, -1)).toEqual([]);
   });
 });
 

@@ -24,7 +24,7 @@ describe('shared copy', () => {
   const copy = loadCopy();
 
   it('names every session page tab', () => {
-    expect(Object.keys(copy.tab)).toEqual(['questions', 'results', 'metrics', 'workflow', 'task']);
+    expect(Object.keys(copy.tab)).toEqual(['questions', 'overview', 'metrics', 'workflow', 'task']);
     expect(Object.values(copy.tab).every((label) => label.length > 0)).toBe(true);
   });
 

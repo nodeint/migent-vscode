@@ -68,7 +68,7 @@ export function renderPage(webview: vscode.Webview, extensionUri: vscode.Uri, pa
  */
 export function tabIcon(
   extensionUri: vscode.Uri,
-  name: 'questions' | 'results' | 'metrics',
+  name: 'questions' | 'results' | 'overview' | 'metrics',
   state: string,
 ): { light: vscode.Uri; dark: vscode.Uri } {
   const tone = stateTone(state);

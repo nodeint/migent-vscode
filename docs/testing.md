@@ -113,13 +113,19 @@ capability states and Recheck. `scripts/integration/run.mjs` creates a `migent` 
 shell's `PATH` ahead of the one the runner passes. The scenarios in
 `timeline.integration.test.ts` open the timeline document, append and truncate `events.jsonl`, and check
 log channels and that no tail outlives its consumer; `statusBar.integration.test.ts` checks the status bar
-text and hidden state; `results.integration.test.ts` opens the Session panel on its Results tab from a session row
+text and hidden state; `overview.integration.test.ts` opens the Session panel on its Overview tab from a session row
 (Completed, or Running until it completes in place), checks that
 reopening reuses the panel, that a `sessionAction` intent runs the session command for the panel's own session
 (and an unknown action nothing), that page intents open real files by identity (and invalid ones nothing),
 lineage navigation, background updates without focus changes, and that closing a panel releases its `outputs/`
-watcher. The pickers are driven through the flow's replaceable `NextStepUi`. They are
-skipped in `--exclude` mode, where no events arrive.
+watcher. It also appends `events.jsonl` to a Running session and checks that the posted model's Latest activity
+follows without changing focus or opening another panel. The pickers are driven through the flow's replaceable
+`NextStepUi`. They are skipped in `--exclude` mode, where no events arrive.
+
+The Overview page's pure parts have their own tests: `sessionSummary.test.ts` derives the Status facts,
+`overviewActions.test.ts` holds the state action table, `sessionProgress.test.ts` maps stages or executions to
+rows, `sessionActivity.test.ts` bounds and formats the activity lines, and `overviewModel.test.ts` composes them
+without reading disk. `overviewPage.test.ts` renders the fixed block order against the fake DOM.
 
 `nextStep.integration.test.ts` drives the Next step flow through the fixture CLI, which records
 `prior_session_id` and logs the argv of `session run` and `session prepare`. It covers one child from concurrent

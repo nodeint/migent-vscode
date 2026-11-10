@@ -242,7 +242,7 @@ function load() {
     }),
   });
   const media = path.join(__dirname, '../../../media');
-  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/dom.js', 'shared/components.js', 'shared/form.js', 'shared/page.js', 'shared/agentform.js', 'shared/draftpage.js', 'workfloweditor/workflowCopy.js', 'workfloweditor/workflowModel.js', 'workfloweditor/workflowForm.js', 'session/sessionCopy.js', 'session/resultsCopy.js', 'session/metricsCopy.js', 'session/sessionWorkflowCopy.js', 'session/questionsCopy.js', 'session/sessionHeader.js', 'session/results.js', 'session/metrics.js', 'session/workflow.js', 'session/questions.js', 'session/session.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
+  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/dom.js', 'shared/components.js', 'shared/form.js', 'shared/page.js', 'shared/agentform.js', 'shared/draftpage.js', 'workfloweditor/workflowCopy.js', 'workfloweditor/workflowModel.js', 'workfloweditor/workflowForm.js', 'session/sessionCopy.js', 'session/overviewCopy.js', 'session/resultsCopy.js', 'session/metricsCopy.js', 'session/sessionWorkflowCopy.js', 'session/questionsCopy.js', 'session/sessionHeader.js', 'session/overviewProgress.js', 'session/overview.js', 'session/results.js', 'session/metrics.js', 'session/workflow.js', 'session/questions.js', 'session/session.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   const deliver = (revision: number, next: Record<string, unknown>): void => {
     const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next) };
     for (const handler of windowListeners.message ?? []) handler({ data });
@@ -304,16 +304,16 @@ describe('Questions page', () => {
     expect(page.byId('jump-1').className).toContain('q-jump--done');
   });
 
-  it('shows the shared session header with Questions, Results, Metrics, Workflow and Task tabs', () => {
+  it('shows the shared session header with Questions, Overview, Metrics, Workflow and Task tabs', () => {
     const page = load();
     page.deliver(1, model(1));
     const tabs = page.doc.root.descendants().filter((node) => node.className === 'mg-tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Results', 'Metrics', 'Workflow', 'Task']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Overview', 'Metrics', 'Workflow', 'Task']);
     expect(tabs[0]?.attrs['aria-current']).toBe('page');
     tabs[1]?.click();
     tabs[2]?.click();
     expect(page.posted.slice(-2)).toMatchObject([
-      { type: 'intent', intent: 'selectTab', tab: 'results' },
+      { type: 'intent', intent: 'selectTab', tab: 'overview' },
       { type: 'intent', intent: 'selectTab', tab: 'metrics' },
     ]);
     expect(page.doc.root.descendants().some((node) => node.textContent === 'implement')).toBe(true);

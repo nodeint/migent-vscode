@@ -1,4 +1,5 @@
 import type { AnswerModel } from './answerModel';
+import type { OverviewModel } from './overviewModel';
 import type { ResultsModel } from './resultsModel';
 import type { SessionMeta } from './sessionMeta';
 import type { SessionMetricsModel } from './sessionMetricsModel';
@@ -7,10 +8,10 @@ import type { SessionWorkflowModel } from './sessionWorkflow';
 
 /**
  * The data the one Session page shows, as plain JSON. The page renders the header once and the body of the
- * tab it is given; each tab keeps the model its own builder produced (results, metrics, workflow, answers).
+ * tab it is given; each tab keeps the model its own builder produced (overview, metrics, workflow, answers).
  */
 
-export const SESSION_TABS = ['questions', 'results', 'metrics', 'workflow'] as const;
+export const SESSION_TABS = ['questions', 'overview', 'metrics', 'workflow'] as const;
 
 export type SessionTab = (typeof SESSION_TABS)[number];
 
@@ -47,14 +48,14 @@ export interface SessionQuestionsTab {
 
 export type SessionPageModel =
   | { tab: 'questions'; header: SessionHeader; questions: SessionQuestionsTab }
-  | { tab: 'results'; header: SessionHeader; results: ResultsModel }
+  | { tab: 'overview'; header: SessionHeader; overview: OverviewModel }
   | { tab: 'metrics'; header: SessionHeader; metrics: SessionMetricsModel }
   | { tab: 'workflow'; header: SessionHeader; workflow: SessionWorkflowModel };
 
 const UNAVAILABLE_STATE = 'Unavailable';
 const TITLE_MAX = 32;
 
-type ResultsHeaderSource = Pick<
+type OverviewHeaderSource = Pick<
   ResultsModel,
   'availability' | 'sessionId' | 'title' | 'state' | 'workflowId' | 'meta'
 >;
@@ -72,7 +73,7 @@ function isUnavailable(state: string): boolean {
   return state === UNAVAILABLE_STATE;
 }
 
-export function resultsHeader(model: ResultsHeaderSource): SessionHeader {
+export function overviewHeader(model: OverviewHeaderSource): SessionHeader {
   return {
     availability: model.availability,
     sessionId: model.sessionId,
@@ -84,7 +85,7 @@ export function resultsHeader(model: ResultsHeaderSource): SessionHeader {
 }
 
 export function metricsHeader(model: MetricsHeaderSource): SessionHeader {
-  return resultsHeader(model);
+  return overviewHeader(model);
 }
 
 export function workflowHeader(model: WorkflowHeaderSource): SessionHeader {

@@ -152,6 +152,8 @@ export interface ExecutionSnapshot {
   attempt: number;
   status: string | null;
   decision: string | null;
+  /** `outcome.blocker` recorded by the CLI when the execution blocked; null otherwise. */
+  blocker: string | null;
   client: string | null;
   model: string | null;
   /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */

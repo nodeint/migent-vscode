@@ -6,12 +6,12 @@ import type { SessionSnapshot } from './model';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
 import { listOutputs, type OutputFileState } from './outputs';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
-import { sessionTitle, truncate } from './sessionPresentation';
+import { sessionTitle } from './sessionPresentation';
 import { readSessionTask } from './sessionTask';
 import type { WorkflowEntry } from './workflows';
 
 /**
- * The data a Results page shows, as plain JSON. Every string is inert text for the page: it is
+ * The data the Overview page's results blocks show, as plain JSON. Every string is inert text for the page: it is
  * rendered with `textContent` and never interpreted as HTML, a path or a command. Rows carry
  * a `key` the page sends back as an intent; the host resolves it against fresh data.
  */
@@ -118,13 +118,6 @@ function isFile(absolute: string | null): boolean {
   } catch {
     return false;
   }
-}
-
-const TITLE_MAX = 32;
-
-/** The editor tab title: the shortened session title, or `Results` when unavailable. The tab icon names the page. */
-export function resultsPanelTitle(model: ResultsModel): string {
-  return model.availability === 'unavailable' ? 'Results' : truncate(model.title, TITLE_MAX);
 }
 
 export function targetState(workflow: string, workflows: readonly WorkflowEntry[]): TargetWorkflowState {

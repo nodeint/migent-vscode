@@ -1,4 +1,4 @@
-// Results tab of the Session page. Read-only: it renders the model the extension posts and sends intents that carry
+// Results blocks of the Overview tab. Read-only: it renders the model the extension posts and sends intents that carry
 // identity only (a key, a name or a closed action name), never a path or a command. Every string is set with
 // textContent. The shared helpers in media/shared load first (see docs/ui.md).
 (function () {

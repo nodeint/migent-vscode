@@ -71,7 +71,7 @@ function cancelledTargets(executions: readonly ExecutionSnapshot[]): ReplyTarget
 }
 
 /**
- * The executions a reply can answer now: the one eligibility rule the tree, the Results page and the commands share.
+ * The executions a reply can answer now: the one eligibility rule the tree, the Overview page and the commands share.
  * A pending question is the Questions page's; a workflow replies to its blocked or interrupted stages, a role session
  * to its latest execution. `executions` is read only when `replyNeedsExecutions` says so.
  */

@@ -293,11 +293,14 @@ function load() {
     'workfloweditor/workflowModel.js',
     'workfloweditor/workflowForm.js',
     'session/sessionCopy.js',
+    'session/overviewCopy.js',
     'session/resultsCopy.js',
     'session/metricsCopy.js',
     'session/sessionWorkflowCopy.js',
     'session/questionsCopy.js',
     'session/sessionHeader.js',
+    'session/overviewProgress.js',
+    'session/overview.js',
     'session/results.js',
     'session/metrics.js',
     'session/workflow.js',
@@ -611,7 +614,7 @@ function metricsPage(executions: Record<string, unknown>[], header: Record<strin
   };
 }
 
-describe('Session Results and Metrics tabs', () => {
+describe('Session Overview and Metrics tabs', () => {
   it('draws a Metrics execution as a collapsible card with the last one open', () => {
     const page = load();
     page.deliverPage(metricsPage([execution({ id: 'e1' }), execution({ id: 'e2', order: 2, attempt: 2 })]));
@@ -681,7 +684,7 @@ describe('Session Results and Metrics tabs', () => {
     expect(cards().map((card) => card.open)).toEqual([true, false]);
   });
 
-  it('keeps the Session header tiers: state, title, facts, then tabs, Reply and the menu', () => {
+  it('keeps the Session header tiers: state, title, facts, then tabs and the menu', () => {
     const page = load();
     const meta = {
       stageId: 'plan',
@@ -705,9 +708,9 @@ describe('Session Results and Metrics tabs', () => {
     expect(chips[1]).toBe('5m 0s');
     expect(chips.at(-1)).toBe('2 pending');
     const barKinds = bar.children.map((child) => (child as FakeElement).className.split(' ')[0]);
-    expect(barKinds).toEqual(['mg-tabs', 'mg-btn', 'mg-menu']);
+    expect(barKinds).toEqual(['mg-tabs', 'mg-menu']);
     const tabs = (bar.children[0] as FakeElement).children.map((tab) => (tab as FakeElement).textContent);
-    expect(tabs).toEqual(['Questions', 'Results', 'Metrics', 'Workflow', 'Task']);
+    expect(tabs).toEqual(['Questions', 'Overview', 'Metrics', 'Workflow', 'Task']);
     const items = bar.descendants().filter((node) => node.classList.contains('mg-menu-item'));
     expect(items.map((item) => item.textContent).slice(0, 4)).toEqual([
       'View log',
@@ -725,12 +728,26 @@ describe('Session Results and Metrics tabs', () => {
     expect(banners[0].classList.contains('mg-banner--warn')).toBe(true);
   });
 
-  it('draws Results sections with counts, an empty block, and no control inside a card', () => {
+  it('draws Overview result sections with counts, an empty block, and no control inside a card', () => {
     const page = load();
     page.deliverPage({
-      tab: 'results',
+      tab: 'overview',
       header: HEADER,
-      results: {
+      overview: {
+        summary: {
+          state: 'completed',
+          unknownReason: null,
+          runningStage: null,
+          runningSummary: null,
+          blocked: [],
+          quotaResetAt: null,
+          pendingQuestions: 0,
+          latestExecution: null,
+          isRunning: false,
+        },
+        progress: { kind: 'empty' },
+        activity: { visible: false },
+        actions: { primary: null, secondary: [] },
         outputs: { rows: [], directoryError: null },
         next: {
           state: 'ok',
@@ -742,7 +759,7 @@ describe('Session Results and Metrics tabs', () => {
       },
     });
     const { root } = page.doc;
-    expect(root.descendants().filter((node) => node.classList.contains('mg-section-head'))).toHaveLength(2);
+    expect(root.descendants().filter((node) => node.classList.contains('mg-section-head'))).toHaveLength(4);
     expect(root.descendants().some((node) => node.classList.contains('mg-empty'))).toBe(true);
     const card = root.descendants().find((node) => node.classList.contains('mg-card'));
     expect(card).toBeDefined();

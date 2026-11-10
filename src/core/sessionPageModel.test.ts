@@ -4,7 +4,7 @@ import { NO_SESSION_META } from './sessionMeta';
 import {
   answerHeader,
   metricsHeader,
-  resultsHeader,
+  overviewHeader,
   type SessionHeader,
   sessionPageTitle,
   workflowHeader,
@@ -20,8 +20,8 @@ const HEADER: SessionHeader = {
 };
 
 describe('session page headers', () => {
-  it('maps the results and metrics headers unchanged', () => {
-    expect(resultsHeader(HEADER)).toEqual(HEADER);
+  it('maps the overview and metrics headers unchanged', () => {
+    expect(overviewHeader(HEADER)).toEqual(HEADER);
     expect(metricsHeader(HEADER)).toEqual(HEADER);
   });
 

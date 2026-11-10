@@ -13,5 +13,9 @@ export const SESSION_ACTION_COMMANDS: Partial<Record<SessionAction, string>> = {
   revealInExplorer: 'migent.session.revealInExplorer',
   openQuestions: 'migent.session.openQuestions',
   completeSession: 'migent.session.complete',
+  start: 'migent.session.start',
+  stop: 'migent.session.cancel',
+  continue: 'migent.session.continue',
+  openFailure: 'migent.session.openFailure',
   reply: 'migent.session.reply',
 };

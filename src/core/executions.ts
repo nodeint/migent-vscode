@@ -62,6 +62,7 @@ function summaryFrom(
     attempt: parsed?.attempt ?? numberOr(record?.stage_attempt, 1),
     status: str(record?.status),
     decision: str(outcome.decision),
+    blocker: str(outcome.blocker),
     client: str(record?.client),
     model: str(record?.model),
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),

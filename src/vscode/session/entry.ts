@@ -34,7 +34,7 @@ export function isIdentity(value: unknown): value is Identity {
 }
 
 export const isTab = (value: unknown): value is SessionTab =>
-  value === 'questions' || value === 'results' || value === 'metrics' || value === 'workflow';
+  value === 'questions' || value === 'overview' || value === 'metrics' || value === 'workflow';
 
 export interface Retained {
   watcher: ProjectContext['watcher'];
@@ -62,10 +62,10 @@ export interface EntryInit {
 }
 
 /** The editor-tab icon file of a tab; the Workflow tab has no icon of its own. */
-function iconOf(tab: SessionTab): 'questions' | 'results' | 'metrics' {
+function iconOf(tab: SessionTab): 'questions' | 'overview' | 'metrics' {
   if (tab === 'questions') return 'questions';
   if (tab === 'metrics') return 'metrics';
-  return 'results';
+  return 'overview';
 }
 
 /** One open Session panel and what was last posted to it. */

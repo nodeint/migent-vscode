@@ -289,6 +289,7 @@ describe('replyTargets', () => {
       client: null,
       model: null,
       hasFailureReport: false,
+      blocker: null,
       kind,
     };
   };

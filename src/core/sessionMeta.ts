@@ -3,7 +3,7 @@ import type { SessionSnapshot } from './model';
 import { stageOf } from './sessionPresentation';
 
 /**
- * What every session page's header says about the session, whatever the page: the same on Results, Metrics and
+ * What every session page's header says about the session, whatever the page: the same on Overview, Metrics and
  * Questions. The page turns the timestamps into a duration and an age, so the model stays free of the clock.
  */
 export interface SessionMeta {

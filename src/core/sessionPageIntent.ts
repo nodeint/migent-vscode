@@ -28,7 +28,7 @@ export type SessionPageMessage =
   | { type: 'later' }
   | { type: 'continue' }
   | { type: 'viewLog' }
-  | { type: 'openResults' }
+  | { type: 'openOverview' }
   | { type: 'openMetrics' }
   | { type: 'saveForm'; form: Record<string, unknown>; baseHash: string }
   | { type: 'reload' }
@@ -102,7 +102,7 @@ function answerMessage(raw: Record<string, unknown>): SessionPageMessage | null 
     case 'later':
     case 'continue':
     case 'viewLog':
-    case 'openResults':
+    case 'openOverview':
     case 'openMetrics':
       return { type: parsed.type };
     default:

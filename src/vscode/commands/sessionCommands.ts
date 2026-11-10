@@ -56,7 +56,7 @@ function targetOf(arg: unknown): Target | undefined {
   }
 }
 
-/** What a command needs to find its session: the projects and the active Results panel. */
+/** What a command needs to find its session: the projects and the active Overview panel. */
 export interface CommandHost {
   registry: ProjectRegistry;
   active: ActiveTarget;
@@ -65,7 +65,7 @@ export interface CommandHost {
 export type Resolved = PickedSession & { target?: Target };
 
 /**
- * The target is the tree node passed in, else the session of the active Results panel, else the user's pick.
+ * The target is the tree node passed in, else the session of the active Overview panel, else the user's pick.
  * A stale tree selection is never an implicit target.
  */
 export interface ResolveQuery {
