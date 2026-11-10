@@ -60,7 +60,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 | State notifications | [transitions.ts](../src/core/transitions.ts), [notificationGate.ts](../src/core/notificationGate.ts), [notifier.ts](../src/vscode/notifier.ts) | `TransitionTracker` remembers `(project, session, kind, execution)`; startup, refresh and discovery seed it silently, so only later transitions notify and each notifies once. `NotificationGate` shows one notification per session at a time: later ones queue (latest wins) and are rebuilt from fresh state when shown. A quota failure is announced as an ordinary failure (Continue reruns the stage; the message names the reset time). Buttons carry the session they announced; a vanished session is reported, never replaced by a picker |
 | Liveness timer | [liveness.ts](../src/core/liveness.ts) | One 10 s timer, alive only while a session is Running; no `vscode` import |
 | Session/workflow locations | [paths.ts](../src/core/paths.ts) | Shared path construction and filenames |
-| Shared parsed types and supported versions | [model.ts](../src/core/model.ts) | Core data shapes, not the complete upstream schema |
+| Shared parsed types and supported versions | [model.ts](../src/core/model.ts) | Core data shapes for session files, not the complete upstream schema; CLI output, exit-code and draft types come from `@nodeint/migent-contracts` (see File-format contract) |
 | Manifest and status reads | [manifest.ts](../src/core/manifest.ts), [statusReader.ts](../src/core/statusReader.ts) | Parse files into nullable fields and explicit read outcomes |
 | Lock observation and display derivation | [lockProbe.ts](../src/core/lockProbe.ts), [displayState.ts](../src/core/displayState.ts) | Separate process/file observation from pure state selection |
 | Execution and workflow summaries | [executions.ts](../src/core/executions.ts), [workflows.ts](../src/core/workflows.ts) | Read lightweight lists; do not execute workflows |
@@ -88,4 +88,15 @@ Migent owns the persisted file formats. The upstream
 [session contract](https://github.com/nodeint/migent/blob/HEAD/docs/sessions.md)
 is maintained in the Migent repository. Consult the matching upstream revision
 when changing a reader. Local supported-version constants and
-parsed types live in [model.ts](../src/core/model.ts).
+parsed types for session files live in [model.ts](../src/core/model.ts), pending upstream schemas for them
+([nodeint/migent#114](https://github.com/nodeint/migent/issues/114)).
+
+The types of CLI stdout payloads, exit codes and editable drafts are bound to
+`@nodeint/migent-contracts`, a type-only dev dependency pinned to the same
+version as `MINIMUM_CLI_VERSION`. Shipped code uses `import type` only (enforced by lint, so
+no TypeBox code reaches `dist/extension.js`). Parsers stay lenient and read
+through [contractRead.ts](../src/core/contractRead.ts), so an upstream rename
+fails typecheck. Draft types come from [contractDraft.ts](../src/core/contractDraft.ts): the
+editors write incomplete documents and the CLI is the only validator.
+[exitCode.ts](../src/cli/exitCode.ts) is the single owner of the translation from
+upstream exit names to `RunOutcome`.

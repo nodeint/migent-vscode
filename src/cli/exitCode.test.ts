@@ -1,6 +1,7 @@
+import { EXIT_CATALOG } from '@nodeint/migent-contracts';
 import { describe, expect, it } from 'vitest';
 
-import { LineBuffer, mapExitCode, parseDiagnosticPaths } from './exitCode';
+import { exitCodeOf, LineBuffer, mapExitCode, parseDiagnosticPaths } from './exitCode';
 
 describe('mapExitCode', () => {
   it('maps each documented exit code to its outcome', () => {
@@ -24,6 +25,21 @@ describe('mapExitCode', () => {
   it('does not invent an outcome for an unknown code or a killed process', () => {
     expect(mapExitCode(42)).toBe('Unknown');
     expect(mapExitCode(null)).toBe('Unknown');
+  });
+});
+
+describe('exit table against the contract catalog', () => {
+  it('knows the code of every upstream exit name and maps none of them to Unknown', () => {
+    for (const entry of EXIT_CATALOG) {
+      expect(exitCodeOf(entry.name)).toBe(entry.code);
+      expect(mapExitCode(entry.code)).not.toBe('Unknown');
+    }
+  });
+
+  it('rejects a name the catalog does not have, and the authoring conflict is the stage_failed code', () => {
+    // @ts-expect-error not an upstream exit name
+    expect(() => exitCodeOf('not_an_exit')).toThrow();
+    expect(exitCodeOf('stage_failed')).toBe(3);
   });
 });
 

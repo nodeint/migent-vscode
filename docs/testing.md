@@ -156,9 +156,16 @@ The fixture CLI enforces `--stage` targeting (only that stage's pending batch, a
 session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply so a test can observe the recovery
 record while the CLI runs.
 
-### Session drafts and CLI 0.5.2 behavior
+`src/integration/fixtureConformance.test.ts` runs the fixture CLI's JSON paths the extension uses (`session prepare`,
+`get clients`, `get models`, `get options --native`, `doctor --json`, `workflow validate --json` and the
+`workflow save` and `config save` envelopes) and checks each output against the matching
+`@nodeint/migent-contracts` schema, so the fixture cannot drift from the real CLI unnoticed.
+`src/core/contractBinding.test.ts` pins the result types of the lenient parsers to the contract field types at compile
+time.
 
-The fixture CLI models 0.5.2 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+### Session drafts and CLI 0.5.4 behavior
+
+The fixture CLI models 0.5.4 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`
