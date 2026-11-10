@@ -9,6 +9,7 @@
 import type { ClientSelection, InlineAgent, Static } from '@nodeint/migent-contracts';
 
 import type { Draft, Expect, OpenPart, SameKeys } from './contractDraft';
+import { wireOf } from './contractRead';
 import { isRecord } from './record';
 
 /** The object branch of an agent's `client`. */
@@ -70,9 +71,10 @@ export type ModeledKeysMatchContract = [
 
 function parseClient(value: unknown): ClientForm {
   const body = isRecord(value) ? value : {};
+  const wire = wireOf<ContractClientSelection>(value) ?? {};
   const client: ClientForm = { extra: pick(body, CLIENT_KEYS) };
-  if (typeof body.type === 'string') client.type = body.type;
-  const options = optionPairs(body.options);
+  if (typeof wire.type === 'string') client.type = wire.type;
+  const options = optionPairs(wire.options);
   if (options !== undefined) client.options = options;
   return client;
 }
@@ -80,10 +82,11 @@ function parseClient(value: unknown): ClientForm {
 /** Read an agent mapping from a YAML value. Anything that is not a mapping reads as an empty agent. */
 export function parseAgent(value: unknown): AgentForm {
   const body = isRecord(value) ? value : {};
+  const wire = wireOf<InlineAgent>(value) ?? {};
   const agent: AgentForm = { extra: pick(body, AGENT_KEYS) };
-  if (typeof body.model === 'string') agent.model = body.model;
-  if (typeof body.effort === 'string') agent.effort = body.effort;
-  if (isRecord(body.client)) agent.client = parseClient(body.client);
+  if (typeof wire.model === 'string') agent.model = wire.model;
+  if (typeof wire.effort === 'string') agent.effort = wire.effort;
+  if (isRecord(wire.client)) agent.client = parseClient(wire.client);
   return agent;
 }
 
