@@ -1,51 +1,43 @@
 // Results tab of the Session page. Read-only: it renders the model the extension posts and sends intents that carry
 // identity only (a key, a name or a closed action name), never a path or a command. Every string is set with
-// textContent. The shared helpers in media/shared/page.js load first (see docs/ui.md).
+// textContent. The shared helpers in media/shared load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, details } = window.MigentPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, details } = ui;
   const copy = window.MigentCopy;
   const text = window.MigentSessionResultsCopy;
 
   let page = null;
 
-  /** A button that sends `intent`. `kind` is a kit button kind. */
-  function action(label, intent, kind) {
-    return ui.button(label, { kind, size: 'md', onClick: () => page.send(intent) });
-  }
+  const action = (label, intent, kind) => page.action(label, intent, kind);
 
   const FILE_STATE = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
 
   function outputRow(row) {
-    const item = el('li');
     if (row.state === 'ok') {
-      const node = el('button', null, 'mg-row');
-      node.type = 'button';
-      node.append(el('span', row.label, 'mg-row-main mg-row-main--action'), el('span', row.path, 'mg-row-meta mg-mono'));
-      node.addEventListener('click', () => page.send({ intent: 'openOutput', name: row.key }));
-      item.append(node);
-    } else {
-      const node = el('div', null, 'mg-row');
-      node.append(
-        el('span', row.label, 'mg-row-main mg-warn'),
-        el('span', row.path + FILE_STATE[row.state], 'mg-row-meta mg-mono'),
-      );
-      item.append(node);
+      return ui.listRow({
+        main: row.label,
+        mainClass: 'mg-row-main--action',
+        meta: row.path,
+        metaClass: 'mg-mono',
+        onClick: () => page.send({ intent: 'openOutput', name: row.key }),
+      });
     }
-    return item;
-  }
-
-  function emptyBlock(message) {
-    return el('p', message, 'mg-empty');
+    return ui.listRow({
+      main: row.label,
+      mainClass: 'mg-warn',
+      meta: row.path + FILE_STATE[row.state],
+      metaClass: 'mg-mono',
+    });
   }
 
   function renderOutputs(model) {
     const rows = model.outputs.rows;
     const children = [];
     if (rows.length === 0 && !model.outputs.directoryError) {
-      children.push(emptyBlock(text.outputs.empty));
+      children.push(ui.empty(text.outputs.empty));
     } else {
       const list = el('ul', null, 'mg-list');
       for (const row of rows) list.append(outputRow(row));
@@ -56,7 +48,7 @@
   }
 
   function suggestionDetails(suggestion) {
-    const node = details('card:' + suggestion.workflow, copy.details);
+    const node = details(copy.details, { key: 'card:' + suggestion.workflow });
     let declared = text.suggestion.declared.unknown;
     if (suggestion.declared === true) declared = text.suggestion.declared.yes;
     else if (suggestion.declared === false) declared = text.suggestion.declared.no;
@@ -89,7 +81,7 @@
     if (suggestion.task) card.append(el('span', suggestion.task, 'mg-card-body'));
     if (suggestion.artifacts.length > 0) {
       const tags = el('span', null, 'mg-tags');
-      for (const artifact of suggestion.artifacts) tags.append(el('span', artifact.name, 'mg-pill'));
+      for (const artifact of suggestion.artifacts) tags.append(ui.pill(artifact.name));
       card.append(tags);
     }
     card.addEventListener('click', () => page.send({ intent: 'openNextStep', workflow: suggestion.workflow }));
@@ -107,12 +99,12 @@
     if (next.state !== 'ok') {
       note = text.next.withDetail(text.next.state[next.state], next.detail);
     } else if (next.suggestions.length === 0) {
-      children.push(emptyBlock(text.next.none));
+      children.push(ui.empty(text.next.none));
     } else {
       children.push(...next.suggestions.map(renderSuggestion));
     }
     if (next.state !== 'missing') {
-      const file = details('next-json', text.next.file);
+      const file = details(text.next.file, { key: 'next-json' });
       file.append(action(text.next.openFile, { intent: 'openNextFile' }, 'secondary'));
       children.push(file);
     }
@@ -124,19 +116,15 @@
     const list = el('ul', null, 'mg-list');
     for (const child of children) {
       const task = child.task || child.title;
-      const row = el('button', null, 'mg-row');
-      row.type = 'button';
-      // The page only shortens the task visually (CSS clamp); the text and the tooltip stay complete.
-      row.title = task;
-      const main = el('span', null, 'mg-row-main');
-      main.append(el('span', task, 'results-clamp'), el('span', child.sessionId, 'results-id mg-muted mg-mono'));
-      const meta = el('span', null, 'mg-row-meta');
-      meta.append(el('span', child.state, 'mg-pill'));
-      row.append(main, meta);
-      row.addEventListener('click', () => page.send({ intent: 'openSession', sessionId: child.sessionId }));
-      const item = el('li');
-      item.append(row);
-      list.append(item);
+      list.append(
+        ui.listRow({
+          // The page only shortens the task visually (CSS clamp); the text and the tooltip stay complete.
+          title: task,
+          main: [el('span', task, 'results-clamp'), el('span', child.sessionId, 'results-id mg-muted mg-mono')],
+          meta: [ui.pill(child.state)],
+          onClick: () => page.send({ intent: 'openSession', sessionId: child.sessionId }),
+        }),
+      );
     }
     return ui.section(text.children.title, { count: String(children.length), children: [list] });
   }

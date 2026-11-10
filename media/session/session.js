@@ -1,10 +1,12 @@
 // The one Session page: a single header and the body of the tab the host last posted. Results, Metrics, Workflow
 // and Questions each keep their own renderer in this folder; the shell only draws the shared header, the batch
-// selector and the tab switch. The shared helpers in media/shared/page.js load first (see docs/ui.md).
+// selector and the tab switch. The shared UI kit and host adapter in media/shared load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, connect, sessionHeader, trackFooter } = window.MigentPage;
+  const { connect, trackFooter } = window.MigentPage;
+  const { el } = window.MigentUi;
+  const { sessionHeader } = window.MigentSessionHeader;
   const copy = window.MigentCopy;
   const text = window.MigentSessionCopy;
   const root = document.getElementById('root');

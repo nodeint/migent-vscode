@@ -2,12 +2,12 @@
 // It renders sections of controls over a draft it does not own; the data shape and pure draft operations live in
 // workflowModel.js.
 // The host page supplies the model, the draft, validation issues and two callbacks (see `create`).
-// Every string is set with textContent. Needs media/shared/page.js, media/shared/form.js and workflowModel.js loaded first (see docs/ui.md).
+// Every string is set with textContent. Needs the UI kit in media/shared and workflowModel.js loaded first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, details } = window.MigentPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, details } = ui;
   const copy = window.MigentCopy;
   const text = window.MigentWorkflowCopy;
   const ops = window.MigentWorkflowModel;
@@ -180,12 +180,10 @@
       const children = [];
       form.stages.forEach((stage, index) => children.push(renderStage(stage, index)));
       children.push(
-        ui.addBlockButton(text.stages.add, () => {
+        ui.addBlockButton(text.stages.add, { onClick: () => {
           form.stages.push(emptyStage());
           edited('stages.' + (form.stages.length - 1) + '.id');
-        }, isFormReadOnly(), {
-          empty: form.stages.length === 0 ? text.stages.empty : undefined,
-        }),
+        }, disabled: isFormReadOnly(), empty: form.stages.length === 0 ? text.stages.empty : undefined }),
       );
       return ui.section(text.stages.title, {
         note: text.stages.note,
@@ -235,21 +233,9 @@
         edited(listKey + '.' + target + '.move-' + direction);
       };
       return [
-        ui.iconButton(
-          'arrow-up',
-          text.stages.move(label, index + 1, 'up'),
-          () => move(-1),
-          isFormReadOnly() || index === 0,
-          listKey + '.' + index + '.move-up',
-        ),
-        ui.iconButton(
-          'arrow-down',
-          text.stages.move(label, index + 1, 'down'),
-          () => move(1),
-          isFormReadOnly() || index === list.length - 1,
-          listKey + '.' + index + '.move-down',
-        ),
-        ui.removeButton(copy.remove(label, index + 1), onRemove, isFormReadOnly()),
+        ui.iconButton(text.stages.move(label, index + 1, 'up'), { icon: 'arrow-up', onClick: () => move(-1), disabled: isFormReadOnly() || index === 0, path: listKey + '.' + index + '.move-up' }),
+        ui.iconButton(text.stages.move(label, index + 1, 'down'), { icon: 'arrow-down', onClick: () => move(1), disabled: isFormReadOnly() || index === list.length - 1, path: listKey + '.' + index + '.move-down' }),
+        ui.removeButton(copy.remove(label, index + 1), { onClick: onRemove, disabled: isFormReadOnly() }),
       ];
     }
 
@@ -273,8 +259,8 @@
     /** The warning chips of a card header: the only framed items there, so a problem is what stands out. */
     function alertChips(errors, extra) {
       const chips = [];
-      if (extra) chips.push(el('span', extra, 'mg-chip mg-chip--warn'));
-      if (errors > 0) chips.push(el('span', text.stages.problems(errors), 'mg-chip mg-chip--warn'));
+      if (extra) chips.push(ui.chip(extra, { tone: 'warn' }));
+      if (errors > 0) chips.push(ui.chip(text.stages.problems(errors), { tone: 'warn' }));
       return chips;
     }
 
@@ -310,21 +296,9 @@
     function stageTools(index) {
       const total = getForm().stages.length;
       return [
-        ui.iconButton(
-          'arrow-up',
-          text.stages.move('stage', index + 1, 'up'),
-          () => moveStage(index, -1),
-          isFormReadOnly() || index === 0,
-          stagePath(index, 'move-up'),
-        ),
-        ui.iconButton(
-          'arrow-down',
-          text.stages.move('stage', index + 1, 'down'),
-          () => moveStage(index, 1),
-          isFormReadOnly() || index === total - 1,
-          stagePath(index, 'move-down'),
-        ),
-        ui.removeButton(copy.remove('stage', index + 1), () => removeStage(index), isFormReadOnly()),
+        ui.iconButton(text.stages.move('stage', index + 1, 'up'), { icon: 'arrow-up', onClick: () => moveStage(index, -1), disabled: isFormReadOnly() || index === 0, path: stagePath(index, 'move-up') }),
+        ui.iconButton(text.stages.move('stage', index + 1, 'down'), { icon: 'arrow-down', onClick: () => moveStage(index, 1), disabled: isFormReadOnly() || index === total - 1, path: stagePath(index, 'move-down') }),
+        ui.removeButton(copy.remove('stage', index + 1), { onClick: () => removeStage(index), disabled: isFormReadOnly() }),
       ];
     }
 
@@ -452,9 +426,7 @@
           issue: issueOf(stagePath(index, 'max_revisions')),
         }),
       );
-      return ui.group(text.identity.title, text.identity.note, {
-        children: [ui.grid(fields)],
-      });
+      return ui.group(text.identity.title, { note: text.identity.note, children: [ui.grid(fields)] });
     }
 
     function agentSummary(stage) {
@@ -504,11 +476,9 @@
         }),
       ];
       if (form.stages.length < 2) {
-        return ui.fieldset(text.dependencies.dependsOn.label, content, {
-          hint: text.dependencies.dependsOn.hintNoOthers,
-        });
+        return ui.fieldset(text.dependencies.dependsOn.label, { children: content, hint: text.dependencies.dependsOn.hintNoOthers });
       }
-      return ui.fieldset(text.dependencies.dependsOn.label, content);
+      return ui.fieldset(text.dependencies.dependsOn.label, { children: content });
     }
 
     /** Registry ids this stage writes on every completion. Ids the registry lacks stay visible and flagged. */
@@ -517,10 +487,10 @@
       const unknown = stage.artifacts.filter((id) => !registry.includes(id));
       const children = [];
       if (registry.length === 0 && unknown.length === 0) {
-        children.push(el('p', text.stageArtifacts.empty, 'mg-empty'));
+        children.push(ui.empty(text.stageArtifacts.empty));
       } else {
         children.push(
-          ui.fieldset(text.stageArtifacts.writes, [
+          ui.fieldset(text.stageArtifacts.writes, { children: [
             checkList({
               available: [...registry, ...unknown],
               selected: stage.artifacts,
@@ -531,15 +501,14 @@
               },
               unknownValues: unknown,
             }),
-          ], { path: stagePath(index, 'artifacts'), issue: issueOf(stagePath(index, 'artifacts')) }),
+          ], path: stagePath(index, 'artifacts'), issue: issueOf(stagePath(index, 'artifacts')) }),
         );
       }
-      return ui.group(text.stageArtifacts.title, text.stageArtifacts.note, { children });
+      return ui.group(text.stageArtifacts.title, { note: text.stageArtifacts.note, children });
     }
 
     function dependenciesGroup(stage, index) {
-      return ui.group(text.dependencies.title, text.dependencies.note, {
-        children: [
+      return ui.group(text.dependencies.title, { note: text.dependencies.note, children: [
           dependsOnEditor(stage, index),
           ui.grid([
             ui.field({
@@ -558,13 +527,11 @@
               issue: issueOf(stagePath(index, 'sessionResumeFrom')),
             }),
           ]),
-        ],
-      });
+        ] });
     }
 
     function instructionsGroup(stage, index) {
-      return ui.group(text.instructions.title, text.instructions.note, {
-        children: [
+      return ui.group(text.instructions.title, { note: text.instructions.note, children: [
           textList({
             values: stage.instructions,
             path: stagePath(index, 'instructions'),
@@ -574,8 +541,7 @@
             itemLabel: text.instructions.item,
             multiline: true,
           }),
-        ],
-      });
+        ] });
     }
 
     /** One destination per decision: complete or another stage, never the stage itself. */
@@ -605,12 +571,10 @@
           : known
             ? text.decisions.navigate.allowed
             : navigationProblem(current, stageId);
-      const wrap = ui.fieldset(text.decisions.navigate.label, [control], {
-        path,
+      const wrap = ui.fieldset(text.decisions.navigate.label, { children: [control], path,
         hint,
         hintWarning: !known || current === '',
-        issue: issueOf(path),
-      });
+        issue: issueOf(path) });
       return wrap;
     }
 
@@ -663,7 +627,7 @@
         const registry = uniqueValues(getForm().artifacts.map((item) => item.id));
         const unknown = route.artifacts.ids.filter((id) => !registry.includes(id));
         wrap.append(
-          ui.fieldset(text.stageArtifacts.writes, [
+          ui.fieldset(text.stageArtifacts.writes, { children: [
             checkList({
               available: [...registry, ...unknown],
               selected: route.artifacts.ids,
@@ -675,19 +639,21 @@
               },
               unknownValues: unknown,
             }),
-          ], { path: path + '.ids', issue: issueOf(path + '.ids') }),
+          ], path: path + '.ids', issue: issueOf(path + '.ids') }),
         );
       } else if (shape === 'local') {
         route.artifacts.items.forEach((item, itemIndex) => {
           const itemPath = path + '.' + itemIndex;
           wrap.append(
-            ui.group(text.decisions.artifacts.heading(itemIndex + 1), undefined, {
-              card: true,
+            ui.group(text.decisions.artifacts.heading(itemIndex + 1), { card: true,
               actions: [
-                ui.removeButton(copy.remove('artifact', itemIndex + 1), () => {
+                ui.removeButton(copy.remove('artifact', itemIndex + 1), {
+                  onClick: () => {
                     route.artifacts.items.splice(itemIndex, 1);
                     edited(path);
-                  }, isFormReadOnly()),
+                  },
+                  disabled: isFormReadOnly(),
+                }),
               ],
               children: [
                 ui.grid([
@@ -735,15 +701,14 @@
                     issue: issueOf(itemPath + '.description'),
                   }),
                 ]),
-              ],
-            }),
+              ] }),
           );
         });
         wrap.append(
-          ui.addButton(text.decisions.artifacts.add, () => {
+          ui.addButton(text.decisions.artifacts.add, { onClick: () => {
             route.artifacts.items.push({ id: '', file: '', description: '' });
             edited(path + '.' + (route.artifacts.items.length - 1) + '.id');
-          }, isFormReadOnly()),
+          }, disabled: isFormReadOnly() }),
         );
       }
       return wrap;
@@ -759,10 +724,10 @@
             variant: 'card',
             accent: true,
             actions: [
-              ui.removeButton(copy.remove('decision', routeIndex + 1), () => {
+              ui.removeButton(copy.remove('decision', routeIndex + 1), { onClick: () => {
                   stage.decision.splice(routeIndex, 1);
                   edited(stagePath(index, 'decision'));
-                }, isFormReadOnly()),
+                }, disabled: isFormReadOnly() }),
             ],
             children: [
               ui.grid([
@@ -805,19 +770,17 @@
         );
       });
       wrap.append(
-        ui.addButton(text.decisions.add, () => {
+        ui.addButton(text.decisions.add, { onClick: () => {
           stage.decision = stage.decision || [];
           stage.decision.push({ value: '', when: '', navigate: '', artifacts: null });
           edited(stagePath(index, 'decision') + '.' + (stage.decision.length - 1) + '.value');
-        }, isFormReadOnly()),
+        }, disabled: isFormReadOnly() }),
       );
       return wrap;
     }
 
     function decisionsGroup(stage, index) {
-      return ui.group(text.decisions.title, text.decisions.note, {
-        children: [decisionEditor(stage, index)],
-      });
+      return ui.group(text.decisions.title, { note: text.decisions.note, children: [decisionEditor(stage, index)] });
     }
 
     function stageAdvanced(stage, index) {
@@ -826,7 +789,7 @@
       if (stage.runWhenPaths.length > 0) facts.push(text.stages.advancedFacts.pathFilters(stage.runWhenPaths.length));
       const heading = el('span', text.advanced.title);
       if (facts.length > 0) heading.append(el('span', facts.join(', '), 'mg-summary'));
-      const advanced = details('stage:' + index + ':advanced', heading, 'wf-advanced', false);
+      const advanced = details(heading, { key: 'stage:' + index + ':advanced', className: 'wf-advanced' });
       const body = el('div', null, 'wf-advanced-body mg-stack');
       body.append(
         ui.grid([
@@ -1021,12 +984,10 @@
         note: text.artifacts.note,
         children: [
           ...children,
-          ui.addBlockButton(text.artifacts.add, () => {
+          ui.addBlockButton(text.artifacts.add, { onClick: () => {
             form.artifacts.push({ id: '', file: '', description: '', required: null });
             edited('artifacts.' + (form.artifacts.length - 1) + '.id');
-          }, isFormReadOnly(), {
-            empty: form.artifacts.length === 0 ? text.artifacts.empty : undefined,
-          }),
+          }, disabled: isFormReadOnly(), empty: form.artifacts.length === 0 ? text.artifacts.empty : undefined }),
         ],
       });
     }
@@ -1130,12 +1091,10 @@
         note: text.downstream.note,
         children: [
           ...children,
-          ui.addBlockButton(text.downstream.add, () => {
+          ui.addBlockButton(text.downstream.add, { onClick: () => {
             form.downstream.push({ workflow: '', task: '', artifacts: null });
             edited('downstream.' + (form.downstream.length - 1) + '.workflow');
-          }, isFormReadOnly(), {
-            empty: form.downstream.length === 0 ? text.downstream.empty : undefined,
-          }),
+          }, disabled: isFormReadOnly(), empty: form.downstream.length === 0 ? text.downstream.empty : undefined }),
         ],
       });
     }
@@ -1159,12 +1118,10 @@
       cards = [];
       const nodes = [datalists(), renderBasics(), renderArtifacts(), renderStages(), renderDownstream()];
       return [
-        ui.root(nodes, {
-          onEdit: () => {
+        ui.root({ children: nodes, onEdit: () => {
             onEdit();
             refreshHeaders();
-          },
-        }),
+          } }),
       ];
     }
 

@@ -283,8 +283,10 @@ function load() {
     'shared/utils.js',
     'shared/icons.js',
     'shared/copy.js',
-    'shared/page.js',
+    'shared/dom.js',
+    'shared/components.js',
     'shared/form.js',
+    'shared/page.js',
     'shared/agentform.js',
     'shared/draftpage.js',
     'workfloweditor/workflowCopy.js',
@@ -295,6 +297,7 @@ function load() {
     'session/metricsCopy.js',
     'session/sessionWorkflowCopy.js',
     'session/questionsCopy.js',
+    'session/sessionHeader.js',
     'session/results.js',
     'session/metrics.js',
     'session/workflow.js',
@@ -753,7 +756,7 @@ describe('Session Results and Metrics tabs', () => {
 interface Kit {
   banner: (options: Record<string, unknown>) => FakeElement;
   issueBanner: (options: Record<string, unknown>) => FakeElement;
-  alertLine: (message: string, tone: string, isAlert?: boolean) => FakeElement;
+  alertLine: (message: string, options?: { tone?: string; role?: string }) => FakeElement;
 }
 
 interface PageKit {
@@ -761,22 +764,25 @@ interface PageKit {
   pageHeader: (options: Record<string, unknown>) => FakeElement;
 }
 
-describe('Shared page and form kit', () => {
+describe('Shared UI kit', () => {
   it('builds one banner with a tone, an icon, a message, quieter lines and actions', () => {
     const page = load();
-    const kit = page.window.MigentForm as Kit;
+    const kit = page.window.MigentUi as Kit;
     const node = kit.banner({ tone: 'error', lines: ['Broken', 'More detail'], actions: [page.doc.createElement('button')] });
     expect(node.classList.contains('mg-banner--error')).toBe(true);
     expect(node.attrs.role).toBe('alert');
     expect(node.textContent).toBe('BrokenMore detail');
     expect(node.descendants().filter((child) => child.classList.contains('mg-muted'))).toHaveLength(1);
     expect(kit.banner({ tone: 'warn', lines: ['x'] }).attrs.role).toBe('status');
-    expect(kit.alertLine('Bad', 'mg-error', true).attrs.role).toBe('alert');
+    expect(kit.alertLine('Bad', { tone: 'error', role: 'alert' }).attrs.role).toBe('alert');
+    expect(kit.alertLine('Bad', { tone: 'error' }).attrs.role).toBeUndefined();
+    expect(kit.banner({ tone: 'error', role: 'none', lines: ['x'] }).attrs.role).toBeUndefined();
+    expect(kit.banner({ tone: 'warn', role: 'alert', lines: ['x'] }).attrs.role).toBe('alert');
   });
 
   it('shows an issue as a link only when the page resolver gives it an action', () => {
     const page = load();
-    const kit = page.window.MigentForm as Kit;
+    const kit = page.window.MigentUi as Kit;
     const activated: string[] = [];
     const node = kit.issueBanner({
       tone: 'warn',
@@ -794,7 +800,7 @@ describe('Shared page and form kit', () => {
 
   it('finds the control of a form path or the nearest one around it, never the bare first part', () => {
     const page = load();
-    const kit = page.window.MigentPage as PageKit;
+    const kit = page.window.MigentUi as PageKit;
     const root = page.doc.createElement('div');
     const stage = page.doc.createElement('input');
     stage.dataset.path = 'stages.0.id';
@@ -810,7 +816,7 @@ describe('Shared page and form kit', () => {
 
   it('keeps the four header tiers in order for any page', () => {
     const page = load();
-    const kit = page.window.MigentPage as PageKit;
+    const kit = page.window.MigentUi as PageKit;
     const node = kit.pageHeader({
       eyebrow: 'Workflow',
       title: 'wf',

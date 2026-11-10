@@ -1,15 +1,16 @@
 // Configuration page: .migent/config.yaml (Project) and .migent/config.local.yaml (Local) as forms, one draft per tab; YAML
 // opens the active tab's real file in the editor. The page keeps each tab's draft and the save intent it started from
 // and asks the host to save; the CLI is the only validator. Every string is set with textContent.
-// Needs media/shared (page.js, form.js, agentform.js, draftpage.js) and configform.js loaded first (see docs/ui.md).
+// Needs media/shared (the kit, page.js, agentform.js, draftpage.js) and configform.js loaded first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, connect, pageHeader, controlOf, revealControl } = window.MigentPage;
+  const { connect } = window.MigentPage;
   const copy = window.MigentCopy;
   const text = window.MigentConfigCopy;
   const draftPage = window.MigentDraftPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, pageHeader, controlOf, revealControl } = ui;
   const configForm = window.MigentConfigForm;
   const root = document.getElementById('root');
 
@@ -283,13 +284,13 @@
     const nodes = [];
     const tab = model.tabs[active];
     const file = FILES[active];
-    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error', true));
-    if (tab.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(file, tab.readError || 'unknown error'), 'mg-error', true));
-    if (tab.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(file, tab.readError || 'unknown error'), 'mg-error', true));
+    if (transient.error) nodes.push(ui.alertLine(transient.error, { tone: 'error', role: 'alert' }));
+    if (tab.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(file, tab.readError || 'unknown error'), { tone: 'error', role: 'alert' }));
+    if (tab.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(file, tab.readError || 'unknown error'), { tone: 'error', role: 'alert' }));
     if (tab.state === 'unsupported') {
-      nodes.push(ui.alertLine(text.notice.unsupported(file, tab.schemaVersion === null ? 'unknown' : tab.schemaVersion), 'mg-warn'));
+      nodes.push(ui.alertLine(text.notice.unsupported(file, tab.schemaVersion === null ? 'unknown' : tab.schemaVersion), { tone: 'warn' }));
     }
-    if (tab.state === 'missing') nodes.push(ui.alertLine(active === 'local' ? text.notice.missingLocal : text.notice.missingProject, 'mg-warn'));
+    if (tab.state === 'missing') nodes.push(ui.alertLine(active === 'local' ? text.notice.missingLocal : text.notice.missingProject, { tone: 'warn' }));
     const changed = changedNotice();
     if (changed) nodes.push(changed);
     const validation = validationOf(active);
@@ -350,7 +351,7 @@
       const node = controlAt(nextFocus);
       if (node) {
         // A new item starts closed; open the cards around its first control so the reader can type into it.
-        window.MigentPage.openAround(node);
+        ui.openAround(node);
         node.focus();
       }
       nextFocus = null;

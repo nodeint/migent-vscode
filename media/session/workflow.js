@@ -4,12 +4,13 @@
 (function () {
   'use strict';
 
-  const { el, trackFooter, controlOf, revealControl } = window.MigentPage;
+  const { trackFooter } = window.MigentPage;
   const copy = window.MigentCopy;
   const text = window.MigentSessionWorkflowCopy;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const draftPage = window.MigentDraftPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, controlOf, revealControl } = ui;
 
   const NO_TRANSIENT = { saving: false, applying: false, error: null };
 
@@ -91,13 +92,13 @@
 
   function renderNotices() {
     const nodes = [];
-    if (model.state === 'invalid') nodes.push(ui.alertLine(text.invalid(model.readError), 'mg-error'));
-    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.unreadable(model.readError), 'mg-error'));
-    if (model.state === 'unsupported') nodes.push(ui.alertLine(text.unsupported(model.schemaVersion), 'mg-warn'));
+    if (model.state === 'invalid') nodes.push(ui.alertLine(text.invalid(model.readError), { tone: 'error' }));
+    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.unreadable(model.readError), { tone: 'error' }));
+    if (model.state === 'unsupported') nodes.push(ui.alertLine(text.unsupported(model.schemaVersion), { tone: 'warn' }));
     if (model.isLocked) {
       nodes.push(ui.banner({ tone: 'warn', lines: [text.locked.title, text.locked.body(model.ranStages)] }));
     }
-    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error'));
+    if (transient.error) nodes.push(ui.alertLine(transient.error, { tone: 'error' }));
     const errors = issues('errors');
     if (errors.length > 0) {
       nodes.push(ui.issueBanner({ tone: 'error', summary: copy.issues.problems(errors.length), issues: errors, resolve: resolveIssue }));
@@ -142,7 +143,7 @@
       const node = root.querySelector('[data-path="' + String(nextFocus).replaceAll('"', '') + '"]');
       if (node) {
         // A new item starts closed; open the cards around its first control so the reader can type into it.
-        window.MigentPage.openAround(node);
+        ui.openAround(node);
         node.focus();
       }
       nextFocus = null;

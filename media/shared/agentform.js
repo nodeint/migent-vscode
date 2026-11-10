@@ -1,11 +1,11 @@
 // Shared agent form: the inline agent editor (model picker, effort, client options), the helpers that read the client
 // list, and the "named agent or inline" selector. Pages with an agent (workflow stages, config agents and roles)
 // render it over the flat shape { model, effort, clientType, clientOptions } and keep their own draft.
-// Every string is set with textContent. Needs media/shared/page.js, form.js and copy.js loaded first (see docs/ui.md).
+// Every string is set with textContent. Builds on the kit (`MigentUi`) and copy.js, which load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
   const copy = window.MigentCopy;
   const text = copy.agent;
 
@@ -67,7 +67,8 @@
     let hint = text.modelHint.known;
     if (clientChoices(options.model).length === 0) hint = text.modelHint.noClients;
     else if (hasModel && !known) hint = options.unknownHint || text.modelHint.unknown;
-    return ui.group(options.title, options.note, {
+    return ui.group(options.title, {
+      note: options.note,
       children: [
         ui.grid([
           ui.field({
@@ -124,8 +125,8 @@
 
   /** The datalists the editor refers to: the effort values and one list of option keys. */
   function datalists(model, entries) {
-    const nodes = [ui.datalist(EFFORT_LIST_ID, EFFORT_SUGGESTIONS)];
-    for (const entry of entries) nodes.push(ui.datalist(entry.id, optionKeySuggestions(model, entry.clientType)));
+    const nodes = [ui.datalist({ id: EFFORT_LIST_ID, values: EFFORT_SUGGESTIONS })];
+    for (const entry of entries) nodes.push(ui.datalist({ id: entry.id, values: optionKeySuggestions(model, entry.clientType) }));
     return nodes;
   }
 

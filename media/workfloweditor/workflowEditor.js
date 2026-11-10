@@ -1,13 +1,14 @@
 // Workflow editor page. The page edits the workflow as a form (YAML opens the file in the editor); it keeps a local draft and asks the
 // host to validate, apply or save it. The Design view's controls live in workflowForm.js. Every string is set with
-// textContent. The shared helpers in media/shared/page.js and workflowForm.js load first (see docs/ui.md).
+// textContent. The shared UI kit in media/shared and workflowForm.js load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, connect, trackFooter, pageHeader, controlOf, revealControl } = window.MigentPage;
+  const { connect, trackFooter } = window.MigentPage;
   const copy = window.MigentCopy;
   const text = window.MigentWorkflowCopy.page;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, pageHeader, controlOf, revealControl } = ui;
   const { emptyForm, normalizeForm } = window.MigentWorkflowForm;
   const draftPage = window.MigentDraftPage;
   const root = document.getElementById('root');
@@ -98,7 +99,7 @@
     const node = controlAt(target.path);
     if (!node) return;
     // A control in a closed card cannot take focus, so the cards around it open first (a new item starts closed).
-    window.MigentPage.openAround(node);
+    ui.openAround(node);
     node.focus();
     if (typeof node.setSelectionRange === 'function' && typeof target.start === 'number') {
       node.setSelectionRange(target.start, target.end);
@@ -169,13 +170,13 @@
   function renderNotices() {
     const nodes = [];
     const unknownError = text.notice.unknownError;
-    if (transient.error) nodes.push(ui.alertLine(transient.error, 'mg-error', true));
-    if (model.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(model.readError || unknownError), 'mg-error', true));
-    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(model.readError || unknownError), 'mg-error', true));
+    if (transient.error) nodes.push(ui.alertLine(transient.error, { tone: 'error', role: 'alert' }));
+    if (model.state === 'invalid') nodes.push(ui.alertLine(text.notice.invalid(model.readError || unknownError), { tone: 'error', role: 'alert' }));
+    if (model.state === 'unreadable') nodes.push(ui.alertLine(text.notice.unreadable(model.readError || unknownError), { tone: 'error', role: 'alert' }));
     if (model.state === 'unsupported') {
-      nodes.push(ui.alertLine(text.notice.unsupported(model.schemaVersion === null ? text.notice.unknownSchema : model.schemaVersion), 'mg-warn'));
+      nodes.push(ui.alertLine(text.notice.unsupported(model.schemaVersion === null ? text.notice.unknownSchema : model.schemaVersion), { tone: 'warn' }));
     }
-    if (model.duplicateOf && model.duplicateOf.length > 0) nodes.push(ui.alertLine(text.notice.duplicate(model.id), 'mg-warn'));
+    if (model.duplicateOf && model.duplicateOf.length > 0) nodes.push(ui.alertLine(text.notice.duplicate(model.id), { tone: 'warn' }));
     const errors = issues('errors');
     if (errors.length > 0) {
       nodes.push(ui.issueBanner({ tone: 'error', summary: copy.issues.problems(errors.length), issues: errors, resolve: resolveIssue }));

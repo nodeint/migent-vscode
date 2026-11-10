@@ -1,12 +1,12 @@
 // Metrics tab of the Session page. Read-only: it renders the model the extension posts and sends intents that carry
 // identity only (a closed action name), never a path, a command or argv. Every string is set with
 // textContent; bars are <progress> elements sized through properties. The shared helpers in
-// media/shared/page.js load first (see docs/ui.md).
+// media/shared load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el } = window.MigentPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el } = ui;
   const copy = window.MigentCopy;
   const text = window.MigentSessionMetricsCopy;
   const numberFormat = new Intl.NumberFormat('en-US');
@@ -14,10 +14,7 @@
 
   let page = null;
 
-  /** A button that sends `intent`. `kind` is a kit button kind. */
-  function action(label, intent, kind) {
-    return ui.button(label, { kind, size: 'md', onClick: () => page.send(intent) });
-  }
+  const action = (label, intent, kind) => page.action(label, intent, kind);
 
   const SECONDS_PER_MINUTE = 60;
   const SECONDS_PER_HOUR = 3600;
@@ -174,28 +171,20 @@
   }
 
   function renderStages(metrics) {
-    if (metrics.stages.length === 0) return ui.section(text.stages.title, { children: [el('p', text.stages.empty, 'mg-empty')] });
+    if (metrics.stages.length === 0) return ui.section(text.stages.title, { children: [ui.empty(text.stages.empty)] });
     const seconds = metrics.stages.map((stage) => stageSeconds(metrics, stage.id));
     const longest = Math.max(1, ...seconds.map((value) => (value === null ? 0 : value)));
     const list = el('ul', null, 'mg-list');
     metrics.stages.forEach((stage, index) => {
       const spent = seconds[index];
-      const row = el('div', null, 'mg-row');
-      const main = el('div', null, 'mg-row-main');
-      main.append(el('span', stage.id, 'mg-mono'));
-      if (spent !== null) main.append(bar(spent, longest, false));
-      const meta = el('span', null, 'mg-row-meta');
-      meta.append(el('span', formatSeconds(spent), 'metrics-row-value'));
+      const main = [el('span', stage.id, 'mg-mono')];
+      if (spent !== null) main.push(bar(spent, longest, false));
       const parts = [text.stages.executions(count(stage.executions))];
       if (isNumber(stage.skipped) && stage.skipped > 0) parts.push(text.stages.skipped(stage.skipped));
       if (isNumber(stage.revisions) && stage.revisions > 0) parts.push(text.stages.revisions(stage.revisions));
       if (isNumber(stage.failed) && stage.failed > 0) parts.push(text.stages.failed(stage.failed));
       if (isNumber(stage.blocked) && stage.blocked > 0) parts.push(text.stages.blocked(stage.blocked));
-      meta.append(el('span', parts.join(' · ')));
-      row.append(main, meta);
-      const item = el('li');
-      item.append(row);
-      list.append(item);
+      list.append(ui.listRow({ main, meta: [el('span', formatSeconds(spent), 'metrics-row-value'), el('span', parts.join(' · '))] }));
     });
     return ui.section(text.stages.title, { count: String(metrics.stages.length), note: text.stages.note, children: [list] });
   }
@@ -235,28 +224,19 @@
     const longest = Math.max(1, ...TOKEN_FIELDS.map((field) => (isNumber(usage[field]) ? usage[field] : 0)));
     const list = el('ul', null, 'mg-list');
     for (const field of TOKEN_FIELDS) {
-      const row = el('div', null, 'mg-row');
-      const main = el('div', null, 'mg-row-main');
-      main.append(el('span', text.usage.tokens[field]));
-      if (isNumber(usage[field])) main.append(bar(usage[field], longest, true));
-      row.append(main, el('span', count(usage[field]), 'mg-row-meta'));
-      const item = el('li');
-      item.append(row);
-      list.append(item);
+      const main = [el('span', text.usage.tokens[field])];
+      if (isNumber(usage[field])) main.push(bar(usage[field], longest, true));
+      list.append(ui.listRow({ main, meta: count(usage[field]) }));
     }
     const rows = clientRows(metrics);
     const clients = el('ul', null, 'mg-list');
     for (const [name, entry] of rows) {
-      const row = el('div', null, 'mg-row');
-      row.append(el('span', name, 'mg-row-main mg-mono'), el('span', clientMeta(entry), 'mg-row-meta'));
-      const item = el('li');
-      item.append(row);
-      clients.append(item);
+      clients.append(ui.listRow({ main: name, mainClass: 'mg-mono', meta: clientMeta(entry) }));
     }
-    const providers = rows.size === 0 ? [el('p', text.usage.noProviders, 'mg-empty')] : [clients];
+    const providers = rows.size === 0 ? [ui.empty(text.usage.noProviders)] : [clients];
     return ui.section(text.usage.title, {
       note: text.usage.note,
-      children: [list, ui.group(text.usage.providers, null, { children: providers })],
+      children: [list, ui.group(text.usage.providers, { children: providers })],
     });
   }
 
@@ -320,7 +300,7 @@
       cell.append(commands);
       list.append(el('dt', text.verify.failedCommands), cell);
     }
-    return ui.group(text.verify.title, null, { children: [list] });
+    return ui.group(text.verify.title, { children: [list] });
   }
 
   function executionBody(execution) {
@@ -342,11 +322,11 @@
     }
     if (execution.resumesExecutionId) fact(facts, text.execution.resumes, execution.resumesExecutionId);
     if (execution.routedFrom) fact(facts, text.execution.routedFrom, execution.routedFrom);
-    const body = [ui.group(text.execution.timing, null, { children: [facts] })];
+    const body = [ui.group(text.execution.timing, { children: [facts] })];
     if (isSkipped(execution)) return body;
     const tokens = el('dl', null, 'metrics-kv');
     for (const field of TOKEN_FIELDS) fact(tokens, text.usage.tokens[field], count(execution.usage[field]));
-    body.push(ui.group(text.execution.tokens, null, { children: [tokens] }));
+    body.push(ui.group(text.execution.tokens, { children: [tokens] }));
     if (execution.verify) body.push(renderVerify(execution.verify));
     return body;
   }
@@ -355,9 +335,9 @@
   function executionAlerts(execution) {
     const alerts = [];
     const tone = attentionTone(execution);
-    if (tone !== null) alerts.push(el('span', statusLabel(execution).label, 'mg-chip mg-chip--' + tone));
+    if (tone !== null) alerts.push(ui.chip(statusLabel(execution).label, { tone }));
     if (!isSkipped(execution) && !isNumber(execution.usage.costUsd)) {
-      alerts.push(el('span', text.executions.noCost, 'mg-chip mg-chip--warn'));
+      alerts.push(ui.chip(text.executions.noCost, { tone: 'warn' }));
     }
     return alerts;
   }
@@ -379,7 +359,7 @@
   function renderExecutions(metrics) {
     const executions = metrics.executions;
     if (executions.length === 0) {
-      return ui.section(text.executions.title, { children: [el('p', text.executions.empty, 'mg-empty')] });
+      return ui.section(text.executions.title, { children: [ui.empty(text.executions.empty)] });
     }
     return ui.section(text.executions.title, {
       count: String(executions.length),

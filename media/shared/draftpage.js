@@ -2,7 +2,8 @@
 // one or more *draft units*; each holds the draft being edited, the last form adopted from disk and the three
 // transitions of that pair. Whether a dirty draft survives a disk refresh is a policy the page decides, not built-in
 // behavior. Also: the model-pick routing and the notices/footer refresh the pages repeat.
-// Needs media/shared/page.js and form.js loaded first (see docs/ui.md). Exposes `MigentDraftPage`.
+// Host adapter group (see docs/ui.md): it builds on the kit and `MigentPage`, and the kit does not know it.
+// Needs the kit and page.js loaded first. Exposes `MigentDraftPage`.
 (function () {
   'use strict';
 
@@ -80,13 +81,13 @@
   /**
    * The notices area and the sticky footer, refreshed in place after an edit so the focused input survives.
    * options.renderNotices()  nodes of the notices area; called after the form is mounted
-   * options.footerOptions()  options of `MigentForm.saveFooter`
+   * options.footerOptions()  options of `MigentUi.saveFooter`
    */
   function createChrome(options) {
     let noticesHost = null;
     let footerHost = null;
     const { trackFooter } = window.MigentPage;
-    const ui = window.MigentForm;
+    const ui = window.MigentUi;
     return {
       reset() {
         noticesHost = null;
@@ -99,7 +100,7 @@
       },
       /**
        * Fill the notices after the form is in the document, so an issue can be classified against the controls the
-       * form really drew (see `MigentPage.controlOf`).
+       * form really drew (see `MigentUi.controlOf`).
        */
       fillNotices() {
         if (noticesHost !== null) noticesHost.replaceChildren(...options.renderNotices());
@@ -112,7 +113,7 @@
       refresh() {
         if (noticesHost !== null) noticesHost.replaceChildren(...options.renderNotices());
         if (footerHost !== null) {
-          ui.saveFooter(options.footerOptions(), footerHost);
+          ui.saveFooter({ ...options.footerOptions(), into: footerHost });
           trackFooter();
         }
       },

@@ -1,5 +1,5 @@
 // Shared copy for Migent webview pages: the text that more than one page shows, in one place, so one wording is
-// changed once. Loaded before `page.js` (see docs/ui.md). Exposes one global, `MigentCopy`.
+// changed once. Loaded before the kit (`dom.js`) (see docs/ui.md). Exposes one global, `MigentCopy`.
 // Only text that is shared lives here. A page keeps its own text in its own file until a second page needs it.
 (function () {
   'use strict';
@@ -61,6 +61,20 @@
     issues: {
       problems: (count) => count + (count === 1 ? ' problem found' : ' problems found'),
       warnings: (count) => count + (count === 1 ? ' warning' : ' warnings'),
+    },
+
+    /** What the UI kit shows when a page passes nothing of its own. */
+    kit: {
+      none: '(none)',
+      notInList: ' (not in list)',
+      notKnownValue: ' is not a known value',
+      save: 'Save workflow',
+      saving: 'Saving…',
+      discard: 'Discard changes',
+      menuTrigger: '⋯',
+      item: 'item',
+      rowKey: (item, number) => item + ' ' + number + ' key',
+      rowValue: (item, number) => item + ' ' + number + ' value',
     },
 
     loadingWorkflow: 'Loading the workflow…',
