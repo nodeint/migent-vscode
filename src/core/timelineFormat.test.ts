@@ -41,6 +41,14 @@ describe('formatTimelineLine', () => {
     expect(line).toBe('09:10:00 session.created');
   });
 
+  it.each(['handoff.file_invalid', 'response.contract_invalid', 'stage.output_missing'])(
+    'formats the %s event as an ordinary line',
+    (name) => {
+      const line = formatTimelineLine(event({ event: name, timestamp: '2026-10-26T09:10:00.000+00:00' }), utc);
+      expect(line).toBe(`09:10:00 ${name}`);
+    },
+  );
+
   it('falls back to the stage id and a placeholder for a missing or invalid timestamp', () => {
     expect(formatTimelineLine(event({ stageId: 'plan' }), utc)).toBe('--:--:-- plan note');
     expect(formatTimelineLine(event({ timestamp: 'garbage' }), utc)).toBe('--:--:-- note');

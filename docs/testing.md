@@ -163,9 +163,9 @@ record while the CLI runs.
 `src/core/contractBinding.test.ts` pins the result types of the lenient parsers to the contract field types at compile
 time.
 
-### Session drafts and CLI 0.5.4 behavior
+### Session drafts and CLI 0.5.5 behavior
 
-The fixture CLI models 0.5.4 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+The fixture CLI models 0.5.5 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`

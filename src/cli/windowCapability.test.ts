@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { CapabilityState } from './version';
 import { WindowCapability } from './windowCapability';
 
-const ok: CapabilityState = { kind: 'ok', required: '0.5.4', detected: '0.5.4' };
-const missing: CapabilityState = { kind: 'missing', required: '0.5.4' };
+const ok: CapabilityState = { kind: 'ok', required: '0.5.5', detected: '0.5.5' };
+const missing: CapabilityState = { kind: 'missing', required: '0.5.5' };
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
