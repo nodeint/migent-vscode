@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.8
+
 - Replace the session page's Results tab with an Overview tab: Status, Progress, Latest activity, Outputs,
   Next steps, child sessions, source and handoff in one fixed order, with one primary action for the current state.
 
