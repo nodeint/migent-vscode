@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { isValid, SealedMetricsHistorical } from '@nodeint/migent-contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { parseMetrics, readMetrics } from './metrics';
@@ -178,5 +179,13 @@ describe('parseMetrics', () => {
     expect(read.metrics.totals.wallSeconds).toBeNull();
     expect(read.metrics.totals.turns).toBeNull();
     expect(read.metrics.totals.usage.costUsd).toBeNull();
+  });
+});
+
+describe('captured metrics.json against the contract', () => {
+  it('conforms to the historical known shape and still reads ok', () => {
+    const value: unknown = JSON.parse(readFileSync(path.join(FIXTURE, METRICS_FILENAME), 'utf8'));
+    expect(isValid(SealedMetricsHistorical, value)).toBe(true);
+    expect(parseMetrics(value).kind).toBe('ok');
   });
 });

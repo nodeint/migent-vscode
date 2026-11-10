@@ -11,6 +11,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.13.0)
+      '@nodeint/migent-contracts':
+        specifier: 0.5.4
+        version: 0.5.4
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -658,6 +661,10 @@ packages:
   '@node-rs/crc32@1.10.8':
     resolution: {integrity: sha512-gOYKFwkojSdWrSmreCcGocRcAXSpRkNZYxv6nscmtddSWBKVGypdMbfLxu5qgmymdaCNApajuwZblYEfs7HswA==}
     engines: {node: '>= 10'}
+
+  '@nodeint/migent-contracts@0.5.4':
+    resolution: {integrity: sha512-5SB20yUzZqD5KfZfqkWAt4wPJQJ3OWFXuDxxkK4GhLHxyHBhLQqLfX08P9JpZgyeEleFBkSWV0YRubt8A+hryQ==}
+    engines: {node: '>=22'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2207,6 +2214,9 @@ packages:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
 
+  typebox@1.4.6:
+    resolution: {integrity: sha512-Yh8Mi4hzD7gqcuv9ZIk6HK1KVJKubTlfxaNxkrYK35HCvxoCjCuWVr8cBjQ/ChfA7yliPteJEBWHGFVGWDuF5Q==}
+
   typed-rest-client@1.8.11:
     resolution: {integrity: sha512-5UvfMpd1oelmUPRbbaVnq+rHP7ng2cE4qoQkQeAqxRL6PklkxsM0g32/HL0yfvruK6ojQ5x8EE+HF4YV6DtuCA==}
 
@@ -2876,6 +2886,10 @@ snapshots:
       '@node-rs/crc32-win32-arm64-msvc': 1.10.8
       '@node-rs/crc32-win32-ia32-msvc': 1.10.8
       '@node-rs/crc32-win32-x64-msvc': 1.10.8
+
+  '@nodeint/migent-contracts@0.5.4':
+    dependencies:
+      typebox: 1.4.6
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -4535,6 +4549,8 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
+
+  typebox@1.4.6: {}
 
   typed-rest-client@1.8.11:
     dependencies:

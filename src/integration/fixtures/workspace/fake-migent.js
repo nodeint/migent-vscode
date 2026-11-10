@@ -7,7 +7,7 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.5.2: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.5.4: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
@@ -463,6 +463,26 @@ function get() {
     );
     return;
   }
+  if (type === 'options' || type === 'option') {
+    // `get options --client <id> --native --json`: the client's native headless options (0.5.0 and later).
+    const client = option('--client');
+    print([
+      {
+        kind: 'option',
+        name: 'temperature',
+        client,
+        source: 'native',
+        flags: ['--temperature'],
+        description: 'Sampling temperature.',
+        argument: 'value',
+        value_mode: 'value',
+        type: 'string',
+        choices: null,
+        default: null,
+      },
+    ]);
+    return;
+  }
   if (type === 'role' || type === 'roles') {
     if (name !== undefined) {
       console.error(`${type} not found: ${name}.`);
@@ -474,10 +494,35 @@ function get() {
   return unknown(type);
 }
 
+// `workflow save|config save - --json`: the authoring envelope of a successful save (the content is not kept).
+function authoringSave() {
+  const command = `${args[0]}.save`;
+  const target = option('--target') ?? option('--scope') ?? option('--session');
+  process.stdin.resume();
+  process.stdin.on('end', () => {
+    const hash = crypto.createHash('sha256').update(String(target)).digest('hex');
+    console.log(JSON.stringify({ schema_version: 1, command, valid: true, diagnostics: [], file: target, hash, written: true }));
+  });
+}
+
+// `doctor --json`: one passing check per area.
+function doctor() {
+  console.log(
+    JSON.stringify({
+      ok: true,
+      checks: [{ name: 'config', ok: true, items: ['.migent/config.yaml'], problems: [], warnings: [] }],
+    }),
+  );
+}
+
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.2');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.4');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
+} else if ((args[0] === 'workflow' || args[0] === 'config') && args[1] === 'save' && !IS_LEGACY) {
+  authoringSave();
+} else if (args[0] === 'doctor' && !IS_LEGACY) {
+  doctor();
 } else if (args[0] === 'get' && args[1] === 'providers' && !IS_LEGACY) {
   console.error('error: unknown resource type providers (removed in 0.5.0)');
   process.exit(2);

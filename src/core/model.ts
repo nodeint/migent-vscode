@@ -1,10 +1,12 @@
+import type { LifecycleEventV2 } from '@nodeint/migent-contracts';
+
 /**
  * Types shared by the `core/` modules. Nothing here may import `vscode`.
  * Field shapes mirror migent's documented file formats (docs/sessions.md).
  */
 
 /** Highest event envelope version this extension understands (events.jsonl `v`). */
-export const KNOWN_EVENT_VERSION = 2;
+export const KNOWN_EVENT_VERSION: LifecycleEventV2['v'] = 2;
 
 /**
  * Manifest `schema_version` values this extension understands. Independent of the

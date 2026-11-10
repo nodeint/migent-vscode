@@ -1,7 +1,8 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { isValid, LegacyLifecycleEvent, LifecycleEventV2 } from '@nodeint/migent-contracts';
 import { describe, expect, it } from 'vitest';
 
 import { EventTail, readRecentEvents, tailEvents } from './eventTail';
@@ -257,5 +258,19 @@ ${noSeq}
     rmSync(file);
     expect(tail.poll()).toEqual({ events: [], truncated: false });
     expect(tail.history).toHaveLength(1);
+  });
+});
+
+describe('captured events.jsonl against the contract', () => {
+  it('every line is a known envelope and reads as an event, not a raw line', () => {
+    const file = path.join(__dirname, 'fixtures', 'sessions', 'completed', 'events.jsonl');
+    const lines = readFileSync(file, 'utf8').split('\n').filter((line) => line !== '');
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      const value: unknown = JSON.parse(line);
+      expect(isValid(LifecycleEventV2, value) || isValid(LegacyLifecycleEvent, value)).toBe(true);
+    }
+    const read = tailEvents(file, 0);
+    expect(read.events.every((event) => event.rawLine === null && event.event !== null)).toBe(true);
   });
 });

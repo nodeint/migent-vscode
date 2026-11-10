@@ -273,6 +273,26 @@ const noVscodeConfig = {
   },
 };
 
+// Contracts are type-only: a value import would bundle TypeBox into the extension. Tests may import values.
+const contractsTypeOnlyConfig = {
+  files: ['src/**/*.ts'],
+  ignores: ['src/**/*.test.ts'],
+  rules: {
+    '@typescript-eslint/no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: '@nodeint/migent-contracts',
+            allowTypeImports: true,
+            message: 'Import @nodeint/migent-contracts with `import type` only; it is a dev-time type dependency.',
+          },
+        ],
+      },
+    ],
+  },
+};
+
 export default defineConfig(
   { ignores: IGNORE_PATTERNS },
   baseConfig,
@@ -280,4 +300,5 @@ export default defineConfig(
   sizeConfig,
   testFilesConfig,
   noVscodeConfig,
+  contractsTypeOnlyConfig,
 );

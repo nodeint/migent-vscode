@@ -1,4 +1,23 @@
-import { isRecord } from './record';
+import type {
+  DoctorReport,
+  GetClient,
+  GetModel,
+  GetNativeOption,
+  PrepareResult,
+  Static,
+} from '@nodeint/migent-contracts';
+
+import { type Wire, wireOf } from './contractRead';
+
+type PrepareOutput = Static<typeof PrepareResult>;
+type ClientRow = Static<typeof GetClient>;
+type ModelRow = Static<typeof GetModel>;
+type NativeOptionRow = Static<typeof GetNativeOption>;
+type DoctorCheckRow = DoctorReport['checks'][number];
+
+/** The values the extension compares against, typed by the contract so a field type change fails typecheck. */
+const AVAILABLE_FLAG: ClientRow['available'] = true;
+const DEFAULT_FLAG: ModelRow['default'] = true;
 
 /**
  * Pure argv builders for the write commands (plans/03-control.md §2). Each value is its own argv entry:
@@ -79,9 +98,12 @@ export function completeArgs(sessionId: string): string[] {
 }
 
 /** What `session prepare` printed, or null when it is not the documented object. */
-export function parsePrepared(value: unknown): { sessionId: string; taskPath: string } | null {
-  if (!isRecord(value)) return null;
-  const { session_id: sessionId, task_path: taskPath } = value;
+export function parsePrepared(
+  value: unknown,
+): { sessionId: PrepareOutput['session_id']; taskPath: PrepareOutput['task_path'] } | null {
+  const prepared = wireOf<PrepareOutput, 'session_id' | 'task_path'>(value);
+  if (prepared === null) return null;
+  const { session_id: sessionId, task_path: taskPath } = prepared;
   if (typeof sessionId !== 'string' || typeof taskPath !== 'string') return null;
   if (sessionId.length === 0 || taskPath.length === 0) return null;
   return { sessionId, taskPath };
@@ -124,12 +146,12 @@ function stringList(value: unknown): string[] {
 
 export interface ClientChoice {
   /** The client id `init --client` accepts, such as `claude-code`. */
-  id: string;
-  models: string[];
+  id: ClientRow['name'];
+  models: ModelRow['name'][];
   /** The model `get models` marks as default for this client. */
-  defaultModel?: string;
+  defaultModel?: ModelRow['name'];
   /** Native option keys the client reports in `get options --native`. */
-  optionKeys?: string[];
+  optionKeys?: NativeOptionRow['name'][];
 }
 
 /** The models of a client with its default first, when it is one of them. */
@@ -140,13 +162,17 @@ export function modelsDefaultFirst(choice: ClientChoice): string[] {
 }
 
 /** The model names a client reports in `get models --json` rows, in CLI order, and its default one. */
-function clientModels(models: unknown[], client: string): { names: string[]; defaultModel?: string } {
-  const names: string[] = [];
-  let defaultModel: string | undefined;
-  for (const row of models) {
-    if (!isRecord(row) || row.client !== client || typeof row.name !== 'string' || row.name === '') continue;
+function clientModels(
+  models: unknown[],
+  client: ModelRow['client'],
+): { names: ModelRow['name'][]; defaultModel?: ModelRow['name'] } {
+  const names: ModelRow['name'][] = [];
+  let defaultModel: ModelRow['name'] | undefined;
+  for (const item of models) {
+    const row = wireOf<ModelRow, 'client' | 'name' | 'default'>(item);
+    if (row?.client !== client || typeof row.name !== 'string' || row.name === '') continue;
     names.push(row.name);
-    if (row.default === true) defaultModel = row.name;
+    if (row.default === DEFAULT_FLAG) defaultModel = row.name;
   }
   return defaultModel === undefined ? { names } : { names, defaultModel };
 }
@@ -158,8 +184,9 @@ function clientModels(models: unknown[], client: string): { names: string[]; def
 export function joinClients(clients: unknown, models: unknown): ClientChoice[] {
   if (!Array.isArray(clients) || !Array.isArray(models)) return [];
   const choices: ClientChoice[] = [];
-  for (const item of clients as unknown[]) {
-    if (!isRecord(item) || typeof item.name !== 'string' || item.name === '' || item.available !== true) continue;
+  for (const row of clients as unknown[]) {
+    const item = wireOf<ClientRow, 'name' | 'available'>(row);
+    if (item === null || typeof item.name !== 'string' || item.name === '' || item.available !== AVAILABLE_FLAG) continue;
     const { names, defaultModel } = clientModels(models as unknown[], item.name);
     if (names.length === 0) continue;
     const choice: ClientChoice = { id: item.name, models: names };
@@ -180,11 +207,12 @@ export function clientOptionsArgs(client: string): string[] {
 }
 
 /** The names of the available clients in `get clients --json`, in CLI order. */
-export function availableClients(value: unknown): string[] {
+export function availableClients(value: unknown): ClientRow['name'][] {
   if (!Array.isArray(value)) return [];
-  const names: string[] = [];
-  for (const row of value as unknown[]) {
-    if (isRecord(row) && row.available === true && typeof row.name === 'string' && row.name !== '') names.push(row.name);
+  const names: ClientRow['name'][] = [];
+  for (const item of value as unknown[]) {
+    const row = wireOf<ClientRow, 'name' | 'available'>(item);
+    if (row !== null && row.available === AVAILABLE_FLAG && typeof row.name === 'string' && row.name !== '') names.push(row.name);
   }
   return names;
 }
@@ -193,7 +221,7 @@ export function availableClients(value: unknown): string[] {
  * One client's choice for the workflow editor from its `get models` and native `get options` rows; null when the
  * client reports no model.
  */
-export function clientChoice(client: string, models: unknown, options: unknown): ClientChoice | null {
+export function clientChoice(client: ModelRow['client'], models: unknown, options: unknown): ClientChoice | null {
   if (!Array.isArray(models)) return null;
   const { names, defaultModel } = clientModels(models as unknown[], client);
   if (names.length === 0) return null;
@@ -201,8 +229,8 @@ export function clientChoice(client: string, models: unknown, options: unknown):
   if (defaultModel !== undefined) choice.defaultModel = defaultModel;
   const optionKeys = Array.isArray(options)
     ? (options as unknown[])
-        .filter(isRecord)
-        .map((option) => (typeof option.name === 'string' ? option.name : ''))
+        .map((option) => wireOf<NativeOptionRow, 'name'>(option))
+        .map((option): NativeOptionRow['name'] => (typeof option?.name === 'string' ? option.name : ''))
         .filter((name) => name !== '')
     : [];
   if (optionKeys.length > 0) choice.optionKeys = optionKeys;
@@ -240,19 +268,22 @@ export function initArgs(input: InitInput): string[] {
   ];
 }
 
+/** One doctor check as the extension reads it. `items` is not read; `problems` and `warnings` default to empty. */
 export interface DoctorCheck {
-  name: string;
-  ok: boolean;
-  problems: string[];
-  warnings: string[];
+  name: DoctorCheckRow['name'];
+  ok: DoctorCheckRow['ok'];
+  problems: DoctorCheckRow['problems'];
+  warnings: DoctorCheckRow['warnings'];
 }
 
 /** The checks of `doctor --json`, or null when the output is not the documented object. */
 export function parseDoctor(value: unknown): DoctorCheck[] | null {
-  if (!isRecord(value) || !Array.isArray(value.checks)) return null;
+  const report = wireOf<DoctorReport, 'checks'>(value);
+  if (report === null || !Array.isArray(report.checks)) return null;
   const checks: DoctorCheck[] = [];
-  for (const item of value.checks as unknown[]) {
-    if (!isRecord(item) || typeof item.name !== 'string') return null;
+  for (const raw of report.checks as unknown[]) {
+    const item: Wire<DoctorCheckRow> | null = wireOf<DoctorCheckRow>(raw);
+    if (item === null || typeof item.name !== 'string') return null;
     checks.push({
       name: item.name,
       ok: item.ok === true,

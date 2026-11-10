@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import type { SealedMetricsHistorical, Static } from '@nodeint/migent-contracts';
+
+import { type Declared, declaredOf } from './contractRead';
 import { METRICS_FILENAME } from './paths';
 import { isRecord } from './record';
 
@@ -9,6 +12,17 @@ import { isRecord } from './record';
  * Documented nulls stay null; a missing value is never replaced by 0. Machine-specific fields
  * (`argv`, `agent_id`, `cli_version`, `git_head`, `git_dirty`) are deliberately not part of these types.
  */
+
+/**
+ * The opt-in historical shape (every field optional) is the upper bound of what is read: each reader below takes its
+ * field names from it, so an upstream rename fails typecheck. Values stay `unknown`; it is a drift signal, not a gate.
+ */
+type HistoricalMetrics = Static<typeof SealedMetricsHistorical>;
+type TotalsWire = NonNullable<HistoricalMetrics['totals']>;
+type StageWire = NonNullable<HistoricalMetrics['stages']>[string];
+type ExecutionWire = NonNullable<HistoricalMetrics['executions']>[number];
+type UsageWire = NonNullable<TotalsWire['usage']>;
+type VerifyWire = NonNullable<ExecutionWire['verify']>;
 
 /** Token and cost values; null when the client did not report the field. */
 export interface MetricsUsage {
@@ -99,20 +113,20 @@ function errorCode(error: unknown): string {
   return isRecord(error) && typeof error.code === 'string' ? error.code : 'unknown error';
 }
 
-function num(value: unknown): number | null {
+function num(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function str(value: unknown): string | null {
+function str(value: string | null | undefined): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-function bool(value: unknown): boolean | null {
+function bool(value: boolean | null | undefined): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
 
 function usageOf(value: unknown): MetricsUsage {
-  const source = isRecord(value) ? value : {};
+  const source: Declared<UsageWire> = declaredOf<UsageWire>(value) ?? {};
   return {
     inputTokens: num(source.input_tokens),
     outputTokens: num(source.output_tokens),
@@ -123,7 +137,7 @@ function usageOf(value: unknown): MetricsUsage {
   };
 }
 
-function totalsOf(totals: Record<string, unknown>): MetricsTotals {
+function totalsOf(totals: Declared<TotalsWire>): MetricsTotals {
   return {
     executions: num(totals.executions),
     skipped: num(totals.skipped),
@@ -143,7 +157,7 @@ function totalsOf(totals: Record<string, unknown>): MetricsTotals {
   };
 }
 
-function stageOf(id: string, value: Record<string, unknown>): MetricsStage {
+function stageOf(id: string, value: Declared<StageWire>): MetricsStage {
   return {
     id,
     executions: num(value.executions),
@@ -154,8 +168,9 @@ function stageOf(id: string, value: Record<string, unknown>): MetricsStage {
   };
 }
 
-function verifyOf(value: unknown): MetricsVerify | null {
-  if (!isRecord(value)) return null;
+function verifyOf(raw: unknown): MetricsVerify | null {
+  const value = declaredOf<VerifyWire>(raw);
+  if (value === null) return null;
   const commands = Array.isArray(value.failed_commands) ? value.failed_commands : [];
   return {
     runs: num(value.runs),
@@ -165,8 +180,15 @@ function verifyOf(value: unknown): MetricsVerify | null {
   };
 }
 
-function executionOf(value: unknown): MetricsExecution | null {
-  if (!isRecord(value)) return null;
+/** `reason` of a skip record; the contract types `skip` as an open record, so the value is checked here. */
+function skipReasonOf(skip: unknown): string | null {
+  const reason = isRecord(skip) ? skip.reason : null;
+  return str(typeof reason === 'string' ? reason : null);
+}
+
+function executionOf(raw: unknown): MetricsExecution | null {
+  const value = declaredOf<ExecutionWire>(raw);
+  if (value === null) return null;
   const id = str(value.execution_id);
   const order = num(value.execution_order);
   const stageId = str(value.stage_id);
@@ -190,22 +212,25 @@ function executionOf(value: unknown): MetricsExecution | null {
     usage: usageOf(value.usage),
     usageMissing: usageOf(value.usage_missing),
     verify: verifyOf(value.verify),
-    skipReason: isRecord(value.skip) ? str(value.skip.reason) : null,
+    skipReason: skipReasonOf(value.skip),
     resumesExecutionId: str(value.resumes_execution_id),
     routedFrom: str(value.routed_from),
   };
 }
 
 /** Validate the top-level shapes the page consumes and reduce the file to {@link SessionMetrics}. */
-export function parseMetrics(value: unknown): MetricsRead {
-  if (!isRecord(value)) return { kind: 'invalid', error: 'not a JSON object' };
-  if (!isRecord(value.totals)) return { kind: 'invalid', error: 'totals is not an object' };
+export function parseMetrics(raw: unknown): MetricsRead {
+  const value = declaredOf<HistoricalMetrics>(raw);
+  if (value === null) return { kind: 'invalid', error: 'not a JSON object' };
+  const totals = declaredOf<TotalsWire>(value.totals);
+  if (totals === null) return { kind: 'invalid', error: 'totals is not an object' };
   if (!isRecord(value.stages)) return { kind: 'invalid', error: 'stages is not an object' };
   if (!Array.isArray(value.executions)) return { kind: 'invalid', error: 'executions is not a list' };
   const stages: MetricsStage[] = [];
   for (const [id, stage] of Object.entries(value.stages)) {
-    if (!isRecord(stage)) return { kind: 'invalid', error: 'a stage is not an object' };
-    stages.push(stageOf(id, stage));
+    const stageWire = declaredOf<StageWire>(stage);
+    if (stageWire === null) return { kind: 'invalid', error: 'a stage is not an object' };
+    stages.push(stageOf(id, stageWire));
   }
   const executions: MetricsExecution[] = [];
   for (const [index, entry] of value.executions.entries()) {
@@ -213,7 +238,7 @@ export function parseMetrics(value: unknown): MetricsRead {
     if (execution === null) return { kind: 'invalid', error: `execution ${index + 1} is malformed` };
     executions.push(execution);
   }
-  return { kind: 'ok', metrics: { totals: totalsOf(value.totals), stages, executions } };
+  return { kind: 'ok', metrics: { totals: totalsOf(totals), stages, executions } };
 }
 
 /** Read `metrics.json` of one session on demand. Nothing is cached. */

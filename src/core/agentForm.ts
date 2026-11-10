@@ -6,7 +6,20 @@
  * Presence is kept: an optional field is absent (`undefined`) or present, and an empty present value is still
  * present. Keys the form does not model are kept as inert JSON in `extra` and written back unchanged.
  */
+import type { ClientSelection, InlineAgent, Static } from '@nodeint/migent-contracts';
+
+import type { Draft, Expect, OpenPart, SameKeys } from './contractDraft';
+import { wireOf } from './contractRead';
 import { isRecord } from './record';
+
+/** The object branch of an agent's `client`. */
+type ContractClientSelection = Static<typeof ClientSelection>;
+
+/** What `agentBody` writes for a `client`: the contract's `type` and `options`, plus preserved unmodeled keys. */
+export type ClientDraft = Draft<ContractClientSelection> & OpenPart;
+
+/** What `agentBody` writes for an agent (an inline agent, or a named agent fragment): every key optional. */
+export type AgentDraft = Draft<Omit<InlineAgent, 'client'>> & { client?: ClientDraft } & OpenPart;
 
 export interface OptionPair {
   key: string;
@@ -46,14 +59,22 @@ function optionPairs(value: unknown): OptionPair[] | undefined {
   return Object.entries(value).map(([key, item]) => ({ key, value: typeof item === 'string' ? item : String(item) }));
 }
 
-const CLIENT_KEYS = ['type', 'options'] as const;
-const AGENT_KEYS = ['model', 'effort', 'client'] as const;
+const CLIENT_KEYS = ['type', 'options'] as const satisfies readonly (keyof ContractClientSelection)[];
+const AGENT_KEYS = ['model', 'effort', 'client'] as const satisfies readonly (keyof InlineAgent)[];
+
+// A key added to or removed from the contract's client or agent fails typecheck here.
+export type ModeledKeysMatchContract = [
+  Expect<SameKeys<(typeof CLIENT_KEYS)[number], keyof ContractClientSelection>>,
+  Expect<SameKeys<(typeof AGENT_KEYS)[number], keyof InlineAgent>>,
+  Expect<SameKeys<keyof NonNullable<InlineAgent['client']>, keyof ContractClientSelection>>,
+];
 
 function parseClient(value: unknown): ClientForm {
   const body = isRecord(value) ? value : {};
+  const wire = wireOf<ContractClientSelection>(value) ?? {};
   const client: ClientForm = { extra: pick(body, CLIENT_KEYS) };
-  if (typeof body.type === 'string') client.type = body.type;
-  const options = optionPairs(body.options);
+  if (typeof wire.type === 'string') client.type = wire.type;
+  const options = optionPairs(wire.options);
   if (options !== undefined) client.options = options;
   return client;
 }
@@ -61,10 +82,11 @@ function parseClient(value: unknown): ClientForm {
 /** Read an agent mapping from a YAML value. Anything that is not a mapping reads as an empty agent. */
 export function parseAgent(value: unknown): AgentForm {
   const body = isRecord(value) ? value : {};
+  const wire = wireOf<InlineAgent>(value) ?? {};
   const agent: AgentForm = { extra: pick(body, AGENT_KEYS) };
-  if (typeof body.model === 'string') agent.model = body.model;
-  if (typeof body.effort === 'string') agent.effort = body.effort;
-  if (isRecord(body.client)) agent.client = parseClient(body.client);
+  if (typeof wire.model === 'string') agent.model = wire.model;
+  if (typeof wire.effort === 'string') agent.effort = wire.effort;
+  if (isRecord(wire.client)) agent.client = parseClient(wire.client);
   return agent;
 }
 
@@ -80,12 +102,12 @@ function optionsRecord(pairs: OptionPair[]): Record<string, string> {
  * The mapping an agent form describes: the unmodeled keys first, then each present modeled field. A modeled key is
  * never copied from `extra`, so an edited field cannot be shadowed by a stale copy.
  */
-export function agentBody(agent: AgentForm): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
+export function agentBody(agent: AgentForm): AgentDraft {
+  const body: AgentDraft = {};
   if (agent.model !== undefined) body.model = agent.model;
   if (agent.effort !== undefined) body.effort = agent.effort;
   if (agent.client !== undefined) {
-    const client: Record<string, unknown> = {};
+    const client: ClientDraft = {};
     if (agent.client.type !== undefined) client.type = agent.client.type;
     if (agent.client.options !== undefined) client.options = optionsRecord(agent.client.options);
     for (const [key, value] of Object.entries(agent.client.extra)) {

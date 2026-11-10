@@ -1,4 +1,5 @@
 /** The workflow editor's form shapes: inert data the page edits and the host serializes. No `vscode`. */
+import type { WORKFLOW_SCHEMA_VERSION } from '@nodeint/migent-contracts';
 
 /** A complete agent written inline on a stage. Empty fields are omitted when saved. */
 export interface WorkflowAgentForm {
@@ -12,7 +13,10 @@ export interface WorkflowAgentForm {
 export type WorkflowAgentMode = 'role' | 'named' | 'inline';
 
 /** Schema version the editor reads and writes. Older files are shown read-only; `migent migrate` upgrades them. */
-export const EDITABLE_SCHEMA_VERSION = 7;
+export const EDITABLE_SCHEMA_VERSION: typeof WORKFLOW_SCHEMA_VERSION = 7;
+
+/** Who a stage asks: nobody (`''`) or the human, the only value the contract accepts. */
+export type WorkflowAsk = '' | 'human';
 
 /** One entry of the top-level artifact registry. `required` is tri-state: null leaves the key out on save. */
 export interface WorkflowArtifactForm {
@@ -50,7 +54,7 @@ export interface WorkflowStageForm {
   id: string;
   description: string;
   role: string;
-  ask: string;
+  ask: WorkflowAsk;
   agentMode: WorkflowAgentMode;
   agentName: string;
   agent: WorkflowAgentForm;

@@ -1,4 +1,5 @@
 import { describeCapability } from '../cli/capabilityText';
+import { exitCodeOf } from '../cli/exitCode';
 import { invokeJson } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
 import type { CapabilityState } from '../cli/version';
@@ -6,8 +7,8 @@ import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope 
 import type { CapabilityService } from './capability';
 import type { ProjectKey } from './changes';
 
-/** Exit code of a rejected save because the file no longer matches the base hash. */
-export const EXIT_CONFLICT = 3;
+/** Exit code of a rejected save because the file no longer matches the base hash (authoring family: `stage_failed`). */
+export const EXIT_CONFLICT = exitCodeOf('stage_failed');
 
 export const SAVE_TIMEOUT_MS = 30_000;
 

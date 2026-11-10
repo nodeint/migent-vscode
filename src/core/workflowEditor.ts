@@ -2,15 +2,18 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse, stringify } from 'yaml';
 
 import { agentBody as agentBodyOf, type AgentForm, parseAgent } from './agentForm';
 import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope } from './authoring';
+import { wireOf } from './contractRead';
 import type { ClientChoice } from './controlArgs';
 import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
 import type { ProjectConfig } from './projectConfig';
 import { projectRelative } from './projectPresentation';
 import { isRecord } from './record';
+import type { WorkflowDraft, WorkflowStageDraft } from './workflowContractDraft';
 import {
   EDITABLE_SCHEMA_VERSION,
   emptyAgentForm,
@@ -19,6 +22,7 @@ import {
   newWorkflowForm,
   type WorkflowAgentForm,
   type WorkflowAgentMode,
+  type WorkflowAsk,
   type WorkflowForm,
   type WorkflowLocalArtifactForm,
   type WorkflowRouteArtifacts,
@@ -26,6 +30,7 @@ import {
 } from './workflowForm';
 import type { WorkflowScan } from './workflows';
 
+export type { WorkflowDraft, WorkflowStageDraft } from './workflowContractDraft';
 export * from './workflowForm';
 
 export type WorkflowEditorState = 'ok' | 'invalid' | 'unreadable' | 'unsupported';
@@ -87,6 +92,11 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+/** Only `human` is a valid `ask`; anything else reads as none. */
+function askValue(value: unknown): WorkflowAsk {
+  return value === 'human' ? 'human' : '';
+}
+
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -102,8 +112,14 @@ function navigationText(value: unknown): string {
   return strings(value).join(', ');
 }
 
+type ContractArtifact = NonNullable<WorkflowDocumentInput['artifacts']>[string];
+type ContractDecisionBody = NonNullable<NonNullable<WorkflowStageInput['decision']>[number][string]>;
+type ContractSession = NonNullable<WorkflowStageInput['session']>;
+type ContractRunWhen = NonNullable<WorkflowStageInput['run_when']>;
+type ContractDownstream = NonNullable<WorkflowDocumentInput['downstream']>[number];
+
 function localArtifactBody(id: string, value: unknown): WorkflowLocalArtifactForm {
-  const body = isRecord(value) ? value : {};
+  const body = wireOf<ContractArtifact>(value) ?? {};
   return { id, file: stringValue(body.file), description: stringValue(body.description) };
 }
 
@@ -122,7 +138,7 @@ function decisions(value: unknown): WorkflowStageForm['decision'] {
   for (const entry of value) {
     if (!isRecord(entry)) continue;
     for (const [name, route] of Object.entries(entry)) {
-      const body = isRecord(route) ? route : {};
+      const body = wireOf<ContractDecisionBody>(route) ?? {};
       routes.push({
         value: name,
         when: stringValue(body.when),
@@ -152,14 +168,14 @@ function agentFields(value: unknown): Pick<WorkflowStageForm, 'agentMode' | 'age
 }
 
 function stageForm(value: unknown): WorkflowStageForm {
-  const body = isRecord(value) ? value : {};
-  const session = isRecord(body.session) ? body.session : {};
-  const runWhen = isRecord(body.run_when) ? body.run_when : {};
+  const body = wireOf<WorkflowStageInput>(value) ?? {};
+  const session = wireOf<ContractSession>(body.session) ?? {};
+  const runWhen = wireOf<ContractRunWhen>(body.run_when) ?? {};
   return {
     id: stringValue(body.id),
     description: stringValue(body.description),
     role: stringValue(body.role),
-    ask: stringValue(body.ask),
+    ask: askValue(body.ask),
     ...agentFields(body.agent),
     depends_on: strings(body.depends_on),
     max_revisions: numberValue(body.max_revisions),
@@ -174,7 +190,8 @@ function stageForm(value: unknown): WorkflowStageForm {
   };
 }
 
-function formFromBody(body: Record<string, unknown>, fallbackId: string): WorkflowForm {
+function formFromBody(raw: Record<string, unknown>, fallbackId: string): WorkflowForm {
+  const body = wireOf<WorkflowDocumentInput>(raw) ?? {};
   const registry = isRecord(body.artifacts) ? Object.entries(body.artifacts) : [];
   const downstream = Array.isArray(body.downstream) ? body.downstream : [];
   return {
@@ -183,7 +200,7 @@ function formFromBody(body: Record<string, unknown>, fallbackId: string): Workfl
     constraints: strings(body.constraints),
     stages: (Array.isArray(body.stages) ? body.stages : []).map(stageForm),
     artifacts: registry.map(([id, value]) => {
-      const item = isRecord(value) ? value : {};
+      const item = wireOf<ContractArtifact>(value) ?? {};
       return {
         id,
         file: stringValue(item.file),
@@ -192,7 +209,7 @@ function formFromBody(body: Record<string, unknown>, fallbackId: string): Workfl
       };
     }),
     downstream: downstream.map((value) => {
-      const target = isRecord(value) ? value : {};
+      const target = wireOf<ContractDownstream>(value) ?? {};
       return {
         workflow: stringValue(target.workflow),
         task: stringValue(target.task),
@@ -291,7 +308,7 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
   }
   const body = isRecord(parsed) ? parsed : {};
   const form = formFromBody(body, fallbackId(input.file));
-  const schemaVersion = numberValue(body.schema_version);
+  const schemaVersion = numberValue(wireOf<WorkflowDocumentInput>(body)?.schema_version);
   const isSupported = schemaVersion === EDITABLE_SCHEMA_VERSION;
   return {
     ...base,
@@ -348,7 +365,7 @@ function clientStage(value: unknown): WorkflowStageForm {
     id: stringValue(body.id),
     description: stringValue(body.description),
     role: stringValue(body.role),
-    ask: stringValue(body.ask),
+    ask: askValue(body.ask),
     agentMode: agentMode(body.agentMode),
     agentName: stringValue(body.agentName),
     agent: {
@@ -408,7 +425,7 @@ function pairsToRecord(values: { key: string; value: string }[]): Record<string,
   return Object.keys(record).length === 0 ? undefined : record;
 }
 
-function agentBody(stage: WorkflowStageForm): unknown {
+function agentBody(stage: WorkflowStageForm): WorkflowStageDraft['agent'] {
   if (stage.agentMode === 'named') {
     const name = stage.agentName.trim();
     return name === '' ? undefined : name;
@@ -439,20 +456,24 @@ function navigateValue(text: string): string | string[] | undefined {
   return parts.length === 1 ? parts[0] : parts;
 }
 
+type DecisionDraft = NonNullable<WorkflowStageDraft['decision']>[number];
+type DecisionBodyDraft = NonNullable<DecisionDraft[string]>;
+type LocalArtifactsDraft = Extract<NonNullable<DecisionBodyDraft['artifacts']>, Record<string, unknown>>;
+
 /** Decision-local artifacts are a mapping keyed by id. */
-function localArtifactsRecord(items: WorkflowLocalArtifactForm[]): Record<string, unknown> {
-  const record: Record<string, unknown> = {};
+function localArtifactsRecord(items: WorkflowLocalArtifactForm[]): LocalArtifactsDraft {
+  const record: LocalArtifactsDraft = {};
   for (const item of items) {
-    const entry: Record<string, unknown> = { file: item.file };
+    const entry: LocalArtifactsDraft[string] = { file: item.file };
     if (item.description !== '') entry.description = item.description;
     record[item.id] = entry;
   }
   return record;
 }
 
-function decisionBody(routes: WorkflowStageForm['decision']): Record<string, unknown>[] {
+function decisionBody(routes: WorkflowStageForm['decision']): DecisionDraft[] {
   return routes.map((route) => {
-    const body: Record<string, unknown> = {};
+    const body: DecisionBodyDraft = {};
     if (route.when !== '') body.when = route.when;
     const navigate = navigateValue(route.navigate);
     if (navigate !== undefined) body.navigate = navigate;
@@ -462,13 +483,13 @@ function decisionBody(routes: WorkflowStageForm['decision']): Record<string, unk
   });
 }
 
-function stageBody(stage: WorkflowStageForm): Record<string, unknown> {
-  const body: Record<string, unknown> = { id: stage.id };
+function stageBody(stage: WorkflowStageForm): WorkflowStageDraft {
+  const body: WorkflowStageDraft = { id: stage.id };
   if (stage.description !== '') body.description = stage.description;
   if (stage.role !== '') body.role = stage.role;
   const agent = agentBody(stage);
   if (agent !== undefined) body.agent = agent;
-  if (stage.ask !== '') body.ask = stage.ask;
+  if (stage.ask === 'human') body.ask = stage.ask;
   if (stage.depends_on.length > 0) body.depends_on = stage.depends_on;
   if (stage.max_revisions !== null) body.max_revisions = stage.max_revisions;
   if (stage.instructions.length > 0) body.instructions = stage.instructions;
@@ -485,17 +506,17 @@ function stageBody(stage: WorkflowStageForm): Record<string, unknown> {
 /**
  * The mapping the form describes. `schemaVersion` is the opened file's own; the CLI judges it.
  * Keys the form does not expose are never invented. */
-export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number | null): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
+export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number | null): WorkflowDraft {
+  const body: WorkflowDraft = {};
   if (schemaVersion !== null) body.schema_version = schemaVersion;
   if (form.id !== '') body.id = form.id;
   if (form.concurrency !== null) body.concurrency = form.concurrency;
   if (form.constraints.length > 0) body.constraints = form.constraints;
   if (form.artifacts.length > 0) {
     // The registry is a mapping keyed by artifact id.
-    const registry: Record<string, unknown> = {};
+    const registry: NonNullable<WorkflowDraft['artifacts']> = {};
     for (const item of form.artifacts) {
-      const entry: Record<string, unknown> = { file: item.file };
+      const entry: NonNullable<WorkflowDraft['artifacts']>[string] = { file: item.file };
       if (item.description !== '') entry.description = item.description;
       if (item.required !== null) entry.required = item.required;
       registry[item.id] = entry;
@@ -505,7 +526,7 @@ export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number |
   body.stages = form.stages.map(stageBody);
   if (form.downstream.length > 0) {
     body.downstream = form.downstream.map((target) => {
-      const entry: Record<string, unknown> = { workflow: target.workflow };
+      const entry: NonNullable<WorkflowDraft['downstream']>[number] = { workflow: target.workflow };
       if (target.task !== '') entry.task = target.task;
       // Absent passes every published artifact; an explicit mapping, even an empty one, passes only what it names.
       if (target.artifacts !== null) entry.artifacts = pairsToRecord(target.artifacts) ?? {};

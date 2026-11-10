@@ -104,6 +104,10 @@ CI runs this sequence on macOS and Windows, followed by `pnpm test:integration`
 lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
 
+The dev dependency `@nodeint/migent-contracts` is pinned to the version of
+`MINIMUM_CLI_VERSION` in `src/cli/version.ts`; bump both together, together with the fixture CLI's
+reported version, and fix the type errors the new contracts surface.
+
 Follow the [testing guide](docs/testing.md) when selecting test cases and
 verifying behavior changes.
 

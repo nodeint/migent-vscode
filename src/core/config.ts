@@ -8,13 +8,20 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
+import type { ConfigLayer, InlineAgent, NamedAgentFragment, RoleEntry as ContractRoleEntry, Static } from '@nodeint/migent-contracts';
 import { parse, stringify } from 'yaml';
 
-import { agentBody, type AgentForm, agentFromClient, emptyAgent, parseAgent } from './agentForm';
+import { agentBody, type AgentDraft, type AgentForm, agentFromClient, emptyAgent, parseAgent } from './agentForm';
+import type { Draft, Expect, OpenPart, Same, SameKeys } from './contractDraft';
+import { wireOf } from './contractRead';
 import type { ClientChoice } from './controlArgs';
 import { configLocalPath, configPath } from './paths';
 import { isRecord } from './record';
 
+/**
+ * The config schema version this extension writes. Gap: the contract types `schema_version` as a plain `number`, so
+ * this value cannot be bound to the contract at compile time; a bump upstream is caught only by the CLI at save time.
+ */
 export const CONFIG_SCHEMA_VERSION = 7;
 
 export type ConfigScope = 'project' | 'local';
@@ -96,8 +103,49 @@ export const MERGE_UNITS = {
   role: ['description', 'responsibilities', 'agent'],
 } as const;
 
-const ROLE_KEYS = ['description', 'responsibilities', 'agent'] as const;
-const ROOT_KEYS = ['schema_version', 'agents', 'roles'] as const;
+const ROLE_KEYS = ['description', 'responsibilities', 'agent'] as const satisfies readonly (keyof ContractRoleEntry)[];
+const ROOT_KEYS = ['schema_version', 'agents', 'roles'] as const satisfies readonly (keyof ConfigLayer)[];
+
+// A key added to or removed from the contract's role or config layer fails typecheck here.
+export type ConfigKeysMatchContract = [
+  Expect<SameKeys<(typeof ROLE_KEYS)[number], keyof ContractRoleEntry>>,
+  Expect<SameKeys<(typeof ROOT_KEYS)[number], keyof ConfigLayer>>,
+];
+
+/** The contract's role `agent`: a named-agent reference (string) or an inline agent. */
+type ContractRoleAgent = NonNullable<ContractRoleEntry['agent']>;
+/** The contract's `agents.<name>` and `roles.<name>` entries. */
+type ContractNamedAgent = NonNullable<ConfigLayer['agents']>[string];
+type ContractFragment = Static<typeof NamedAgentFragment>;
+type ContractRole = NonNullable<ConfigLayer['roles']>[string];
+
+/** What `roleBody` writes for a role: the contract's keys (all optional), an agent name or draft, plus extras. */
+export type RoleDraft = Draft<Omit<ContractRoleEntry, 'agent'>> & {
+  agent?: Extract<ContractRoleAgent, string> | AgentDraft;
+} & OpenPart;
+
+/** What `configBodyFromForm` writes: a draft of a `ConfigLayer`, never asserted to be a valid one. */
+export type ConfigDraft = Draft<Omit<ConfigLayer, 'agents' | 'roles'>> & {
+  agents?: { [name: string]: AgentDraft };
+  roles?: { [name: string]: RoleDraft };
+} & OpenPart;
+
+// The replaced members (`agent`, `agents`, `roles`) stay tied to the contract: a change to their shape fails typecheck.
+export type ReplacedMembersMatchContract = [
+  Expect<Same<ContractRole, ContractRoleEntry>>,
+  Expect<Same<Extract<ContractRoleAgent, string>, string>>,
+  Expect<SameKeys<keyof Exclude<ContractRoleAgent, string>, keyof InlineAgent>>,
+  Expect<Same<Exclude<ContractRoleAgent, string>['model'], InlineAgent['model']>>,
+  Expect<Same<Exclude<ContractRoleAgent, string>['effort'], InlineAgent['effort']>>,
+  Expect<Same<Exclude<ContractRoleAgent, string>['client'], InlineAgent['client']>>,
+  Expect<SameKeys<keyof ContractNamedAgent, keyof ContractFragment>>,
+  Expect<SameKeys<keyof ContractNamedAgent, keyof InlineAgent>>,
+  // A named fragment may omit `model`; an inline agent may not. Only the value type must agree.
+  Expect<Same<Exclude<ContractNamedAgent['model'], undefined>, InlineAgent['model']>>,
+  Expect<Same<ContractNamedAgent['effort'], InlineAgent['effort']>>,
+  Expect<Same<ContractNamedAgent['client'], InlineAgent['client']>>,
+  Expect<Same<ContractNamedAgent, ContractFragment>>,
+];
 
 function without(body: Record<string, unknown>, known: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(body).filter(([key]) => !known.includes(key)));
@@ -115,22 +163,24 @@ function roleAgent(value: unknown): RoleAgent {
 
 function roleEntry(name: string, value: unknown): RoleEntry {
   const body = isRecord(value) ? value : {};
-  const role: RoleEntry = { name, agent: roleAgent(body.agent), extra: without(body, ROLE_KEYS) };
-  if (typeof body.description === 'string') role.description = body.description;
-  const responsibilities = textList(body.responsibilities);
+  const wire = wireOf<ContractRoleEntry>(value) ?? {};
+  const role: RoleEntry = { name, agent: roleAgent(wire.agent), extra: without(body, ROLE_KEYS) };
+  if (typeof wire.description === 'string') role.description = wire.description;
+  const responsibilities = textList(wire.responsibilities);
   if (responsibilities !== undefined) role.responsibilities = responsibilities;
   return role;
 }
 
 /** Project a parsed config mapping into the form. */
 export function configFormFromBody(body: Record<string, unknown>): ConfigForm {
-  const version = body.schema_version;
+  const wire = wireOf<ConfigLayer>(body) ?? {};
+  const version = wire.schema_version;
   return {
     schemaVersion: typeof version === 'number' && Number.isFinite(version) ? version : null,
-    agents: isRecord(body.agents)
-      ? Object.entries(body.agents).map(([name, value]) => ({ name, agent: parseAgent(value) }))
+    agents: isRecord(wire.agents)
+      ? Object.entries(wire.agents).map(([name, value]) => ({ name, agent: parseAgent(value) }))
       : [],
-    roles: isRecord(body.roles) ? Object.entries(body.roles).map(([name, value]) => roleEntry(name, value)) : [],
+    roles: isRecord(wire.roles) ? Object.entries(wire.roles).map(([name, value]) => roleEntry(name, value)) : [],
     extra: without(body, ROOT_KEYS),
   };
 }
@@ -253,8 +303,8 @@ export function configFormFromClient(raw: unknown): ConfigForm {
 
 // ---------- the YAML draft the CLI saves ----------
 
-function roleBody(role: RoleEntry): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
+function roleBody(role: RoleEntry): RoleDraft {
+  const body: RoleDraft = {};
   if (role.description !== undefined) body.description = role.description;
   if (role.responsibilities !== undefined) body.responsibilities = role.responsibilities;
   if (role.agent.mode === 'named') body.agent = role.agent.name;
@@ -269,20 +319,20 @@ function roleBody(role: RoleEntry): Record<string, unknown> {
  * The mapping the form describes. On the Local overlay an entry with nothing present is not written, since it would
  * only be an empty override; on Project every entry is written as it is.
  */
-export function configBodyFromForm(form: ConfigForm, scope: ConfigScope): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
+export function configBodyFromForm(form: ConfigForm, scope: ConfigScope): ConfigDraft {
+  const body: ConfigDraft = {};
   if (form.schemaVersion !== null) body.schema_version = form.schemaVersion;
   for (const [key, value] of Object.entries(form.extra)) {
     if (!(ROOT_KEYS as readonly string[]).includes(key)) body[key] = value;
   }
-  const isKept = (entry: Record<string, unknown>): boolean => scope === 'project' || Object.keys(entry).length > 0;
-  const agents: Record<string, unknown> = {};
+  const isKept = (entry: object): boolean => scope === 'project' || Object.keys(entry).length > 0;
+  const agents: Record<string, AgentDraft> = {};
   for (const entry of form.agents) {
     const agent = agentBody(entry.agent);
     if (isKept(agent)) agents[entry.name] = agent;
   }
   if (Object.keys(agents).length > 0 || scope === 'project') body.agents = agents;
-  const roles: Record<string, unknown> = {};
+  const roles: Record<string, RoleDraft> = {};
   for (const role of form.roles) {
     const entry = roleBody(role);
     if (isKept(entry)) roles[role.name] = entry;

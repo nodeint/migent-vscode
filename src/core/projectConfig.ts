@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 
+import type { ConfigLayer } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { wireOf } from './contractRead';
 import { configPath } from './paths';
 import { isRecord } from './record';
 
@@ -45,12 +47,13 @@ export function readProjectConfig(projectRoot: string): ProjectConfig {
   if (!isRecord(parsed)) {
     return { state: 'invalid', error: 'config.yaml must be a YAML mapping', schemaVersion: null, roles: [], agents: [] };
   }
-  const version = parsed.schema_version;
+  const wire = wireOf<ConfigLayer>(parsed) ?? {};
+  const version = wire.schema_version;
   return {
     state: 'ok',
     error: null,
     schemaVersion: typeof version === 'number' && Number.isInteger(version) ? version : null,
-    roles: isRecord(parsed.roles) ? Object.keys(parsed.roles) : [],
-    agents: isRecord(parsed.agents) ? Object.keys(parsed.agents) : [],
+    roles: isRecord(wire.roles) ? Object.keys(wire.roles) : [],
+    agents: isRecord(wire.agents) ? Object.keys(wire.agents) : [],
   };
 }

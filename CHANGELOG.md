@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.5.4. The extension's types for CLI output, exit codes and editable drafts are now checked at
+  build time against the CLI's published contracts, so an upstream change surfaces as a build failure.
+
 ## 0.1.8
 
 - Replace the session page's Results tab with an Overview tab: Status, Progress, Latest activity, Outputs,
