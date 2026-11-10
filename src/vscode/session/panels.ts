@@ -59,6 +59,7 @@ const PAGE: PageDescriptor = {
     'metricsCopy.js',
     'sessionWorkflowCopy.js',
     'questionsCopy.js',
+    'sessionHeader.js',
     'results.js',
     'metrics.js',
     'workflow.js',

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DISPLAY_STATE_ICONS, DISPLAY_STATE_TONES, stateTone } from '../../core/displayState';
 
+type ConnectFn = (options: { render: (...args: unknown[]) => void }) => Connected;
 type Listener = (event: { data: unknown }) => void;
 
 interface Connected {
@@ -13,7 +14,7 @@ interface Connected {
   post: (message: Record<string, unknown>) => void;
 }
 
-/** A minimal element, enough for `MigentPage.details` to build its header and chevron. */
+/** A minimal element, enough for `MigentUi.details` to build its header and chevron. */
 class FakeElement {
   public children: (FakeElement | string)[] = [];
   public attrs: Record<string, string> = {};
@@ -46,7 +47,7 @@ class FakeElement {
   }
 }
 
-/** Run `media/shared/page.js` against a minimal browser stub and return what the page would see. */
+/** Run the shared scripts against a minimal browser stub and return what the page would see. */
 function load() {
   const listeners: Listener[] = [];
   const posted: unknown[] = [];
@@ -67,19 +68,23 @@ function load() {
       setState: (state: unknown) => states.push(state),
     }),
   });
-  for (const file of ['icons.js', 'copy.js', 'page.js']) {
-    vm.runInContext(readFileSync(path.join(__dirname, '../../../media/shared', file), 'utf8'), context);
+  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/dom.js', 'shared/components.js', 'shared/page.js', 'session/sessionHeader.js']) {
+    vm.runInContext(readFileSync(path.join(__dirname, '../../../media', file), 'utf8'), context);
   }
-  const page = window.MigentPage as {
+  const header = window.MigentSessionHeader as {
     sessionStates: Record<string, { icon: string; tone: string }>;
-    connect: (options: { render: (...args: unknown[]) => void }) => Connected;
     sessionHeader: (connected: Connected, options: Record<string, unknown>) => FakeElement;
+  };
+  const ui = window.MigentUi as {
     details: (
-      key: string,
       summary: string | FakeElement,
-      className?: string,
-      isOpenByDefault?: boolean,
+      options?: { key?: string; className?: string; open?: boolean },
     ) => FakeElement;
+  };
+  const page = {
+    ...header,
+    ...ui,
+    connect: (window.MigentPage as { connect: ConnectFn }).connect,
   };
   return { page, listeners, posted, states, icons: window.MigentIcons as Record<string, unknown[]> };
 }
@@ -119,12 +124,12 @@ describe('MigentPage.connect', () => {
   });
 });
 
-describe('MigentPage.details', () => {
+describe('MigentUi.details', () => {
   it('puts the shared chevron before the header and the header after it', () => {
     const { page } = load();
     const header = new FakeElement('DIV');
     header.textContent = 'Advanced settings';
-    const node = page.details('stage:0', header, 'wf-advanced');
+    const node = page.details(header, { key: 'stage:0', className: 'wf-advanced' });
 
     expect(node.tagName).toBe('DETAILS');
     expect(node.className).toBe('mg-details wf-advanced');
@@ -145,11 +150,11 @@ describe('MigentPage.details', () => {
 
   it('keeps a string summary as the heading text and honors the default open state', () => {
     const { page } = load();
-    const closed = page.details('details', 'Details');
+    const closed = page.details('Details', { key: 'details' });
     const heading = (closed.children[0] as FakeElement).children[1] as FakeElement;
     expect(heading.textContent).toBe('Details');
     expect(closed.open).toBe(false);
-    expect(page.details('open', 'Details', undefined, true).open).toBe(true);
+    expect(page.details('Details', { key: 'open', open: true }).open).toBe(true);
   });
 });
 
@@ -163,7 +168,7 @@ function menuItems(node: FakeElement): FakeElement[] {
   return [...own, ...node.children.flatMap((child) => (typeof child === 'string' ? [] : menuItems(child)))];
 }
 
-describe('MigentPage.sessionHeader', () => {
+describe('MigentSessionHeader.sessionHeader', () => {
   const header = (state: string, canComplete: boolean, canReply = false) => {
     const { page, posted } = load();
     const connected = page.connect({ render: () => undefined });

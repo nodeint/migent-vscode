@@ -289,8 +289,10 @@ function load() {
   for (const file of [
     'shared/icons.js',
     'shared/copy.js',
-    'shared/page.js',
+    'shared/dom.js',
+    'shared/components.js',
     'shared/form.js',
+    'shared/page.js',
     'shared/agentform.js',
     'shared/draftpage.js',
     'config/configcopy.js',

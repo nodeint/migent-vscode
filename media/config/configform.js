@@ -2,12 +2,12 @@
 // core `ConfigForm` (src/core/config.ts): an optional field is absent or present, and keys the form does not model
 // ride along in `extra` and are never touched here. On the Local tab each merge unit has an Override control: absent
 // means inherited from config.yaml, present (even empty) means this file sets it. Every string is set with textContent.
-// Needs media/shared (page.js, form.js, agentform.js, copy.js) and configcopy.js loaded first (see docs/ui.md).
+// Needs media/shared (the kit, agentform.js, copy.js) and configcopy.js loaded first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, icon } = window.MigentPage;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, icon } = ui;
   const agents = window.MigentAgentForm;
   const copy = window.MigentCopy;
   const text = window.MigentConfigCopy;
@@ -291,7 +291,7 @@
         for (const pair of inherited) list.append(el('li', text.local.options.inherited(pair.key, pair.value), 'mg-muted'));
         options.push(list, el('p', text.local.options.note, 'mg-muted'));
       }
-      return [ui.group(text.agents.group, text.agents.inlineNote, { children: [ui.grid(fields), ...options] })];
+      return [ui.group(text.agents.group, { note: text.agents.inlineNote, children: [ui.grid(fields), ...options] })];
     }
 
     function renderAgentCard(entry, index) {
@@ -314,10 +314,10 @@
           ...describe(),
           describe,
           tools: [
-            ui.removeButton(copy.remove(text.agents.item, index + 1), () => {
+            ui.removeButton(copy.remove(text.agents.item, index + 1), { onClick: () => {
               getForm().agents.splice(index, 1);
               edited('agents');
-            }),
+            } }),
           ],
           body: [
             ui.grid([
@@ -345,15 +345,10 @@
       const form = getForm();
       const children = form.agents.map(renderAgentCard);
       children.push(
-        ui.addBlockButton(
-          text.agents.add,
-          () => {
+        ui.addBlockButton(text.agents.add, { onClick: () => {
             form.agents.push({ name: '', agent: emptyAgent() });
             edited('agents.' + (form.agents.length - 1) + '.name');
-          },
-          false,
-          { empty: form.agents.length === 0 ? text.agents.empty : undefined },
-        ),
+          }, empty: form.agents.length === 0 ? text.agents.empty : undefined }),
       );
       return ui.section(text.agents.title, {
         note: isLocal ? text.agents.localNote : text.agents.note,
@@ -450,7 +445,7 @@
           );
         }
       }
-      return ui.group(text.roles.agent.label, null, { children });
+      return ui.group(text.roles.agent.label, { children });
     }
 
     function roleBody(role, index, path) {
@@ -565,10 +560,10 @@
           ...describe(),
           describe,
           tools: [
-            ui.removeButton(copy.remove(text.roles.item, index + 1), () => {
+            ui.removeButton(copy.remove(text.roles.item, index + 1), { onClick: () => {
               getForm().roles.splice(index, 1);
               edited('roles');
-            }),
+            } }),
           ],
           body: roleBody(role, index, path),
         }),
@@ -579,15 +574,10 @@
       const form = getForm();
       const children = form.roles.map(renderRoleCard);
       children.push(
-        ui.addBlockButton(
-          text.roles.add,
-          () => {
+        ui.addBlockButton(text.roles.add, { onClick: () => {
             form.roles.push({ name: '', agent: { mode: 'absent' }, extra: {} });
             edited('roles.' + (form.roles.length - 1) + '.name');
-          },
-          false,
-          { empty: form.roles.length === 0 ? text.roles.empty : undefined },
-        ),
+          }, empty: form.roles.length === 0 ? text.roles.empty : undefined }),
       );
       return ui.section(text.roles.title, { note: text.roles.note, count: String(form.roles.length), children });
     }
@@ -612,12 +602,10 @@
       syncs = [];
       const nodes = [optionKeyLists(), renderAgents(), renderRoles()];
       return [
-        ui.root(nodes, {
-          onEdit: () => {
+        ui.root({ children: nodes, onEdit: () => {
             editedSynced();
             for (const card of cards) card.refresh();
-          },
-        }),
+          } }),
       ];
     }
 

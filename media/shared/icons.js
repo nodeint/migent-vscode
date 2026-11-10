@@ -1,6 +1,6 @@
 // Codicons used by the webview pages, as SVG path data. Same icon vocabulary as the VS Code UI and the Sessions view.
 // Icons: Copyright (c) Microsoft Corporation, CC BY 4.0, https://github.com/microsoft/vscode-codicons
-// Exposes `window.MigentIcons`: icon id -> [{ d, evenodd }]. Drawn 16x16 with currentColor (see MigentPage.icon).
+// Exposes `window.MigentIcons`: icon id -> [{ d, evenodd }]. Drawn 16x16 with currentColor (see MigentUi.icon).
 (function () {
   'use strict';
 

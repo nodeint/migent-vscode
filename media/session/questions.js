@@ -1,11 +1,12 @@
 // Questions tab of the Session page. All content is rendered with textContent; the host validates every message
-// again. The shared helpers in media/shared/page.js load first (see docs/ui.md).
+// again. The shared helpers in media/shared load first (see docs/ui.md).
 (function () {
   'use strict';
 
-  const { el, details, trackFooter, icon } = window.MigentPage;
+  const { trackFooter } = window.MigentPage;
   const copy = window.MigentCopy;
-  const ui = window.MigentForm;
+  const ui = window.MigentUi;
+  const { el, details, icon } = ui;
   const text = window.MigentSessionQuestionsCopy;
   const CONTEXT_CLAMP_LENGTH = 240;
   // The tone of the banner for the batch's state. Anything else is plain information.
@@ -114,7 +115,7 @@
     const body = el('span', null, 'q-option-body');
     const head = el('span', null, 'q-option-head');
     head.append(el('span', option.label, 'q-option-label'));
-    if (q.recommended.includes(option.id)) head.append(el('span', text.question.recommended, 'mg-pill'));
+    if (q.recommended.includes(option.id)) head.append(ui.pill(text.question.recommended));
     body.append(head);
     if (option.description) {
       const desc = el('span', option.description, 'q-option-desc mg-muted');
@@ -289,7 +290,7 @@
   }
 
   function archivedSection() {
-    const box = details('archived', text.archived.title);
+    const box = details(text.archived.title, { key: 'archived' });
     box.querySelector('summary').id = 'archived-summary';
     for (const item of model.archived) {
       box.append(el('p', text.archived.line(item.id, item.question, item.answer), 'q-archived'));
@@ -298,11 +299,11 @@
   }
 
   function footer() {
-    const bar = el('footer', null, 'mg-footer');
+    const buttons = [];
     const add = (label, type, kind) => {
       const node = ui.button(label, { kind: kind || 'secondary', size: 'md', onClick: () => page.post({ type }) });
       node.id = 'act-' + type;
-      bar.append(node);
+      buttons.push(node);
     };
     if (model.state === 'stale') add(text.footer.reload, 'reload', 'primary');
     if (model.state === 'unconfirmed') add(text.footer.recheck, 'recheck', 'primary');
@@ -312,7 +313,7 @@
     if (model.editable && model.state !== 'unconfirmed') {
       const submitButton = ui.button(text.footer.send, { kind: 'primary', size: 'md', disabled: true, onClick: submit });
       submitButton.id = 'submit';
-      bar.append(submitButton);
+      buttons.push(submitButton);
     }
     if (model.state === 'sending') {
       // The send is in flight: the button stays where it was and says so, until the state moves on.
@@ -320,9 +321,9 @@
       sending.id = 'submit';
       sending.setAttribute('aria-busy', 'true');
       sending.replaceChildren(icon('sync', true), ' ' + text.footer.sending);
-      bar.append(sending);
+      buttons.push(sending);
     }
-    return bar.children.length > 0 ? bar : null;
+    return buttons.length > 0 ? ui.footer({ children: buttons }) : null;
   }
 
   function submit() {

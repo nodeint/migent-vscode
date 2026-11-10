@@ -116,7 +116,7 @@ interface FooterOptions {
 }
 
 interface FormKit {
-  saveFooter: (options: FooterOptions, into?: FakeNode) => FakeNode;
+  saveFooter: (options: FooterOptions & { into?: FakeNode }) => FakeNode;
   notices: (children: FakeNode[]) => FakeNode;
   collapsibleCard: (options: {
     key: string;
@@ -149,22 +149,9 @@ function el(tag: string, text?: string | null, className?: string): FakeNode {
 
 function load() {
   const window: Record<string, unknown> = {
-    MigentPage: {
+    // The DOM basics are the fake nodes of this file; the components and the form kit load for real.
+    MigentUi: {
       el,
-      section: (title: string, className: string): FakeNode => {
-        const node = el('section', null, className);
-        node.append(el('h2', title));
-        return node;
-      },
-      details: (_key: string, summary: string | FakeNode, className: string, isOpenByDefault: boolean): FakeNode => {
-        const node = el('details', null, className);
-        node.open = isOpenByDefault === true;
-        const head = el('summary');
-        if (typeof summary === 'string') head.textContent = summary;
-        else head.append(summary);
-        node.append(head);
-        return node;
-      },
       icon: (name: string): FakeNode => {
         const node = el('svg', null, 'mg-icon');
         node.setAttribute('data-icon', name);
@@ -176,7 +163,7 @@ function load() {
     window,
     document: { getElementById: (): null => null },
   });
-  for (const file of ['../../../media/shared/utils.js', '../../../media/shared/copy.js', '../../../media/shared/form.js', '../../../media/shared/agentform.js', '../../../media/workfloweditor/workflowCopy.js', '../../../media/workfloweditor/workflowModel.js', '../../../media/workfloweditor/workflowForm.js']) {
+  for (const file of ['../../../media/shared/utils.js', '../../../media/shared/copy.js', '../../../media/shared/components.js', '../../../media/shared/form.js', '../../../media/shared/agentform.js', '../../../media/workfloweditor/workflowCopy.js', '../../../media/workfloweditor/workflowModel.js', '../../../media/workfloweditor/workflowForm.js']) {
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   return {
@@ -187,7 +174,7 @@ function load() {
       };
       normalizeForm: (input: unknown) => unknown;
     },
-    form: window.MigentForm as FormKit,
+    form: window.MigentUi as FormKit,
   };
 }
 
@@ -757,6 +744,31 @@ describe('workflow form layout', () => {
       expect(flagged(nodes)).toEqual(['artifacts.0.file']);
     });
 
+    const removeArtifact = (nodes: FakeNode[]): FakeNode | undefined =>
+      // The top-level artifact card has the same name; the decision-local one comes after it.
+      all(nodes).filter((node) => node.attrs['aria-label'] === 'Remove artifact 1').at(-1);
+
+    it('removes a decision-local artifact and reports the edit', () => {
+      const form = collisionForm();
+      let edits = 0;
+      const repaint = vi.fn();
+      const nodes = render(form, { onEdit: () => (edits += 1), repaint });
+      const button = removeArtifact(nodes);
+      expect(button?.disabled).toBe(false);
+      if (button) fire(button, 'click');
+      const [stage] = form.stages as { decision: { artifacts: { items: unknown[] } }[] }[];
+      const [, decision] = stage.decision;
+      expect(decision.artifacts.items).toHaveLength(0);
+      expect(repaint).toHaveBeenCalled();
+    });
+
+    it('disables the remove button of a decision-local artifact in a locked workflow', () => {
+      const nodes = render(collisionForm(), {
+        getModel: () => ({ roles: [], agents: [], workflows: [], clients: [], isSupported: true, state: 'ok', isLocked: true }),
+      });
+      expect(removeArtifact(nodes)?.disabled).toBe(true);
+    });
+
     it('marks only the value of a decision for an issue about the whole decision', () => {
       const nodes = render(collisionForm(), {
         issues: (kind: string) => (kind === 'errors' ? [{ path: 'stages.0.decision.0', message: 'bad' }] : []),
@@ -832,18 +844,18 @@ describe('shared form kit', () => {
     expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
     expect(footerButtons(footer)['Discard changes'].disabled).toBe(true);
 
-    expect(kit.saveFooter(base, footer)).toBe(footer);
+    expect(kit.saveFooter({ ...base, into: footer })).toBe(footer);
     expect(footerButtons(footer)['Save workflow'].disabled).toBe(false);
     expect(footerButtons(footer)['Discard changes'].disabled).toBe(false);
 
-    kit.saveFooter({ ...base, canSave: false }, footer);
+    kit.saveFooter({ ...base, canSave: false, into: footer });
     expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
 
-    kit.saveFooter({ ...base, saving: true }, footer);
+    kit.saveFooter({ ...base, saving: true, into: footer });
     expect(footerButtons(footer)['Saving…'].disabled).toBe(true);
     expect(footerButtons(footer)['Discard changes'].disabled).toBe(true);
 
-    kit.saveFooter({ ...base, busy: true }, footer);
+    kit.saveFooter({ ...base, busy: true, into: footer });
     expect(footerButtons(footer)['Save workflow'].disabled).toBe(true);
   });
 
@@ -854,7 +866,7 @@ describe('shared form kit', () => {
     const footer = kit.saveFooter({ canDiscard: true, canSave: true, onSave: first, onDiscard: () => undefined });
     const save = footerButtons(footer)['Save workflow'];
 
-    kit.saveFooter({ canDiscard: true, canSave: true, onSave: second, onDiscard: () => undefined }, footer);
+    kit.saveFooter({ canDiscard: true, canSave: true, onSave: second, onDiscard: () => undefined, into: footer });
 
     // A refill during a press (a field's change event fires when Save takes the focus) must not swap the button.
     expect(footerButtons(footer)['Save workflow']).toBe(save);

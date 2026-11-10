@@ -19,7 +19,7 @@ function load(): { agents: AgentForm; copy: Record<string, unknown> } {
   const window: Record<string, unknown> = {};
   const context = vm.createContext({ window });
   vm.runInContext(readFileSync(path.join(media, 'shared/copy.js'), 'utf8'), context);
-  window.MigentForm = {};
+  window.MigentUi = {};
   vm.runInContext(readFileSync(path.join(media, 'shared/agentform.js'), 'utf8'), context);
   return { agents: window.MigentAgentForm as AgentForm, copy: window.MigentCopy as Record<string, unknown> };
 }

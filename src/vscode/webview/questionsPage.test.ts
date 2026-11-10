@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
-/* A tiny DOM, just enough for media/shared/page.js and media/session/session.js with the tab scripts to run. */
+/* A tiny DOM, just enough for media/shared and media/session/session.js with the tab scripts to run. */
 type Handler = (event: Record<string, unknown>) => void;
 
 class FakeText {
@@ -242,7 +242,7 @@ function load() {
     }),
   });
   const media = path.join(__dirname, '../../../media');
-  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/page.js', 'shared/form.js', 'shared/agentform.js', 'shared/draftpage.js', 'workfloweditor/workflowCopy.js', 'workfloweditor/workflowModel.js', 'workfloweditor/workflowForm.js', 'session/sessionCopy.js', 'session/resultsCopy.js', 'session/metricsCopy.js', 'session/sessionWorkflowCopy.js', 'session/questionsCopy.js', 'session/results.js', 'session/metrics.js', 'session/workflow.js', 'session/questions.js', 'session/session.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
+  for (const file of ['shared/utils.js', 'shared/icons.js', 'shared/copy.js', 'shared/dom.js', 'shared/components.js', 'shared/form.js', 'shared/page.js', 'shared/agentform.js', 'shared/draftpage.js', 'workfloweditor/workflowCopy.js', 'workfloweditor/workflowModel.js', 'workfloweditor/workflowForm.js', 'session/sessionCopy.js', 'session/resultsCopy.js', 'session/metricsCopy.js', 'session/sessionWorkflowCopy.js', 'session/questionsCopy.js', 'session/sessionHeader.js', 'session/results.js', 'session/metrics.js', 'session/workflow.js', 'session/questions.js', 'session/session.js']) vm.runInContext(readFileSync(path.join(media, file), 'utf8'), context);
   const deliver = (revision: number, next: Record<string, unknown>): void => {
     const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next) };
     for (const handler of windowListeners.message ?? []) handler({ data });
