@@ -176,9 +176,9 @@ export class StateNotifier implements vscode.Disposable {
         return this.#failed(transition, snapshot, target);
       case 'completed':
         return this.#single(`Session ${sessionLabel(snapshot)} completed.`, 'info', {
-          label: 'Open result',
+          label: 'Open overview',
           command: 'migent.session.open',
-          target: { ...target, tab: 'results' },
+          target: { ...target, tab: 'overview' },
         });
     }
   }

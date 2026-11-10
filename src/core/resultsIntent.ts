@@ -1,12 +1,28 @@
 import { isRecord } from './record';
 
 /** Header actions, a closed set. The host maps each to an existing session command for the panel's own session. */
-export const SESSION_ACTIONS = ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics', 'answerQuestions', 'openWorkflow', 'completeSession', 'reply'] as const;
+export const SESSION_ACTIONS = [
+  'openResult',
+  'openTask',
+  'showLog',
+  'copyId',
+  'revealInExplorer',
+  'openQuestions',
+  'openMetrics',
+  'answerQuestions',
+  'openWorkflow',
+  'completeSession',
+  'start',
+  'stop',
+  'continue',
+  'openFailure',
+  'reply',
+] as const;
 
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
 /**
- * What the Results page may ask the host to do. Intents carry identity only (a key, a name or a
+ * What the Overview page may ask the host to do. Intents carry identity only (a key, a name or a
  * session id), never a path or a command: the host resolves each against fresh data.
  */
 export type ResultsIntent =

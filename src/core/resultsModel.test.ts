@@ -10,7 +10,6 @@ import {
   resolveHandoffPath,
   resolveOutputPath,
   type ResultsInput,
-  resultsPanelTitle,
 } from './resultsModel';
 import { capturedDir, snapshotFromDir } from './testHelpers';
 import type { WorkflowEntry } from './workflows';
@@ -207,26 +206,6 @@ describe('session meta and child task', () => {
     expect(childTask()).toBeNull();
     writeFileSync(path.join(targetDir, 'task.md'), LONG_TASK);
     expect(childTask()).toBe(LONG_TASK.trim());
-  });
-});
-
-describe('resultsPanelTitle', () => {
-  it('is the session title, whatever the state', () => {
-    const model = buildResultsModel(sourceInput());
-    expect(resultsPanelTitle(model)).toBe(model.title);
-    expect(resultsPanelTitle({ ...model, state: 'Running' })).toBe(model.title);
-  });
-
-  it('shortens a long title', () => {
-    const model = buildResultsModel(sourceInput());
-    const title = resultsPanelTitle({ ...model, title: 'x'.repeat(80) });
-    expect(title.startsWith('x')).toBe(true);
-    expect(title.endsWith('…')).toBe(true);
-    expect(title.length).toBeLessThan(80);
-  });
-
-  it('is neutral for an unavailable session', () => {
-    expect(resultsPanelTitle(buildResultsModel({ ...sourceInput(), snapshots: [], sessionId: 'gone' }))).toBe('Results');
   });
 });
 

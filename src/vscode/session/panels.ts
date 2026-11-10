@@ -37,8 +37,8 @@ import {
   batchOf,
   buildEmptyAnswerHeader,
   buildMetricsPage,
+  buildOverviewPage,
   buildQuestionsPage,
-  buildResultsPage,
   latestOf,
   summariesOf,
 } from './pageModels';
@@ -55,11 +55,14 @@ const PAGE: PageDescriptor = {
   styles: ['session.css'],
   scripts: [
     'sessionCopy.js',
+    'overviewCopy.js',
     'resultsCopy.js',
     'metricsCopy.js',
     'sessionWorkflowCopy.js',
     'questionsCopy.js',
     'sessionHeader.js',
+    'overviewProgress.js',
+    'overview.js',
     'results.js',
     'metrics.js',
     'workflow.js',
@@ -91,7 +94,7 @@ export interface SessionOpenOptions {
 
 /** Header actions that only move between tabs of this page instead of running a command. */
 const TAB_ACTIONS: Partial<Record<SessionAction, SessionTab>> = {
-  openResult: 'results',
+  openResult: 'overview',
   openMetrics: 'metrics',
   answerQuestions: 'questions',
   openQuestions: 'questions',
@@ -108,7 +111,7 @@ export interface SessionPanelsDeps {
 }
 
 /**
- * The one Session page: Results, Session Metrics, Session Workflow and Questions of one session, as tabs of a
+ * The one Session page: Overview, Session Metrics, Session Workflow and Questions of one session, as tabs of a
  * single webview. One panel per `(project, session)`, reused on reopen and restored by a serializer. Only the
  * active tab is built; a background change reposts the model of that tab, never focusing or revealing anything.
  */
@@ -204,7 +207,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       else this.#reveal(existing, tab, options.batch);
       return;
     }
-    const tab = options.tab ?? (options.batch === undefined ? 'results' : 'questions');
+    const tab = options.tab ?? (options.batch === undefined ? 'overview' : 'questions');
     const batch = options.batch === undefined ? null : batchOf(identity, options.batch);
     const panel = vscode.window.createWebviewPanel(
       SESSION_VIEW_TYPE,
@@ -271,7 +274,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       return;
     }
     const restored = state as RestoredState;
-    const tab = isTab(restored.tab) ? restored.tab : 'results';
+    const tab = isTab(restored.tab) ? restored.tab : 'overview';
     const executionId = typeof restored.executionId === 'string' ? restored.executionId : '';
     const stageId = typeof restored.stageId === 'string' ? restored.stageId : null;
     const batch: BatchIdentity | null =
@@ -328,8 +331,8 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       case 'questions':
         this.#sendQuestions(entry, isForced);
         return;
-      case 'results':
-        entry.publish(buildResultsPage(entry, this.#registry), isForced);
+      case 'overview':
+        entry.publish(buildOverviewPage(entry, this.#registry), isForced);
         return;
       case 'metrics':
         entry.publish(buildMetricsPage(entry, this.#registry), isForced);
@@ -363,7 +366,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
         if (page !== null) entry.publish(page, false);
       },
       close: () => {
-        this.#selectTab(entry, 'results', undefined);
+        this.#selectTab(entry, 'overview', undefined);
       },
     };
   }
@@ -399,8 +402,8 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       case 'sessionAction':
         await this.#sessionAction(entry, intent.action);
         return;
-      case 'openResults':
-        this.#selectTab(entry, 'results', undefined);
+      case 'openOverview':
+        this.#selectTab(entry, 'overview', undefined);
         return;
       case 'openMetricsFile': {
         const context = this.#registry.project(entry.project);
@@ -478,7 +481,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       );
       return;
     }
-    this.open({ project: entry.project, sessionId }, { tab: 'results' });
+    this.open({ project: entry.project, sessionId }, { tab: 'overview' });
   }
 
   async #openWorkflow(context: ProjectContext, workflow: string): Promise<void> {
@@ -499,8 +502,8 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
   }
 
   async #handleAnswer(entry: Entry, raw: unknown, type: string): Promise<void> {
-    if (type === 'openResults') {
-      this.#selectTab(entry, 'results', undefined);
+    if (type === 'openOverview') {
+      this.#selectTab(entry, 'overview', undefined);
       return;
     }
     if (type === 'openMetrics') {

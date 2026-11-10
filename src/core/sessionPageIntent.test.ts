@@ -47,7 +47,7 @@ describe('parseSessionPageMessage', () => {
       revision: 2,
       fingerprint: 'f',
     });
-    for (const type of ['discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog', 'openResults', 'openMetrics']) {
+    for (const type of ['discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog', 'openOverview', 'openMetrics']) {
       expect(parseSessionPageMessage({ type })).toEqual({ type });
     }
   });

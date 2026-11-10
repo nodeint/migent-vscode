@@ -41,7 +41,21 @@ describe('parseResultsMessage', () => {
   });
 
   it('accepts each of the header actions and nothing else', () => {
-    for (const action of ['openResult', 'openTask', 'showLog', 'copyId', 'revealInExplorer', 'openQuestions', 'openMetrics', 'completeSession', 'reply']) {
+    for (const action of [
+      'openResult',
+      'openTask',
+      'showLog',
+      'copyId',
+      'revealInExplorer',
+      'openQuestions',
+      'openMetrics',
+      'completeSession',
+      'start',
+      'stop',
+      'continue',
+      'openFailure',
+      'reply',
+    ]) {
       expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action })).toEqual({
         type: 'intent',
         value: { intent: 'sessionAction', action },

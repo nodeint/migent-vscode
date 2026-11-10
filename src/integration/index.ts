@@ -8,9 +8,9 @@ import { type Filters, isEmptySelection, isFileSelected, normalizeFilter, parseP
 import { selectedScenarioCount } from './harness';
 import { runMonitoringScenarios } from './monitoring.integration.test';
 import { runNextStepScenarios } from './nextStep.integration.test';
+import { runOverviewScenarios } from './overview.integration.test';
 import { runQuestionScenarios } from './questions.integration.test';
 import { runReplyScenarios } from './reply.integration.test';
-import { runResultsScenarios } from './results.integration.test';
 import { runSessionMetricsScenarios } from './sessionMetrics.integration.test';
 import { runSessionsTreeScenarios } from './sessionsTree.integration.test';
 import { runStatusBarScenarios } from './statusBar.integration.test';
@@ -46,7 +46,7 @@ const SUITES = [
   runCapabilityScenarios,
   runTimelineScenarios,
   runStatusBarScenarios,
-  runResultsScenarios,
+  runOverviewScenarios,
   runSessionMetricsScenarios,
   runControlScenarios,
   runNextStepScenarios,

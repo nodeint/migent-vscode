@@ -16,6 +16,8 @@ const posted = vi.hoisted(() => ({
   html: '',
 }));
 
+const executed = vi.hoisted(() => vi.fn());
+
 vi.mock('vscode', () => ({
   ViewColumn: { Active: 1 },
   ThemeIcon: class {},
@@ -26,7 +28,7 @@ vi.mock('vscode', () => ({
     file: (file: string) => ({ fsPath: file }),
     joinPath: (base: { fsPath: string }, ...parts: string[]) => ({ fsPath: [base.fsPath, ...parts].join('/') }),
   },
-  commands: { executeCommand: vi.fn() },
+  commands: { executeCommand: executed },
   window: {
     showErrorMessage: vi.fn(),
     showWarningMessage: vi.fn(),
@@ -172,10 +174,10 @@ beforeEach(() => {
 });
 
 describe('SessionPanels tabs', () => {
-  it('opens on Results by default and switches in place', async () => {
+  it('opens on Overview by default and switches in place', async () => {
     const { panels, last } = setup(makeRoot(false), snapshot());
     panels.open(identity);
-    expect(last()?.model.tab).toBe('results');
+    expect(last()?.model.tab).toBe('overview');
     await panels.handle(identity, { type: 'intent', intent: 'selectTab', tab: 'metrics' });
     expect(last()?.model.tab).toBe('metrics');
   });
@@ -189,7 +191,7 @@ describe('SessionPanels tabs', () => {
     expect(panels.revision(identity)).toBe(revision);
     expect(posted.messages.filter((message) => message.type === 'model')).toHaveLength(models.length + 1);
     expect(posted.messages.filter((message) => message.type === 'model').at(-1)?.revision).toBe(revision);
-    expect(last()?.model.tab).toBe('results');
+    expect(last()?.model.tab).toBe('overview');
   });
 
   it('bumps the revision when a publish carries a changed model', async () => {
@@ -234,6 +236,33 @@ describe('SessionPanels tabs', () => {
     panels.open(identity);
     panels.open(identity, { tab: 'metrics' });
     expect(panels.count).toBe(1);
+  });
+});
+
+describe('SessionPanels session actions', () => {
+  it.each([
+    ['start', 'migent.session.start'],
+    ['stop', 'migent.session.cancel'],
+    ['continue', 'migent.session.continue'],
+    ['openFailure', 'migent.session.openFailure'],
+  ])('runs %s as %s for the panel’s own session', async (action, command) => {
+    const { panels } = setup(makeRoot(false), snapshot());
+    panels.open(identity);
+    executed.mockClear();
+    await panels.handle(identity, { type: 'intent', intent: 'sessionAction', action });
+    expect(executed).toHaveBeenCalledWith(command, {
+      project: identity.project,
+      sessionId: identity.sessionId,
+    });
+  });
+
+  it('switches tab in place instead of running a command for a tab action', async () => {
+    const { panels, last } = setup(makeRoot(false), snapshot());
+    panels.open(identity);
+    executed.mockClear();
+    await panels.handle(identity, { type: 'intent', intent: 'sessionAction', action: 'answerQuestions' });
+    expect(last()?.model.tab).toBe('questions');
+    expect(executed).not.toHaveBeenCalled();
   });
 });
 

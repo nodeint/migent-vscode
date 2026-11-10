@@ -7,14 +7,14 @@ import { SESSION_ACTIONS, type SessionAction } from './resultsIntent';
  */
 export type SessionMetricsIntent =
   | { intent: 'sessionAction'; action: SessionAction }
-  | { intent: 'openResults' }
+  | { intent: 'openOverview' }
   | { intent: 'openMetricsFile' };
 
 export type SessionMetricsMessage = { type: 'ready' } | { type: 'intent'; value: SessionMetricsIntent };
 
 function intentWith(message: Record<string, unknown>): SessionMetricsIntent | null {
   switch (message.intent) {
-    case 'openResults':
+    case 'openOverview':
     case 'openMetricsFile':
       return { intent: message.intent };
     case 'sessionAction': {

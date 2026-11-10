@@ -1,26 +1,25 @@
 import type { AnswerModel } from '../../core/answerModel';
 import { buildAnswerModel } from '../../core/answerModel';
-import { parseExecutionId } from '../../core/executions';
-import { sessionDir } from '../../core/paths';
+import { readRecentEvents } from '../../core/eventTail';
+import { listExecutions, parseExecutionId } from '../../core/executions';
+import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
+import { eventsPath, sessionDir } from '../../core/paths';
 import { groupPendingQuestions, type QuestionGroup } from '../../core/questions';
-import {
-  buildResultsModel,
-  type ResultsInput,
-  type ResultsModel,
-  titleCase,
-} from '../../core/resultsModel';
+import { type ResultsInput, titleCase } from '../../core/resultsModel';
+import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
 import { buildSessionMeta } from '../../core/sessionMeta';
 import { buildSessionMetricsModel, type SessionMetricsInput, type SessionMetricsModel } from '../../core/sessionMetricsModel';
 import {
   answerHeader,
   metricsHeader,
-  resultsHeader,
+  overviewHeader,
   type SessionBatchRef,
   type SessionBatchSummary,
   type SessionHeader,
   type SessionPageModel,
 } from '../../core/sessionPageModel';
 import { sessionTitle } from '../../core/sessionPresentation';
+import { readSessionStagePlan } from '../../core/workflowStages';
 import type { ProjectRegistry } from '../projects';
 import type { BatchIdentity } from '../questions/entry';
 import type { Entry, Identity } from './entry';
@@ -73,20 +72,46 @@ export function batchGroups(entry: Entry, registry: ProjectRegistry): Addressabl
   return addressable(groupPendingQuestions(snapshot?.status?.questions ?? []));
 }
 
-export function buildResultsPage(entry: Entry, registry: ProjectRegistry): SessionPageModel {
+/** The fields a page builder needs from an entry; tests can pass a plain object. */
+type PageEntry = Pick<Entry, 'project' | 'sessionId'>;
+
+function resultsInputOf(entry: PageEntry, registry: ProjectRegistry): ResultsInput {
   const context = registry.project(entry.project);
-  const input: ResultsInput =
-    context === undefined
-      ? { sessionId: entry.sessionId, sessionDirPath: '', snapshots: [], eligibleIds: [], workflows: [] }
-      : {
-          sessionId: entry.sessionId,
-          sessionDirPath: sessionDir(context.root, entry.sessionId),
-          snapshots: context.store.all(),
-          eligibleIds: context.store.scanOutcome.eligible,
-          workflows: context.catalog.workflows().entries,
-        };
-  const model: ResultsModel = buildResultsModel(input);
-  return { tab: 'results', header: resultsHeader(model), results: model };
+  if (context === undefined) {
+    return { sessionId: entry.sessionId, sessionDirPath: '', snapshots: [], eligibleIds: [], workflows: [] };
+  }
+  return {
+    sessionId: entry.sessionId,
+    sessionDirPath: sessionDir(context.root, entry.sessionId),
+    snapshots: context.store.all(),
+    eligibleIds: context.store.scanOutcome.eligible,
+    workflows: context.catalog.workflows().entries,
+  };
+}
+
+/**
+ * The Overview data: the results input plus the executions, stage plan and recent
+ * events. Events are read only while the session is Running; the tab still posts
+ * the `results` model until P5 renames it.
+ */
+export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): SessionPageModel {
+  const context = registry.project(entry.project);
+  const snapshot = context?.store.snapshot(entry.sessionId);
+  const input: OverviewInput = {
+    ...resultsInputOf(entry, registry),
+    executions: [],
+    plan: { kind: 'missing' },
+    events: [],
+  };
+  if (context !== undefined && snapshot !== undefined) {
+    input.executions = listExecutions(input.sessionDirPath);
+    input.plan = readSessionStagePlan(context.root, entry.sessionId);
+    if (snapshot.displayState.state === 'running') {
+      input.events = readRecentEvents(eventsPath(context.root, entry.sessionId), OVERVIEW_ACTIVITY_LIMIT);
+    }
+  }
+  const model = buildOverviewModel(input);
+  return { tab: 'overview', header: overviewHeader(model), overview: model };
 }
 
 export function buildMetricsPage(entry: Entry, registry: ProjectRegistry): SessionPageModel {

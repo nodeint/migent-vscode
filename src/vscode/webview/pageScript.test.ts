@@ -173,7 +173,7 @@ describe('MigentSessionHeader.sessionHeader', () => {
     const { page, posted } = load();
     const connected = page.connect({ render: () => undefined });
     const meta = { canComplete, canReply };
-    const node = page.sessionHeader(connected, { state, title: 't', meta, tabs: [], current: 'results' });
+    const node = page.sessionHeader(connected, { state, title: 't', meta, tabs: [], current: 'overview' });
     return { items: menuItems(node), node, posted };
   };
 
@@ -185,14 +185,12 @@ describe('MigentSessionHeader.sessionHeader', () => {
     expect(posted.at(-1)).toMatchObject({ type: 'intent', intent: 'sessionAction', action: 'completeSession' });
   });
 
-  it('shows a Reply button in the header only when the host says a reply can be sent, and sends its session action', () => {
+  it('keeps Reply off the header on every tab', () => {
     const labels = (state: string, canReply: boolean): string[] =>
       buttons(header(state, false, canReply).node).map((node) => node.textContent);
-    expect(labels('Stopped', false)).not.toContain('Reply…');
-    expect(labels('Cancelled', true)).toContain('Reply…');
-    const { node, posted } = header('Cancelled', false, true);
-    buttons(node).find((button) => button.textContent === 'Reply…')?.handlers.click?.[0]();
-    expect(posted.at(-1)).toMatchObject({ type: 'intent', intent: 'sessionAction', action: 'reply' });
+    for (const state of ['Stopped', 'Cancelled', 'Completed', 'Blocked']) {
+      expect(labels(state, true)).not.toContain('Reply…');
+    }
   });
 
   it.each(['Running', 'Completed', 'Prepared', 'Unknown'])('does not offer Complete session for a %s session', (state) => {
@@ -228,7 +226,7 @@ describe('icon vocabulary', () => {
 
   it('has a tab icon file per page, tone and theme, and treats other names as muted', () => {
     const tones = new Set(Object.values(DISPLAY_STATE_TONES));
-    for (const page of ['questions', 'results', 'metrics']) {
+    for (const page of ['questions', 'overview', 'metrics']) {
       for (const tone of tones) {
         for (const theme of ['light', 'dark']) {
           const file = path.join(__dirname, '../../../media/tab-icons', `${page}-${tone}-${theme}.svg`);

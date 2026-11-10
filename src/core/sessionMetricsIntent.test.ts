@@ -9,9 +9,9 @@ describe('parseSessionMetricsMessage', () => {
   });
 
   it('accepts the identity-only intents and drops extra fields', () => {
-    expect(parseSessionMetricsMessage({ type: 'intent', intent: 'openResults', revision: 2, path: 'C:/x' })).toEqual({
+    expect(parseSessionMetricsMessage({ type: 'intent', intent: 'openOverview', revision: 2, path: 'C:/x' })).toEqual({
       type: 'intent',
-      value: { intent: 'openResults' },
+      value: { intent: 'openOverview' },
     });
     expect(parseSessionMetricsMessage({ type: 'intent', intent: 'openMetricsFile', command: 'x' })).toEqual({
       type: 'intent',

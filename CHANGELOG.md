@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replace the session page's Results tab with an Overview tab: Status, Progress, Latest activity, Outputs,
+  Next steps, child sessions, source and handoff in one fixed order, with one primary action for the current state.
+
 ## 0.1.7
 
 - Synchronize session page UI components and styles with the configuration page for consistent visual appearance and user experience.

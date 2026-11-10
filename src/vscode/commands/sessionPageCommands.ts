@@ -28,8 +28,6 @@ function requestedFrom(arg: unknown): Requested {
   };
 }
 
-const hasPending = (snapshot: SessionSnapshot): boolean => (snapshot.status?.questions.length ?? 0) > 0;
-
 /** The stage of an execution, from the session's pending questions when the caller did not name it. */
 function stageOf(snapshot: SessionSnapshot, stageId: string | null, executionId: string): string | null {
   if (stageId !== null) return stageId;
@@ -37,8 +35,12 @@ function stageOf(snapshot: SessionSnapshot, stageId: string | null, executionId:
   return question?.stageId ?? null;
 }
 
-function optionsFor(snapshot: SessionSnapshot, requested: Requested, executionId: string | undefined): SessionOpenOptions {
-  const tab = requested.tab ?? (executionId !== undefined || hasPending(snapshot) ? 'questions' : 'results');
+function optionsFor(
+  snapshot: SessionSnapshot,
+  requested: Requested,
+  executionId: string | undefined,
+): SessionOpenOptions {
+  const tab = requested.tab ?? (executionId !== undefined ? 'questions' : 'overview');
   if (tab !== 'questions' || executionId === undefined) return { tab };
   return {
     tab,
@@ -49,7 +51,7 @@ function optionsFor(snapshot: SessionSnapshot, requested: Requested, executionId
 /**
  * The one way to open a Session page. Called with a tree node, a notification target or an explicit
  * `{ project, sessionId, tab?, stageId?, executionId? }`; it resolves the session afresh and opens the requested tab.
- * A session with a pending batch opens on Questions, otherwise on Results.
+ * A request that names an execution opens on Questions; every other request opens on Overview.
  */
 export function registerSessionPageCommands(
   host: CommandHost,

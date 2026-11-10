@@ -192,12 +192,12 @@ export type AnswerMessage =
   | { type: 'later' }
   | { type: 'continue' }
   | { type: 'viewLog' }
-  | { type: 'openResults' }
+  | { type: 'openOverview' }
   | { type: 'openMetrics' }
   | { type: 'sessionAction'; action: SessionAction };
 
 const SIMPLE_MESSAGES = new Map<string, AnswerMessage>(
-  (['ready', 'reload', 'discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog', 'openResults', 'openMetrics'] as const).map(
+  (['ready', 'reload', 'discard', 'recheck', 'openQuestions', 'later', 'continue', 'viewLog', 'openOverview', 'openMetrics'] as const).map(
     (type) => [type, { type }],
   ),
 );

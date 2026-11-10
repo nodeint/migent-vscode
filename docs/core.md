@@ -66,6 +66,8 @@ background work; its caller chooses when to scan, refresh, and load details.
 | `session.lock` | Snapshot construction | Uses the lock rules above |
 | `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
 | `events.jsonl` | Explicit `EventTail.poll()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset; a file smaller than the offset resets the tail (see below) |
+| `events.jsonl` (bounded recent read) | `readRecentEvents(file, limit)` on demand by the Overview tab, only while the session is Running | Missing, empty or unreadable input yields no lines; it reads the newest newline-terminated lines and keeps at most `limit` |
+| `workflow.frozen.yaml`, `workflow.yaml` | `readSessionStagePlan(projectRoot, sessionId)` on demand by the Overview tab | The frozen copy first, else the draft; `missing` when neither exists, `unreadable` and `invalid` keep the first error. Only `stages[].id` is parsed, so no full workflow is built |
 | `.migent/workflows/*.{yaml,yml}` | Explicit `scanWorkflows`, or `readWorkflowFile` for one file | Missing, empty and unreadable directories are distinct outcomes; an unparsable or unreadable file stays listed as `invalid` or `unreadable` with its error |
 | `.migent/config.yaml` | `readProjectConfig` | `missing`, `ok`, `invalid` (unparsable or not a mapping) or `unreadable`; raw integer `schema_version` or null; no defaults |
 | `status.json` `questions`, `outputs` | Snapshot construction (they come with the status read) | Records without `id` and `question` (questions) or `path` (outputs) are skipped; absent keys give empty lists |
@@ -212,6 +214,12 @@ read, then advances the watermark to the maximum returned sequence. Records
 without a sequence are retained. This does not remove duplicate sequence numbers
 within the same read batch. Reading events does not update status or display
 state; those require a session refresh.
+
+`readRecentEvents(file, limit)` is the Overview tab's stateless read: it opens the
+file, reads the newest complete lines and returns at most `limit` events, oldest
+first. It keeps no offset and takes no part in the tail lifecycle. The Overview
+host calls it only while the session is Running; every other state has no activity
+block and reads no events.
 
 `EventTail` also keeps a bounded history (the most recent 5000 events by
 default, oldest first); older events are dropped and counted in `droppedCount`

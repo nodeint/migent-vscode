@@ -203,9 +203,9 @@ const scenarios: Scenario[] = [
       await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'migent.session.openTask' });
       await sleep(SETTLE_MS);
       assert.equal(activeFile(), before, 'unknown intents open nothing');
-      await env.api.session.handle(id, { type: 'intent', intent: 'openResults' });
-      await waitFor('results tab shown', () => env.api.session.lastModel(id)?.tab === 'results');
-      assert.equal(env.api.session.count, 1, 'Results replaced Metrics in the same panel');
+      await env.api.session.handle(id, { type: 'intent', intent: 'openOverview' });
+      await waitFor('overview tab shown', () => env.api.session.lastModel(id)?.tab === 'overview');
+      assert.equal(env.api.session.count, 1, 'Overview replaced Metrics in the same panel');
 
       await closeAll(env);
     },
@@ -215,8 +215,8 @@ const scenarios: Scenario[] = [
     async run(env) {
       await metricsProject(env, { isMetricsKept: true });
       const id = identity(env);
-      env.api.session.open(id, { tab: 'results' });
-      await waitFor('results model posted', () => env.api.session.lastModel(id)?.tab === 'results');
+      env.api.session.open(id, { tab: 'overview' });
+      await waitFor('overview model posted', () => env.api.session.lastModel(id)?.tab === 'overview');
       await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openMetrics' });
       await waitFor('metrics tab shown', () => env.api.session.lastModel(id)?.tab === 'metrics');
       assert.equal(env.api.session.count, 1, 'the action switched tabs in place');

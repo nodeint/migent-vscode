@@ -11,6 +11,7 @@ const media = path.join(__dirname, '../../../media');
 /** Each Session script, the copy file it reads as `text`, and the global that file defines. */
 const PAIRS = [
   { script: 'session', copy: 'sessionCopy', global: 'MigentSessionCopy' },
+  { script: 'overview', copy: 'overviewCopy', global: 'MigentSessionOverviewCopy' },
   { script: 'results', copy: 'resultsCopy', global: 'MigentSessionResultsCopy' },
   { script: 'metrics', copy: 'metricsCopy', global: 'MigentSessionMetricsCopy' },
   { script: 'workflow', copy: 'sessionWorkflowCopy', global: 'MigentSessionWorkflowCopy' },

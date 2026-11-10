@@ -56,6 +56,11 @@ describe('listExecutions', () => {
     expect(rows[0]?.stage).toBe('plan');
   });
 
+  it('reads the recorded blocker text, and null when the outcome has none', () => {
+    expect(listExecutions(fixture('blocked'))[0]?.blocker).toBe('needs a decision');
+    expect(listExecutions(fixture('completed'))[0]?.blocker).toBeNull();
+  });
+
   it('flags an execution that wrote failure.md, and only that one', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
     temps.push(dir);

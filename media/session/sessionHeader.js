@@ -1,5 +1,5 @@
 // The session domain of the page header: which icon and tone each session state gets, the facts every session page
-// shows, and the Reply button and menu of the session. It maps session data onto the kit's `pageHeader`; the kit
+// shows, and the menu of the session. It maps session data onto the kit's `pageHeader`; the kit
 // itself knows nothing about sessions. Loaded before session.js (see docs/ui.md). Exposes `MigentSessionHeader`.
 (function () {
   'use strict';
@@ -72,7 +72,6 @@
    */
   function sessionHeader(page, options) {
     const send = (name) => () => (options.sendAction ? options.sendAction(name) : page.send(sessionAction(name)));
-    const replyButton = ui.button(copy.reply, { kind: 'secondary', size: 'sm', className: 'mg-header-reply', onClick: send('reply') });
     return ui.pageHeader({
       state: stateBadge(options.state),
       label: options.workflowId,
@@ -80,7 +79,6 @@
       clamp: true,
       facts: sessionFacts(options.meta),
       tabs: { label: copy.tabsLabel, tabs: options.tabs, current: options.current },
-      actions: options.meta && options.meta.canReply ? [replyButton] : [],
       menu: {
         label: copy.menu.label,
         items: [

@@ -76,7 +76,7 @@ describe('parseAnswerMessage', () => {
     });
     expect(parseAnswerMessage({ type: 'submit', revision: 2, fingerprint: 'f' })).toMatchObject({ type: 'submit' });
     expect(parseAnswerMessage({ type: 'later' })).toEqual({ type: 'later' });
-    expect(parseAnswerMessage({ type: 'openResults' })).toEqual({ type: 'openResults' });
+    expect(parseAnswerMessage({ type: 'openOverview' })).toEqual({ type: 'openOverview' });
     expect(parseAnswerMessage({ type: 'openMetrics' })).toEqual({ type: 'openMetrics' });
     expect(parseAnswerMessage({ type: 'sessionAction', action: 'showLog' })).toEqual({
       type: 'sessionAction',

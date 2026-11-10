@@ -1,4 +1,4 @@
-// Copy of the Results tab: every heading, note and message the tab shows, in one place. Loaded before `results.js`
+// Copy of the Overview tab's results blocks: every heading, note and message they show, in one place. Loaded before `results.js`
 // (see docs/ui.md). Exposes one global, `MigentSessionResultsCopy`.
 // Grouped by what the text is about (outputs, next steps, child sessions...). A text with a value in it is a function.
 // Text that several pages show lives in `MigentCopy`.

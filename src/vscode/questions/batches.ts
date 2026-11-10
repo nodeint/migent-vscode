@@ -240,7 +240,7 @@ export class QuestionBatches implements vscode.Disposable {
       case 'later':
         this.#surfaces.get(batchKeyOf(entry.identity))?.close();
         return;
-      case 'openResults':
+      case 'openOverview':
         await this.#runSessionCommand(entry, 'migent.session.open');
         return;
       case 'openMetrics': {

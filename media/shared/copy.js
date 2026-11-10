@@ -8,15 +8,12 @@
     /** The page tabs of the session header, by page key. */
     tab: {
       questions: 'Questions',
-      results: 'Results',
+      overview: 'Overview',
       metrics: 'Metrics',
       workflow: 'Workflow',
       task: 'Task',
     },
     tabsLabel: 'Session pages',
-
-    /** The header button that replies to a session whose reply the host can send. */
-    reply: 'Reply…',
 
     /** The more menu of a session page, and the actions several pages add to it. */
     menu: {
