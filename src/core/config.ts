@@ -135,10 +135,13 @@ export type ReplacedMembersMatchContract = [
   Expect<Same<ContractRole, ContractRoleEntry>>,
   Expect<Same<Extract<ContractRoleAgent, string>, string>>,
   Expect<SameKeys<keyof Exclude<ContractRoleAgent, string>, keyof InlineAgent>>,
+  Expect<Same<Exclude<ContractRoleAgent, string>['model'], InlineAgent['model']>>,
   Expect<Same<Exclude<ContractRoleAgent, string>['effort'], InlineAgent['effort']>>,
   Expect<Same<Exclude<ContractRoleAgent, string>['client'], InlineAgent['client']>>,
   Expect<SameKeys<keyof ContractNamedAgent, keyof ContractFragment>>,
   Expect<SameKeys<keyof ContractNamedAgent, keyof InlineAgent>>,
+  // A named fragment may omit `model`; an inline agent may not. Only the value type must agree.
+  Expect<Same<Exclude<ContractNamedAgent['model'], undefined>, InlineAgent['model']>>,
   Expect<Same<ContractNamedAgent['effort'], InlineAgent['effort']>>,
   Expect<Same<ContractNamedAgent['client'], InlineAgent['client']>>,
   Expect<Same<ContractNamedAgent, ContractFragment>>,

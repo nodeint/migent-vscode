@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 
+import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { wireOf } from './contractRead';
 import { frozenWorkflowPath, workflowDraftPath } from './paths';
 import { isRecord } from './record';
 
@@ -24,13 +26,11 @@ function errorText(error: unknown): string {
 function stageIds(parsed: unknown): string[] {
   if (!isRecord(parsed)) return [];
   // A frozen workflow wraps the body under `workflow`; a draft has the body at the top level.
-  const body = isRecord(parsed.workflow) ? parsed.workflow : parsed;
-  const { stages } = body;
+  const stages = wireOf<WorkflowDocumentInput>(isRecord(parsed.workflow) ? parsed.workflow : parsed)?.stages;
   if (!Array.isArray(stages)) return [];
   const ids: string[] = [];
   for (const stage of stages) {
-    if (!isRecord(stage)) continue;
-    const { id } = stage;
+    const { id } = wireOf<WorkflowStageInput>(stage) ?? {};
     if (typeof id === 'string' && id !== '') ids.push(id);
   }
   return ids;

@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { wireOf } from './contractRead';
 import type { DirectoryState } from './model';
 import { workflowsDir } from './paths';
 import { isRecord } from './record';
@@ -31,13 +33,11 @@ export interface WorkflowScan {
 }
 
 function stageIds(parsed: unknown): string[] {
-  if (!isRecord(parsed)) return [];
-  const { stages } = parsed;
+  const stages = wireOf<WorkflowDocumentInput>(parsed)?.stages;
   if (!Array.isArray(stages)) return [];
   const ids: string[] = [];
   for (const stage of stages) {
-    if (!isRecord(stage)) continue;
-    const { id } = stage;
+    const { id } = wireOf<WorkflowStageInput>(stage) ?? {};
     if (typeof id === 'string' && id !== '') ids.push(id);
   }
   return ids;
@@ -80,8 +80,9 @@ export function readWorkflowFile(projectRoot: string, file: string): WorkflowEnt
     return failed(file, 'invalid', error);
   }
   const body = isRecord(parsed) ? parsed : null;
+  const id = wireOf<WorkflowDocumentInput>(parsed)?.id;
   return {
-    id: typeof body?.id === 'string' && body.id !== '' ? body.id : fallbackId(file),
+    id: typeof id === 'string' && id !== '' ? id : fallbackId(file),
     file,
     state: 'ok',
     error: null,
