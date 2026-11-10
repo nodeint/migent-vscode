@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { AuthoringDiagnostic, AuthoringResult } from './authoring';
 import type { Expect, Same } from './contractDraft';
 import type { ClientChoice, DoctorCheck, parsePrepared } from './controlArgs';
+import type { EnvelopeFields, TailEvent } from './eventTail';
 
 type Prepared = NonNullable<ReturnType<typeof parsePrepared>>;
 
@@ -36,6 +37,11 @@ export type ForwardedFieldsMatchContract = [
   // Compared only (never forwarded): controlArgs.ts types its comparison constants from these fields too.
   Expect<Same<Static<typeof GetClient>['available'], boolean>>,
   Expect<Same<Static<typeof GetModel>['default'], boolean>>,
+  // Event envelope: each forwarded field keeps the contract's value type (a local `null` means absent or malformed).
+  Expect<Same<NonNullable<TailEvent['seq']>, EnvelopeFields['seq']>>,
+  Expect<Same<TailEvent['timestamp'], EnvelopeFields['timestamp']>>,
+  Expect<Same<NonNullable<TailEvent['event']>, EnvelopeFields['event']>>,
+  Expect<Same<TailEvent['data'], EnvelopeFields['data']>>,
 
 ];
 

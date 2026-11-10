@@ -1,7 +1,21 @@
 import { closeSync, fstatSync,openSync, readSync } from 'node:fs';
 
+import type { LegacyLifecycleEvent, LifecycleEventV2, Static } from '@nodeint/migent-contracts';
+
+import { declaredOf } from './contractRead';
 import { KNOWN_EVENT_VERSION } from './model';
 import { isRecord } from './record';
+
+/**
+ * Envelope keys read below. All but the three extension-only ones come from the opt-in known shapes (current
+ * `LifecycleEventV2`, plus `LegacyLifecycleEvent` whose `v` is optional), so an upstream rename fails typecheck.
+ * `execution_id`, `stage_id` and `summary` are in neither shape; they are read leniently and stay null when absent.
+ */
+/** The envelope as read: the current shape, with `v` also allowed to be absent or 1 as in the legacy shape. */
+export type EnvelopeFields = Omit<LifecycleEventV2, 'v'> & {
+  v: LifecycleEventV2['v'] | Static<typeof LegacyLifecycleEvent>['v'];
+};
+type ExtensionKey = 'execution_id' | 'stage_id' | 'summary';
 
 /**
  * Tail events.jsonl by byte offset. Each call reads from `offset` to end of file
@@ -73,28 +87,25 @@ function parseLine(line: string): TailEvent {
   } catch {
     // Fall through: returned as a raw line below.
   }
-  const record =
-    isRecord(value)
-      ? value
-      : null;
-  if (record === null || typeof record.event !== 'string') {
+  const record = isRecord(value) ? value : null;
+  const wire = declaredOf<EnvelopeFields>(record);
+  if (record === null || wire === null || typeof wire.event !== 'string') {
     return emptyEvent({ raw: null, rawLine: line, seq: null, v: 1, event: null });
   }
-  const version = record.v;
+  const version = wire.v;
   const v = typeof version === 'number' && Number.isInteger(version) && version >= 1 ? version : 1;
   const isUnknownVersion = v > KNOWN_EVENT_VERSION;
-  const str = (key: string): string | null =>
-    typeof record[key] === 'string' ? (record[key]) : null;
-  const seq = typeof record.seq === 'number' && Number.isInteger(record.seq) ? record.seq : null;
+  const ext = (key: ExtensionKey): string | null => (typeof record[key] === 'string' ? record[key] : null);
+  const seq = typeof wire.seq === 'number' && Number.isInteger(wire.seq) ? wire.seq : null;
   const parsed: TailEvent = {
     seq,
     v,
-    event: record.event,
-    timestamp: str('timestamp') ?? '',
-    executionId: str('execution_id'),
-    stageId: str('stage_id'),
-    summary: str('summary'),
-    data: isData(record.data),
+    event: wire.event,
+    timestamp: typeof wire.timestamp === 'string' ? wire.timestamp : '',
+    executionId: ext('execution_id'),
+    stageId: ext('stage_id'),
+    summary: ext('summary'),
+    data: isData(wire.data),
     raw: record,
     rawLine: isUnknownVersion ? line : null,
   };

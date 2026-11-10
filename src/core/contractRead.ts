@@ -16,3 +16,17 @@ export function wireOf<T, Keys extends keyof T = keyof T>(value: unknown): Wire<
   const wire: Wire<T, Keys> = value;
   return wire;
 }
+
+/**
+ * The keys of contract type `T` with the contract's own value types, present or not. For readers whose result type
+ * forwards a contract field: a contract change of a field's type breaks the reader that narrows it. The value is
+ * still checked at runtime; this is a drift signal, never a validation gate.
+ */
+export type Declared<T, Keys extends keyof T = keyof T> = { readonly [Key in Keys]?: T[Key] };
+
+/** `value` as a record read through the contract's field names and value types, or null when it is not an object. */
+export function declaredOf<T, Keys extends keyof T = keyof T>(value: unknown): Declared<T, Keys> | null;
+// The overload is the one place the contract's value types are declared; every reader still verifies them at runtime.
+export function declaredOf(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
