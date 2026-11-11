@@ -7,6 +7,7 @@ import { configPath, MIGENT_DIR, WORKFLOWS_DIRNAME, workflowsDir } from '../../c
 import { duplicateWorkflowText, workflowFileName, workflowIdProblem } from '../../core/workflowDraft';
 import type { CapabilityService } from '../capability';
 import type { ConfigPanels } from '../config/panels';
+import { confirm, notify } from '../notices';
 import { openFile } from '../openFile';
 import { pickProject } from '../pick';
 import type { ProjectContext, ProjectRegistry } from '../projects';
@@ -125,7 +126,7 @@ interface DuplicateDeps {
 }
 
 function fail(message: string): void {
-  void vscode.window.showErrorMessage(`Workflow not duplicated. ${message}`);
+  notify('workflow.duplicateFailed', { message });
 }
 
 async function createCopy(
@@ -172,16 +173,11 @@ async function deleteWorkflow(registry: ProjectRegistry, editor: WorkflowEditorP
   const target = await targetWorkflow(registry, arg, 'Delete workflow');
   if (target === undefined) return;
   const { context, file } = target;
-  const choice = await vscode.window.showWarningMessage(
-    `Delete workflow ${file}?`,
-    { modal: true, detail: 'The file is moved to the Trash. Existing sessions keep their own frozen copy.' },
-    'Move to Trash',
-  );
-  if (choice !== 'Move to Trash') return;
+  if (!(await confirm('workflow.deleteConfirm', { file }))) return;
   try {
     await vscode.workspace.fs.delete(vscode.Uri.file(path.join(workflowsDir(context.root), file)), { useTrash: true });
   } catch (error) {
-    void vscode.window.showErrorMessage(`Workflow not deleted. ${error instanceof Error ? error.message : 'unknown error'}`);
+    notify('workflow.deleteFailed', { detail: error instanceof Error ? error.message : 'unknown error' });
     return;
   }
   editor.close({ project: context.key, file });

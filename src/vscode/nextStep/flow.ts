@@ -13,6 +13,7 @@ import { sessionDir, workflowsDir } from '../../core/paths';
 import type { ProjectKey } from '../changes';
 import type { ControlService } from '../control';
 import { askTask, askTitle, LAUNCH_MODE_ITEMS, PREPARE, RUN_NOW, type TaskInput, titleOf } from '../launchPrompts';
+import { notify } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { offerWorkflowDraft } from '../workflowDraft';
@@ -108,12 +109,12 @@ export class NextStepFlow {
   public async start(identity: NextStepIdentity): Promise<void> {
     const context = this.#registry.project(identity.project);
     if (context === undefined) {
-      void vscode.window.showErrorMessage('The project is no longer open.');
+      notify('nextStep.projectClosed');
       return;
     }
     const preview = previewNextStep(this.#inputFor(context, identity));
     if (preview.launchBlock !== null) {
-      void vscode.window.showWarningMessage(`Next step ${identity.workflow}: ${preview.launchBlock}`);
+      notify('nextStep.blocked', { workflow: identity.workflow, reason: preview.launchBlock });
       return;
     }
     const existing: ChoiceItem[] = preview.activeChildren.map((child) => ({
@@ -159,7 +160,7 @@ export class NextStepFlow {
   public async launch(identity: NextStepIdentity, mode: LaunchMode, options: LaunchOptions = {}): Promise<void> {
     const context = this.#registry.project(identity.project);
     if (context === undefined) {
-      void vscode.window.showErrorMessage('The project is no longer open.');
+      notify('nextStep.projectClosed');
       return;
     }
     if (this.#control.isDownstreamBusy(context, identity.workflow, identity.sessionId)) {
@@ -181,11 +182,11 @@ export class NextStepFlow {
     // Re-resolve everything from the identity immediately before dispatch.
     const resolved = resolveLaunch(this.#inputFor(context, identity), request.task, { allowEmpty: request.mode === 'prepare' });
     if (resolved.kind === 'blocked') {
-      void vscode.window.showWarningMessage(resolved.reason);
+      notify('nextStep.resolveBlocked', { reason: resolved.reason });
       return undefined;
     }
     if (!(await this.#saveTargetWorkflow(context, resolved.launch))) {
-      void vscode.window.showWarningMessage('The workflow was not saved, so it was not started.');
+      notify('nextStep.notSaved');
       return undefined;
     }
     // Saving may have changed the target: resolve once more, so the launch matches the saved file.
@@ -194,7 +195,7 @@ export class NextStepFlow {
       allowEmpty: request.mode === 'prepare',
     });
     if (fresh.kind === 'blocked') {
-      void vscode.window.showWarningMessage(fresh.reason);
+      notify('nextStep.resolveBlocked', { reason: fresh.reason });
       return undefined;
     }
     return fresh.launch;

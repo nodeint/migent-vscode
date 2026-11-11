@@ -141,8 +141,14 @@ unconfirmed, edits made while sending (on disk or unsaved in the editor) being k
 an empty reply. The fixture CLI also answers a reply to a cancelled workflow stage (interrupted wording) and to a role
 session (no `--stage`, `## Role` prefix), so the suite covers their argv, draft settlement, a stale target being refused,
 a completed role session reopening as Running and returning to Recent with the counts following, and quick text
-becoming the draft body without overwriting an existing draft. Notifications, Quick Picks and the input box are
-not driven; their rules are covered by `transitions.test.ts`, `notificationGate.test.ts` and `replyFlow.test.ts`.
+becoming the draft body without overwriting an existing draft. Quick Picks and the input box are not driven, and
+neither are notification buttons in the test host. Notifications are covered at the boundary with a mocked `vscode`:
+`notices.test.ts` (the facade: severity, buttons, picked key, modal confirmations, progress) and `notifier.test.ts` and
+`questionNotifier.test.ts` (when a notification fires, queueing, which command a button runs, the settings), plus
+`deleteSession.test.ts` for the delete ids. Their rules are covered by `transitions.test.ts`, `notificationGate.test.ts`,
+`batchWatch.test.ts` and `replyFlow.test.ts`; the catalog's exact wording by `src/core/notices.test.ts`. A test that
+asserts notification text reads it from the catalog (`NOTICES`), as webview text is read from `MigentCopy`. Clicking
+a real notification button stays a manual check.
 
 `questions.integration.test.ts` drives the Session panel's Questions tab through its message handler against the
 fixture CLI's `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable

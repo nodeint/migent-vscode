@@ -1,5 +1,3 @@
-import * as vscode from 'vscode';
-
 import type { SessionWorkflowModel } from '../../core/sessionWorkflow';
 import {
   duplicateArtifactProblem,
@@ -15,6 +13,7 @@ import {
   usableLaunch,
 } from '../authoringSave';
 import type { CapabilityService } from '../capability';
+import { notify } from '../notices';
 import type { ProjectRegistry } from '../projects';
 import { type Entry, type Transient, transient } from './entry';
 
@@ -45,7 +44,7 @@ function saveRefusal(model: SessionWorkflowModel | null, form: WorkflowForm): st
 }
 
 function notifySaveFailed(message: string): void {
-  void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
+  notify('workflow.saveFailed', { message });
 }
 
 function saveArgs(sessionId: string, baseHash: string): string[] {

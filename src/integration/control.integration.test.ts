@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../core/model';
+import { LABELS, NOTICES } from '../core/notices';
 import type { ProjectContext } from '../vscode/projects';
 import { openWorkflowDraft, type PreparedSession } from '../vscode/workflowDraft';
 import { createProject, type Env, freshLock, manifest, migentPath, openScenarioFolder, repoRoot, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';
@@ -640,7 +641,13 @@ async function withMessages(
   }
 }
 
-const confirmComplete = (message: string): string | undefined => (message.startsWith('Complete ') ? 'Complete' : undefined);
+/** The text of a catalog entry before its first value, so a test matches wording that comes from the catalog. */
+const COMPLETE_CONFIRM = NOTICES['reply.completeConfirm'].text({ label: '\u0000' }).split('\u0000')[0] ?? '';
+const COMPLETE_WARNINGS = NOTICES['control.completedWithWarnings'].text({ label: '\u0000', warnings: '' }).split('\u0000')[0] ?? '';
+const COMPLETE_FAILED = NOTICES['control.completeFailed'].text({ detail: '' });
+
+const confirmComplete = (message: string): string | undefined =>
+  message.startsWith(COMPLETE_CONFIRM) ? LABELS.complete : undefined;
 
 /** Run a long session and stop it, leaving a cancelled session that `session complete` accepts. */
 async function stoppedSession(env: Env, project: ProjectContext): Promise<SessionSnapshot> {
@@ -667,7 +674,7 @@ scenarios.push(
       await withMessages(confirmComplete, async (shown) => {
         await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
         await waitFor('session completed', () => project.store.snapshot(stopped.sessionId)?.displayState.state === 'completed');
-        assert.ok(shown.some((line) => line.startsWith('warning:Complete ')), 'asked to confirm first');
+        assert.ok(shown.some((line) => line.startsWith(`warning:${COMPLETE_CONFIRM}`)), 'asked to confirm first');
       });
       assert.equal(gateHeld(env, project, stopped.sessionId), false, 'gate released');
       assert.deepEqual(argvLog(env).at(-1), ['session', 'complete', stopped.sessionId]);
@@ -694,7 +701,7 @@ scenarios.push(
         await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: prepared.sessionId });
         assert.equal(argvLog(env).some((argv) => argv[1] === 'complete'), false, 'ineligible: no CLI call');
         await env.api.control.complete(project, snapshotOf(project, prepared.sessionId));
-        assert.ok(shown.some((line) => line.startsWith('error:Could not complete the session')), 'refusal reported');
+        assert.ok(shown.some((line) => line.startsWith(`error:${COMPLETE_FAILED}`)), 'refusal reported');
       });
       assert.equal(gateHeld(env, project, prepared.sessionId), false, 'gate released');
       assert.equal(snapshotOf(project, prepared.sessionId).displayState.state, 'prepared');
@@ -709,7 +716,7 @@ scenarios.push(
       await waitFor('manifest shows the role', () => project.store.snapshot(stopped.sessionId)?.manifest?.role === 'planner');
       await withMessages(confirmComplete, async (shown) => {
         await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
-        assert.equal(shown.some((line) => line.startsWith('warning:Complete ')), false, 'no confirmation');
+        assert.equal(shown.some((line) => line.startsWith(`warning:${COMPLETE_CONFIRM}`)), false, 'no confirmation');
       });
       assert.equal(argvLog(env).some((argv) => argv[1] === 'complete'), false, 'no CLI call');
     },
@@ -724,7 +731,7 @@ scenarios.push(
           await env.api.control.complete(project, stopped);
           await waitFor('session completed', () => project.store.snapshot(stopped.sessionId)?.displayState.state === 'completed');
           assert.ok(
-            shown.some((line) => line.startsWith('warning:Completed ') && line.includes('required artifact "plan"')),
+            shown.some((line) => line.startsWith(`warning:${COMPLETE_WARNINGS}`) && line.includes('required artifact "plan"')),
             'warning shown',
           );
         });

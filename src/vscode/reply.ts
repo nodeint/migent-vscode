@@ -10,6 +10,7 @@ import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
 import type { ReplyTarget, ReplyTargetKind, SessionSnapshot } from '../core/model';
+import { PROGRESS_MESSAGES } from '../core/notices';
 import type { GateHandle } from '../core/operationGate';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../core/paths';
 import { isRecord } from '../core/record';
@@ -24,6 +25,7 @@ import {
 } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
 import type { ControlService } from './control';
+import { notify, show } from './notices';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
 const INFO_MESSAGE_MS = 5000;
@@ -198,7 +200,7 @@ export class ReplyService implements vscode.Disposable {
       return true;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(`Could not create the reply draft: ${detail}`);
+      notify('reply.draftFailed', { detail });
       return false;
     }
   }
@@ -288,7 +290,7 @@ export class ReplyService implements vscode.Disposable {
       return { kind: 'blocked', reason: refused };
     }
     const args = answerArgs({ sessionId: meta.sessionId, stageId: target.stageId, replyFile });
-    input.onPhase('Migent is applying the reply…');
+    input.onPhase(PROGRESS_MESSAGES.replyApplying);
     // No await between this validation and the spawn.
     const run = runLong(runtime.launch, args, { cwd: context.root, env: runtime.env, onStderrLine: runtime.log });
     // The CLI runs the whole stage and exits only when it is done. The reply is received once the blocked execution
@@ -315,7 +317,7 @@ export class ReplyService implements vscode.Disposable {
       this.#keptFiles.delete(input.replyFile);
       return rm(input.replyFile, { force: true });
     });
-    input.onPhase('Reply received');
+    input.onPhase(PROGRESS_MESSAGES.replyReceived);
     handle.release();
     if (received.seen === 'consumed') return { kind: 'sent', hasKeptEdits: await this.#settleDraft(input.meta, input.content) };
     // Resumed, but its conversation does not show this text (yet): the draft is settled if it appears.
@@ -324,7 +326,7 @@ export class ReplyService implements vscode.Disposable {
   }
 
   async #settle(input: SendInput, result: ExitedRun, handle: { release: () => void }): Promise<SendResult> {
-    input.onPhase('Waiting for the stage to resume…');
+    input.onPhase(PROGRESS_MESSAGES.replyWaiting);
     const seen = await this.#awaitResumed(input);
     if (seen !== 'none') {
       // The blocked execution moved on, so it cannot be answered again: the gate has done its job.
@@ -482,15 +484,19 @@ export class ReplyService implements vscode.Disposable {
     const file = this.draftPath(meta);
     if (existsSync(file)) await this.#show(file);
     if (result.kind === 'unconfirmed') {
-      const actions = this.#following.has(this.#followKey(meta)) ? ['Refresh', 'Stop waiting', 'View log'] : ['Refresh', 'View log'];
-      const picked = await vscode.window.showWarningMessage('Status not confirmed. Your draft was kept.', ...actions);
-      if (picked === 'Refresh') await vscode.commands.executeCommand('migent.refresh');
-      else if (picked === 'Stop waiting') this.stopWaiting(meta);
-      else if (picked === 'View log') this.#control.showLog();
+      const actions = this.#following.has(this.#followKey(meta))
+        ? (['refresh', 'stopWaiting', 'viewLog'] as const)
+        : (['refresh', 'viewLog'] as const);
+      const picked = await show('reply.statusNotConfirmed', undefined, actions);
+      if (picked === 'refresh') await vscode.commands.executeCommand('migent.refresh');
+      else if (picked === 'stopWaiting') this.stopWaiting(meta);
+      else if (picked === 'viewLog') this.#control.showLog();
       return;
     }
-    const text = result.kind === 'blocked' ? result.reason : `Could not send the reply: ${result.detail} Your draft was kept.`;
-    const picked = await vscode.window.showWarningMessage(text, 'View log');
-    if (picked === 'View log') this.#control.showLog();
+    const picked =
+      result.kind === 'blocked'
+        ? await show('reply.blocked', { reason: result.reason })
+        : await show('reply.sendFailed', { detail: result.detail });
+    if (picked === 'viewLog') this.#control.showLog();
   }
 }
