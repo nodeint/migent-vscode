@@ -162,6 +162,10 @@ export interface ExecutionSnapshot {
   hasFailureReport: boolean;
   /** `execution.json` `kind`; `verify` marks a verify-only run, which has no agent to reply to. */
   kind: string | null;
+  /** `execution.json` `created_at`; null when absent. */
+  createdAt: string | null;
+  /** `execution.json` `completed_at`; null while running or when absent. */
+  completedAt: string | null;
 }
 
 /** What a reply answers: a blocker, an interrupted stage, or the next turn of a role session. */

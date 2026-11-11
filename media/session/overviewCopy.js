@@ -47,10 +47,16 @@
       quotaReset: (time) => time + ' UTC',
       /** A stage and attempt, as a quiet value in the key-value grid. */
       execution: (stage, attempt) => stage + ' · attempt ' + attempt,
+      /** The next action of a Completed session, by what the host found launchable. */
+      nextStep: {
+        choose: (count) => count + ' next steps can run. Pick one under Next steps.',
+        blocked: 'The next steps are blocked. See Next steps for each reason.',
+        done: 'Nothing left to run.',
+      },
+      /** Shown when the state offers no action at all. */
+      noAction: 'No action is available.',
       /** The labels of the Status key-value grid. */
       labels: {
-        latestExecution: 'Latest execution',
-        decision: 'Decision',
         blockedIn: 'Blocked in',
         blocker: 'Blocker',
         quotaResets: 'Quota resets',
@@ -62,10 +68,11 @@
     /** The Progress block: one row per workflow stage, or per execution for a role session. */
     progress: {
       title: 'Progress',
-      note: 'Stages in workflow order and their latest attempt.',
+      note: 'Every attempt, in the order it ran.',
       roleNote: 'Executions of this role session.',
       empty: 'No stages or executions to list.',
       attempt: (count) => 'attempt ' + count,
+      /** The tooltip of a decision badge. */
       decision: (decision) => 'decision ' + decision,
       /** The state of a stage or execution row. */
       state: {

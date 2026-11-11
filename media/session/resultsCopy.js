@@ -11,6 +11,8 @@
       note: 'Files this session published.',
       empty: 'No published outputs.',
       unreadable: (error) => 'Cannot read outputs/ (' + error + ')',
+      /** Which execution published an output. */
+      publishedBy: (stage, attempt) => stage + ' · attempt ' + attempt,
       /** A warning chip on an output whose file cannot be opened. */
       state: {
         missing: 'missing',
@@ -21,7 +23,6 @@
     next: {
       title: 'Next steps',
       note: 'Workflows this session suggests running next.',
-      none: 'This session suggested no next steps.',
       /** Why next.json cannot be used, by the state the host reports. */
       state: {
         missing: 'No next-step suggestions.',
@@ -34,56 +35,37 @@
     },
 
     suggestion: {
-      /** A warning chip on a suggestion whose target workflow cannot be used, by the target state. */
-      target: {
-        duplicate: 'duplicate target',
-        invalid: 'invalid target',
-        'not-found': 'target not found',
+      /** A warning chip with the reason a suggestion cannot launch, by the reason the host reports. */
+      block: {
+        sourceNotCompleted: 'source not completed',
+        notDeclared: 'not declared',
+        declarationUnreadable: 'declaration unreadable',
+        targetNotFound: 'target not found',
+        targetInvalid: 'target invalid',
+        targetDuplicate: 'target duplicate',
       },
-      declared: {
-        label: 'Declared by workflow',
-        unknown: 'Unknown',
-        yes: 'Yes',
-        no: 'No',
-      },
-      inputs: 'Inputs',
-      artifactLine: (name, output) => name + ' ← output ' + output,
-      open: 'Open',
-      openWorkflow: 'Open workflow file',
+      /** The newest child session that already ran the step. */
+      ran: (child) => 'Ran → ' + child,
     },
 
     children: {
       title: 'Child sessions',
       note: 'Sessions started from this one.',
-      copyId: 'Copy session ID',
     },
 
-    handoff: {
-      title: 'Handoff',
-      note: 'Artifacts handed over from the source session.',
+    fromSession: {
+      hidden: 'Show more in the Sessions view to load the source.',
+      notFound: 'The source session was not found.',
+      untitled: 'Untitled source session',
       invalid: (reason) => 'Handoff details are not in the expected shape (' + reason + ').',
       openManifest: 'Open manifest',
-      fromOutput: (output) => '← output ' + output,
-      localCopy: 'Local copy',
-      sha256: 'SHA-256',
-      sourcePath: 'Source path',
-      copyHash: 'Copy SHA-256',
-      copySourcePath: 'Copy source path',
-      openLocal: 'Open local copy',
+      details: 'Details',
+      upstream: 'upstream',
       /** A warning chip on an artifact whose local copy cannot be opened. */
       state: {
         missing: 'local copy missing',
         rejected: 'local copy outside session',
       },
-    },
-
-    source: {
-      title: 'Source session',
-      note: 'The session this one continues from.',
-      hidden: 'Show more in the Sessions view to load the source.',
-      notFound: 'The source session was not found.',
-      untitled: 'Untitled source session',
-      copyId: 'Copy session ID',
     },
   };
 })();

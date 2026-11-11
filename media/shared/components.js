@@ -430,26 +430,15 @@
     return settings.title || detail;
   }
 
-  /** The head tooltip: an explicit `tip` wins, so a card can show a value the reader cannot see. */
-  function headTip(settings, segments, parts) {
-    return settings.tip || descriptorText(settings, segments, parts);
-  }
-
-  /** The accessible name of a link card: always the title and metadata, never the tooltip override. */
+  /** The accessible name of a link card: its title and metadata. */
   function accessibleName(settings, segments, parts) {
-    return descriptorText(settings, segments, parts) || settings.tip || '';
+    return descriptorText(settings, segments, parts) || '';
   }
 
-  function endSlot(status, tools) {
-    if (!status && !tools) return null;
-    const end = el('span', null, 'mg-item-end');
-    if (status) end.append(status);
-    if (tools) end.append(tools);
-    return end;
-  }
 
-  function itemMain(settings, segments, parts, titleLines) {
+  function itemMain(settings, segments, parts, titleLines, leadingStatus) {
     const main = el('span', null, 'mg-item-main');
+    if (leadingStatus) main.append(leadingStatus);
     main.append(el('span', settings.title, titleClass('mg-item-title', titleLines)));
     const alerts = el('span', null, 'mg-item-alerts');
     alerts.append(...(settings.alerts || []));
@@ -462,6 +451,9 @@
   function collapsibleItem(settings, segments, parts, titleLines, tone) {
     const tools = settings.tools && settings.tools.length > 0 ? el('span', null, 'mg-collapsible-tools') : null;
     if (tools) tools.append(...settings.tools);
+    // Actions are real buttons with a text label, always visible; the hover-only tools stay a separate group.
+    const actions = settings.actions && settings.actions.length > 0 ? el('span', null, 'mg-collapsible-actions') : null;
+    if (actions) actions.append(...settings.actions);
     const head = el('div', null, 'mg-collapsible-head');
     // The badge and the main region are redrawn by `refresh`; the tools are the same nodes throughout, so a button
     // that holds the focus keeps it.
@@ -473,24 +465,26 @@
         ? el('span', String(state.number), 'mg-badge' + (state.warn ? ' mg-badge--warn' : ''))
         : state.leading ? leadingNode(state.leading) : null;
       const main = el('span', null, 'mg-collapsible-main');
+      // `leadStatus` puts the status before the title, as a static row does, so a list mixing both reads alike.
+      const status = state.status ? statusIndicator(state.status) : null;
+      if (status && state.leadStatus) main.append(status);
       main.append(el('span', state.title, titleClass('mg-collapsible-title', lines)));
       const alerts = el('span', null, 'mg-collapsible-alerts');
       alerts.append(...(state.alerts || []));
       if (alerts.children.length > 0) main.append(alerts);
       if (rich.length > 0) main.append(metaLine(rich));
       else if (summary.length > 0) main.append(el('span', summary.join(' · '), 'mg-collapsible-summary'));
-      if (state.tip || rich.length > 0 || summary.length > 0) main.setAttribute('data-tip', headTip(state, rich, summary));
-      const status = state.status ? statusIndicator(state.status) : null;
       const children = [];
       if (leadNode) children.push(leadNode);
       children.push(main);
-      if (status) {
+      const endStatus = state.leadStatus ? null : status;
+      const trailing = [endStatus, actions, tools].filter(Boolean);
+      if (endStatus || (actions && tools)) {
         const end = el('span', null, 'mg-item-end');
-        end.append(status);
-        if (tools) end.append(tools);
+        end.append(...trailing);
         children.push(end);
-      } else if (tools) {
-        children.push(tools);
+      } else if (trailing.length > 0) {
+        children.push(trailing[0]);
       }
       head.className = 'mg-collapsible-head' + (leadNode ? '' : ' mg-collapsible-head--no-lead');
       head.replaceChildren(...children);
@@ -513,14 +507,16 @@
 
   /**
    * One bordered item card, with three modes decided by the options: collapsible when `body` is given (a `<details>`
-   * head that keeps its open state by `key`), link when `onClick` is given (one `<button>` holding the lead and the
-   * main region; `status` and `tools` stay outside it), and static otherwise.
-   * `options`: `title`, `titleLines` (1-3 clamps the title by CSS; the full text stays in the DOM and the tooltip),
+   * head that keeps its open state by `key`), link when `onClick` is given (one `<button>` holding the lead, the
+   * main region, the `status` and, always last, the chevron; it holds no other control, so `tools` are ignored), and
+   * static otherwise (a plain frame: no head band, no hover, no chevron; its `status` sits right after the title).
+   * `options`: `title`, `titleLines` (1-3 clamps the title by CSS; the full text stays in the DOM),
    * `number` (index badge) or `leading` (a codicon before the title), `summary` (plain strings joined by ` · `),
    * `meta` (rich segments: strings, `{ text, mono?, tone? }` or kit nodes; replaces `summary`), `status`
-   * (`{ icon, tone, text, spin?, compact? }` in the end slot), `alerts` (warning chips), `tools` (icon buttons in
-   * the end slot), `tone` (`info`, `warn` or `error` edge), `affordance` (the link mode's trailing icon, default
-   * `chevron-right`), `tip`, `key`, `path`, `open`, `describe`/`refresh` (collapsible header redraw).
+   * (`{ icon, tone, text, spin?, compact? }`), `alerts` (warning chips), `tools` (hover-only icon buttons of a
+   * collapsible head), `actions` (always-visible kit buttons of a collapsible head), `tone` (`info`, `warn` or `error` edge), `affordance` (the link mode's trailing icon, default
+   * `chevron-right`), `key`, `path`, `open`, `leadStatus` (a collapsible head shows its `status` before the title instead of at the end), `describe`/`refresh`
+   * (collapsible header redraw).
    */
   function itemCard(options) {
     const settings = options || {};
@@ -533,34 +529,29 @@
     const lead = settings.number !== undefined
       ? el('span', String(settings.number), 'mg-badge' + (settings.warn ? ' mg-badge--warn' : ''))
       : settings.leading ? leadingNode(settings.leading) : null;
-    const main = itemMain(settings, segments, parts, titleLines);
-    const status = settings.status ? statusIndicator(settings.status) : null;
-    const tools = settings.tools && settings.tools.length > 0 ? el('span', null, 'mg-item-tools') : null;
-    if (tools) tools.append(...settings.tools);
-    const tip = headTip(settings, segments, parts);
-    const name = accessibleName(settings, segments, parts);
     const link = typeof settings.onClick === 'function';
+    const status = settings.status ? statusIndicator(settings.status) : null;
+    // A static row shows its status at the leading edge, beside the title; a link row keeps it before the chevron.
+    const main = itemMain(settings, segments, parts, titleLines, link ? null : status);
+    const name = accessibleName(settings, segments, parts);
     const head = el('div', null, 'mg-item-head' + (link ? '' : lead ? ' mg-item-head--lead' : ''));
     if (settings.path) head.dataset.path = settings.path;
     if (link) {
-      const button = el('button', null, 'mg-item-link' + (lead ? '' : ' mg-item-link--no-lead'));
+      const button = el('button', null, 'mg-item-link');
       button.type = 'button';
       if (lead) button.append(lead);
       button.append(main);
+      if (status) button.append(status);
       const afford = el('span', null, 'mg-item-afford');
       afford.append(icon(settings.affordance || 'chevron-right'));
       button.append(afford);
       if (name) button.setAttribute('aria-label', name);
-      if (tip) button.setAttribute('data-tip', tip);
       button.addEventListener('click', settings.onClick);
       head.append(button);
     } else {
       if (lead) head.append(lead);
       head.append(main);
-      if (tip) head.setAttribute('data-tip', tip);
     }
-    const end = endSlot(status, tools);
-    if (end) head.append(end);
     const node = el('div', null, 'mg-item mg-item--' + (link ? 'link' : 'static') + tone);
     node.append(head);
     return node;

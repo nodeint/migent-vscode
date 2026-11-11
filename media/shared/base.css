@@ -1423,6 +1423,15 @@ select.mg-select:disabled {
   padding: var(--mg-space-3) var(--mg-space-3) var(--mg-space-4);
 }
 
+/* Always-visible actions of an expandable row: real buttons with a text label, in the end slot of the head. */
+.mg-collapsible-actions {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  gap: var(--mg-space-1);
+  min-height: var(--mg-btn-height);
+}
+
 /* The item's actions sit at the right of its header as icon buttons, on the title's line, so every card keeps them
    in one place. */
 .mg-collapsible-tools {
@@ -1479,33 +1488,33 @@ select.mg-select:disabled {
 
 .mg-item-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   column-gap: var(--mg-space-2);
   padding: var(--mg-space-2) var(--mg-space-3);
-  background: var(--mg-surface-2);
 }
 
 .mg-item-head--lead {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
+/* A static row is a plain fact: the surface of the card, no head band, no hover, the default cursor, no chevron. */
 .mg-item--static > .mg-item-head {
   min-height: var(--mg-btn-height);
 }
 
+/* A link row is the only kind with the head band and the hover: the whole head is one button. */
 .mg-item--link > .mg-item-head {
-  grid-template-columns: minmax(0, 1fr) auto;
   padding: 0;
-  background: none;
+  background: var(--mg-surface-2);
 }
 
 .mg-item-link {
   font: inherit;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   column-gap: var(--mg-space-2);
+  width: 100%;
   min-width: 0;
   padding: var(--mg-space-2) var(--mg-space-3);
   color: var(--mg-fg);
@@ -1515,16 +1524,18 @@ select.mg-select:disabled {
   cursor: pointer;
 }
 
-.mg-item-link--no-lead {
-  grid-template-columns: minmax(0, 1fr) auto;
+/* The main region takes the free width, so the status and the chevron sit at the end, the chevron always last. */
+.mg-item-link > .mg-item-main {
+  flex: 1 1 auto;
+}
+
+.mg-item-link > .mg-status,
+.mg-item-link > .mg-item-afford {
+  flex: none;
 }
 
 .mg-item-link:hover {
   background: var(--mg-hover);
-}
-
-.mg-item--link > .mg-item-head > .mg-item-end {
-  padding-right: var(--mg-space-3);
 }
 
 .mg-item-leading,
@@ -1602,6 +1613,8 @@ select.mg-select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  /* A flex container trims the spaces around each middle-dot separator, so the gap puts them back. */
+  column-gap: var(--mg-space-1);
   min-width: 0;
   color: var(--mg-muted);
   font-size: 0.9em;

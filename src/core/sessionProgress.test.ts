@@ -33,6 +33,8 @@ function execution(
     model: null,
     hasFailureReport: false,
     kind: null,
+    createdAt: null,
+    completedAt: null,
   };
 }
 
@@ -56,8 +58,8 @@ describe('buildProgress', () => {
         runningStageIds: [],
         latestExecutionId: null,
       });
-      expect(stagesOf(progress)).toEqual([
-        { id: 'plan', state, attempts: 1, decision: null, isCurrent: false },
+      expect(stagesOf(progress)).toMatchObject([
+        { id: 'plan', state, attempts: 1, decision: null, history: [{ attempt: 1, state, decision: null }], isCurrent: false },
       ]);
     }
   });
@@ -71,8 +73,8 @@ describe('buildProgress', () => {
     });
 
     expect(stagesOf(progress)).toEqual([
-      { id: 'plan', state: 'running', attempts: 1, decision: null, isCurrent: true },
-      { id: 'review', state: 'not-run', attempts: null, decision: null, isCurrent: false },
+      { id: 'plan', state: 'running', attempts: 1, decision: null, history: [{ order: 1, attempt: 1, state: 'running', decision: null, completedAt: null }], completedAt: null, isCurrent: true },
+      { id: 'review', state: 'not-run', attempts: null, decision: null, history: [], completedAt: null, isCurrent: false },
     ]);
   });
 
@@ -102,8 +104,29 @@ describe('buildProgress', () => {
     });
 
     expect(stagesOf(progress)).toEqual([
-      { id: 'plan', state: 'completed', attempts: 1, decision: 'approved', isCurrent: false },
+      { id: 'plan', state: 'completed', attempts: 1, decision: 'approved', history: [{ order: 1, attempt: 1, state: 'completed', decision: 'approved', completedAt: null }], completedAt: null, isCurrent: false },
     ]);
+  });
+
+  it('lists every non-skipped attempt of a stage, oldest first, with its decision and time', () => {
+    const first = { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed', 'revise'), completedAt: '2026-11-01T10:00:00.000Z' };
+    const second = { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed', 'approved'), completedAt: '2026-11-01T11:00:00.000Z' };
+    const progress = buildProgress({
+      executions: [second, first, execution('0003-plan--attempt-03', 'plan', 3, 'skipped')],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+    });
+
+    expect(stagesOf(progress)[0]).toMatchObject({
+      attempts: 2,
+      decision: 'approved',
+      completedAt: '2026-11-01T11:00:00.000Z',
+      history: [
+        { attempt: 1, state: 'completed', decision: 'revise', completedAt: '2026-11-01T10:00:00.000Z' },
+        { attempt: 2, state: 'completed', decision: 'approved', completedAt: '2026-11-01T11:00:00.000Z' },
+      ],
+    });
   });
 
   it('shows a stage with only skipped executions as skipped', () => {
@@ -126,8 +149,8 @@ describe('buildProgress', () => {
     });
 
     expect(stagesOf(progress)).toEqual([
-      { id: 'build', state: 'not-run', attempts: null, decision: null, isCurrent: false },
-      { id: 'verify', state: 'not-run', attempts: null, decision: null, isCurrent: false },
+      { id: 'build', state: 'not-run', attempts: null, decision: null, history: [], completedAt: null, isCurrent: false },
+      { id: 'verify', state: 'not-run', attempts: null, decision: null, history: [], completedAt: null, isCurrent: false },
     ]);
   });
 

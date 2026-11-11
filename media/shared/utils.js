@@ -36,5 +36,12 @@
     return ms < JUST_NOW_MS ? 'just now' : formatDuration(ms).split(' ')[0] + ' ago';
   }
 
-  window.MigentUtils = { plural, formatDuration, parseTime, formatAgo };
+  /** An ISO time as `{ text, title }`: how long ago (to `now`) and the absolute local time. Null when it is not a time. */
+  function describeTime(iso, now) {
+    const time = parseTime(iso);
+    if (time === null) return null;
+    return { text: formatAgo((now === undefined ? Date.now() : now) - time), title: new Date(time).toLocaleString() };
+  }
+
+  window.MigentUtils = { plural, formatDuration, parseTime, formatAgo, describeTime };
 })();

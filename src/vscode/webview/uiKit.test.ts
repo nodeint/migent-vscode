@@ -268,7 +268,19 @@ describe('UI kit builders', () => {
     expect(summary.textContent).toBe('attempt 1');
   });
 
-  it('itemCard link: one button holds the lead and the main; status and tools stay outside it', () => {
+  it('itemCard static: the status sits at the leading edge of the main region, with no control and no chevron', () => {
+    const { ui } = load();
+    const card = call(ui.itemCard, {
+      title: 'plan',
+      status: { icon: 'pass', tone: 'ok', text: 'Completed', compact: true },
+    });
+    const [[main]] = [card.children[0].children];
+    expect(main.children[0].className).toBe('mg-status mg-status--ok mg-status--compact');
+    expect(main.children[1].className).toBe('mg-item-title');
+    expect(card.descendants().some((node) => node.tagName === 'BUTTON')).toBe(false);
+  });
+
+  it('itemCard link: one button holds everything, the chevron is last, and tools are ignored', () => {
     const { ui } = load();
     let clicked = 0;
     const statusState = { icon: 'pass', tone: 'ok', text: 'Completed', compact: true };
@@ -284,39 +296,62 @@ describe('UI kit builders', () => {
     expect(card.className).toBe('mg-item mg-item--link');
     const [head] = card.children;
     expect(head.className).toBe('mg-item-head');
-    const [link, end] = head.children;
+    expect(head.children).toHaveLength(1);
+    const [link] = head.children;
     expect(link.tagName).toBe('BUTTON');
     expect(link.type).toBe('button');
     expect(link.className).toBe('mg-item-link');
     expect(link.children.map((child) => child.className)).toEqual([
       'mg-item-leading',
       'mg-item-main',
+      'mg-status mg-status--ok mg-status--compact',
       'mg-item-afford',
     ]);
     expect(link.attrs['aria-label']).toBe('plan.md — outputs/plan.md');
-    expect(link.descendants().some((node) => node === tool)).toBe(false);
-    expect(end.className).toBe('mg-item-end');
-    const [status, tools] = end.children;
-    expect(status.className).toBe('mg-status mg-status--ok mg-status--compact');
-    expect(tools.children[0]).toBe(tool);
+    expect(card.descendants().some((node) => node === tool)).toBe(false);
     link.click();
     expect(clicked).toBe(1);
   });
 
-  it('itemCard link: a tip override is the tooltip only; the accessible name still carries the title and metadata', () => {
+  it('itemCard collapsible: leadStatus puts the status before the title instead of in the end slot', () => {
+    const { ui } = load();
+    const status = { icon: 'pass', tone: 'ok', text: 'Completed' };
+    const end = call(ui.itemCard, { key: 'card:e', title: 'plan', status, body: [] });
+    const lead = call(ui.itemCard, { key: 'card:l', title: 'plan', status, leadStatus: true, body: [] });
+    const headOf = (card: ReturnType<typeof call>) => card.children[0].children[1].children[0];
+    expect(headOf(end).children.map((child) => child.className)).toEqual(['mg-collapsible-main', 'mg-item-end']);
+    const [main] = headOf(lead).children;
+    expect(headOf(lead).children).toHaveLength(1);
+    expect(main.children[0].className).toBe('mg-status mg-status--ok');
+    expect(main.children[1].className).toBe('mg-collapsible-title');
+  });
+
+  it('itemCard collapsible: actions are always-visible buttons, apart from the hover-only tools', () => {
+    const { ui } = load();
+    const action = call(ui.button, 'Run again', { kind: 'secondary', onClick: () => undefined });
+    const tool = call(ui.iconButton, 'Open', { icon: 'go-to-file', onClick: () => undefined });
+    const card = call(ui.itemCard, { key: 'card:a', title: 'next', actions: [action], tools: [tool], body: [] });
+    const [summary] = card.children;
+    const [head] = summary.children[1].children;
+    const trailing = head.children[head.children.length - 1];
+    expect(trailing.className).toBe('mg-item-end');
+    expect(trailing.children.map((child) => child.className)).toEqual(['mg-collapsible-actions', 'mg-collapsible-tools']);
+    expect(trailing.children[0].children[0]).toBe(action);
+  });
+
+  it('itemCard link: no tooltip; the accessible name carries the title and metadata', () => {
     const { ui } = load();
     const card = call(ui.itemCard, {
       leading: 'file',
       title: 'note.md',
       meta: [{ text: 'outputs/note.md', mono: true }],
-      tip: 'outputs/note.md',
       onClick: () => undefined,
     });
     const [head] = card.children;
     const [link] = head.children;
     expect(link.textContent).toContain('note.md');
     expect(link.attrs['aria-label']).toBe('note.md — outputs/note.md');
-    expect(link.attrs['data-tip']).toBe('outputs/note.md');
+    expect(link.attrs['data-tip']).toBeUndefined();
   });
 
   it('itemCard collapsible keeps its open state by key and appends the body', () => {
@@ -354,7 +389,7 @@ describe('UI kit builders', () => {
     expect(main.children[0].textContent).toBe('next-wf');
     expect(main.children[1].className).toBe('mg-collapsible-summary');
     expect(main.children[1].textContent).toBe('Do the next task');
-    expect(main.attrs['data-tip']).toBe('next-wf — Do the next task');
+    expect(main.attrs['data-tip']).toBeUndefined();
     expect(tools.className).toBe('mg-collapsible-tools');
     expect(tools.children[0]).toBe(tool);
   });
@@ -369,7 +404,7 @@ describe('UI kit builders', () => {
     const [title, meta] = main.children;
     expect(title.className).toBe('mg-item-title mg-item-title--clamp-2');
     expect(title.textContent).toBe(full);
-    expect(head.attrs['data-tip']).toBe(full + ' — first · path · 123e4567-e89b-12d3-a456-426614174000');
+    expect(head.attrs['data-tip']).toBeUndefined();
     expect(meta.className).toBe('mg-item-meta');
     expect(meta.children[1].className).toBe('mg-mono');
     expect(ref.className).toBe('mg-ref mg-ref--id');
