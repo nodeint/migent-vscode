@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CapabilityState } from '../../cli/version';
-import { NOTICES } from '../../core/notices';
 import { OperationGate } from '../../core/operationGate';
+import { NOTICES } from '../../text/notices';
 import type { CapabilityService } from '../capability';
 
 const invoke = vi.hoisted(() => ({ json: vi.fn(), text: vi.fn() }));

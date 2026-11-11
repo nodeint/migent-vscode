@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { text } from '../text';
 import type { PendingQuestion, QuestionBase, QuestionOption } from './model';
 import { QUESTIONS_FILENAME } from './paths';
 import { isRecord } from './record';
@@ -114,20 +115,20 @@ const OPTION_MIN = 2;
 const OPTION_MAX = 26;
 
 function optionProblem(options: unknown): string | null {
-  if (!Array.isArray(options)) return 'options is not a list';
-  if (options.length < OPTION_MIN || options.length > OPTION_MAX) return 'options must number 2-26';
+  if (!Array.isArray(options)) return text('states.optionsNotList');
+  if (options.length < OPTION_MIN || options.length > OPTION_MAX) return text('states.optionsCount');
   const isValid = (option: unknown): boolean =>
     isRecord(option) && str(option.id) !== null && str(option.label) !== null;
-  return options.every(isValid) ? null : 'an option has no id or label';
+  return options.every(isValid) ? null : text('states.optionIncomplete');
 }
 
 /** Why a raw record is unusable as written, or null. Mirrors the documented question shape. */
 export function recordProblem(entry: unknown): string | null {
-  if (!isRecord(entry)) return 'not an object';
-  if (str(entry.id) === null || str(entry.question) === null) return 'missing id or question';
-  if (str(entry.context) === null) return 'missing context';
-  if (entry.selection !== 'single' && entry.selection !== 'multiple') return 'unsupported selection';
-  if (!['pending', 'answered', 'superseded'].includes(String(entry.status))) return 'unrecognized status';
+  if (!isRecord(entry)) return text('states.notObject');
+  if (str(entry.id) === null || str(entry.question) === null) return text('states.missingIdOrQuestion');
+  if (str(entry.context) === null) return text('states.missingContext');
+  if (entry.selection !== 'single' && entry.selection !== 'multiple') return text('states.unsupportedSelection');
+  if (!['pending', 'answered', 'superseded'].includes(String(entry.status))) return text('states.unrecognizedStatus');
   return optionProblem(entry.options);
 }
 
@@ -139,19 +140,19 @@ function parseRecord(entry: unknown): QuestionRecord | null {
 }
 
 /** Parse session `questions.json` text. Records without `id` and `question` are skipped. */
-export function parseQuestionsFile(text: string): QuestionsRead {
+export function parseQuestionsFile(source: string): QuestionsRead {
   let value: unknown;
   try {
-    value = JSON.parse(text);
+    value = JSON.parse(source);
   } catch (error) {
-    return { kind: 'invalid', error: error instanceof Error ? error.message : 'unparsable JSON' };
+    return { kind: 'invalid', error: error instanceof Error ? error.message : text('states.unparsableJson') };
   }
-  if (!isRecord(value)) return { kind: 'invalid', error: 'not a JSON object' };
+  if (!isRecord(value)) return { kind: 'invalid', error: text('states.notJsonObject') };
   const version = value.schema_version;
   if (typeof version !== 'number' || !SUPPORTED_QUESTIONS_SCHEMA_VERSIONS.includes(version)) {
     return { kind: 'unsupported', schemaVersion: typeof version === 'number' ? version : null };
   }
-  if (!Array.isArray(value.questions)) return { kind: 'invalid', error: 'questions is not a list' };
+  if (!Array.isArray(value.questions)) return { kind: 'invalid', error: text('states.questionsNotList') };
   const questions = value.questions.flatMap((entry): QuestionRecord[] => {
     const record = parseRecord(entry);
     return record === null ? [] : [record];

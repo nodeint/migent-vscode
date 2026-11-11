@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { deriveDisplayState } from '../core/displayState';
 import type { SessionSnapshot } from '../core/model';
-import { LABELS, NOTICES } from '../core/notices';
 import { parseStatus } from '../core/statusReader';
+import { LABELS, NOTICES } from '../text/notices';
 
 const hoisted = vi.hoisted(() => ({
   enabled: new Map<string, boolean>(),

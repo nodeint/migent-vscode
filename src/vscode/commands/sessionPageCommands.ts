@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../../core/model';
 import { isRecord } from '../../core/record';
 import { SESSION_TABS, type SessionBatchRef, type SessionTab } from '../../core/sessionPageModel';
+import { text } from '../../text';
 import type { NextStepFlow } from '../nextStep/flow';
 import type { SessionOpenOptions, SessionPanels } from '../session/panels';
 import { registerNextStepCommands } from './nextStepCommands';
@@ -61,7 +62,7 @@ export function registerSessionPageCommands(
   return [
     vscode.commands.registerCommand('migent.session.open', async (arg: unknown) => {
       const requested = requestedFrom(arg);
-      const resolved = await resolve(host, arg, 'Open which session?');
+      const resolved = await resolve(host, arg, text('prompts.openWhichSession'));
       if (resolved === undefined) return;
       const { context, snapshot, target } = resolved;
       const executionId = requested.batch?.executionId ?? target?.executionId;

@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../../core/model';
 import { sessionDir, TASK_FILENAME, workflowDraftPath } from '../../core/paths';
 import type { WorkflowEntry } from '../../core/workflows';
+import { text } from '../../text';
 import type { ControlService, WorkflowChoice } from '../control';
 import { askTask, askTitle, LAUNCH_MODE_ITEMS, titleOf } from '../launchPrompts';
 import { notify, show } from '../notices';
@@ -34,7 +35,7 @@ async function pickWorkflow(
 ): Promise<WorkflowEntry | undefined> {
   const entries = runnable(context);
   if (entries.length === 0) {
-    vscode.window.setStatusBarMessage('This project has no valid workflow to run.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noValidWorkflow'), INFO_MESSAGE_MS);
     return undefined;
   }
   const last = memento.get<string>(`${LAST_WORKFLOW_KEY}.${context.key}`);
@@ -45,7 +46,7 @@ async function pickWorkflow(
       entry,
     }))
     .sort((left, right) => Number(right.entry.id === last) - Number(left.entry.id === last));
-  const picked = await vscode.window.showQuickPick(items, { title, placeHolder: 'Select a workflow' });
+  const picked = await vscode.window.showQuickPick(items, { title, placeHolder: text('prompts.selectWorkflow') });
   if (picked !== undefined) await memento.update(`${LAST_WORKFLOW_KEY}.${context.key}`, picked.entry.id);
   return picked?.entry;
 }
@@ -65,7 +66,7 @@ async function openTask(file: string): Promise<void> {
 
 /** Task entry for a chosen workflow: a one-line task runs now; Compose in editor prepares `task.md`. */
 async function runWorkflow(control: ControlService, context: ProjectContext, workflow: WorkflowEntry): Promise<void> {
-  const input = await askTask(`Run ${workflow.id}`);
+  const input = await askTask(text('prompts.runWorkflow', { workflow: workflow.id }));
   if (input === undefined) return;
   if (input.kind === 'task') {
     await control.runNew(context, workflow.id, input.text);
@@ -83,7 +84,7 @@ async function runWorkflow(control: ControlService, context: ProjectContext, wor
 async function run(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
   const context = await pickProject(registry);
   if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'Run a workflow');
+  const workflow = await pickWorkflow(context, memento, text('prompts.runAWorkflow'));
   if (workflow !== undefined) await runWorkflow(control, context, workflow);
 }
 
@@ -138,7 +139,7 @@ async function prepareWorkflow(
   context: ProjectContext,
   workflow: WorkflowEntry,
 ): Promise<void> {
-  const title = await askTitle(`Prepare ${workflow.id}`);
+  const title = await askTitle(text('prompts.prepareWorkflow', { workflow: workflow.id }));
   if (title === undefined) return;
   const prepared = await control.prepare(context, { workflowId: workflow.id, title });
   if (prepared === undefined) return;
@@ -148,7 +149,7 @@ async function prepareWorkflow(
 async function prepare(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
   const context = await pickProject(registry);
   if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'Prepare a session');
+  const workflow = await pickWorkflow(context, memento, text('prompts.prepareASession'));
   if (workflow !== undefined) await prepareWorkflow(control, context, workflow);
 }
 
@@ -160,7 +161,7 @@ async function launchWorkflow(
 ): Promise<void> {
   const mode = await vscode.window.showQuickPick(
     LAUNCH_MODE_ITEMS,
-    { title: `New session · ${workflow.id}`, placeHolder: 'Run now or prepare' },
+    { title: text('prompts.newSession', { workflow: workflow.id }), placeHolder: text('prompts.runOrPrepare') },
   );
   if (mode?.mode === 'run') await runWorkflow(control, context, workflow);
   else if (mode?.mode === 'prepare') await prepareWorkflow(control, context, workflow);
@@ -170,7 +171,7 @@ async function launchWorkflow(
 async function newSession(control: ControlService, memento: vscode.Memento, registry: CommandHost['registry']): Promise<void> {
   const context = await pickProject(registry);
   if (context === undefined) return;
-  const workflow = await pickWorkflow(context, memento, 'New session');
+  const workflow = await pickWorkflow(context, memento, text('prompts.newSessionTitle'));
   if (workflow === undefined) return;
   await launchWorkflow(control, context, workflow);
 }
@@ -186,7 +187,7 @@ async function taskTarget(control: ControlService, host: CommandHost, arg: unkno
   const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
   const fromTask = uri === undefined ? undefined : control.sessionOfTask(uri);
   if (fromTask !== undefined) return { ...fromTask, uri };
-  const resolved = await resolveWith(host, arg, { title: 'Run which prepared session?', isEligible: isPrepared });
+  const resolved = await resolveWith(host, arg, { title: text('prompts.runWhichPrepared'), isEligible: isPrepared });
   return resolved === undefined ? undefined : { context: resolved.context, sessionId: resolved.snapshot.sessionId };
 }
 
@@ -225,7 +226,7 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   const snapshot = target.context.store.snapshot(target.sessionId);
   const workflowId = snapshot?.manifest?.workflowId;
   if (snapshot === undefined || !isPrepared(snapshot)) {
-    vscode.window.setStatusBarMessage('This session is no longer prepared.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noLongerPrepared'), INFO_MESSAGE_MS);
   } else if (workflowId === null || workflowId === undefined) {
     notify('control.noWorkflowRecorded');
   } else {
@@ -249,7 +250,7 @@ export async function chooseWorkflow(
         'vscode.diff',
         vscode.Uri.file(change.frozen),
         vscode.Uri.file(change.current),
-        'Session workflow ↔ updated workflow',
+        text('prompts.sessionWorkflowDiff'),
       );
       continue;
     }
@@ -274,7 +275,7 @@ export function registerControlCommands(
     vscode.commands.registerCommand('migent.session.prepare', () => prepare(control, memento, host.registry)),
     vscode.commands.registerCommand('migent.session.start', (arg: unknown) => start(control, host, arg)),
     vscode.commands.registerCommand('migent.session.continue', async (arg: unknown) => {
-      const resolved = await resolveWith(host, arg, { title: 'Continue which session?', isEligible: isContinuable });
+      const resolved = await resolveWith(host, arg, { title: text('prompts.continueWhich'), isEligible: isContinuable });
       if (resolved === undefined) return;
       const { context, snapshot } = resolved;
       if (!(await control.ensureWritable(context, snapshot))) return;
@@ -282,7 +283,7 @@ export function registerControlCommands(
       if (choice !== undefined) await control.continueSession(context, snapshot, choice);
     }),
     vscode.commands.registerCommand('migent.session.cancel', async (arg: unknown) => {
-      const resolved = await resolveWith(host, arg, { title: 'Stop which session?', isEligible: isRunning });
+      const resolved = await resolveWith(host, arg, { title: text('prompts.stopWhich'), isEligible: isRunning });
       if (resolved !== undefined) await control.cancel(resolved.context, resolved.snapshot);
     }),
   ];

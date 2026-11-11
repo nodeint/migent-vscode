@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 
+import { text } from '../text';
 import type { LaunchSpec } from './locate';
 
 export const DEFAULT_INVOKE_TIMEOUT_MS = 30_000;
@@ -44,7 +45,7 @@ export const execWithExecFile: Exec = (launch, args, options) =>
           return;
         }
         if (error.killed === true) {
-          resolve({ kind: 'failed', error: { kind: 'timeout', detail: `Timed out after ${options.timeoutMs} ms.`, stderr } });
+          resolve({ kind: 'failed', error: { kind: 'timeout', detail: text('states.cliTimeout', { ms: options.timeoutMs }), stderr } });
         } else if (typeof error.code === 'number') {
           resolve({ kind: 'failed', error: { kind: 'exit', detail: error.message, exitCode: error.code, stderr, stdout } });
         } else {
@@ -106,6 +107,6 @@ export async function invokeJson(
     return { kind: 'ok', value: JSON.parse(result.value) as unknown };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return { kind: 'error', error: { kind: 'parse', detail: `Output is not JSON: ${detail}`, stderr: '' } };
+    return { kind: 'error', error: { kind: 'parse', detail: text('states.cliNotJson', { detail }), stderr: '' } };
   }
 }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import type { ProjectChangeKind } from '../../core/model';
 import type { RowView } from '../../core/projectPresentation';
+import { text } from '../../text';
 import type { ProjectKey } from '../changes';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 
@@ -56,8 +57,7 @@ function icon(id: string, color?: string): vscode.ThemeIcon {
 function diagnosticItem(node: MetaDiagnosticNode): vscode.TreeItem {
   const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
   item.description = node.detail ?? undefined;
-  item.tooltip = node.detail === null ? node.label : `${node.label}
-${node.detail}`;
+  item.tooltip = node.detail === null ? node.label : [node.label, node.detail].join('\n');
   item.iconPath = node.isError ? icon('error', 'list.errorForeground') : icon('info');
   item.contextValue = node.contextValue;
   return item;
@@ -73,7 +73,7 @@ function fileItem(node: MetaFileNode): vscode.TreeItem {
   // A missing config has nothing to open; a workflow row opens its editor, the config row the Configuration page.
   if (view.contextValue !== 'config.missing') {
     const command = node.kind === 'workflow' ? 'migent.workflow.edit' : 'migent.openConfig';
-    item.command = { command, title: 'Open', arguments: [node] };
+    item.command = { command, title: text('views.open'), arguments: [node] };
   }
   return item;
 }

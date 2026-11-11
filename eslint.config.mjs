@@ -256,7 +256,7 @@ const testFilesConfig = {
 
 // Layering: core and cli must stay free of the VS Code API (plans/02-monitoring.md, AC17).
 const noVscodeConfig = {
-  files: ['src/core/**/*.ts', 'src/cli/**/*.ts'],
+  files: ['src/core/**/*.ts', 'src/cli/**/*.ts', 'src/text/**/*.ts'],
   rules: {
     'no-restricted-imports': [
       'error',
@@ -264,10 +264,10 @@ const noVscodeConfig = {
         paths: [
           {
             name: 'vscode',
-            message: 'src/core and src/cli must not import the VS Code API; keep it in src/vscode.',
+            message: 'src/core, src/cli and src/text must not import the VS Code API; keep it in src/vscode.',
           },
         ],
-        patterns: [{ group: ['vscode/*'], message: 'src/core and src/cli must not import the VS Code API.' }],
+        patterns: [{ group: ['vscode/*'], message: 'src/core, src/cli and src/text must not import the VS Code API.' }],
       },
     ],
   },
@@ -295,16 +295,118 @@ const contractsTypeOnlyConfig = {
 
 // Notifications: one catalog and one host facade. Only src/vscode/notices.ts calls the notification API.
 const NOTIFICATION_MEMBERS = ['showInformationMessage', 'showWarningMessage', 'showErrorMessage', 'withProgress'];
+const NOTIFICATION_SELECTORS = NOTIFICATION_MEMBERS.map((member) => ({
+  selector: `MemberExpression[property.name='${member}']`,
+  message: `Show notifications through src/vscode/notices.ts and the catalog in src/text/notices.ts; only the facade calls ${member}.`,
+}));
+
+// UI text: host-written wording lives in the catalog in src/text/, and `src/vscode` passes ids, not literals, to the
+// places that show text. Syntax-based: it cannot see text routed through a variable (the final inventory covers that).
+const TEXT_PROPERTIES = [
+  'title',
+  'placeHolder',
+  'placeholder',
+  'prompt',
+  'validationMessage',
+  'label',
+  'description',
+  'detail',
+  'tooltip',
+].join('|');
+const TEXT_CALLS = ['setStatusBarMessage', 'createOutputChannel', 'appendLine'];
+const LITERAL = 'Literal[value=/./], TemplateLiteral';
+const CATALOG_MESSAGE =
+  'Host-written UI text belongs in the catalog in src/text/; pass an id to text() instead of a literal.';
+// A function whose returned value is shown: an arrow expression body, or any `return` inside it (a literal returned
+// by a nested helper is flagged too, which is the safe side). `validateInput` and `provideTextDocumentContent` take
+// either form, as property or method.
+const DISPLAY_FUNCTIONS = ['validateInput', 'provideTextDocumentContent'].join('|');
+const DISPLAY_OWNER =
+  `:matches(Property[key.name=/^(${DISPLAY_FUNCTIONS})$/], MethodDefinition[key.name=/^(${DISPLAY_FUNCTIONS})$/])`;
+// `TreeItem` is reached as `vscode.TreeItem` or as an imported name; aliasing the import is rejected below, because a
+// selector cannot follow an alias.
+const TREE_ITEM = ":matches(NewExpression[callee.property.name='TreeItem'], NewExpression[callee.name='TreeItem'])";
+
+// Each display position is a parent selector plus the child spec that picks the shown value. A value may be wrapped in
+// a conditional or a logical expression (`a ? 'x' : 'y'`, `a ?? 'x'`, `a && 'x'`), nested up to three deep, so every
+// position is also checked through those wrappers. A call argument such as `text(a ? 'id1' : 'id2')` is not a display
+// position (its parent is the `text` call), so catalog ids are never flagged.
+const WRAPPER = ':matches(ConditionalExpression, LogicalExpression)';
+const POSITIONS = [
+  ...TEXT_CALLS.flatMap((name) => [
+    [`CallExpression[callee.property.name='${name}']`, ':first-child'],
+    [`CallExpression[callee.name='${name}']`, ':first-child'],
+  ]),
+  [`CallExpression[callee.property.name='createWebviewPanel']`, ':nth-child(2)'],
+  [TREE_ITEM, ':first-child'],
+  [`CallExpression[callee.object.property.name='FileSystemError']`, ':first-child'],
+  [`Property[key.name=/^(${TEXT_PROPERTIES})$/]`, '.value'],
+  [`AssignmentExpression[left.property.name=/^(${TEXT_PROPERTIES})$/]`, '.right'],
+  [
+    `CallExpression[callee.property.name='createTerminal'] > ObjectExpression > Property[key.name='name']`,
+    '.value',
+  ],
+  // Expression body, and every `return`, of a display function.
+  [`${DISPLAY_OWNER} > ArrowFunctionExpression`, '.body'],
+  [`${DISPLAY_OWNER} ReturnStatement`, '.argument'],
+];
+const WRAP_DEPTH = 3;
+const TEXT_SELECTORS = [
+  ...POSITIONS.flatMap(([parent, child]) =>
+    Array.from({ length: WRAP_DEPTH + 1 }, (_, depth) => {
+      const wrappers = Array.from({ length: depth }, () => `${WRAPPER} > `).join('');
+      // The first wrapper takes the position's child spec; deeper wrappers and the literal are plain children.
+      return depth === 0
+        ? `${parent} > :matches(${LITERAL})${child}`
+        : `${parent} > ${WRAPPER}${child} > ${wrappers.slice(WRAPPER.length + 3)}:matches(${LITERAL})`;
+    }),
+  ),
+  {
+    selector: "ImportSpecifier[imported.name='TreeItem'][local.name!='TreeItem']",
+    message: 'Import TreeItem under its own name so the UI text rule can see its label.',
+  },
+].map((entry) => (typeof entry === 'string' ? { selector: entry, message: CATALOG_MESSAGE } : entry));
+
+// ESLint keeps one `no-restricted-syntax` per file, so each file set gets exactly one config that lists everything.
 const notificationFacadeConfig = {
   files: ['src/**/*.ts'],
+  ignores: [...TEST_FILE_GLOBS, 'src/vscode/**'],
+  rules: { 'no-restricted-syntax': ['error', ...NOTIFICATION_SELECTORS] },
+};
+// The webview helper files (`src/vscode/webview/**`) are host code too: their literals reach the user the same way.
+const hostSyntaxConfig = {
+  files: ['src/vscode/**/*.ts'],
   ignores: [...TEST_FILE_GLOBS, 'src/vscode/notices.ts'],
+  rules: { 'no-restricted-syntax': ['error', ...NOTIFICATION_SELECTORS, ...TEXT_SELECTORS] },
+};
+const facadeConfig = {
+  files: ['src/vscode/notices.ts'],
+  rules: { 'no-restricted-syntax': ['error', ...TEXT_SELECTORS] },
+};
+
+// UI text: `src/text/` is a leaf. It may import types from the rest of `src/`, never values.
+const textLeafConfig = {
+  files: ['src/text/**/*.ts'],
+  ignores: TEST_FILE_GLOBS,
   rules: {
-    'no-restricted-syntax': [
+    '@typescript-eslint/no-restricted-imports': [
       'error',
-      ...NOTIFICATION_MEMBERS.map((member) => ({
-        selector: `MemberExpression[property.name='${member}']`,
-        message: `Show notifications through src/vscode/notices.ts and the catalog in src/core/notices.ts; only the facade calls ${member}.`,
-      })),
+      {
+        paths: [
+          {
+            name: '@nodeint/migent-contracts',
+            allowTypeImports: true,
+            message: 'Import @nodeint/migent-contracts with `import type` only; it is a dev-time type dependency.',
+          },
+        ],
+        patterns: [
+          {
+            regex: '^(\\.\\./)+(core|cli|vscode)(/|$)|^(\\.\\./)+extension$',
+            allowTypeImports: true,
+            message: 'src/text is a leaf: import types only from the rest of src/.',
+          },
+        ],
+      },
     ],
   },
 };
@@ -318,4 +420,7 @@ export default defineConfig(
   noVscodeConfig,
   contractsTypeOnlyConfig,
   notificationFacadeConfig,
+  hostSyntaxConfig,
+  facadeConfig,
+  textLeafConfig,
 );

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { parse } from 'yaml';
 
+import { text as describe } from '../text';
 import { FROZEN_WORKFLOW_FILENAME, NEXT_FILENAME, resolveWithin } from './paths';
 import { isRecord } from './record';
 
@@ -104,14 +105,14 @@ export function readNext(sessionDirPath: string): NextRead {
   try {
     value = JSON.parse(text);
   } catch (error) {
-    return { kind: 'invalid', error: error instanceof Error ? error.message : 'unparsable JSON' };
+    return { kind: 'invalid', error: error instanceof Error ? error.message : describe('states.unparsableJson') };
   }
-  if (!isRecord(value)) return { kind: 'invalid', error: 'not a JSON object' };
+  if (!isRecord(value)) return { kind: 'invalid', error: describe('states.notJsonObject') };
   const version = value.schema_version;
   if (typeof version !== 'number' || !SUPPORTED_NEXT_SCHEMA_VERSIONS.includes(version)) {
     return { kind: 'unsupported', schemaVersion: typeof version === 'number' ? version : null };
   }
-  if (!Array.isArray(value.next)) return { kind: 'invalid', error: 'next is not a list' };
+  if (!Array.isArray(value.next)) return { kind: 'invalid', error: describe('states.nextNotList') };
   const suggestions: NextSuggestion[] = [];
   for (const entry of value.next) {
     const suggestion = parseSuggestion(sessionDirPath, entry);
@@ -145,12 +146,12 @@ export function readFrozenDownstream(sessionDirPath: string): FrozenDownstreamRe
   try {
     parsed = parse(text);
   } catch (error) {
-    return { kind: 'invalid', error: error instanceof Error ? error.message : 'unparsable YAML' };
+    return { kind: 'invalid', error: error instanceof Error ? error.message : describe('states.unparsableYaml') };
   }
   const workflow = isRecord(parsed) ? parsed.workflow : undefined;
   const downstream = isRecord(workflow) ? workflow.downstream : undefined;
   if (downstream === undefined) return { kind: 'absent' };
-  if (!Array.isArray(downstream)) return { kind: 'invalid', error: 'downstream is not a list' };
+  if (!Array.isArray(downstream)) return { kind: 'invalid', error: describe('states.downstreamNotList') };
   const declared = downstream
     .map((entry) => parseDownstreamEntry(entry))
     .filter((entry): entry is DeclaredDownstream => entry !== null);

@@ -361,6 +361,14 @@ describe('replyPrompt and the interrupted header', () => {
     expect(replyPrompt(turn, 'reviewer')).toContain('role reviewer');
     expect(replyHeader({ target: turn, blocker: null, responsePath: null, role: 'reviewer' })).toContain('Role: reviewer');
   });
+
+  it('falls back to the word role when neither a stage nor a role name is known', () => {
+    const turn = { executionId: '0002-x--attempt-01', stageId: null, attempt: 1, kind: 'roleTurn' as const };
+    expect(replyHeader({ target: turn, blocker: null, responsePath: null })).toContain(
+      '<!-- Role: role (execution 0002-x- -attempt-01) -->',
+    );
+    expect(replyPrompt(turn, null)).toBe('Reply to the role (execution 0002-x--attempt-01). It starts a new turn.');
+  });
 });
 
 describe('a role turn reply', () => {

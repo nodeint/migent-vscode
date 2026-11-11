@@ -18,6 +18,7 @@ import {
 } from '../core/questionAnswers';
 import { readQuestions } from '../core/questions';
 import { isRecord } from '../core/record';
+import { text } from '../text';
 import type { AnswerRuntime, ControlService } from './control';
 import type { ProjectContext } from './projects';
 
@@ -252,7 +253,7 @@ export class AnswerSubmitter {
     const { context, sessionId, target } = request;
     context.store.refreshSession(sessionId);
     const snapshot = context.store.snapshot(sessionId);
-    if (snapshot === undefined) return 'The session is not available.';
+    if (snapshot === undefined) return text('prompts.sessionUnavailable');
     const blocked = this.#control.answerBlock(context, snapshot, true);
     if (blocked !== null) return blocked;
     const history = readQuestions(sessionDir(context.root, sessionId));
@@ -286,15 +287,15 @@ export class AnswerSubmitter {
   public async submit(request: AnswerRequest): Promise<AnswerSubmission> {
     const { context, sessionId } = request;
     const runtime = this.#control.runtime(context);
-    if (runtime === undefined) return { kind: 'blocked', reason: 'The Migent CLI is unavailable.' };
+    if (runtime === undefined) return { kind: 'blocked', reason: text('prompts.cliUnavailable') };
     const handle = this.#control.gate.tryAcquire(this.#control.sessionKey(context.key, sessionId), 'Sending reply');
-    if (handle === null) return { kind: 'blocked', reason: 'Another operation on this session is in progress.' };
+    if (handle === null) return { kind: 'blocked', reason: text('prompts.operationBusy') };
     const file = await this.#writeReply(request);
-    const blocked = file.kind === 'error' ? `Could not save the answers: ${file.detail}` : this.#blockNow(request);
+    const blocked = file.kind === 'error' ? text('prompts.answersNotSaved', { detail: file.detail }) : this.#blockNow(request);
     if (file.kind === 'error' || blocked !== null) {
       handle.release();
       if (file.kind === 'ok') await this.#discard(request, file.path);
-      return { kind: 'blocked', reason: blocked ?? 'The answers could not be saved.' };
+      return { kind: 'blocked', reason: blocked ?? text('prompts.answersCouldNotBeSaved') };
     }
     this.#holds.set(this.#holdKey(context.key, sessionId), { handle, batches: new Set([request.batchKey]) });
     // No await between the verification above and the spawn.
@@ -356,8 +357,8 @@ export class AnswerSubmitter {
     if (result.kind === 'spawn-failed') {
       // The CLI never ran, so there is nothing to reconcile.
       const cleanup = await this.#clearRecord(context.key, sessionId, batchKey);
-      this.#control.runtime(context)?.logError(`spawn failed: ${result.detail}`);
-      if (cleanup !== null) this.#control.runtime(context)?.logError(`cleanup failed: ${cleanup}`);
+      this.#control.runtime(context)?.logError(text('documents.logSpawnFailed', { detail: result.detail }));
+      if (cleanup !== null) this.#control.runtime(context)?.logError(text('documents.logCleanupFailed', { detail: cleanup }));
       return { kind: 'failed', detail: result.detail };
     }
     const reconciliation = await this.#reconcileWithRetry(request);

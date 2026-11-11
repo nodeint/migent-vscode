@@ -8,6 +8,7 @@ import {
   sessionsDiagnostic,
 } from '../../core/sessionPresentation';
 import type { WatchTarget } from '../../core/watchPlan';
+import { text } from '../../text';
 import type { CapabilityService } from '../capability';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import type {
@@ -61,7 +62,7 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
         color: 'list.warningForeground',
         contextValue: 'diag.cli',
         tooltip: cli.tooltip,
-        command: { command: 'migent.cli.recheck', title: 'Recheck CLI', arguments: [] },
+        command: { command: 'migent.cli.recheck', title: text('views.recheckCli'), arguments: [] },
       }),
     );
   }
@@ -71,12 +72,12 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
     const view: LeafView =
       diagnostic.code === 'scan-unreadable'
         ? {
-            label: `${diagnostic.label}${detail}`,
+            label: [diagnostic.label, detail].join(''),
             icon: 'error',
             color: 'list.errorForeground',
             contextValue: `diag.${diagnostic.code}`,
-            command: { command: 'migent.refresh', title: 'Refresh', arguments: [] },
-            tooltip: 'Select to refresh',
+            command: { command: 'migent.refresh', title: text('views.refresh'), arguments: [] },
+            tooltip: text('views.selectToRefresh'),
           }
         : { label: diagnostic.label, icon: 'info', contextValue: `diag.${diagnostic.code}` };
     nodes.push(leaf(host, { id: nodeIds.diagnostic(key, diagnostic.code), parent: parent, project: key }, view));
@@ -87,14 +88,14 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
     nodes.push(host.intern<GroupNode>({ kind: 'group', id: nodeIds.group(key, group), project: key, group }, parent));
   }
   if (store.hiddenCount > 0) {
-    const label = `Show more (${store.hiddenCount} hidden)`;
+    const label = text('views.showMore', { hidden: store.hiddenCount });
     nodes.push(
       leaf(host, { id: nodeIds.more(key), parent: parent, project: key }, {
         label,
         icon: 'chevron-down',
         contextValue: 'more',
-        command: { command: 'migent.sessions.showMore', title: 'Show more', arguments: [{ project: key }] },
-        tooltip: 'Show older sessions',
+        command: { command: 'migent.sessions.showMore', title: text('views.showMoreTitle'), arguments: [{ project: key }] },
+        tooltip: text('views.showOlder'),
       }),
     );
   }

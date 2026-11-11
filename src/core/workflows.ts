@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { text as describe } from '../text';
 import { wireOf } from './contractRead';
 import type { DirectoryState } from './model';
 import { workflowsDir } from './paths';
@@ -48,7 +49,7 @@ export function isWorkflowFile(name: string): boolean {
 }
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : describe('states.unknownError');
 }
 
 function fallbackId(file: string): string {

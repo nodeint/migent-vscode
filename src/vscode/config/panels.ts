@@ -18,6 +18,7 @@ import {
 import { parseConfigMessage, type SaveBase } from '../../core/configIntent';
 import type { ClientChoice } from '../../core/controlArgs';
 import { configLocalPath, configPath } from '../../core/paths';
+import { text } from '../../text';
 import { EMPTY_VALIDATION, runAuthoringSave, type SaveOutcome, usableLaunch } from '../authoringSave';
 import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
@@ -34,7 +35,7 @@ const PAGE: PageDescriptor = {
   folder: 'config',
   styles: ['config.css'],
   scripts: ['configcopy.js', 'configform.js', 'config.js'],
-  title: 'Migent configuration',
+  title: text('shell.configPanel'),
 };
 
 /** The page edits one project's config; `tab` is the last tab shown, restored with the panel. */
@@ -59,7 +60,6 @@ interface Transient {
   result?: { tab: ConfigScope; seq: number };
 }
 
-const CONFLICT_MESSAGE = 'The file changed on disk. Reload it from disk before saving again.';
 
 const transient = (error: string | null, isSaving = false): Transient => ({ saving: isSaving, applying: false, error });
 
@@ -143,7 +143,7 @@ class Entry {
     this.#lastJson = json;
     this.lastModel = model;
     this.revision += 1;
-    this.panel.title = 'Migent configuration';
+    this.panel.title = text('shell.configPanel');
     void this.panel.webview.postMessage({
       type: 'model',
       revision: this.revision,
@@ -208,7 +208,7 @@ export class ConfigPanels implements vscode.Disposable {
       existing.panel.reveal(existing.panel.viewColumn ?? vscode.ViewColumn.Active);
       return;
     }
-    const panel = vscode.window.createWebviewPanel(CONFIG_VIEW_TYPE, 'Migent configuration', vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel(CONFIG_VIEW_TYPE, text('shell.configPanel'), vscode.ViewColumn.Active, {
       ...this.#options(),
       retainContextWhenHidden: true,
     });
@@ -285,7 +285,7 @@ export class ConfigPanels implements vscode.Disposable {
   /** A Local file that does not exist yet has nothing to open. */
   async #openFile(root: string, scope: ConfigScope): Promise<void> {
     const file = scope === 'project' ? configPath(root) : configLocalPath(root);
-    if (readConfigTab(root, scope).exists) await openFile(file, 'Config');
+    if (readConfigTab(root, scope).exists) await openFile(file, text('documents.kindConfig'));
   }
 
   /** One save at a time per page; a second request is ignored while the first is in flight. */
@@ -309,10 +309,10 @@ export class ConfigPanels implements vscode.Disposable {
     }
     if (this.#entries.get(project) !== entry) return;
     if (entry.clients.length === 0) {
-      this.#publishLast(entry, { error: 'No client list is available. Check the Migent CLI, then Reload the page.' });
+      this.#publishLast(entry, { error: text('prompts.noClientList') });
       return;
     }
-    const picked = await pickModel('Agent model', entry.clients, false);
+    const picked = await pickModel(text('prompts.agentModel'), entry.clients, false);
     if (picked === undefined || this.#entries.get(project) !== entry) return;
     void entry.panel.webview.postMessage({
       type: 'modelPicked',
@@ -325,11 +325,11 @@ export class ConfigPanels implements vscode.Disposable {
   /** Why a save must be refused before anything is serialized, or null (the page's disabled state is not trusted). */
   #refusal(entry: Entry, message: { tab: ConfigScope; base: SaveBase }, form: ConfigForm): string | null {
     if (entry.lastModel?.tabs[message.tab].canSave !== true) {
-      return 'This file cannot be saved from the page. If it uses an older schema, run `migent migrate`.';
+      return text('prompts.configUnsavable');
     }
     // A project without config.yaml is outside this page's scope: only the Local file is ever created.
     if (message.tab === 'project' && message.base.kind === 'create') {
-      return 'config.yaml is not created from the page. Run `migent init` first.';
+      return text('states.configNotCreated');
     }
     return duplicateNameProblem(form);
   }
@@ -341,7 +341,7 @@ export class ConfigPanels implements vscode.Disposable {
   ): Promise<void> {
     const context = this.registry.project(project);
     if (context === undefined) {
-      this.#fail(entry, 'The project is no longer available.');
+      this.#fail(entry, text('prompts.projectGone'));
       return;
     }
     const form = configFormFromClient(message.form);
@@ -375,17 +375,17 @@ export class ConfigPanels implements vscode.Disposable {
         });
         return;
       case 'unconfirmed':
-        this.#fail(entry, 'Migent did not confirm the save.');
+        this.#fail(entry, text('prompts.saveNotConfirmed'));
         return;
       case 'conflict':
         entry.record(scope, outcome.envelope.diagnostics, entry.lastModel?.tabs[scope].hash ?? null);
-        notifySaveFailed(CONFLICT_MESSAGE);
-        this.#publishLast(entry, { error: CONFLICT_MESSAGE, result: entry.nextResult(scope) });
+        notifySaveFailed(text('prompts.fileChanged'));
+        this.#publishLast(entry, { error: text('prompts.fileChanged'), result: entry.nextResult(scope) });
         return;
       case 'invalid': {
         entry.record(scope, outcome.envelope.diagnostics, entry.lastModel?.tabs[scope].hash ?? null);
         const count = entry.validation[scope].value.errors.length;
-        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
+        notifySaveFailed(text('states.problemsFound', { count }));
         this.#publishLast(entry, { error: null, result: entry.nextResult(scope) });
         return;
       }
@@ -437,7 +437,7 @@ export class ConfigPanels implements vscode.Disposable {
       const gone = (scope: ConfigScope): ConfigTabModel => ({
         ...readConfigTab('', scope),
         state: 'unreadable',
-        readError: 'The project is no longer available.',
+        readError: text('prompts.projectGone'),
         canSave: false,
       });
       const tabs = { project: gone('project'), local: gone('local') };

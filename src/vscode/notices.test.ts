@@ -10,7 +10,7 @@ const hoisted = vi.hoisted(() => ({
 }));
 vi.mock('vscode', () => ({ window: hoisted.window, ProgressLocation: { Notification: 15, Window: 10 } }));
 
-const { LABELS, NOTICES } = await import('../core/notices');
+const { LABELS, NOTICES } = await import('../text/notices');
 const { confirm, notify, progress, show } = await import('./notices');
 const { window } = hoisted;
 

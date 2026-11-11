@@ -1,15 +1,12 @@
-import path from 'node:path';
-
 import * as vscode from 'vscode';
 
 import type { AnswerModel } from '../../core/answerModel';
-import { manifestPath, metricsPath, nextPath, sessionDir, workflowDraftPath, workflowsDir } from '../../core/paths';
-import type { ResultsIntent, SessionAction } from '../../core/resultsIntent';
-import { resolveHandoffPath, resolveHandoffValue, resolveOutputPath, type ResultsInput } from '../../core/resultsModel';
+import { metricsPath, workflowDraftPath } from '../../core/paths';
+import type { SessionAction } from '../../core/resultsIntent';
 import { parseSessionPageMessage, type SessionPageIntent, type SessionPageMessage } from '../../core/sessionPageIntent';
 import { type SessionBatchRef, type SessionPageModel, type SessionTab,workflowHeader } from '../../core/sessionPageModel';
 import { readSessionWorkflow } from '../../core/sessionWorkflow';
-import type { WorkflowEntry } from '../../core/workflows';
+import { text } from '../../text';
 import type { AnswerSubmitter } from '../answers';
 import { EMPTY_VALIDATION } from '../authoringSave';
 import type { CapabilityService } from '../capability';
@@ -17,9 +14,8 @@ import type { MigentChange } from '../changes';
 import { ClientCatalog } from '../clientCatalog';
 import type { ControlService } from '../control';
 import { pickModel } from '../modelPicker';
-import { notify } from '../notices';
 import { openFile } from '../openFile';
-import type { ProjectContext, ProjectRegistry } from '../projects';
+import type { ProjectRegistry } from '../projects';
 import { QuestionBatches, type QuestionSurface } from '../questions/batches';
 import { type BatchIdentity,batchKeyOf } from '../questions/entry';
 import { SESSION_ACTION_COMMANDS } from '../sessionActions';
@@ -43,9 +39,8 @@ import {
   latestOf,
   summariesOf,
 } from './pageModels';
+import { runResultsIntent } from './resultsActions';
 import { type SaveRequest, WorkflowSaver } from './workflowSave';
-
-const INFO_MESSAGE_MS = 5000;
 
 export const SESSION_VIEW_TYPE = 'migent.session';
 
@@ -70,7 +65,7 @@ const PAGE: PageDescriptor = {
     'questions.js',
     'session.js',
   ],
-  title: 'Session',
+  title: text('shell.sessionPanel'),
   modules: {
     folder: 'workfloweditor',
     styles: ['workflowForm.css'],
@@ -212,7 +207,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
     const batch = options.batch === undefined ? null : batchOf(identity, options.batch);
     const panel = vscode.window.createWebviewPanel(
       SESSION_VIEW_TYPE,
-      'Session',
+      text('shell.sessionPanel'),
       vscode.ViewColumn.Active,
       { ...this.#webviewOptions(), retainContextWhenHidden: true },
     );
@@ -412,7 +407,16 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
         return;
       }
       default:
-        await this.#runResultsIntent(entry, intent);
+        await runResultsIntent(
+          {
+            registry: this.#registry,
+            openNextStep: (identity, workflow) => { this.#actions?.openNextStep(identity, workflow); },
+            sessionAction: (target, action) => this.#sessionAction(target, action),
+            open: (identity, options) => { this.open(identity, options); },
+          },
+          entry,
+          intent,
+        );
     }
   }
 
@@ -428,88 +432,6 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       project: entry.project,
       sessionId: entry.sessionId,
     });
-  }
-
-  async #runResultsIntent(entry: Entry, intent: ResultsIntent): Promise<void> {
-    const context = this.#registry.project(entry.project);
-    if (context === undefined) return;
-    const input: ResultsInput = {
-      sessionId: entry.sessionId,
-      sessionDirPath: sessionDir(context.root, entry.sessionId),
-      snapshots: context.store.all(),
-      eligibleIds: context.store.scanOutcome.eligible,
-      workflows: context.catalog.workflows().entries,
-    };
-    const identity = { project: entry.project, sessionId: entry.sessionId };
-    switch (intent.intent) {
-      case 'openOutput': {
-        const file = resolveOutputPath(input, intent.name);
-        if (file === null) notify('session.outputNotFound', { name: intent.name });
-        else await openFile(file, 'Output');
-        return;
-      }
-      case 'openHandoffFile': {
-        const file = resolveHandoffPath(input, intent.name);
-        if (file === null) notify('session.handoffNotFound', { name: intent.name });
-        else await openFile(file, 'Handoff file');
-        return;
-      }
-      case 'copyValue':
-        return this.#copyValue(input, intent);
-      case 'openNextStep':
-        this.#actions?.openNextStep(identity, intent.workflow);
-        return;
-      case 'openNextFile':
-        await openFile(nextPath(context.root, entry.sessionId), 'next.json');
-        return;
-      case 'openManifest':
-        await openFile(manifestPath(context.root, entry.sessionId), 'manifest.yaml');
-        return;
-      case 'openTargetWorkflow':
-        await this.#openWorkflow(context, intent.workflow);
-        return;
-      case 'sessionAction':
-        await this.#sessionAction(entry, intent.action);
-        return;
-      case 'openSession':
-        this.#openSession(entry, context, intent.sessionId);
-    }
-  }
-
-  async #copyValue(input: ResultsInput, intent: Extract<ResultsIntent, { intent: 'copyValue' }>): Promise<void> {
-    const value = intent.kind === 'sessionId'
-      ? intent.sessionId
-      : resolveHandoffValue(input, intent.name, intent.kind === 'handoffHash' ? 'hash' : 'sourcePath');
-    if (value === null) {
-      void vscode.window.showWarningMessage('This value is no longer available to copy.');
-      return;
-    }
-    await vscode.env.clipboard.writeText(value);
-  }
-
-  #openSession(entry: Entry, context: ProjectContext, sessionId: string): void {
-    if (context.store.snapshot(sessionId) === undefined) {
-      vscode.window.setStatusBarMessage(
-        `Session ${sessionId} is not shown. Use Show more in the Sessions view.`,
-        INFO_MESSAGE_MS,
-      );
-      return;
-    }
-    this.open({ project: entry.project, sessionId }, { tab: 'overview' });
-  }
-
-  async #openWorkflow(context: ProjectContext, workflow: string): Promise<void> {
-    const matches = context.catalog.workflows().entries.filter((candidate) => candidate.id === workflow);
-    if (matches.length === 0) { notify('session.workflowNotFound', { workflow }); return; }
-    let [target]: (WorkflowEntry | undefined)[] = matches;
-    if (matches.length > 1) {
-      const picked = await vscode.window.showQuickPick(
-        matches.map((candidate) => ({ label: candidate.file, candidate })),
-        { title: `Workflow ${workflow} is defined more than once` },
-      );
-      target = picked?.candidate;
-    }
-    if (target !== undefined) await openFile(path.join(workflowsDir(context.root), target.file), 'Workflow file');
   }
 
   async #handleAnswer(entry: Entry, raw: unknown, type: string): Promise<void> {
@@ -541,7 +463,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
 
   async #pickModel(entry: Entry): Promise<void> {
     if (entry.tab !== 'workflow' || entry.clients.length === 0) return;
-    const picked = await pickModel('Inline agent model', entry.clients, false);
+    const picked = await pickModel(text('prompts.inlineAgentModel'), entry.clients, false);
     if (picked === undefined) return;
     void entry.panel.webview.postMessage({
       type: 'modelPicked',

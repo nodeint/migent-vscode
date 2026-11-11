@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../core/model';
 import { NotificationGate } from '../core/notificationGate';
 import { sessionDir } from '../core/paths';
-import { quotaFailure } from '../core/replyFlow';
+import { describeQuotaReset, quotaFailure } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
 import {
   currentTransition,
@@ -14,6 +14,7 @@ import {
   type Transition,
   TransitionTracker,
 } from '../core/transitions';
+import { text } from '../text';
 import type { MigentChange } from './changes';
 import { show } from './notices';
 import type { ProjectRegistry } from './projects';
@@ -68,6 +69,12 @@ function failureWhere(details: FailureDetails | undefined, snapshot: SessionSnap
  * (latest wins) and are built from fresh state when the open one is dismissed. One session never affects another.
  * A notification opens nothing by itself; its buttons act on the session it captured.
  */
+/** The quota cause of a failed session with its reset phrase worded, or null when it did not fail on quota. */
+function quotaReset(snapshot: SessionSnapshot): { reset: string } | null {
+  const failure = quotaFailure(snapshot);
+  return failure === null ? null : { reset: describeQuotaReset(failure) };
+}
+
 export class StateNotifier implements vscode.Disposable {
   readonly #registry: ProjectRegistry;
   readonly #tracker = new TransitionTracker();
@@ -167,7 +174,7 @@ export class StateNotifier implements vscode.Disposable {
   }
 
   #blocked(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
-    const stage = snapshot.status?.latestStageId ?? 'A stage';
+    const stage = snapshot.status?.latestStageId ?? text('states.aStage');
     return async () => {
       const picked = await show('notify.blocked', { label: sessionLabel(snapshot), stage });
       if (picked === 'reply') {
@@ -188,7 +195,7 @@ export class StateNotifier implements vscode.Disposable {
       label: sessionLabel(snapshot),
       where: failureWhere(details, snapshot),
       cause: details?.cause ?? null,
-      quota: quotaFailure(snapshot),
+      quota: quotaReset(snapshot),
     };
     const file = details?.file ?? null;
     const failureReport = details?.failureReport ?? null;

@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
 import { listSessionDirectory } from '../../core/sessionDirectory';
+import { text } from '../../text';
 import type { ProjectContext } from '../projects';
 import type { Releasable } from '../watchBackend';
 import type { DirectoryNode, ExecutionNode, TreeNode } from './nodes';
@@ -48,13 +49,13 @@ export class SessionFiles implements vscode.Disposable {
     } catch {
       return [this.#intern({
         kind: 'leaf', id: `${node.id}/error`, project: node.project, sessionId: node.sessionId,
-        view: { label: 'Cannot read folder', icon: 'error', contextValue: 'diag.directory-unreadable' },
+        view: { label: text('views.cannotReadFolder'), icon: 'error', contextValue: 'diag.directory-unreadable' },
       }, node)];
     }
   }
 
   public item(context: ProjectContext | undefined, node: DirectoryNode): vscode.TreeItem {
-    const label = node.relativePath === '' ? 'Files' : path.basename(node.relativePath);
+    const label = node.relativePath === '' ? text('views.files') : path.basename(node.relativePath);
     const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
     if (context !== undefined) {
       item.resourceUri = vscode.Uri.file(path.join(sessionDir(context.root, node.sessionId), node.relativePath));

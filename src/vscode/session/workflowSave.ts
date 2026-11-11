@@ -5,6 +5,7 @@ import {
   type WorkflowForm,
   workflowFormFromClient,
 } from '../../core/workflowEditor';
+import { text } from '../../text';
 import {
   EMPTY_VALIDATION,
   runAuthoringSave,
@@ -17,9 +18,6 @@ import { notify } from '../notices';
 import type { ProjectRegistry } from '../projects';
 import { type Entry, type Transient, transient } from './entry';
 
-const LOCKED_MESSAGE = 'A stage already ran, so this workflow can no longer be changed.';
-const UNSUPPORTED_MESSAGE =
-  'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
 
 export interface SaveRequest {
   rawForm: unknown;
@@ -38,8 +36,8 @@ export interface WorkflowSaverHost {
 }
 
 function saveRefusal(model: SessionWorkflowModel | null, form: WorkflowForm): string | null {
-  if (model === null || model.isLocked) return LOCKED_MESSAGE;
-  if (!model.canSave) return UNSUPPORTED_MESSAGE;
+  if (model === null || model.isLocked) return text('prompts.workflowLocked');
+  if (!model.canSave) return text('prompts.workflowUnsavable');
   return duplicateArtifactProblem(form);
 }
 
@@ -83,7 +81,7 @@ export class WorkflowSaver {
   async #run(entry: Entry, request: SaveRequest): Promise<void> {
     const context = this.#host.registry.project(entry.project);
     if (context === undefined) {
-      this.#fail(entry, 'The project is no longer available.');
+      this.#fail(entry, text('prompts.projectGone'));
       return;
     }
     const form = workflowFormFromClient(request.rawForm);
@@ -114,17 +112,17 @@ export class WorkflowSaver {
         this.#host.send(entry, transient(null));
         return;
       case 'unconfirmed':
-        this.#fail(entry, 'Migent did not confirm the save.');
+        this.#fail(entry, text('prompts.saveNotConfirmed'));
         return;
       case 'conflict':
         entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), this.#workflowOf(entry)?.savedHash ?? null);
-        notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
-        this.#host.publishLast(entry, transient('The file changed on disk. Reload it from disk before saving again.'));
+        notifySaveFailed(text('prompts.fileChanged'));
+        this.#host.publishLast(entry, transient(text('prompts.fileChanged')));
         return;
       case 'invalid': {
         entry.setValidation(splitDiagnostics(outcome.envelope.diagnostics), this.#workflowOf(entry)?.savedHash ?? null);
         const count = entry.validation.errors.length;
-        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
+        notifySaveFailed(text('states.problemsFound', { count }));
         this.#host.publishLast(entry, transient(null));
         return;
       }

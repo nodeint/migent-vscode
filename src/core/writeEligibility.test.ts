@@ -51,4 +51,28 @@ describe('describeBlock', () => {
     if (check.ok) throw new Error('expected a block');
     expect(describeBlock(check)).toContain('other pid 9');
   });
+
+  it('words each block exactly', () => {
+    expect(describeBlock({ reason: 'cli', kind: 'checking', recovery: 'recheck' })).toBe(
+      'The Migent CLI is still being checked.',
+    );
+    expect(describeBlock({ reason: 'cli', kind: 'missing', recovery: 'recheck' })).toBe(
+      'The Migent CLI is unavailable (missing).',
+    );
+    expect(describeBlock({ reason: 'busy', phase: 'Stopping', recovery: 'none' })).toBe(
+      'Another operation on this session is still running (stopping).',
+    );
+    expect(describeBlock({ reason: 'busy', phase: 'Sending reply', recovery: 'none' })).toBe(
+      'Another operation on this session is still running (sending reply).',
+    );
+    expect(describeBlock({ reason: 'busy', phase: 'Odd Phase', recovery: 'none' })).toBe(
+      'Another operation on this session is still running (odd phase).',
+    );
+    expect(
+      describeBlock({ reason: 'foreign-lock', host: 'h', pid: 3, heartbeatAt: 't', recovery: 'refresh' }),
+    ).toBe('Another process holds this session (h pid 3, last heartbeat t).');
+    expect(
+      describeBlock({ reason: 'foreign-lock', host: null, pid: null, heartbeatAt: null, recovery: 'refresh' }),
+    ).toBe('Another process holds this session (unknown).');
+  });
 });

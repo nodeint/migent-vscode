@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 
 import { formatTimeline } from '../../core/timelineFormat';
+import { text } from '../../text';
 import type { ProjectKey } from '../changes';
 import type { TailHandle, TailManager } from '../tails';
 
 export const SESSION_DOC_SCHEME = 'migent-session';
 
-const EMPTY_TEXT = 'No events yet.';
 
 /** `migent-session:/<sessionId>/timeline?project=<ProjectKey>` (plans/02-monitoring.md §6.8, C7). */
 export function timelineUri(project: ProjectKey, sessionId: string): vscode.Uri {
@@ -71,7 +71,7 @@ export class SessionDocsProvider implements vscode.TextDocumentContentProvider, 
     if (open === undefined) {
       const target = parseTimelineUri(uri);
       const handle = target === undefined ? undefined : this.#tails.acquire(target.project, target.sessionId);
-      if (handle === undefined) return 'This session is not available in the open projects.';
+      if (handle === undefined) return text('documents.sessionUnavailable');
       open = {
         handle,
         subscription: handle.onDidUpdate(() => {
@@ -81,7 +81,7 @@ export class SessionDocsProvider implements vscode.TextDocumentContentProvider, 
       this.#open.set(key, open);
     }
     const lines = formatTimeline(open.handle.history, open.handle.droppedCount);
-    return lines.length === 0 ? EMPTY_TEXT : `${lines.join('\n')}\n`;
+    return lines.length === 0 ? text('documents.noEvents') : [...lines, ''].join('\n');
   }
 
   public dispose(): void {

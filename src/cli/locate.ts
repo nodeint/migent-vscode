@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { text } from '../text';
+
 /** How to start the CLI without a shell: `command` with `[...prefixArgs, ...args]`. */
 export interface LaunchSpec {
   command: string;
@@ -143,7 +145,7 @@ function classify(options: LocateOptions, resolvedPath: string): LocateResult {
       kind: 'unsupported',
       reason: 'unknown-type',
       resolvedPath,
-      detail: `${resolvedPath} is neither a native executable (.exe) nor an npm launcher (.cmd).`,
+      detail: text('states.cliUnknownType', { path: resolvedPath }),
     };
   }
   const entry = shimEntry(options, resolvedPath);
@@ -152,7 +154,7 @@ function classify(options: LocateOptions, resolvedPath: string): LocateResult {
       kind: 'unsupported',
       reason: 'script-shim',
       resolvedPath,
-      detail: `${resolvedPath} is a ${extension} launcher whose JavaScript entry could not be found in it. Reinstall with "npm install -g @nodeint/migent".`,
+      detail: text('states.cliShimEntryMissing', { path: resolvedPath, extension }),
     };
   }
   const node = resolveNode(options, path.win32.dirname(resolvedPath));
@@ -161,7 +163,7 @@ function classify(options: LocateOptions, resolvedPath: string): LocateResult {
       kind: 'unsupported',
       reason: 'node-missing',
       resolvedPath: entry,
-      detail: `${entry} is a JavaScript entry but "node" was not found on PATH.`,
+      detail: text('states.cliNodeMissing', { entry }),
     };
   }
   return { kind: 'ok', resolvedPath: entry, launch: { command: node, prefixArgs: [entry], via: 'node-script' } };

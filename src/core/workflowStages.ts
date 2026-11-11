@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { text as describe } from '../text';
 import { wireOf } from './contractRead';
 import { frozenWorkflowPath, workflowDraftPath } from './paths';
 import { isRecord } from './record';
@@ -19,7 +20,7 @@ export type SessionStagePlan =
   | { kind: 'invalid'; error: string };
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : describe('states.unknownError');
 }
 
 /** `stages[].id` in declaration order; malformed entries are skipped. */

@@ -5,11 +5,11 @@ import * as vscode from 'vscode';
 import { describeInstallOutcome, INSTALL_CLI_COMMAND, type InstallOutcome } from '../../cli/capabilityText';
 import { type InstallEnd, InstallWait } from '../../cli/installWait';
 import { migentDir } from '../../core/paths';
+import { text } from '../../text';
 import type { CapabilityService } from '../capability';
 import { notify, show } from '../notices';
 
 const STATUS_MESSAGE_MS = 2000;
-const TERMINAL_NAME = 'Migent: Install CLI';
 
 function hasUninitializedFolder(): boolean {
   return (vscode.workspace.workspaceFolders ?? []).some(
@@ -57,8 +57,8 @@ async function waitForCli(capability: CapabilityService, isStopped: () => boolea
 }
 
 async function runInstall(capability: CapabilityService): Promise<InstallEnd> {
-  const existing = vscode.window.terminals.find((candidate) => candidate.name === TERMINAL_NAME);
-  const terminal: vscode.Terminal = existing ?? vscode.window.createTerminal({ name: TERMINAL_NAME });
+  const existing = vscode.window.terminals.find((candidate) => candidate.name === text('shell.installTerminal'));
+  const terminal: vscode.Terminal = existing ?? vscode.window.createTerminal({ name: text('shell.installTerminal') });
   terminal.show();
   let isDone = false;
   try {
@@ -89,11 +89,11 @@ export function registerCapabilityCommands(capability: CapabilityService): vscod
   return [
     vscode.commands.registerCommand('migent.cli.recheck', async () => {
       await capability.recheck();
-      vscode.window.setStatusBarMessage('Migent CLI rechecked', STATUS_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.cliRechecked'), STATUS_MESSAGE_MS);
     }),
     vscode.commands.registerCommand('migent.cli.install', async () => {
       if (isInstalling) {
-        vscode.window.setStatusBarMessage('The Migent CLI install is already running.', STATUS_MESSAGE_MS);
+        vscode.window.setStatusBarMessage(text('prompts.installRunning'), STATUS_MESSAGE_MS);
         return;
       }
       isInstalling = true;

@@ -17,6 +17,7 @@ import { type QuestionRecord, type QuestionsRead,readQuestions } from '../../cor
 import { titleCase } from '../../core/resultsModel';
 import { buildSessionMeta } from '../../core/sessionMeta';
 import { sessionTitle } from '../../core/sessionPresentation';
+import { text } from '../../text';
 import type { AnswerRequest, AnswerSubmitter } from '../answers';
 import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
@@ -32,7 +33,6 @@ const describeError = (error: unknown): string => (error instanceof Error ? erro
 const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
   snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null;
 
-const WAITING = 'Loading the project…';
 
 /** Pending records of one batch, in stored order. */
 export function pendingBatch(snapshot: SessionSnapshot | undefined, id: BatchIdentity): PendingQuestion[] {
@@ -192,7 +192,7 @@ export class QuestionBatches implements vscode.Disposable {
     const reply = this.#submitter.pending(batchKeyOf(entry.identity));
     if (reply === null) return;
     entry.setSubmitted(reply);
-    entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
+    entry.move({ state: 'unconfirmed', message: text('prompts.unconfirmed') });
   }
 
   /** Handle a page message for the batch. Public so tests can drive it without a webview. */
@@ -209,8 +209,9 @@ export class QuestionBatches implements vscode.Disposable {
         else this.#publish(entry, true);
         return;
       case 'sessionAction':
-        if (SESSION_ACTION_COMMANDS[message.action] !== undefined) {
-          await this.#runSessionCommand(entry, SESSION_ACTION_COMMANDS[message.action] as string);
+        {
+          const command = SESSION_ACTION_COMMANDS[message.action];
+          if (command !== undefined) await this.#runSessionCommand(entry, command);
         }
         return;
       default:
@@ -291,7 +292,7 @@ export class QuestionBatches implements vscode.Disposable {
         draft: old.draft,
       });
     } catch (error) {
-      entry.setMessage(`The old draft could not be archived (${describeError(error)}), so the questions were not replaced.`);
+      entry.setMessage(text('prompts.archiveFailed', { error: describeError(error) }));
       this.#publish(entry, true);
       return;
     }
@@ -308,7 +309,7 @@ export class QuestionBatches implements vscode.Disposable {
     try {
       await this.#drafts.delete(entry.identity);
     } catch (error) {
-      entry.setMessage(`The draft could not be deleted: ${describeError(error)}`);
+      entry.setMessage(text('prompts.draftDeleteFailed', { error: describeError(error) }));
     }
     this.#publish(entry, true);
   }
@@ -357,7 +358,7 @@ export class QuestionBatches implements vscode.Disposable {
    */
   #blockReason(entry: Entry, resolved: Resolved | undefined): string | null {
     const history = this.#readHistory(entry);
-    if (resolved?.snapshot === undefined || history === null) return 'The session is not available.';
+    if (resolved?.snapshot === undefined || history === null) return text('prompts.sessionUnavailable');
     const { executionId, stageId } = entry.identity;
     const verified = verifyBatch({
       summary: resolved.snapshot.status?.questions ?? [],
@@ -375,7 +376,7 @@ export class QuestionBatches implements vscode.Disposable {
     const reply = serializeAnswers(entry.questions, entry.draft);
     const reason = this.#blockReason(entry, resolved);
     if (reply === null || reason !== null || resolved === undefined) {
-      entry.setMessage(reason ?? 'Answer every question to send.');
+      entry.setMessage(reason ?? text('prompts.answerEvery'));
       return null;
     }
     return { context: resolved.context, reply };
@@ -385,7 +386,7 @@ export class QuestionBatches implements vscode.Disposable {
   async #isDraftSaved(entry: Entry): Promise<boolean> {
     const unsaved = await entry.flush();
     if (unsaved === null) return true;
-    entry.setMessage(`Your draft could not be saved (${unsaved}), so nothing was sent.`);
+    entry.setMessage(text('prompts.draftNotSavedNothingSent', { error: unsaved }));
     return false;
   }
 
@@ -393,7 +394,7 @@ export class QuestionBatches implements vscode.Disposable {
     const before = { state: entry.state };
     if (before.state !== 'editing' && before.state !== 'rejected') return;
     // The sending state is set before the first await, so a second Submit cannot start a competing call.
-    entry.move({ state: 'sending', message: 'Sending your answers…' });
+    entry.move({ state: 'sending', message: text('prompts.sending') });
     this.#publish(entry, true);
     const prepared = (await this.#isDraftSaved(entry)) ? this.#prepareSubmit(entry) : null;
     if (prepared === null) {
@@ -408,7 +409,7 @@ export class QuestionBatches implements vscode.Disposable {
       this.#apply(entry, result);
       return;
     }
-    const message = result.kind === 'blocked' ? result.reason : `Could not start the Migent CLI: ${result.detail}`;
+    const message = result.kind === 'blocked' ? result.reason : text('prompts.spawnFailed', { detail: result.detail });
     entry.move({ state: 'editing', message });
     entry.setSubmitted(null);
     // A blocked send often means the batch moved: let persisted state decide whether it is now stale.
@@ -419,18 +420,18 @@ export class QuestionBatches implements vscode.Disposable {
   #apply(entry: Entry, settled: Settled): void {
     const { reconciliation: outcome, stderrLast, cleanupError } = settled;
     if (outcome.kind === 'recorded') {
-      const note = cleanupError === null ? '' : ` A saved copy could not be removed (${cleanupError}). Reopen this page and press Check again to retry.`;
-      entry.move({ state: 'recorded', message: `Answers sent.${note}` });
+      const note = cleanupError === null ? '' : text('prompts.cleanupNote', { error: cleanupError });
+      entry.move({ state: 'recorded', message: text('prompts.answersSent', { note }) });
       // The exact submitted snapshot is archived; later edits would belong to a new batch.
       void this.#drafts.delete(entry.identity).catch(() => undefined);
       this.#sync(entry);
     } else if (outcome.kind === 'pending') {
-      const detail = stderrLast === null ? '' : ` ${stderrLast}`;
-      entry.move({ state: 'rejected', message: `Your answers were not accepted.${detail}` });
+      const detail = stderrLast === null ? '' : text('prompts.rejectedDetail', { last: stderrLast });
+      entry.move({ state: 'rejected', message: text('prompts.notAccepted', { detail }) });
     } else if (outcome.kind === 'answered-elsewhere') {
-      entry.move({ state: 'answered-elsewhere', message: 'These questions were already answered somewhere else.' });
+      entry.move({ state: 'answered-elsewhere', message: text('prompts.answeredSomewhere') });
     } else {
-      entry.move({ state: 'unconfirmed', message: 'Could not confirm that your answers arrived. Check again before sending them a second time.' });
+      entry.move({ state: 'unconfirmed', message: text('prompts.unconfirmed') });
     }
     if (outcome.kind !== 'unconfirmed') entry.setSubmitted(null);
     this.#publish(entry, true);
@@ -461,7 +462,7 @@ export class QuestionBatches implements vscode.Disposable {
     const resolved = this.#resolve(entry.identity);
     if (resolved?.snapshot === undefined) {
       if (entry.state === 'editing' || entry.state === 'unavailable') {
-        entry.move({ state: 'unavailable', message: WAITING });
+        entry.move({ state: 'unavailable', message: text('prompts.loadingProject') });
       }
       return;
     }
@@ -492,9 +493,9 @@ export class QuestionBatches implements vscode.Disposable {
       title: resolved?.snapshot === undefined ? entry.identity.sessionId : sessionTitle(resolved.snapshot),
       workflowId: workflowIdOf(resolved?.snapshot),
       meta: buildSessionMeta(resolved?.snapshot),
-      sessionState: titleCase(resolved?.snapshot?.displayState.state ?? 'unavailable'),
+      sessionState: titleCase(resolved?.snapshot?.displayState.state ?? text('views.unavailable')),
       state: entry.state,
-      message: entry.message ?? (entry.saveError === null ? null : `Draft not saved: ${entry.saveError}`),
+      message: entry.message ?? (entry.saveError === null ? null : text('prompts.draftNotSaved', { error: entry.saveError })),
       questions: entry.questions,
       draft: entry.draft,
       blockReason: this.#blockReason(entry, resolved),

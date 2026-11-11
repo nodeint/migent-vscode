@@ -1,3 +1,4 @@
+import { text } from '../text';
 import { formatDuration } from './duration';
 import type { ExecutionFile } from './executionFiles';
 import { parseExecutionId } from './executions';
@@ -8,8 +9,6 @@ import { describeQuotaReset, quotaFailure } from './replyFlow';
 
 export const LABEL_MAX_LENGTH = 60;
 const SHORT_ID_LENGTH = 8;
-const UNAVAILABLE = 'unavailable';
-
 const MS_PER_SECOND = 1000;
 const JUST_NOW_SECONDS = 5;
 
@@ -36,9 +35,9 @@ export function sessionLabel(snapshot: SessionSnapshot): string {
 
 /** `just now` or `<duration> ago`, for a time in the past. */
 export function formatAgo(ms: number): string {
-  if (ms < JUST_NOW_SECONDS * MS_PER_SECOND) return 'just now';
-  const [first] = formatDuration(ms).split(' ');
-  return `${first} ago`;
+  if (ms < JUST_NOW_SECONDS * MS_PER_SECOND) return text('views.justNow');
+  const [first = ''] = formatDuration(ms).split(' ');
+  return text('views.ago', { duration: first });
 }
 
 function parseTime(value: string | null | undefined): number | null {
@@ -55,19 +54,19 @@ export function pendingQuestionTotal(snapshot: SessionSnapshot): number {
 export function unknownReasonText(snapshot: SessionSnapshot): string {
   switch (snapshot.displayState.unknownReason) {
     case 'missing-status':
-      return 'status.json missing';
+      return text('views.unknownStatusMissing');
     case 'unreadable-status':
-      return 'status.json unreadable';
+      return text('views.unknownStatusUnreadable');
     case 'invalid-status':
-      return 'status.json invalid';
+      return text('views.unknownStatusInvalid');
     case 'invalid-manifest':
-      return 'manifest.yaml missing or invalid';
+      return text('views.unknownManifestInvalid');
     case 'unsupported-schema':
-      return `Unsupported schema version ${snapshot.manifest?.schemaVersion ?? UNAVAILABLE}`;
+      return text('views.unknownSchema', { version: String(snapshot.manifest?.schemaVersion ?? unavailable()) });
     case 'unrecognized-status':
-      return `Unrecognized status "${snapshot.status?.status ?? UNAVAILABLE}"`;
+      return text('views.unknownStatus', { status: snapshot.status?.status ?? unavailable() });
     case undefined:
-      return UNAVAILABLE;
+      return unavailable();
   }
 }
 
@@ -78,8 +77,12 @@ export function sessionIcon(snapshot: SessionSnapshot): string {
   return reason === 'unsupported-schema' || reason === 'unrecognized-status' ? 'question' : 'bracket-error';
 }
 
+function unavailable(): string {
+  return text('views.unavailable');
+}
+
 function questionsText(count: number): string {
-  return `${count} ${count === 1 ? 'question' : 'questions'}`;
+  return text('views.questionCount', { count });
 }
 
 export function stageOf(snapshot: SessionSnapshot): string | null {
@@ -120,36 +123,39 @@ function stateTitle(snapshot: SessionSnapshot): string {
 function stageLine(snapshot: SessionSnapshot): string | null {
   const id = snapshot.status?.latestExecutionId ?? null;
   const parsed = id === null ? null : parseExecutionId(id);
-  if (parsed !== null) return `Stage: ${parsed.stageId} (attempt ${parsed.attempt})`;
+  if (parsed !== null) return text('views.tooltipStageAttempt', { stage: parsed.stageId, attempt: parsed.attempt });
   const stage = snapshot.status?.latestStageId ?? null;
-  return stage === null ? null : `Stage: ${stage}`;
+  return stage === null ? null : text('views.tooltipStage', { stage });
 }
 
 function eventLine(snapshot: SessionSnapshot): string | null {
   const event = snapshot.status?.latestProviderEvent ?? null;
   if (event === null) return null;
   const detail = [event.event, event.summary, event.client].filter((part) => part !== null).join(' · ');
-  return detail === '' ? null : `Latest event: ${detail}`;
+  return detail === '' ? null : text('views.tooltipEvent', { detail });
 }
 
 function blockerLine(snapshot: SessionSnapshot): string | null {
   const { status } = snapshot;
   if (snapshot.displayState.state === 'blocked' && status !== null) {
-    return `Blocked by: ${status.blockedByExecutionIds.join(', ') || UNAVAILABLE}`;
+    return text('views.tooltipBlockedBy', { ids: status.blockedByExecutionIds.join(', ') || unavailable() });
   }
-  if (snapshot.displayState.state === 'failed') return `Latest execution: ${status?.latestExecutionStatus ?? UNAVAILABLE}`;
+  if (snapshot.displayState.state === 'failed') return text('views.tooltipLatestExecution', { status: status?.latestExecutionStatus ?? unavailable() });
   return null;
 }
 
 function quotaLine(snapshot: SessionSnapshot): string | null {
   const failure = quotaFailure(snapshot);
-  return failure === null ? null : `Failed on client quota; ${describeQuotaReset(failure)}`;
+  return failure === null ? null : text('states.quotaFailed', { reset: describeQuotaReset(failure) });
 }
 
 function updateLine(snapshot: SessionSnapshot, now: number): string {
   const updatedAt = snapshot.status?.updatedAt ?? null;
   const updated = parseTime(updatedAt);
-  return `Last update: ${updated === null ? UNAVAILABLE : `${updatedAt} (${formatAgo(now - updated)})`}`;
+  const value = updated === null
+    ? unavailable()
+    : text('views.tooltipLastUpdateAgo', { at: updatedAt ?? '', ago: formatAgo(now - updated) });
+  return text('views.tooltipLastUpdate', { value });
 }
 
 /** Multi-line tooltip. Missing values read "unavailable"; the full provider event is never shown. */
@@ -157,17 +163,17 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
   const questions = pendingQuestionTotal(snapshot);
   const lines: (string | null)[] = [
     sessionTitle(snapshot),
-    `State: ${stateTitle(snapshot)}`,
-    snapshot.displayState.unknownReason === undefined ? null : `Reason: ${unknownReasonText(snapshot)}`,
-    `Workflow: ${snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? UNAVAILABLE}`,
+    text('views.tooltipState', { state: stateTitle(snapshot) }),
+    snapshot.displayState.unknownReason === undefined ? null : text('views.tooltipReason', { reason: unknownReasonText(snapshot) }),
+    text('views.tooltipWorkflow', { workflow: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? unavailable() }),
     stageLine(snapshot),
     blockerLine(snapshot),
     quotaLine(snapshot),
-    questions > 0 ? `Pending questions: ${questions}` : null,
-    snapshot.displayState.writable ? null : 'Lock held by another host',
+    questions > 0 ? text('views.tooltipPendingQuestions', { count: questions }) : null,
+    snapshot.displayState.writable ? null : text('views.tooltipForeignLock'),
     updateLine(snapshot, now),
     eventLine(snapshot),
-    `Session: ${snapshot.sessionId}`,
+    text('views.tooltipSession', { id: snapshot.sessionId }),
   ];
   return lines.filter((line): line is string => line !== null).join('\n');
 }
@@ -186,7 +192,7 @@ export function sessionContextValue(snapshot: SessionSnapshot): string {
 }
 
 export function executionLabel(execution: ExecutionSnapshot): string {
-  return `${execution.stage || execution.id} · attempt ${execution.attempt}`;
+  return text('views.executionLabel', { stage: execution.stage || execution.id, attempt: execution.attempt });
 }
 
 export function executionDescription(execution: ExecutionSnapshot): string {
@@ -216,7 +222,7 @@ export function executionContextValue(execution: ExecutionSnapshot): string {
 }
 
 export function executionFileLabel(file: ExecutionFile): string {
-  if (file.kind === 'verify') return `verify · turn ${file.turn ?? '?'}`;
+  if (file.kind === 'verify') return text('views.verifyFile', { turn: String(file.turn ?? '?') });
   return file.relativePath.split('/').pop() ?? file.relativePath;
 }
 
@@ -230,9 +236,9 @@ export interface SessionsDiagnostic {
 /** The empty or error node for a project's sessions, or null when sessions exist. */
 export function sessionsDiagnostic(scan: ScanOutcome): SessionsDiagnostic | null {
   if (scan.state === 'unreadable') {
-    return { code: 'scan-unreadable', label: 'Cannot read the sessions folder', detail: scan.error };
+    return { code: 'scan-unreadable', label: text('views.cannotReadSessions'), detail: scan.error };
   }
-  return scan.eligible.length === 0 ? { code: 'no-sessions', label: 'No sessions yet', detail: null } : null;
+  return scan.eligible.length === 0 ? { code: 'no-sessions', label: text('views.noSessions'), detail: null } : null;
 }
 
 /** `TreeItem.id` values (plans/02-monitoring.md §5.3). `project` is the host's `ProjectKey`. Never include state. */

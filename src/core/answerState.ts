@@ -1,3 +1,4 @@
+import { text } from '../text';
 import type { AnswerState } from './answerModel';
 import { parseExecutionId } from './executions';
 import type { PendingQuestion } from './model';
@@ -38,8 +39,8 @@ function hasContinued(input: BatchStateInput): boolean {
 
 function continuation(input: BatchStateInput): StateUpdate {
   return hasContinued(input)
-    ? { state: 'continuing', message: 'Answers sent. The stage is continuing.' }
-    : { state: 'recorded-waiting', message: 'Answers saved, but the stage has not continued yet.' };
+    ? { state: 'continuing', message: text('states.answersSent') }
+    : { state: 'recorded-waiting', message: text('states.answersSaved') };
 }
 
 function noLongerPending(input: BatchStateInput): StateUpdate {
@@ -48,8 +49,8 @@ function noLongerPending(input: BatchStateInput): StateUpdate {
     (record) => record.executionId === executionId && record.stageId === stageId && record.status === 'answered',
   );
   return isAnswered
-    ? { state: 'answered-elsewhere', message: 'These questions were already answered. The answers are shown below.' }
-    : { state: 'unavailable', message: 'These questions are no longer waiting for an answer.' };
+    ? { state: 'answered-elsewhere', message: text('states.answeredElsewhere') }
+    : { state: 'unavailable', message: text('states.noLongerWaiting') };
 }
 
 /**
@@ -61,7 +62,7 @@ export function refreshBatchState(input: BatchStateInput): StateUpdate | null {
   if (FROZEN.has(input.state)) return null;
   if (input.current.length === 0) return noLongerPending(input);
   if (batchFingerprint(input.current) !== input.fingerprint) {
-    return { state: 'stale', message: 'The questions have changed since you opened this page. Your draft is kept for reference.' };
+    return { state: 'stale', message: text('states.questionsChangedKept') };
   }
   const isRecoverable = input.state === 'stale' || input.state === 'unavailable';
   return isRecoverable ? { state: 'editing', message: null } : null;

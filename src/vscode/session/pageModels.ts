@@ -20,6 +20,7 @@ import {
 } from '../../core/sessionPageModel';
 import { sessionTitle } from '../../core/sessionPresentation';
 import { readSessionStagePlan } from '../../core/workflowStages';
+import { text } from '../../text';
 import type { ProjectRegistry } from '../projects';
 import type { BatchIdentity } from '../questions/entry';
 import type { Entry, Identity } from './entry';
@@ -161,7 +162,7 @@ export function buildEmptyAnswerHeader(entry: Entry, registry: ProjectRegistry):
     sessionState,
     meta: buildSessionMeta(snapshot),
     state: 'unavailable',
-    message: 'No questions are pending for this session.',
+    message: text('prompts.noPendingQuestions'),
     questions: [],
     draft: {},
     blockReason: null,

@@ -9,6 +9,7 @@ import { doctorArgs, doctorLines, parseDoctorOutput, renameArgs } from '../core/
 import type { SessionSnapshot } from '../core/model';
 import { frozenWorkflowPath, workflowDraftPath, workflowsDir } from '../core/paths';
 import { sessionLabel } from '../core/sessionPresentation';
+import { text } from '../text';
 import { progress, show } from './notices';
 import type { ProjectContext } from './projects';
 
@@ -82,10 +83,10 @@ export async function reportCompleted(
   sinks: { log: (line: string) => void; showLog: () => void },
 ): Promise<void> {
   if (warnings === '') {
-    vscode.window.setStatusBarMessage(`Completed ${sessionLabel(snapshot)}`, COMPLETED_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.completedStatus', { label: sessionLabel(snapshot) }), COMPLETED_MESSAGE_MS);
     return;
   }
-  sinks.log(`complete warnings: ${warnings}`);
+  sinks.log(text('documents.logCompleteWarnings', { warnings }));
   const picked = await show('control.completedWithWarnings', { label: sessionLabel(snapshot), warnings });
   if (picked === 'viewLog') sinks.showLog();
 }
@@ -108,7 +109,7 @@ export async function runRename(
   );
   if (result.kind === 'ok') return;
   const detail = result.error.stderr.trim() || result.error.detail;
-  output.error(`rename failed: ${detail}`);
+  output.error(text('documents.logRenameFailed', { detail }));
   const picked = await show('control.renameFailed', { detail });
   if (picked === 'viewLog') control.showLog();
 }
@@ -122,13 +123,13 @@ export async function runDoctor(
   const result = await progress('control.doctorRunning', undefined, () => invokeText(launch, doctorArgs(), options));
   const checks = parseDoctorOutput(result.kind === 'ok' ? result.value : (result.error.stdout ?? ''));
   if (checks === null) {
-    const detail = result.kind === 'error' ? result.error.stderr.trim() || result.error.detail : 'unexpected output';
-    output.error(`doctor failed: ${detail}`);
+    const detail = result.kind === 'error' ? result.error.stderr.trim() || result.error.detail : text('states.unexpectedOutput');
+    output.error(text('documents.logDoctorFailed', { detail }));
     const picked = await show('control.doctorFailed', { detail });
     if (picked === 'viewLog') showLog();
     return;
   }
-  output.appendLine(`doctor (${context.folder.name}):`);
+  output.appendLine(text('documents.doctorHeading', { folder: context.folder.name }));
   for (const line of doctorLines(checks)) output.appendLine(line);
   showLog();
 }

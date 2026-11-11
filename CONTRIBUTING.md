@@ -100,8 +100,10 @@ pnpm package
 
 CI runs this sequence on macOS and Windows, followed by `pnpm test:integration`
 (a failure fails the job on both systems). `pnpm lint` enforces that
-`src/core/` and `src/cli/` never import `vscode`. There are currently no separate
-lint or gate scripts. Report baseline failures separately from regressions;
+`src/core/`, `src/cli/` and `src/text/` never import `vscode`, that `src/text/` only imports types from the rest of
+`src/`, and that `src/vscode/` passes catalog ids (`text('<area>.<name>')`) rather than string literals to the places
+that show text (status bar messages, picker and input titles, tree labels, panel and channel names). There are
+currently no separate lint or gate scripts. Report baseline failures separately from regressions;
 do not weaken verification to make a change pass.
 
 The dev dependency `@nodeint/migent-contracts` is pinned to the version of

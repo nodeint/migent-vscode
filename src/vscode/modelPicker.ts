@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { type ClientChoice, modelsDefaultFirst, type RoleModel } from '../core/controlArgs';
+import { text } from '../text';
 
 interface ModelItem extends vscode.QuickPickItem {
   model?: RoleModel;
@@ -13,8 +14,8 @@ export function modelItems(clients: ClientChoice[]): ModelItem[] {
     items.push({ label: choice.id, kind: vscode.QuickPickItemKind.Separator });
     for (const model of modelsDefaultFirst(choice)) {
       items.push({
-        label: `${choice.id} · ${model}`,
-        description: model === choice.defaultModel ? 'default' : undefined,
+        label: text('prompts.modelLabel', { client: choice.id, model }),
+        description: model === choice.defaultModel ? text('prompts.modelDefault') : undefined,
         model: { client: choice.id, model },
       });
     }
@@ -30,7 +31,7 @@ export interface ModelPick {
 
 const FOR_ALL_BUTTON: vscode.QuickInputButton = {
   iconPath: new vscode.ThemeIcon('check-all'),
-  tooltip: 'Use this model for all roles',
+  tooltip: text('prompts.modelForAll'),
 };
 
 /** One filterable list; with `canPickAll`, a title button accepts the highlighted model for every role. */
@@ -41,7 +42,7 @@ export async function pickModel(
 ): Promise<ModelPick | undefined> {
   const input = vscode.window.createQuickPick<ModelItem>();
   input.title = title;
-  input.placeholder = 'Type to filter by client or model';
+  input.placeholder = text('prompts.modelFilter');
   input.matchOnDescription = true;
   input.items = modelItems(clients);
   if (canPickAll) input.buttons = [FOR_ALL_BUTTON];

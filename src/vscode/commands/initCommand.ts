@@ -15,6 +15,7 @@ import {
 } from '../../core/controlArgs';
 import type { OperationGate } from '../../core/operationGate';
 import { migentDir } from '../../core/paths';
+import { text } from '../../text';
 import type { CapabilityService } from '../capability';
 import { pickModel } from '../modelPicker';
 import { notify, progress, show } from '../notices';
@@ -31,19 +32,19 @@ type Role = (typeof ROLES)[number];
 async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file');
   if (folders.length === 0) {
-    vscode.window.setStatusBarMessage('Open a folder first, then initialize Migent in it.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.openFolderFirst'), INFO_MESSAGE_MS);
     return undefined;
   }
   const candidates = folders.filter((folder) => !existsSync(migentDir(folder.uri.fsPath)));
   if (candidates.length === 0) {
-    vscode.window.setStatusBarMessage('Every open folder already has a .migent directory.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.everyFolderInit'), INFO_MESSAGE_MS);
     return undefined;
   }
   const [only] = candidates;
   if (candidates.length === 1) return only;
   const picked = await vscode.window.showQuickPick(
     candidates.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
-    { title: 'Initialize which folder?' },
+    { title: text('prompts.initWhichFolder') },
   );
   return picked?.folder;
 }
@@ -52,7 +53,7 @@ async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
 async function pickRoles(clients: ClientChoice[]): Promise<InitInput | undefined> {
   const chosen: Partial<Record<Role, RoleModel>> = {};
   for (const role of ROLES) {
-    const picked = await pickModel(`Initialize Migent: ${role} model`, clients, role === ROLES[0]);
+    const picked = await pickModel(text('prompts.initRoleModel', { role }), clients, role === ROLES[0]);
     if (picked === undefined) return undefined;
     if (picked.isForAll) return { developer: picked.model, planner: picked.model, reviewer: picked.model };
     chosen[role] = picked.model;
@@ -140,7 +141,7 @@ async function initializeFolder(target: InitTarget): Promise<void> {
   if (roles === undefined) return;
   // The prompts took time: the folder may have been initialized meanwhile, so eligibility is checked again.
   if (existsSync(migentDir(target.folder.uri.fsPath))) {
-    vscode.window.setStatusBarMessage(`The folder ${target.folder.name} already has a .migent directory.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.folderInit', { name: target.folder.name }), INFO_MESSAGE_MS);
     return;
   }
   const result = await progress('init.running', undefined, () => invokeText(launch, initArgs(roles), options));
@@ -164,7 +165,7 @@ export async function initializeProject(gate: OperationGate, capability: Capabil
   if (folder === undefined) return;
   const handle = gate.tryAcquire({ kind: 'launch', project: folder.uri.toString(), workflowId: INIT_GATE_ID });
   if (handle === null) {
-    vscode.window.setStatusBarMessage(`The folder ${folder.name} is already being initialized.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.folderIniting', { name: folder.name }), INFO_MESSAGE_MS);
     return;
   }
   try {

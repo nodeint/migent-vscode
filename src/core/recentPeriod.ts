@@ -1,14 +1,17 @@
+import type { TextId } from '../text';
+
 export const RECENT_PERIODS = ['today', 'yesterday', 'week', 'month', 'older', 'unknown'] as const;
 export type RecentPeriod = (typeof RECENT_PERIODS)[number];
 
-export const RECENT_PERIOD_LABELS: Readonly<Record<RecentPeriod, string>> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  week: 'Previous 7 days',
-  month: 'Previous 30 days',
-  older: 'Older',
-  unknown: 'Unknown date',
-};
+/** The catalog id of each period's heading; the wording lives in `src/text/`. */
+export const RECENT_PERIOD_TEXT = {
+  today: 'views.periodToday',
+  yesterday: 'views.periodYesterday',
+  week: 'views.periodWeek',
+  month: 'views.periodMonth',
+  older: 'views.periodOlder',
+  unknown: 'views.periodUnknown',
+} as const satisfies Record<RecentPeriod, TextId>;
 
 /** Use the same creation date and fallback as the session store's ordering. */
 export function recentPeriod(

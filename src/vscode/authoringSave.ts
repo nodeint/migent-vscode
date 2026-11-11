@@ -4,6 +4,7 @@ import { invokeJson } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
 import type { CapabilityState } from '../cli/version';
 import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope } from '../core/authoring';
+import { text } from '../text';
 import type { CapabilityService } from './capability';
 import type { ProjectKey } from './changes';
 
@@ -44,8 +45,8 @@ export function saveFailure(exitCode: number | undefined, stderr: string): strin
     .map((line) => line.trim())
     .filter((line) => line !== '')
     .at(-1);
-  if (last !== undefined) return `Could not save: ${last}`;
-  return exitCode === undefined ? 'Could not save: Migent could not be run.' : `Could not save: Migent exited with code ${exitCode}.`;
+  if (last !== undefined) return text('prompts.saveFailedLast', { last });
+  return exitCode === undefined ? text('prompts.saveCouldNotRun') : text('prompts.saveExited', { code: exitCode });
 }
 
 /** The launch to save with, or the message to show when the CLI is not usable. */
@@ -58,7 +59,7 @@ export async function usableLaunch(
   if (state.kind === 'ok' && state.launch !== undefined) return { launch: state.launch };
   const diagnostic = describeCapability(state);
   return {
-    message: `Saving needs a usable Migent CLI. ${diagnostic?.label ?? 'The CLI check has not finished; try again shortly.'}`,
+    message: text('prompts.savingNeedsCli', { detail: diagnostic?.label ?? text('prompts.cliCheckPending') }),
   };
 }
 

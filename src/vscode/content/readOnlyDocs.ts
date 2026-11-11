@@ -2,9 +2,10 @@ import { readFileSync, statSync } from 'node:fs';
 
 import * as vscode from 'vscode';
 
+import { text } from '../../text';
+
 export const READ_ONLY_DOC_SCHEME = 'migent-readonly';
 
-const NOT_WRITABLE = 'This document is read-only.';
 
 /** `migent-readonly:/<real path>`: the same file, shown without letting the editor write it back. */
 export function readOnlyDocUri(file: string): vscode.Uri {
@@ -52,19 +53,19 @@ export class ReadOnlyDocsProvider implements vscode.FileSystemProvider, vscode.D
   }
 
   public createDirectory(): void {
-    throw vscode.FileSystemError.NoPermissions(NOT_WRITABLE);
+    throw vscode.FileSystemError.NoPermissions(text('documents.readOnly'));
   }
 
   public writeFile(): void {
-    throw vscode.FileSystemError.NoPermissions(NOT_WRITABLE);
+    throw vscode.FileSystemError.NoPermissions(text('documents.readOnly'));
   }
 
   public delete(): void {
-    throw vscode.FileSystemError.NoPermissions(NOT_WRITABLE);
+    throw vscode.FileSystemError.NoPermissions(text('documents.readOnly'));
   }
 
   public rename(): void {
-    throw vscode.FileSystemError.NoPermissions(NOT_WRITABLE);
+    throw vscode.FileSystemError.NoPermissions(text('documents.readOnly'));
   }
 
   public dispose(): void {

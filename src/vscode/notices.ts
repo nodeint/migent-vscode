@@ -8,7 +8,7 @@ import {
   type NoticeParams,
   NOTICES,
   type Severity,
-} from '../core/notices';
+} from '../text/notices';
 
 /**
  * The only module that calls the VS Code notification API (`show*Message`, `withProgress`); an ESLint rule

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { SealedMetricsHistorical, Static } from '@nodeint/migent-contracts';
 
+import { text as describe } from '../text';
 import { type Declared, declaredOf } from './contractRead';
 import { METRICS_FILENAME } from './paths';
 import { isRecord } from './record';
@@ -221,15 +222,15 @@ function executionOf(raw: unknown): MetricsExecution | null {
 /** Validate the top-level shapes the page consumes and reduce the file to {@link SessionMetrics}. */
 export function parseMetrics(raw: unknown): MetricsRead {
   const value = declaredOf<HistoricalMetrics>(raw);
-  if (value === null) return { kind: 'invalid', error: 'not a JSON object' };
+  if (value === null) return { kind: 'invalid', error: describe('states.notJsonObject') };
   const totals = declaredOf<TotalsWire>(value.totals);
-  if (totals === null) return { kind: 'invalid', error: 'totals is not an object' };
-  if (!isRecord(value.stages)) return { kind: 'invalid', error: 'stages is not an object' };
-  if (!Array.isArray(value.executions)) return { kind: 'invalid', error: 'executions is not a list' };
+  if (totals === null) return { kind: 'invalid', error: describe('states.totalsNotObject') };
+  if (!isRecord(value.stages)) return { kind: 'invalid', error: describe('states.stagesNotObject') };
+  if (!Array.isArray(value.executions)) return { kind: 'invalid', error: describe('states.executionsNotList') };
   const stages: MetricsStage[] = [];
   for (const [id, stage] of Object.entries(value.stages)) {
     const stageWire = declaredOf<StageWire>(stage);
-    if (stageWire === null) return { kind: 'invalid', error: 'a stage is not an object' };
+    if (stageWire === null) return { kind: 'invalid', error: describe('states.stageNotObject') };
     stages.push(stageOf(id, stageWire));
   }
   const executions: MetricsExecution[] = [];
@@ -255,7 +256,7 @@ export function readMetrics(sessionDirPath: string): MetricsRead {
     value = JSON.parse(text);
   } catch {
     // The parser's message can quote the file, which may hold fields that must not leave core.
-    return { kind: 'invalid', error: 'not valid JSON' };
+    return { kind: 'invalid', error: describe('states.notValidJson') };
   }
   return parseMetrics(value);
 }

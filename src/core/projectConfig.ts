@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { ConfigLayer } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
+import { text as describe } from '../text';
 import { wireOf } from './contractRead';
 import { configPath } from './paths';
 import { isRecord } from './record';
@@ -22,7 +23,7 @@ export interface ProjectConfig {
 }
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : describe('states.unknownError');
 }
 
 /**
@@ -45,7 +46,7 @@ export function readProjectConfig(projectRoot: string): ProjectConfig {
     return { state: 'invalid', error: errorText(error), schemaVersion: null, roles: [], agents: [] };
   }
   if (!isRecord(parsed)) {
-    return { state: 'invalid', error: 'config.yaml must be a YAML mapping', schemaVersion: null, roles: [], agents: [] };
+    return { state: 'invalid', error: describe('states.configFileNotMapping'), schemaVersion: null, roles: [], agents: [] };
   }
   const wire = wireOf<ConfigLayer>(parsed) ?? {};
   const version = wire.schema_version;

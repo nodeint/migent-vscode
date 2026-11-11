@@ -2,6 +2,7 @@ import type { AnswerModel, AnswerState } from '../../core/answerModel';
 import type { StateUpdate } from '../../core/answerState';
 import type { PendingQuestion } from '../../core/model';
 import { type AnswerDraft, type BatchDraft, batchFingerprint, type ReplyMap } from '../../core/questionAnswers';
+import { text } from '../../text';
 import type { ProjectKey } from '../changes';
 
 const DRAFT_DEBOUNCE_MS = 300;
@@ -141,7 +142,7 @@ export class Entry {
     } catch (error) {
       this.saveError = error instanceof Error ? error.message : String(error);
     }
-    return this.isUnsaved ? (this.saveError ?? 'The draft changed while it was being saved.') : null;
+    return this.isUnsaved ? (this.saveError ?? text('prompts.draftChanged')) : null;
   }
 
   /** Persist now until nothing is unsaved (before submission or disposal). Null means durable. */

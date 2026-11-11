@@ -1,6 +1,7 @@
 import { statSync } from 'node:fs';
 import path from 'node:path';
 
+import { text } from '../text';
 import { childrenOf, type HandoffArtifact, readHandoff } from './handoff';
 import type { SessionSnapshot } from './model';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
@@ -144,7 +145,7 @@ function nextModel(input: ResultsInput): ResultsNext {
       return {
         ...base,
         state: 'unsupported',
-        detail: read.schemaVersion === null ? 'schema_version is missing' : `schema_version ${read.schemaVersion}`,
+        detail: read.schemaVersion === null ? text('states.schemaMissing') : text('states.schemaVersion', { version: String(read.schemaVersion) }),
       };
     case 'ok':
       return {

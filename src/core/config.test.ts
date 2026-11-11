@@ -70,6 +70,22 @@ describe('config form', () => {
     expect(duplicateNameProblem(configFormFromBody(SOURCE))).toBeNull();
   });
 
+  it('words each name problem for agents and roles', () => {
+    const agents = configFormFromBody(SOURCE);
+    agents.agents.push({ name: '', agent: { extra: {} } });
+    expect(duplicateNameProblem(agents)).toBe('Every agent needs a name.');
+    const repeatedAgent = configFormFromBody(SOURCE);
+    repeatedAgent.agents.push({ name: 'fast', agent: { extra: {} } });
+    expect(duplicateNameProblem(repeatedAgent)).toBe('The agent name "fast" is used more than once.');
+    const roles = configFormFromBody(SOURCE);
+    roles.roles.push({ name: '', agent: { mode: 'absent' }, extra: {} });
+    expect(duplicateNameProblem(roles)).toBe('Every role needs a name.');
+    const repeatedRole = configFormFromBody(SOURCE);
+    repeatedRole.roles.push({ name: 'dup', agent: { mode: 'absent' }, extra: {} });
+    repeatedRole.roles.push({ name: 'dup', agent: { mode: 'absent' }, extra: {} });
+    expect(duplicateNameProblem(repeatedRole)).toBe('The role name "dup" is used more than once.');
+  });
+
   it('lists the agent names of both files once', () => {
     const a = configFormFromBody({ agents: { x: {}, y: {} } });
     const b = configFormFromBody({ agents: { y: {}, z: {} } });
