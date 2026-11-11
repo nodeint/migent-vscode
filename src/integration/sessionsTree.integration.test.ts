@@ -8,7 +8,8 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { deleteSession } from '../vscode/commands/deleteSession';
+import { NOTICES } from '../core/notices';
+import { type DeleteError, deleteSession } from '../vscode/commands/deleteSession';
 import { READ_ONLY_DOC_SCHEME } from '../vscode/content/readOnlyDocs';
 import type { TreeNode } from '../vscode/views/nodes';
 import {
@@ -115,7 +116,13 @@ const scenarios: Scenario[] = [
           removals += 1;
           fs.rmSync(uri.fsPath, { recursive: true });
         },
-        error: (message: string): void => { errors.push(message); },
+        error: (error: DeleteError): void => {
+          errors.push(
+            error.id === 'deleteSession.failed'
+              ? NOTICES[error.id].text(error.params)
+              : NOTICES[error.id].text(undefined),
+          );
+        },
       };
       const remove = (): Promise<void> =>
         deleteSession({ registry: env.api.registry, gate: env.api.control.gate }, target, ui);

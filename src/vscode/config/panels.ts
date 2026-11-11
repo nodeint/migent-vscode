@@ -23,6 +23,7 @@ import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
 import { ClientCatalog } from '../clientCatalog';
 import { pickModel } from '../modelPicker';
+import { notify } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectRegistry } from '../projects';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
@@ -63,7 +64,7 @@ const CONFLICT_MESSAGE = 'The file changed on disk. Reload it from disk before s
 const transient = (error: string | null, isSaving = false): Transient => ({ saving: isSaving, applying: false, error });
 
 function notifySaveFailed(message: string): void {
-  void vscode.window.showErrorMessage(`Configuration not saved. ${message}`);
+  notify('config.saveFailed', { message });
 }
 
 /** The argv of one save. Create or replace comes from the draft's own base, never from the file's state now. */

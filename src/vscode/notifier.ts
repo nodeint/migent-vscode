@@ -3,11 +3,11 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../core/model';
 import { NotificationGate } from '../core/notificationGate';
 import { sessionDir } from '../core/paths';
-import { describeQuotaReset, quotaFailure } from '../core/replyFlow';
+import { quotaFailure } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
 import {
   currentTransition,
-  FAILURE_REPORT_BUTTON,
+  type FailureActionKey,
   failureButtons,
   type FailureDetails,
   failureDetails,
@@ -15,6 +15,7 @@ import {
   TransitionTracker,
 } from '../core/transitions';
 import type { MigentChange } from './changes';
+import { show } from './notices';
 import type { ProjectRegistry } from './projects';
 
 interface SessionTarget {
@@ -22,29 +23,11 @@ interface SessionTarget {
   sessionId: string;
 }
 
-/** What one notification shows, built from the session's state at the moment it is shown. */
-interface Spec {
-  severity: 'info' | 'warning' | 'error';
-  text: string;
-  buttons: string[];
-  act: (picked: string) => void;
-}
+/** Shows one notification, built from the session's state at the moment it is shown, and acts on the pick. */
+type Spec = () => Promise<void>;
 
 /** Builds a notification from current state; null when it no longer applies. */
 type Build = () => Spec | null;
-
-interface Action {
-  label: string;
-  command: string;
-  /** The command target; `tab` names the Session page tab for `migent.session.open`. */
-  target: SessionTarget & { tab?: string };
-}
-
-function showSpec(spec: Spec): Thenable<string | undefined> {
-  if (spec.severity === 'error') return vscode.window.showErrorMessage(spec.text, ...spec.buttons);
-  if (spec.severity === 'warning') return vscode.window.showWarningMessage(spec.text, ...spec.buttons);
-  return vscode.window.showInformationMessage(spec.text, ...spec.buttons);
-}
 
 interface FailureAction {
   target: SessionTarget;
@@ -54,12 +37,12 @@ interface FailureAction {
 }
 
 /** Run the failure notification button the user picked; each button names its own target. */
-function actOnFailure(picked: string, action: FailureAction): void {
-  if (picked === 'Continue') {
+function actOnFailure(picked: FailureActionKey, action: FailureAction): void {
+  if (picked === 'continue') {
     void vscode.commands.executeCommand('migent.session.continue', action.target);
-  } else if (picked === 'View log') {
+  } else if (picked === 'viewLog') {
     void vscode.commands.executeCommand('migent.session.showLog', action.target);
-  } else if (picked === FAILURE_REPORT_BUTTON) {
+  } else if (picked === 'failureReport') {
     if (action.failureReport !== null) {
       void vscode.commands.executeCommand('migent.session.openFailure', {
         ...action.target,
@@ -146,8 +129,7 @@ export class StateNotifier implements vscode.Disposable {
       this.#next(key);
       return;
     }
-    void showSpec(spec).then((picked) => {
-      if (picked !== undefined) spec.act(picked);
+    void spec().then(() => {
       this.#next(key);
     });
   }
@@ -175,31 +157,22 @@ export class StateNotifier implements vscode.Disposable {
       case 'failed':
         return this.#failed(transition, snapshot, target);
       case 'completed':
-        return this.#single(`Session ${sessionLabel(snapshot)} completed.`, 'info', {
-          label: 'Open overview',
-          command: 'migent.session.open',
-          target: { ...target, tab: 'overview' },
-        });
+        return async () => {
+          const picked = await show('notify.completed', { label: sessionLabel(snapshot) });
+          if (picked === 'openOverview') {
+            void vscode.commands.executeCommand('migent.session.open', { ...target, tab: 'overview' });
+          }
+        };
     }
-  }
-
-  #single(text: string, severity: Spec['severity'], action: Action): Spec {
-    return {
-      severity,
-      text,
-      buttons: [action.label],
-      act: () => void vscode.commands.executeCommand(action.command, action.target),
-    };
   }
 
   #blocked(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
     const stage = snapshot.status?.latestStageId ?? 'A stage';
-    return {
-      severity: 'warning',
-      text: `Session ${sessionLabel(snapshot)}: ${stage} is blocked and needs a reply.`,
-      buttons: ['Reply'],
-      act: () =>
-        void vscode.commands.executeCommand('migent.session.reply', { ...target, executionId: transition.executionId }),
+    return async () => {
+      const picked = await show('notify.blocked', { label: sessionLabel(snapshot), stage });
+      if (picked === 'reply') {
+        void vscode.commands.executeCommand('migent.session.reply', { ...target, executionId: transition.executionId });
+      }
     };
   }
 
@@ -211,21 +184,19 @@ export class StateNotifier implements vscode.Disposable {
 
   #failed(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
     const details = this.#failureDetailsFor(transition);
-    const where = failureWhere(details, snapshot);
-    const failure = quotaFailure(snapshot);
-    const cause =
-      failure === null
-        ? (details?.cause ?? 'The cause is in the response or log.')
-        : `Client quota was exhausted; ${describeQuotaReset(failure)}. Continue reruns the stage.`;
+    const params = {
+      label: sessionLabel(snapshot),
+      where: failureWhere(details, snapshot),
+      cause: details?.cause ?? null,
+      quota: quotaFailure(snapshot),
+    };
     const file = details?.file ?? null;
     const failureReport = details?.failureReport ?? null;
-    return {
-      severity: 'error',
-      text: `Session ${sessionLabel(snapshot)} failed${where === '' ? '' : ` (${where})`}. ${cause}`,
-      buttons: failureButtons(details),
-      act: (picked) => {
+    return async () => {
+      const picked = await show('notify.failed', params, failureButtons(details));
+      if (picked !== undefined) {
         actOnFailure(picked, { target, executionId: transition.executionId, failureReport, file });
-      },
+      }
     };
   }
 }

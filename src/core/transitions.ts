@@ -68,22 +68,23 @@ export interface FailureDetails {
   attempt: number | null;
 }
 
-export const FAILURE_REPORT_BUTTON = 'Open failure report';
+export type FailureActionKey = 'continue' | 'failureReport' | 'openVerify' | 'openResponse' | 'openHandoff' | 'viewLog';
 
-const FILE_BUTTONS = { verify: 'Open verify', response: 'Open response', handoff: 'Open handoff' } as const;
+const FILE_ACTIONS = { verify: 'openVerify', response: 'openResponse', handoff: 'openHandoff' } as const;
 
 /**
- * Button labels of a failed-execution notification. The failure report button needs a report that exists;
- * older executions have none, so their notification keeps the existing buttons.
+ * Action keys of a failed-execution notification, in display order (labels live in the notice catalog). The
+ * failure report action needs a report that exists; older executions have none, so their notification keeps the
+ * existing buttons.
  */
-export function failureButtons(details: FailureDetails | undefined): string[] {
+export function failureButtons(details: FailureDetails | undefined): FailureActionKey[] {
   const file = details?.file ?? null;
   const report = details?.failureReport ?? null;
   return [
-    'Continue',
-    ...(report === null ? [] : [FAILURE_REPORT_BUTTON]),
-    ...(file === null ? [] : [FILE_BUTTONS[file.kind]]),
-    'View log',
+    'continue',
+    ...(report === null ? [] : (['failureReport'] as const)),
+    ...(file === null ? [] : [FILE_ACTIONS[file.kind]]),
+    'viewLog',
   ];
 }
 

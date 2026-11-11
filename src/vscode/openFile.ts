@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { readOnlyDocUri } from './content/readOnlyDocs';
+import { notify } from './notices';
 
 /** Open a real file in its native editor; a missing file is reported by path and never created. */
 export async function openFile(file: string, what: string): Promise<void> {
@@ -8,7 +9,7 @@ export async function openFile(file: string, what: string): Promise<void> {
   try {
     await vscode.workspace.fs.stat(uri);
   } catch {
-    void vscode.window.showWarningMessage(`Could not find ${what}: ${file}`);
+    notify('file.notFound', { what, file });
     return;
   }
   await vscode.commands.executeCommand('vscode.open', uri);
@@ -19,7 +20,7 @@ export async function openReadOnly(file: string, what: string): Promise<void> {
   try {
     await vscode.workspace.fs.stat(vscode.Uri.file(file));
   } catch {
-    void vscode.window.showWarningMessage(`Could not find ${what}: ${file}`);
+    notify('file.notFound', { what, file });
     return;
   }
   const document = await vscode.workspace.openTextDocument(readOnlyDocUri(file));

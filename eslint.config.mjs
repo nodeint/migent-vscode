@@ -293,6 +293,22 @@ const contractsTypeOnlyConfig = {
   },
 };
 
+// Notifications: one catalog and one host facade. Only src/vscode/notices.ts calls the notification API.
+const NOTIFICATION_MEMBERS = ['showInformationMessage', 'showWarningMessage', 'showErrorMessage', 'withProgress'];
+const notificationFacadeConfig = {
+  files: ['src/**/*.ts'],
+  ignores: [...TEST_FILE_GLOBS, 'src/vscode/notices.ts'],
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      ...NOTIFICATION_MEMBERS.map((member) => ({
+        selector: `MemberExpression[property.name='${member}']`,
+        message: `Show notifications through src/vscode/notices.ts and the catalog in src/core/notices.ts; only the facade calls ${member}.`,
+      })),
+    ],
+  },
+};
+
 export default defineConfig(
   { ignores: IGNORE_PATTERNS },
   baseConfig,
@@ -301,4 +317,5 @@ export default defineConfig(
   testFilesConfig,
   noVscodeConfig,
   contractsTypeOnlyConfig,
+  notificationFacadeConfig,
 );

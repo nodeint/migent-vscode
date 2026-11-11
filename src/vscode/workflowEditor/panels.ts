@@ -32,6 +32,7 @@ import type { CapabilityService } from '../capability';
 import type { MigentChange, ProjectKey } from '../changes';
 import { ClientCatalog } from '../clientCatalog';
 import { pickModel } from '../modelPicker';
+import { notify } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { type PageDescriptor, pageResourceRoots, renderPage } from '../webview/page';
@@ -51,7 +52,7 @@ const UNSAVABLE_MESSAGE =
   'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
 
 function notifySaveFailed(message: string): void {
-  void vscode.window.showErrorMessage(`Workflow not saved. ${message}`);
+  notify('workflow.saveFailed', { message });
 }
 
 /** A workflow file inside one project's `.migent/workflows` folder. */

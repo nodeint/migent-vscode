@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { BatchWatch } from '../core/batchWatch';
 import { sessionLabel } from '../core/sessionPresentation';
 import type { MigentChange } from './changes';
+import { show } from './notices';
 import type { ProjectRegistry } from './projects';
 
 /**
@@ -47,11 +48,9 @@ export class QuestionNotifier implements vscode.Disposable {
       .get<boolean>('question', true);
     if (!isEnabled || snapshot === undefined) return;
     for (const batch of fresh) {
-      const text = `Session ${sessionLabel(snapshot)}: ${batch.stageId ?? 'a role'} is waiting for ${batch.count} answer${
-        batch.count === 1 ? '' : 's'
-      }.`;
-      void vscode.window.showInformationMessage(text, 'Answer questions').then((picked) => {
-        if (picked !== 'Answer questions') return;
+      const params = { label: sessionLabel(snapshot), stage: batch.stageId ?? 'a role', count: batch.count };
+      void show('notify.questions', params).then((picked) => {
+        if (picked !== 'answerQuestions') return;
         void vscode.commands.executeCommand('migent.session.open', {
           project: context.key,
           sessionId: batch.sessionId,

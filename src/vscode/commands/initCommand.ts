@@ -17,6 +17,7 @@ import type { OperationGate } from '../../core/operationGate';
 import { migentDir } from '../../core/paths';
 import type { CapabilityService } from '../capability';
 import { pickModel } from '../modelPicker';
+import { notify, progress, show } from '../notices';
 
 const INFO_MESSAGE_MS = 5000;
 
@@ -85,13 +86,13 @@ async function untilCancelled<T>(work: Promise<T>, token: vscode.CancellationTok
 }
 
 async function warnUnavailable(kind: string): Promise<void> {
-  let action = 'Recheck';
+  let action: 'recheck' | 'installCli' | 'updateCli' = 'recheck';
   let command = 'migent.cli.recheck';
   if (kind === 'missing' || kind === 'old') {
-    action = kind === 'old' ? 'Update Migent CLI' : 'Install Migent CLI';
+    action = kind === 'old' ? 'updateCli' : 'installCli';
     command = 'migent.cli.install';
   }
-  const picked = await vscode.window.showWarningMessage(`The Migent CLI is unavailable (${kind}).`, action);
+  const picked = await show('init.cliUnavailable', { kind }, [action]);
   if (picked !== undefined) await vscode.commands.executeCommand(command);
 }
 
@@ -125,7 +126,7 @@ async function loadTarget(
   const clients =
     clientRows.kind === 'ok' && modelRows.kind === 'ok' ? joinClients(clientRows.value, modelRows.value) : [];
   if (clients.length === 0) {
-    void vscode.window.showErrorMessage('No client with models is available. Install an agent CLI first.');
+    notify('init.noClients');
     return undefined;
   }
   return { folder, launch: state.launch, env, clients };
@@ -142,19 +143,15 @@ async function initializeFolder(target: InitTarget): Promise<void> {
     vscode.window.setStatusBarMessage(`The folder ${target.folder.name} already has a .migent directory.`, INFO_MESSAGE_MS);
     return;
   }
-  const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Initializing Migent' },
-    () => invokeText(launch, initArgs(roles), options),
-  );
+  const result = await progress('init.running', undefined, () => invokeText(launch, initArgs(roles), options));
   if (result.kind === 'error') {
     const detail = result.error.stderr.trim() || result.error.detail;
-    void vscode.window.showErrorMessage(`Could not initialize Migent: ${detail}`);
+    notify('init.failed', { detail });
     return;
   }
   await vscode.commands.executeCommand('migent.refresh');
-  const message = `Initialized Migent in ${target.folder.name}.`;
-  const picked = await vscode.window.showInformationMessage(message, 'Run workflow');
-  if (picked === 'Run workflow') await vscode.commands.executeCommand('migent.session.run');
+  const picked = await show('init.done', { name: target.folder.name });
+  if (picked === 'runWorkflow') await vscode.commands.executeCommand('migent.session.run');
 }
 
 /**
@@ -171,9 +168,8 @@ export async function initializeProject(gate: OperationGate, capability: Capabil
     return;
   }
   try {
-    const target = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Migent: loading clients…', cancellable: true },
-      (_progress, token) => loadTarget(folder, capability, token),
+    const target = await progress('init.loadingClients', undefined, (_reporter, token) =>
+      loadTarget(folder, capability, token),
     );
     if (target !== undefined) await initializeFolder(target);
   } finally {

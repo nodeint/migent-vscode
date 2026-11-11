@@ -17,6 +17,7 @@ import type { MigentChange } from '../changes';
 import { ClientCatalog } from '../clientCatalog';
 import type { ControlService } from '../control';
 import { pickModel } from '../modelPicker';
+import { notify } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { QuestionBatches, type QuestionSurface } from '../questions/batches';
@@ -443,13 +444,13 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
     switch (intent.intent) {
       case 'openOutput': {
         const file = resolveOutputPath(input, intent.name);
-        if (file === null) void vscode.window.showWarningMessage(`Output not found: ${intent.name}`);
+        if (file === null) notify('session.outputNotFound', { name: intent.name });
         else await openFile(file, 'Output');
         return;
       }
       case 'openHandoffFile': {
         const file = resolveHandoffPath(input, intent.name);
-        if (file === null) void vscode.window.showWarningMessage(`Handoff file not found: ${intent.name}`);
+        if (file === null) notify('session.handoffNotFound', { name: intent.name });
         else await openFile(file, 'Handoff file');
         return;
       }
@@ -486,10 +487,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
 
   async #openWorkflow(context: ProjectContext, workflow: string): Promise<void> {
     const matches = context.catalog.workflows().entries.filter((candidate) => candidate.id === workflow);
-    if (matches.length === 0) {
-      void vscode.window.showWarningMessage(`No workflow with id ${workflow} in this project.`);
-      return;
-    }
+    if (matches.length === 0) { notify('session.workflowNotFound', { workflow }); return; }
     let [target]: (WorkflowEntry | undefined)[] = matches;
     if (matches.length > 1) {
       const picked = await vscode.window.showQuickPick(

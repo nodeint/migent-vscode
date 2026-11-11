@@ -6,6 +6,7 @@ import { describeInstallOutcome, INSTALL_CLI_COMMAND, type InstallOutcome } from
 import { type InstallEnd, InstallWait } from '../../cli/installWait';
 import { migentDir } from '../../core/paths';
 import type { CapabilityService } from '../capability';
+import { notify, show } from '../notices';
 
 const STATUS_MESSAGE_MS = 2000;
 const TERMINAL_NAME = 'Migent: Install CLI';
@@ -37,11 +38,8 @@ async function waitForInstall(terminal: vscode.Terminal): Promise<InstallEnd> {
 
 /** Shell integration may be unavailable, so the user can also end the wait by hand. */
 async function waitForManualRecheck(): Promise<InstallEnd> {
-  const picked = await vscode.window.showInformationMessage(
-    'Installing the Migent CLI in the terminal. Use Recheck if this does not update by itself.',
-    'Recheck',
-  );
-  if (picked === 'Recheck') return { exitCode: undefined };
+  const picked = await show('install.waiting', undefined);
+  if (picked === 'recheck') return { exitCode: undefined };
   return new Promise<InstallEnd>(() => {});
 }
 
@@ -72,18 +70,17 @@ async function runInstall(capability: CapabilityService): Promise<InstallEnd> {
 
 async function notifyInstall(outcome: InstallOutcome): Promise<void> {
   if (outcome.kind === 'ready') {
-    const initialize = hasUninitializedFolder() ? 'Initialize project' : undefined;
-    const buttons = initialize === undefined ? [] : [initialize];
-    const picked = await vscode.window.showInformationMessage(outcome.message, ...buttons);
+    const buttons = hasUninitializedFolder() ? (['initializeProject'] as const) : [];
+    const picked = await show('install.ready', { message: outcome.message }, buttons);
     if (picked !== undefined) await vscode.commands.executeCommand('migent.init');
     return;
   }
   if (outcome.kind === 'failed') {
-    void vscode.window.showErrorMessage(outcome.message);
+    notify('install.failed', { message: outcome.message });
     return;
   }
-  const picked = await vscode.window.showWarningMessage(outcome.message, 'Recheck');
-  if (picked === 'Recheck') await vscode.commands.executeCommand('migent.cli.recheck');
+  const picked = await show('install.notReady', { message: outcome.message });
+  if (picked === 'recheck') await vscode.commands.executeCommand('migent.cli.recheck');
 }
 
 /** Recheck and install or update of the CLI. */

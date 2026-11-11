@@ -8,6 +8,7 @@ import { sessionLabel, sessionTitle } from '../../core/sessionPresentation';
 import { normalizeRenameTitle, validateRenameTitle } from '../../core/sessionTitle';
 import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
+import { confirm, progress } from '../notices';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import type { DraftSource, ReplyService, SendResult } from '../reply';
@@ -130,11 +131,11 @@ async function replyTo(source: DraftSource, replies: ReplyService): Promise<void
 async function runSend(replies: ReplyService, meta: Parameters<ReplyService['send']>[0]): Promise<void> {
   // The click has no other sign of life: a notification names what the send is doing until it settles. It is not
   // cancellable, because once the CLI is running a reply cannot be taken back.
-  const run = async (progress: vscode.Progress<{ message?: string }>): Promise<SendResult> => {
-    const onPhase = (message: string): void => progress.report({ message });
+  const run = async (reporter: vscode.Progress<{ message?: string }>): Promise<SendResult> => {
+    const onPhase = (message: string): void => reporter.report({ message });
     return replies.send(meta, onPhase);
   };
-  const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Sending reply' }, run);
+  const result = await progress('reply.sending', undefined, run);
   await replies.report(meta, undefined, result);
 }
 
@@ -152,12 +153,7 @@ async function discardReply(replies: ReplyService, arg: unknown): Promise<void> 
   const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
   const meta = uri === undefined ? undefined : replies.identityOf(uri);
   if (meta === undefined) return;
-  const picked = await vscode.window.showWarningMessage(
-    'Discard this reply draft? The text is deleted.',
-    { modal: true },
-    'Discard reply',
-  );
-  if (picked === 'Discard reply') await replies.discard(meta);
+  if (await confirm('reply.discardConfirm')) await replies.discard(meta);
 }
 
 async function continueOnce(
@@ -184,12 +180,7 @@ async function continueWithoutReply(
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
-  const picked = await vscode.window.showWarningMessage(
-    `Continue ${sessionLabel(snapshot)} without a reply? The agent is told to continue with the blocker unanswered.`,
-    { modal: true },
-    'Continue without reply',
-  );
-  if (picked !== 'Continue without reply') return;
+  if (!(await confirm('reply.continueWithoutConfirm', { label: sessionLabel(snapshot) }))) return;
   const choice = await chooseWorkflow(control, context, snapshot);
   if (choice !== undefined) await control.continueSession(context, snapshot, choice);
 }
@@ -200,12 +191,7 @@ async function repair(control: ControlService, context: ProjectContext, snapshot
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
-  const picked = await vscode.window.showWarningMessage(
-    `Repair ${sessionLabel(snapshot)}? This rebuilds status.json from the session directory.`,
-    { modal: true },
-    'Repair',
-  );
-  if (picked === 'Repair') await control.repair(context, snapshot);
+  if (await confirm('reply.repairConfirm', { label: sessionLabel(snapshot) })) await control.repair(context, snapshot);
 }
 
 async function complete(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
@@ -214,12 +200,7 @@ async function complete(control: ControlService, context: ProjectContext, snapsh
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
-  const picked = await vscode.window.showWarningMessage(
-    `Complete ${sessionLabel(snapshot)}? No further stage runs, and its outputs are published as they are.`,
-    { modal: true },
-    'Complete',
-  );
-  if (picked === 'Complete') await control.complete(context, snapshot);
+  if (await confirm('reply.completeConfirm', { label: sessionLabel(snapshot) })) await control.complete(context, snapshot);
 }
 
 async function rename(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {

@@ -4,6 +4,7 @@ import type { RunOutcome } from '../cli/exitCode';
 import { describeFailure } from '../core/failureText';
 import { workflowDraftPath } from '../core/paths';
 import { hasWorkflowDraft } from './controlHelpers';
+import { notify, show } from './notices';
 import type { ProjectContext } from './projects';
 
 /** A session that `session prepare` created, with the files the user edits. */
@@ -18,13 +19,10 @@ export function preparedSession(context: ProjectContext, sessionId: string, task
   return { sessionId, taskFile, workflowFile: workflowDraftPath(context.root, sessionId) };
 }
 
-const OPEN_DRAFT = 'Open workflow.yaml';
-const VIEW_LOG = 'View log';
-
 /** Open the session's own `workflow.yaml`; says so when it no longer exists. */
 export async function openWorkflowDraft(context: ProjectContext, sessionId: string): Promise<void> {
   if (!hasWorkflowDraft(context.root, sessionId)) {
-    void vscode.window.showWarningMessage('This session no longer has a workflow.yaml.');
+    notify('draft.missing');
     return;
   }
   try {
@@ -32,7 +30,7 @@ export async function openWorkflowDraft(context: ProjectContext, sessionId: stri
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    void vscode.window.showErrorMessage(`Could not open workflow.yaml: ${detail}`);
+    notify('draft.openFailed', { detail });
   }
 }
 
@@ -41,9 +39,9 @@ export async function openWorkflowDraft(context: ProjectContext, sessionId: stri
  * file again when clicked, because it may have been removed meanwhile.
  */
 export function offerWorkflowDraft(context: ProjectContext, prepared: { sessionId: string }): void {
-  void vscode.window
-    .showInformationMessage('Session prepared. Its workflow can be edited before it runs.', OPEN_DRAFT)
-    .then((picked) => (picked === OPEN_DRAFT ? openWorkflowDraft(context, prepared.sessionId) : undefined));
+  void show('draft.prepared', undefined).then((picked) =>
+    picked === 'openDraft' ? openWorkflowDraft(context, prepared.sessionId) : undefined,
+  );
 }
 
 /**
@@ -61,10 +59,10 @@ export function reportFailure(
     last: result.stderrTail.at(-1),
     isDrafted: sessionId !== undefined && hasWorkflowDraft(context.root, sessionId),
   });
-  const actions = offersDraft ? [OPEN_DRAFT, VIEW_LOG] : [VIEW_LOG];
-  void vscode.window.showErrorMessage(message, ...actions).then((picked) => {
-    if (picked === VIEW_LOG) showLog();
-    else if (picked === OPEN_DRAFT && sessionId !== undefined) return openWorkflowDraft(context, sessionId);
+  const actions = offersDraft ? (['openDraft', 'viewLog'] as const) : (['viewLog'] as const);
+  void show('command.failed', { message }, actions).then((picked) => {
+    if (picked === 'viewLog') showLog();
+    else if (picked === 'openDraft' && sessionId !== undefined) return openWorkflowDraft(context, sessionId);
     return undefined;
   });
 }

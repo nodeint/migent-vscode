@@ -9,6 +9,7 @@ import { doctorArgs, doctorLines, parseDoctorOutput, renameArgs } from '../core/
 import type { SessionSnapshot } from '../core/model';
 import { frozenWorkflowPath, workflowDraftPath, workflowsDir } from '../core/paths';
 import { sessionLabel } from '../core/sessionPresentation';
+import { progress, show } from './notices';
 import type { ProjectContext } from './projects';
 
 const COMPLETED_MESSAGE_MS = 3000;
@@ -85,11 +86,8 @@ export async function reportCompleted(
     return;
   }
   sinks.log(`complete warnings: ${warnings}`);
-  const picked = await vscode.window.showWarningMessage(
-    `Completed ${sessionLabel(snapshot)} with warnings: ${warnings}`,
-    'View log',
-  );
-  if (picked === 'View log') sinks.showLog();
+  const picked = await show('control.completedWithWarnings', { label: sessionLabel(snapshot), warnings });
+  if (picked === 'viewLog') sinks.showLog();
 }
 
 /**
@@ -105,15 +103,14 @@ export async function runRename(
   const [launch, env, output] = runtime;
   if (!(await control.ensureWritable(context)) || launch === undefined) return;
   const options = { cwd: context.root, env, timeoutMs: 30_000 };
-  const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Window, title: `Renaming ${sessionLabel(snapshot)}` },
-    () => invokeCaptured(launch, renameArgs(snapshot.sessionId, title), options),
+  const result = await progress('control.renaming', { label: sessionLabel(snapshot) }, () =>
+    invokeCaptured(launch, renameArgs(snapshot.sessionId, title), options),
   );
   if (result.kind === 'ok') return;
   const detail = result.error.stderr.trim() || result.error.detail;
   output.error(`rename failed: ${detail}`);
-  const picked = await vscode.window.showErrorMessage(`Could not rename the session: ${detail}`, 'View log');
-  if (picked === 'View log') control.showLog();
+  const picked = await show('control.renameFailed', { detail });
+  if (picked === 'viewLog') control.showLog();
 }
 
 export async function runDoctor(
@@ -122,16 +119,13 @@ export async function runDoctor(
 ): Promise<void> {
   const { launch, env, output, showLog } = runtime;
   const options = { cwd: context.root, env, timeoutMs: 30_000 };
-  const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Window, title: 'Running Migent doctor' },
-    () => invokeText(launch, doctorArgs(), options),
-  );
+  const result = await progress('control.doctorRunning', undefined, () => invokeText(launch, doctorArgs(), options));
   const checks = parseDoctorOutput(result.kind === 'ok' ? result.value : (result.error.stdout ?? ''));
   if (checks === null) {
     const detail = result.kind === 'error' ? result.error.stderr.trim() || result.error.detail : 'unexpected output';
     output.error(`doctor failed: ${detail}`);
-    const picked = await vscode.window.showErrorMessage(`Doctor could not run: ${detail}`, 'View log');
-    if (picked === 'View log') showLog();
+    const picked = await show('control.doctorFailed', { detail });
+    if (picked === 'viewLog') showLog();
     return;
   }
   output.appendLine(`doctor (${context.folder.name}):`);
