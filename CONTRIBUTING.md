@@ -218,8 +218,8 @@ results. Both CI jobs must pass. Merging publishes the release.
 `release.yml` starts when a `release/*` pull request is merged into `next`. It
 checks that the merged commit carries a newer version, a nonempty `## X.Y.Z`
 changelog section, and no existing tag, then creates and pushes `vX.Y.Z`,
-fast-forwards `main` to that commit, and publishes the VSIX to Marketplace, then
-Open VSX, then a GitHub Release. It does not rerun the tests: the release PR's
+fast-forwards `main` to that commit, creates a GitHub Release, and publishes the
+VSIX to Marketplace, then Open VSX. It does not rerun the tests: the release PR's
 CI and the up-to-date merge requirement are the test gate.
 
 Watch the run through completion and check the GitHub Release:
@@ -230,10 +230,11 @@ gh run watch <databaseId> --exit-status
 gh release view vX.Y.Z
 ```
 
-The workflow verifies both registries itself, retrying while propagation lags.
-Install the exact version from Marketplace and the Open VSX VSIX in a suitable
-client and verify the affected behavior. Metadata checks alone do not establish
-successful installation.
+The workflow does not verify the registries after publishing. Confirm that the
+exact version appears on Marketplace and Open VSX (allowing for propagation
+lag), then install it from Marketplace and install the Open VSX VSIX in a
+suitable client and verify the affected behavior. Metadata checks alone do not
+establish successful installation.
 
 To publish an existing tag again, or to recover after a failed run, dispatch the
 workflow for that tag:
@@ -272,8 +273,9 @@ failing step and which registries or GitHub assets already exist. If nothing
 reached either registry, dispatch the same tag again after fixing external
 configuration. When a version already reached a registry, prepare the next patch
 through a new release PR; never delete or overwrite a released version. If the
-run failed only at "Verify main advanced", publication succeeded: fix the main
-push restriction and re-run, or run the guarded synchronization above.
+run failed at "Verify main advanced", the GitHub Release exists but nothing was
+published to Marketplace or Open VSX: fix the main push restriction or run the
+guarded synchronization above, then publish the tag again.
 
 If `RELEASE_PAUSED` skipped a merged release, create the tag on the merged
 commit that the release PR produced and dispatch it:

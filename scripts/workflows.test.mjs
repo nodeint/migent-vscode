@@ -15,7 +15,7 @@ test("release workflow parses and covers merge, tag, and manual retry entries", 
   assert.equal(release.jobs.release.environment, "release");
   assert.deepEqual(Object.keys(release.jobs.release.permissions).sort(), ["contents", "id-token"]);
   const names = release.jobs.release.steps.flatMap(step => step.name ?? []);
-  for (const name of ["Create release tag", "Advance main", "Verify publication", "Verify main advanced"]) {
+  for (const name of ["Create release tag", "Advance main", "Verify main advanced"]) {
     assert.ok(names.includes(name), `Missing release step: ${name}`);
   }
 });
