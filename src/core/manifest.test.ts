@@ -24,6 +24,17 @@ describe('parseManifest', () => {
     expect(manifest?.schemaSupported).toBe(true);
   });
 
+  it('reads unquoted integer ids as the same strings as quoted ones', () => {
+    const unquoted = parseManifest('session_id: 3\nprior_session_id: 2\n');
+    const quoted = parseManifest('session_id: "3"\nprior_session_id: "2"\n');
+    expect(unquoted).toMatchObject({ sessionId: '3', priorSessionId: '2' });
+    expect(quoted).toMatchObject({ sessionId: '3', priorSessionId: '2' });
+  });
+
+  it.each(['1.5', '-1', 'true', '[1]', '1e400'])('keeps a non-integer id %s null', (value) => {
+    expect(parseManifest(`session_id: ${value}\n`)?.sessionId).toBeNull();
+  });
+
   it('accepts a v1 manifest with a status line and no schema_version', () => {
     const manifest = parseManifest('session_id: s1\nstatus: completed\n');
     expect(manifest?.schemaVersion).toBeNull();

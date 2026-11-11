@@ -22,6 +22,7 @@
       copySessionId: 'Copy session ID',
       revealInExplorer: 'Reveal in Explorer',
       completeSession: 'Complete session…',
+      renameSession: 'Rename session…',
       reloadFromDisk: 'Reload from disk',
     },
 

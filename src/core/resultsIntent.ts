@@ -12,6 +12,7 @@ export const SESSION_ACTIONS = [
   'answerQuestions',
   'openWorkflow',
   'completeSession',
+  'renameSession',
   'start',
   'stop',
   'continue',

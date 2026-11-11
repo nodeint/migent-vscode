@@ -21,9 +21,12 @@ import {
   sessionsDir,
   STATUS_FILENAME,
   statusPath,
+  titlePath,
 } from './paths';
 import { isRecord } from './record';
 import { replyNeedsExecutions, replyTargets } from './replyFlow';
+import { compareSessionIds } from './sessionId';
+import { readTitleOverride } from './sessionTitle';
 import { readStatus } from './statusReader';
 
 export const DEFAULT_SESSION_LIMIT = 50;
@@ -54,6 +57,7 @@ interface SnapshotBody {
   status: SessionSnapshot['status'];
   statusError: boolean;
   lock: SessionSnapshot['lock'];
+  titleOverride: SessionSnapshot['titleOverride'];
   displayState: SessionSnapshot['displayState'];
   replyTargets: SessionSnapshot['replyTargets'];
 }
@@ -69,10 +73,17 @@ function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
     sameJson(a.status?.latestProviderEvent, b.status?.latestProviderEvent) &&
     a.statusError === b.statusError &&
     sameJson(a.lock, b.lock) &&
+    sameDisplay(a, b) &&
+    sameJson(a.replyTargets, b.replyTargets)
+  );
+}
+
+function sameDisplay(a: SnapshotBody, b: SnapshotBody): boolean {
+  return (
+    a.titleOverride === b.titleOverride &&
     a.displayState.state === b.displayState.state &&
     a.displayState.unknownReason === b.displayState.unknownReason &&
-    a.displayState.writable === b.displayState.writable &&
-    sameJson(a.replyTargets, b.replyTargets)
+    a.displayState.writable === b.displayState.writable
   );
 }
 
@@ -89,7 +100,7 @@ function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
   const left = createdAtOf(a) ?? '';
   const right = createdAtOf(b) ?? '';
   if (left !== right) return left > right;
-  return a.sessionId > b.sessionId;
+  return compareSessionIds(a.sessionId, b.sessionId) > 0;
 }
 
 /**
@@ -366,6 +377,7 @@ export class SessionStore {
       status: statusRead.kind === 'ok' ? statusRead.status : null,
       statusError: statusRead.kind === 'error',
       lock,
+      titleOverride: readTitleOverride(titlePath(this.projectRoot, sessionId)),
       displayState,
       replyTargets: [],
     };

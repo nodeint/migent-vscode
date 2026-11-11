@@ -11,6 +11,7 @@ They are not part of `fixtures/sessions`, so the shared test layout does not cop
 | `question-answered` | The same session after `session continue --reply "1B, 2A+C, 3 <text>"`: `answered` records with `selected` and `text`, and `answered_at`. |
 | `handoff-source` | Completed workflow session with `downstream`: `next.json` v1 and its `status.json` outputs. |
 | `handoff-target` | Session started with `--prior`: manifest `prior_session_id` and `handoff` mapping, and `status.json.handoff`. |
+| `numeric-ids-0.5.6` | CLI 0.5.6 `session prepare` then `session rename`: the session id is the quoted string `"1"`, and `title.json` holds the new title and the `history` of earlier titles (`changed_at`) next to the unchanged manifest and status titles. |
 | `prepared-draft` | migent 0.3.5 `session prepare`: `status: prepared`, an empty `task.md`, the editable `workflow.yaml` (the `workflow_path` of the manifest and status) and no `workflow.frozen.yaml`. |
 | `started-draft` | A 0.3.5 session after `session run --session`: `workflow.yaml` is kept next to `workflow.frozen.yaml`, which wraps the workflow as `source_sha256` and `workflow`. The provider event is dropped. |
 

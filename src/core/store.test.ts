@@ -539,3 +539,51 @@ schema_version: 2
     expect(reads.dirs.filter((dir) => dir.includes('cancelled-old'))).toHaveLength(1);
   });
 });
+
+describe('SessionStore numeric ids and title overlay', () => {
+  function addSession(id: string, createdAt: string, extra = ''): string {
+    const root = dirs[dirs.length - 1]!;
+    const dir = path.join(root, '.migent', 'sessions', id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'manifest.yaml'), `session_id: ${id}\nworkflow_id: plan\ncreated_at: ${createdAt}\nschema_version: 2\n${extra}`);
+    writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ session_id: id, status: 'prepared', updated_at: createdAt }));
+    return dir;
+  }
+
+  it('orders sessions with equal creation times by number, and mixed ids without throwing', () => {
+    const at = '2030-01-01T00:00:00.000+00:00';
+    addSession('9', at);
+    addSession('10', at);
+    const s = store();
+    s.load();
+    const ids = s.all().map((snapshot) => snapshot.sessionId);
+    expect(ids.indexOf('10')).toBeLessThan(ids.indexOf('9'));
+    expect(ids.slice(0, 2)).toEqual(['10', '9']);
+  });
+
+  it('reads unquoted integer ids and links numeric lineage', () => {
+    const at = '2030-01-01T00:00:00.000+00:00';
+    addSession('2', at);
+    addSession('3', at, 'prior_session_id: 2\n');
+    const s = store();
+    s.load();
+    expect(s.snapshot('3')?.manifest?.priorSessionId).toBe('2');
+    expect(s.snapshot('2')?.manifest?.sessionId).toBe('2');
+  });
+
+  it('emits updated when only title.json changes', () => {
+    const dir = addSession('5', '2030-01-01T00:00:00.000+00:00');
+    const s = store();
+    s.load();
+    expect(s.snapshot('5')?.titleOverride).toBeNull();
+    const events: SessionChangeEvent[] = [];
+    s.onDidChange((event) => events.push(event));
+    writeFileSync(path.join(dir, 'title.json'), '{"title":"Renamed","updated_at":"t","history":[]}');
+    s.refreshSession('5');
+    expect(events).toEqual([expect.objectContaining({ sessionId: '5', kind: 'updated' })]);
+    expect(s.snapshot('5')?.titleOverride).toBe('Renamed');
+    writeFileSync(path.join(dir, 'title.json'), '{"title":"bad\\nline"}');
+    s.refreshSession('5');
+    expect(s.snapshot('5')?.titleOverride).toBeNull();
+  });
+});

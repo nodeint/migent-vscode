@@ -716,7 +716,7 @@ describe('Session Overview and Metrics tabs', () => {
       'View log',
       'Copy session ID',
       'Reveal in Explorer',
-      'Complete session…',
+      'Rename session…',
     ]);
   });
 

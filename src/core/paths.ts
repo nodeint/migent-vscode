@@ -17,6 +17,8 @@ export const TASK_FILENAME = 'task.md';
 /** The editable session workflow written by `session prepare` (CLI 0.3.5 and later). */
 export const WORKFLOW_DRAFT_FILENAME = 'workflow.yaml';
 export const METRICS_FILENAME = 'metrics.json';
+/** The CLI's per-session title overlay (CLI 0.5.6 and later); written only by `session rename`. */
+export const TITLE_FILENAME = 'title.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
 /** Readable failure report written by CLI 0.3.6 and later for a failed execution. */
 export const FAILURE_REPORT_FILENAME = 'failure.md';
@@ -25,6 +27,10 @@ export const DIAGNOSTICS_FILENAME = 'diagnostics.json';
 export const CONFIG_FILENAME = 'config.yaml';
 /** The git-ignored local overlay of `config.yaml`. */
 export const CONFIG_LOCAL_FILENAME = 'config.local.yaml';
+
+export function titlePath(projectRoot: string, sessionId: string): string {
+  return path.join(sessionDir(projectRoot, sessionId), TITLE_FILENAME);
+}
 
 export function migentDir(projectRoot: string): string {
   return path.join(projectRoot, MIGENT_DIR);

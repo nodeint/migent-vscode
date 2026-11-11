@@ -11,6 +11,7 @@ function snapshotWith(lock: SessionSnapshot['lock']): SessionSnapshot {
     statusError: false,
     lock,
     displayState: { state: 'running', icon: 'x', writable: true },
+    titleOverride: null,
     replyTargets: [],
   };
 }

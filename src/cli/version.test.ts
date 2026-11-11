@@ -48,9 +48,9 @@ describe('probeCapability', () => {
   it('is ok when the detected version meets the minimum', async () => {
     const state = await probeCapability({
       locate: locate(),
-      run: outputting({ kind: 'output', stdout: '0.5.5\n' }),
+      run: outputting({ kind: 'output', stdout: '0.5.6\n' }),
     });
-    expect(state).toMatchObject({ kind: 'ok', detected: '0.5.5', required: '0.5.5', resolvedPath: '/bin/migent' });
+    expect(state).toMatchObject({ kind: 'ok', detected: '0.5.6', required: '0.5.6', resolvedPath: '/bin/migent' });
   });
 
   it('is old just below the built-in minimum', async () => {

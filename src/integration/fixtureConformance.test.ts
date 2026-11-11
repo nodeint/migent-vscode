@@ -39,7 +39,7 @@ function expectConforms(schema: TSchema, value: unknown): void {
 }
 
 // The integration suite trusts the fixture CLI; this keeps it from drifting from the published contracts.
-describe('fixture CLI JSON output conforms to the CLI 0.5.5 contracts', () => {
+describe('fixture CLI JSON output conforms to the CLI 0.5.6 contracts', () => {
   it('session prepare', () => {
     expectConforms(PrepareResult, fixtureJson(['session', 'prepare', 'A title', '--workflow', 'demo']));
   });

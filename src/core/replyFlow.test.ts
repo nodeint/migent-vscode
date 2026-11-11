@@ -32,6 +32,7 @@ function snapshot(raw: Record<string, unknown>): SessionSnapshot {
     statusError: false,
     lock: { kind: 'none' },
     displayState: deriveDisplayState({ status, statusError: null, manifest: 'ok' }, { kind: 'none' }),
+    titleOverride: null,
     replyTargets: [],
   };
 }

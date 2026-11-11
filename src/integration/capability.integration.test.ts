@@ -61,6 +61,41 @@ async function withPath(
 
 const scenarios: Scenario[] = [
   {
+    name: 'AC8: Rename is refused at dispatch while the CLI is old (launch retained), and runs again after Recheck',
+    async run(env) {
+      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
+      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
+      const project = await createProject(env);
+      await waitFor('capability ok', () => kindOf(env) === 'ok');
+      const snapshot = project.store.snapshot('s1');
+      assert.ok(snapshot, 's1 loaded');
+      const argvFile = path.join(env.root, 'fake-argv.log');
+      const renames = (): number =>
+        fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter((l) => l.includes('"rename"')).length : 0;
+      const previous = process.env.MIGENT_FAKE_LEGACY;
+      process.env.MIGENT_FAKE_LEGACY = '1';
+      const window = vscode.window as unknown as Record<string, unknown>;
+      const savedWarning = window.showWarningMessage;
+      try {
+        await vscode.commands.executeCommand('migent.cli.recheck');
+        await waitFor('capability old', () => kindOf(env) === 'old');
+        assert.ok(env.api.capability.state(project.key).launch, 'an old CLI still has a launch command');
+        window.showWarningMessage = (): Promise<undefined> => Promise.resolve(undefined);
+        await env.api.control.rename(project, snapshot, 'Blocked name');
+        assert.equal(renames(), 0, 'no CLI call while the CLI is old');
+      } finally {
+        window.showWarningMessage = savedWarning;
+        if (previous === undefined) delete process.env.MIGENT_FAKE_LEGACY;
+        else process.env.MIGENT_FAKE_LEGACY = previous;
+        await vscode.commands.executeCommand('migent.cli.recheck');
+        await waitFor('capability restored', () => kindOf(env) === 'ok');
+      }
+      await env.api.control.rename(project, snapshot, 'Allowed name');
+      await waitFor('title overlay read', () => project.store.snapshot('s1')?.titleOverride === 'Allowed name');
+      assert.equal(renames(), 1);
+    },
+  },
+  {
     name: 'AC13: a missing CLI empties the Sessions view so onboarding shows, and Recheck recovers',
     async run(env) {
       write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
@@ -102,13 +137,13 @@ const scenarios: Scenario[] = [
         const state = project === undefined ? undefined : env.api.capability.state(project.key);
         assert.equal(state?.detected, '0.3.5');
         assert.equal(state?.required, MINIMUM_CLI_VERSION);
-        assert.match(String(diagnostic(env)?.label), /older than 0.5.5/);
-        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.5.5/);
+        assert.match(String(diagnostic(env)?.label), /older than 0.5.6/);
+        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.5.6/);
       });
     },
   },
   {
-    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.5.5 minimum, and Recheck recovers',
+    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.5.6 minimum, and Recheck recovers',
     async run(env) {
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');

@@ -734,6 +734,92 @@ scenarios.push(
   },
 );
 
+/** Answers the Rename input box with `title` and records the prefill and validation of the box. */
+async function withRenameBox(
+  title: string | undefined,
+  body: (box: { prefill: string[]; invalid: string[] }) => Promise<void>,
+): Promise<void> {
+  const window = vscode.window as unknown as Record<string, unknown>;
+  const saved = window.showInputBox;
+  const box = { prefill: [] as string[], invalid: [] as string[] };
+  window.showInputBox = (options: {
+    value?: string;
+    validateInput?: (value: string) => string | undefined;
+  }): Promise<string | undefined> => {
+    box.prefill.push(options.value ?? '');
+    const message = title === undefined ? undefined : options.validateInput?.(title);
+    if (message !== undefined) box.invalid.push(message);
+    return Promise.resolve(message === undefined ? title : undefined);
+  };
+  try {
+    await body(box);
+  } finally {
+    window.showInputBox = saved;
+  }
+}
+
+scenarios.push(
+  {
+    name: 'Rename: a Running session with a numeric id is renamed without the gate, and the open panel follows',
+    async run(env) {
+      const project = await createProject(env);
+      await withFake({ [RUN_MS]: '30000', MIGENT_FAKE_IDS: 'numeric' }, async () => {
+        const run = env.api.control.runNew(project, 'plan', 'long task');
+        await waitFor('session running', () => stateOf(env, 'running') !== undefined);
+        const running = stateOf(env, 'running');
+        assert.ok(running);
+        assert.match(running.sessionId, /^\d+$/, 'numeric id');
+        const identity = { project: project.key, sessionId: running.sessionId };
+        await vscode.commands.executeCommand('migent.session.open', identity);
+        await waitFor('panel opened', () => env.api.session.has(identity));
+        assert.ok(env.api.control.gate.current(project.key, running.sessionId), 'gate held while running');
+        await withRenameBox('  Renamed while running ', async (box) => {
+          await vscode.commands.executeCommand('migent.session.rename', identity);
+          assert.equal(box.prefill[0], running.manifest?.title ?? running.status?.title ?? 'plan');
+        });
+        await waitFor('title overlay read', () => project.store.snapshot(running.sessionId)?.titleOverride === 'Renamed while running');
+        await waitFor('panel header shows the new title', () => env.api.session.lastModel(identity)?.header.title === 'Renamed while running');
+        assert.deepEqual(argvLog(env).filter((argv) => argv[1] === 'rename').at(-1), [
+          'session', 'rename', running.sessionId, 'Renamed while running', '--json',
+        ]);
+        assert.equal(project.store.snapshot(running.sessionId)?.displayState.state, 'running', 'the run continues');
+        await env.api.control.cancel(project, running);
+        await run;
+      });
+    },
+  },
+  {
+    name: 'Rename: a Completed session is renamed; an empty, multi-line or unchanged title calls no CLI',
+    async run(env) {
+      const project = await createProject(env);
+      await withFake({ [RUN_MS]: '300' }, async () => {
+        await env.api.control.runNew(project, 'plan', 'quick task');
+        await waitFor('session completed', () => stateOf(env, 'completed') !== undefined);
+      });
+      const done = stateOf(env, 'completed');
+      assert.ok(done);
+      const identity = { project: project.key, sessionId: done.sessionId };
+      const renames = (): number => argvLog(env).filter((argv) => argv[1] === 'rename').length;
+      for (const bad of ['', '   ', 'a\nb', 'Title\n']) {
+        await withRenameBox(bad, async (box) => {
+          await vscode.commands.executeCommand('migent.session.rename', identity);
+          assert.equal(box.invalid.length, 1, `rejected ${JSON.stringify(bad)}`);
+        });
+      }
+      assert.equal(renames(), 0, 'no CLI call for invalid input');
+      await withRenameBox(undefined, async () => {
+        await vscode.commands.executeCommand('migent.session.rename', identity);
+      });
+      assert.equal(renames(), 0, 'cancel calls nothing');
+      await withRenameBox('Final name', async () => {
+        await vscode.commands.executeCommand('migent.session.rename', identity);
+      });
+      await waitFor('title overlay read', () => project.store.snapshot(done.sessionId)?.titleOverride === 'Final name');
+      assert.equal(renames(), 1);
+    },
+  },
+);
+
 export function runControlScenarios(): Promise<number> {
   return runScenarios(scenarios);
 }

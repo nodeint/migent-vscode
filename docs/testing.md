@@ -163,9 +163,16 @@ record while the CLI runs.
 `src/core/contractBinding.test.ts` pins the result types of the lenient parsers to the contract field types at compile
 time.
 
-### Session drafts and CLI 0.5.5 behavior
+### Numeric ids and rename
 
-The fixture CLI models 0.5.5 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+`src/core/fixtures/captured/numeric-ids-0.5.6` is a session captured from CLI 0.5.6 (id `1`, renamed once), and
+`synthetic/numeric-ids-unquoted` holds manifests with unquoted integer ids and a numeric `prior_session_id`.
+The fixture CLI implements `session rename` (it writes only `title.json`, takes no lock) and, with
+`MIGENT_FAKE_IDS=numeric`, gives new sessions numeric ids.
+
+### Session drafts and CLI 0.5.6 behavior
+
+The fixture CLI models 0.5.6 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`

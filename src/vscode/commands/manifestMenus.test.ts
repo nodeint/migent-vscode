@@ -104,3 +104,21 @@ describe('Complete Session menu entries', () => {
     expect(palette?.when).toBe('false');
   });
 });
+
+describe('Rename Session menu entries', () => {
+  const { menus } = manifest.contributes;
+  const entry = (menus['view/item/context'] ?? []).find((item) => item.command === 'migent.session.rename');
+
+  it.each(['running', 'completed', 'prepared', 'stopped', 'failed', 'unknown', 'question'])(
+    'is offered for a %s session row',
+    (state) => {
+      const pattern = /viewItem =~ \/(.+?)\//.exec(entry?.when ?? '')?.[1] ?? '';
+      expect(new RegExp(pattern).test(`session.${state}`)).toBe(true);
+    },
+  );
+
+  it('is in the session page More Actions submenu and hidden from the Command Palette', () => {
+    expect((menus['migent.results.more'] ?? []).some((item) => item.command === 'migent.session.rename')).toBe(true);
+    expect((menus.commandPalette ?? []).find((item) => item.command === 'migent.session.rename')?.when).toBe('false');
+  });
+});

@@ -10,6 +10,12 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
+/** A session id the CLI may write quoted or as an unquoted non-negative integer; always returned as a string. */
+export function asSessionId(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return asString(value);
+}
+
 /**
  * Parse `manifest.yaml` text. A manifest that does not parse is schema poison:
  * the caller treats the session as Unknown and never guesses.
@@ -28,12 +34,12 @@ export function parseManifest(text: string): SessionManifest | null {
       ? raw.schema_version
       : null;
   return {
-    sessionId: asString(raw.session_id),
+    sessionId: asSessionId(raw.session_id),
     title: asString(raw.title),
     workflowId: asString(raw.workflow_id),
     workflowPath: asString(raw.workflow_path),
     createdAt: asString(raw.created_at),
-    priorSessionId: asString(raw.prior_session_id),
+    priorSessionId: asSessionId(raw.prior_session_id),
     role: asString(raw.role),
     schemaVersion,
     schemaSupported: schemaVersion === null || SUPPORTED_MANIFEST_SCHEMA_VERSIONS.includes(schemaVersion),

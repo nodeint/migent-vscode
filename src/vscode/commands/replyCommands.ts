@@ -4,7 +4,8 @@ import { isCompletable } from '../../core/completeEligibility';
 import type { SessionSnapshot } from '../../core/model';
 import type { ReplyTarget } from '../../core/model';
 import { blockKind, replyPrompt } from '../../core/replyFlow';
-import { sessionLabel } from '../../core/sessionPresentation';
+import { sessionLabel, sessionTitle } from '../../core/sessionPresentation';
+import { normalizeRenameTitle, validateRenameTitle } from '../../core/sessionTitle';
 import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
 import { pickProject } from '../pick';
@@ -221,6 +222,21 @@ async function complete(control: ControlService, context: ProjectContext, snapsh
   if (picked === 'Complete') await control.complete(context, snapshot);
 }
 
+async function rename(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+  if (!(await control.ensureWritable(context))) return;
+  const current = sessionTitle(snapshot);
+  const entered = await vscode.window.showInputBox({
+    title: 'Rename Session',
+    prompt: 'The new session title (one line)',
+    value: current,
+    validateInput: (text) => validateRenameTitle(text) ?? undefined,
+  });
+  if (entered === undefined) return;
+  const title = normalizeRenameTitle(entered);
+  if (title === null || title === current) return;
+  await control.rename(context, snapshot, title);
+}
+
 async function runAction(
   deps: { host: CommandHost; control: ControlService },
   action: SessionAction,
@@ -255,6 +271,7 @@ const SESSION_ACTIONS: readonly SessionAction[] = [
     act: continueWithoutReply,
   },
   { id: 'migent.session.complete', title: 'Complete which session?', isEligible: isCompletable, act: complete },
+  { id: 'migent.session.rename', title: 'Rename which session?', isEligible: () => true, act: rename },
   { id: 'migent.session.repair', title: 'Repair which session?', isEligible: isRepairable, act: repair },
 ];
 

@@ -3,9 +3,9 @@ import path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { invokeText } from '../cli/invoke';
+import { invokeCaptured, invokeText } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
-import { doctorArgs, doctorLines, parseDoctorOutput } from '../core/controlArgs';
+import { doctorArgs, doctorLines, parseDoctorOutput, renameArgs } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
 import { frozenWorkflowPath, workflowDraftPath, workflowsDir } from '../core/paths';
 import { sessionLabel } from '../core/sessionPresentation';
@@ -90,6 +90,30 @@ export async function reportCompleted(
     'View log',
   );
   if (picked === 'View log') sinks.showLog();
+}
+
+/**
+ * Run `session rename` and report a failure. The CLI usability check runs here, at dispatch, because it can change
+ * while the title prompt is open. Success returns through the `title.json` watcher.
+ */
+export async function runRename(
+  target: { context: ProjectContext; snapshot: SessionSnapshot; title: string },
+  control: { ensureWritable: (context: ProjectContext) => Promise<boolean>; showLog: () => void },
+  runtime: readonly [launch: LaunchSpec | undefined, env: NodeJS.ProcessEnv, output: vscode.LogOutputChannel],
+): Promise<void> {
+  const { context, snapshot, title } = target;
+  const [launch, env, output] = runtime;
+  if (!(await control.ensureWritable(context)) || launch === undefined) return;
+  const options = { cwd: context.root, env, timeoutMs: 30_000 };
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Window, title: `Renaming ${sessionLabel(snapshot)}` },
+    () => invokeCaptured(launch, renameArgs(snapshot.sessionId, title), options),
+  );
+  if (result.kind === 'ok') return;
+  const detail = result.error.stderr.trim() || result.error.detail;
+  output.error(`rename failed: ${detail}`);
+  const picked = await vscode.window.showErrorMessage(`Could not rename the session: ${detail}`, 'View log');
+  if (picked === 'View log') control.showLog();
 }
 
 export async function runDoctor(

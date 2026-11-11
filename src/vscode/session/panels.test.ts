@@ -97,6 +97,7 @@ function snapshot(questions: ReturnType<typeof question>[] = []): SessionSnapsho
     manifest: { title: 'Session', workflowId: 'wf', raw: {} },
     status: { workflowId: 'wf', questions, runningStages: [], outputs: [] },
     displayState: { state: 'question', icon: '', writable: true },
+    titleOverride: null,
     replyTargets: [],
   } as unknown as SessionSnapshot;
 }

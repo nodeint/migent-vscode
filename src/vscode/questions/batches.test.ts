@@ -37,6 +37,7 @@ function setup() {
     manifest: { title: 'Session', workflowId: 'wf' },
     status: { workflowId: 'wf', questions: QUESTIONS, runningStages: [], outputs: [] },
     displayState: { state: 'question', icon: '', writable: true },
+    titleOverride: null,
     replyTargets: [],
   } as unknown as SessionSnapshot;
   const context = { key: 'k', root: '/tmp/batches', store: { snapshot: () => snapshot } };
