@@ -11,32 +11,3 @@ html {
     scroll-padding-top: 0;
   }
 }
-
-/* Decisions are a vertical list of shared section cards. */
-.wf-decision-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mg-gap-card);
-}
-
-/* The list spaces its cards itself, so a card's own neighbour margin would double it. */
-.wf-decision-list > .mg-section--card {
-  margin-top: 0;
-}
-
-/* A route's artifact editor stacks its type select, checklist or artifact cards with the same gap. */
-.wf-route-artifacts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mg-gap-block);
-}
-
-.wf-advanced {
-  margin-top: var(--mg-space-4);
-  padding-top: var(--mg-space-3);
-  border-top: 1px solid var(--mg-border);
-}
-
-.wf-advanced-body {
-  margin-top: var(--mg-space-2);
-}

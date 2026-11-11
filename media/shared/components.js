@@ -168,23 +168,38 @@
 
   /**
    * A block that states what is missing instead of leaving a blank area. With `options.action` (a node) it is one
-   * dashed frame that holds the message and, under it, the action.
+   * dashed frame that holds the message and, under it, the action; `options.icon` puts a codicon above the message.
    */
   function empty(message, options) {
-    const action = options && options.action;
-    if (!action) return el('p', message, 'mg-empty');
+    const settings = options || {};
+    const action = settings.action;
+    if (!action && !settings.icon) return el('p', message, 'mg-empty');
     const frame = el('div', null, 'mg-empty');
-    frame.append(el('p', message, 'mg-empty-text'), action);
+    if (settings.icon) {
+      const mark = el('span', null, 'mg-empty-icon');
+      mark.append(icon(settings.icon));
+      frame.append(mark);
+    }
+    frame.append(el('p', message, 'mg-empty-text'));
+    if (action) frame.append(action);
     return frame;
   }
 
   /**
-   * The status badge: an icon and a text, tinted by `tone`. `state` is `{ icon, tone, text, spin? }`. The text is
-   * always shown too, so color is never the only signal.
+   * The status badge: an icon and a text, tinted by `tone`. `state` is `{ icon, tone, text, spin?, compact? }`. The
+   * text is always rendered too, so color is never the only signal; `compact` hides it visually but keeps it for
+   * assistive technology and puts it in the tooltip.
    */
   function statusIndicator(state) {
     const node = el('span', null, 'mg-status mg-status--' + state.tone);
-    node.append(icon(state.icon, state.spin), el('span', state.text));
+    node.append(icon(state.icon, state.spin));
+    if (state.compact) {
+      node.classList.add('mg-status--compact');
+      node.setAttribute('data-tip', state.text);
+      node.append(el('span', state.text, 'mg-visually-hidden'));
+    } else {
+      node.append(el('span', state.text));
+    }
     return node;
   }
 
@@ -216,6 +231,105 @@
     return item;
   }
 
+  /**
+   * A dense list (`ul.mg-list`): the tabular rows a page appends one per line, separated by the kit's divider.
+   * `items` are nodes (usually `listRow` results), strings or `{ text, className }` specs.
+   */
+  function denseList(items) {
+    const node = el('ul', null, 'mg-list');
+    for (const item of items || []) {
+      if (typeof item === 'string') node.append(el('li', item));
+      else if (isNode(item)) node.append(item);
+      else if (item) node.append(el('li', item.text, item.className));
+    }
+    return node;
+  }
+
+  /**
+   * A plain list of lines without dividers: activity, commands, inherited options. `items` are strings or nodes;
+   * `options.mono` puts the string lines in the mono font.
+   */
+  function plainList(items, options) {
+    const settings = options || {};
+    const node = el('ul', null, 'mg-list--plain');
+    for (const item of items || []) {
+      const line = el('li');
+      if (typeof item === 'string') {
+        line.textContent = item;
+        if (settings.mono) line.classList.add('mg-mono');
+      } else if (item) {
+        line.append(item);
+      }
+      node.append(line);
+    }
+    return node;
+  }
+
+  /**
+   * A stack of blocks with one rhythm between them: `gap` is `'card'` (the gap between item cards) or `'block'`
+   * (the gap between blocks in a body). `children` are the nodes to stack.
+   */
+  function stack(children, options) {
+    const gap = options && options.gap === 'card' ? 'card' : 'block';
+    const node = el('div', null, gap === 'card' ? 'mg-card-stack' : 'mg-block-stack');
+    node.append(...(children || []));
+    return node;
+  }
+
+  /** A row of actions: one flex line whose items are buttons or other controls. */
+  function actions(children) {
+    const node = el('div', null, 'mg-actions');
+    node.append(...(children || []));
+    return node;
+  }
+
+  // ---------- values ----------
+
+  /**
+   * A reference value: an id, a hash or a path. Display only: mono, cut at the end (`id`, `hash`) or wrapped
+   * (`path`) by CSS, with the full value in the DOM and in the tooltip. The copy action is a separate tool
+   * (`refValue.copyButton`), never part of this node, so it can sit outside a link button.
+   */
+  function refValue(value, options) {
+    const kind = options && options.kind;
+    const node = el('span', String(value), 'mg-ref' + (kind ? ' mg-ref--' + kind : ''));
+    node.dataset.tip = String(value);
+    return node;
+  }
+
+  /** The copy tool of a reference value: an icon button named by `label` (accessible name and tooltip). */
+  refValue.copyButton = function copyButton(label, onCopy) {
+    return iconButton(label, { icon: 'copy', onClick: onCopy });
+  };
+
+  /**
+   * A key-value grid (`dl.mg-kv`): each pair is a quiet label and its value, with an optional tool at the end of
+   * the row. `pairs` is `[{ label, value, tone?, mono?, tools? }]`; `value` is a string or a node, and `tools` a
+   * list of nodes. `options.dense` tightens the column gap.
+   */
+  function keyValues(pairs, options) {
+    const settings = options || {};
+    const list = el('dl', null, 'mg-kv' + (settings.dense ? ' mg-kv--dense' : ''));
+    for (const pair of pairs || []) {
+      list.append(el('dt', pair.label));
+      const cell = el('dd');
+      const value = el('div', null, 'mg-kv-value');
+      if (typeof pair.value === 'string') value.textContent = pair.value;
+      else if (pair.value) value.append(pair.value);
+      if (pair.mono) value.classList.add('mg-mono');
+      const tone = toneClass(pair.tone);
+      if (tone) value.classList.add(tone);
+      cell.append(value);
+      if (pair.tools && pair.tools.length > 0) {
+        const tools = el('span', null, 'mg-kv-tools');
+        tools.append(...pair.tools);
+        cell.append(tools);
+      }
+      list.append(cell);
+    }
+    return list;
+  }
+
   // ---------- collapsibles and menus ----------
 
   // Open/closed state of <details>, kept in memory so a model re-render does not collapse them.
@@ -226,12 +340,16 @@
    * The shared chevron has a box of its own, so a header with chips or a wrapped title keeps the arrow on the
    * first line. `summary` is a string, or a node when the header needs a badge and metadata chips.
    * `options`: `key` (keeps the open state across repaints), `className`, `open` (starts open unless the reader
-   * has toggled it) and `path` (a `data-path` on the summary, so a repaint can focus the header without opening
-   * the block).
+   * has toggled it), `path` (a `data-path` on the summary, so a repaint can focus the header without opening
+   * the block), `facts` (strings shown as a quiet summary beside a string title) and `ruled` (a top rule and the
+   * block gap above it).
    */
   function details(summary, options) {
     const settings = options || {};
-    const node = el('details', null, 'mg-details' + (settings.className ? ' ' + settings.className : ''));
+    const className = ['mg-details', settings.ruled ? 'mg-details--ruled' : '', settings.className || '']
+      .filter(Boolean)
+      .join(' ');
+    const node = el('details', null, className);
     node.open = detailsOpen.has(settings.key) ? detailsOpen.get(settings.key) === true : settings.open === true;
     const head = el('summary', null, 'mg-details-summary');
     if (settings.path) head.dataset.path = settings.path;
@@ -241,59 +359,224 @@
     const heading = el('div', null, 'mg-details-heading');
     if (typeof summary === 'string') heading.textContent = summary;
     else if (summary) heading.append(summary);
+    const facts = (settings.facts || []).filter((fact) => fact !== '');
+    if (facts.length > 0) heading.append(el('span', facts.join(', '), 'mg-summary'));
     head.append(heading);
     node.append(head);
     node.addEventListener('toggle', () => detailsOpen.set(settings.key, node.open));
     return node;
   }
 
-  /**
-   * A collapsible card on top of `details`: a header with a number badge, a title, one quiet summary line and
-   * warning chips, then the body.
-   * `options`: `key` (keeps it open or closed across repaints), `number`, `title`, `summary` (strings joined into
-   * one line of muted text beside the title, cut with an ellipsis when it does not fit, the whole header's tooltip
-   * carrying it in full), `alerts` (warning chips, the only framed items in the header),
-   * `warn` (warning badge), `open` (default state), `path` (a `data-path` on the header, so a repaint can focus it
-   * without opening the card), `tools` (icon buttons at the right of the header, such as move and remove), `body`
-   * (nodes), `describe` (a function returning the current `title`, `summary`, `alerts` and `warn`; the card's
-   * `refresh()` calls it and redraws the header, so a value edited in the body shows in the header at once without
-   * rebuilding the card). The caller may set `id` on the result.
-   */
-  function collapsibleCard(options) {
+  // ---------- item cards ----------
+
+  const TITLE_LINES = { 1: ' mg-item-title--clamp-1', 2: ' mg-item-title--clamp-2', 3: ' mg-item-title--clamp-3' };
+
+  function titleClass(base, lines) {
+    return base + (TITLE_LINES[lines] || '');
+  }
+
+  function isNode(value) {
+    return Boolean(value) && typeof value.tagName === 'string';
+  }
+
+  function toneClass(tone) {
+    if (!tone) return '';
+    if (tone === 'muted' || tone === 'warn' || tone === 'error') return 'mg-' + tone;
+    return 'mg-status--' + tone;
+  }
+
+  function leadingNode(name) {
+    const node = el('span', null, 'mg-item-leading');
+    node.append(icon(name));
+    return node;
+  }
+
+  /** The plain text of a list of metadata segments, for the tooltip and the accessible name. */
+  function metaText(segments) {
+    return segments
+      .map((segment) => {
+        if (typeof segment === 'string') return segment;
+        if (isNode(segment)) return segment.textContent;
+        return segment && typeof segment.text === 'string' ? segment.text : '';
+      })
+      .filter((part) => part !== '')
+      .join(' · ');
+  }
+
+  /** The rich metadata line: strings and kit nodes separated by the same middle dot as a plain summary. */
+  function metaLine(segments) {
+    const line = el('span', null, 'mg-item-meta');
+    segments.forEach((segment, index) => {
+      if (index > 0) line.append(' · ');
+      if (typeof segment === 'string') {
+        line.append(el('span', segment));
+      } else if (isNode(segment)) {
+        line.append(segment);
+      } else if (segment) {
+        const value = el('span', segment.text || '');
+        if (segment.mono) value.classList.add('mg-mono');
+        const tone = toneClass(segment.tone);
+        if (tone) value.classList.add(tone);
+        line.append(value);
+      }
+    });
+    return line;
+  }
+
+  /** The plain text of a card: its title and metadata, in the same shape as the visible head. */
+  function descriptorText(settings, segments, parts) {
+    const detail = segments.length > 0 ? metaText(segments) : parts.join(' · ');
+    if (settings.title && detail) return settings.title + ' — ' + detail;
+    return settings.title || detail;
+  }
+
+  /** The head tooltip: an explicit `tip` wins, so a card can show a value the reader cannot see. */
+  function headTip(settings, segments, parts) {
+    return settings.tip || descriptorText(settings, segments, parts);
+  }
+
+  /** The accessible name of a link card: always the title and metadata, never the tooltip override. */
+  function accessibleName(settings, segments, parts) {
+    return descriptorText(settings, segments, parts) || settings.tip || '';
+  }
+
+  function endSlot(status, tools) {
+    if (!status && !tools) return null;
+    const end = el('span', null, 'mg-item-end');
+    if (status) end.append(status);
+    if (tools) end.append(tools);
+    return end;
+  }
+
+  function itemMain(settings, segments, parts, titleLines) {
+    const main = el('span', null, 'mg-item-main');
+    main.append(el('span', settings.title, titleClass('mg-item-title', titleLines)));
+    const alerts = el('span', null, 'mg-item-alerts');
+    alerts.append(...(settings.alerts || []));
+    if (alerts.children.length > 0) main.append(alerts);
+    if (segments.length > 0) main.append(metaLine(segments));
+    else if (parts.length > 0) main.append(el('span', parts.join(' · '), 'mg-item-summary'));
+    return main;
+  }
+
+  function collapsibleItem(settings, segments, parts, titleLines, tone) {
+    const tools = settings.tools && settings.tools.length > 0 ? el('span', null, 'mg-collapsible-tools') : null;
+    if (tools) tools.append(...settings.tools);
     const head = el('div', null, 'mg-collapsible-head');
-    let tools = null;
-    if (options.tools && options.tools.length > 0) {
-      tools = el('span', null, 'mg-collapsible-tools');
-      tools.append(...options.tools);
-    }
-    // The badge and the title cell are redrawn by `refresh`; the tools are the same nodes throughout, so a button
+    // The badge and the main region are redrawn by `refresh`; the tools are the same nodes throughout, so a button
     // that holds the focus keeps it.
     const fill = (state) => {
-      const badge = el('span', String(options.number), 'mg-badge' + (state.warn ? ' mg-badge--warn' : ''));
-      // One line: the title, its warning chips, then the quiet summary, level with the badge and the tools. The
-      // title is never cut; the summary is what gives way, and the tooltip of the cell carries it whole.
+      const lines = TITLE_LINES[state.titleLines] ? state.titleLines : titleLines;
+      const rich = Array.isArray(state.meta) ? state.meta : segments;
+      const summary = (state.summary || []).filter((part) => part !== '');
+      const leadNode = state.number !== undefined
+        ? el('span', String(state.number), 'mg-badge' + (state.warn ? ' mg-badge--warn' : ''))
+        : state.leading ? leadingNode(state.leading) : null;
       const main = el('span', null, 'mg-collapsible-main');
-      main.append(el('span', state.title, 'mg-collapsible-title'));
+      main.append(el('span', state.title, titleClass('mg-collapsible-title', lines)));
       const alerts = el('span', null, 'mg-collapsible-alerts');
       alerts.append(...(state.alerts || []));
       if (alerts.children.length > 0) main.append(alerts);
-      const parts = (state.summary || []).filter((part) => part !== '');
-      if (parts.length > 0) {
-        const text = parts.join(' · ');
-        main.append(el('span', text, 'mg-collapsible-summary'));
-        main.setAttribute('data-tip', state.title ? state.title + ' — ' + text : text);
+      if (rich.length > 0) main.append(metaLine(rich));
+      else if (summary.length > 0) main.append(el('span', summary.join(' · '), 'mg-collapsible-summary'));
+      if (state.tip || rich.length > 0 || summary.length > 0) main.setAttribute('data-tip', headTip(state, rich, summary));
+      const status = state.status ? statusIndicator(state.status) : null;
+      const children = [];
+      if (leadNode) children.push(leadNode);
+      children.push(main);
+      if (status) {
+        const end = el('span', null, 'mg-item-end');
+        end.append(status);
+        if (tools) end.append(tools);
+        children.push(end);
+      } else if (tools) {
+        children.push(tools);
       }
-      head.replaceChildren(badge, main, ...(tools === null ? [] : [tools]));
+      head.className = 'mg-collapsible-head' + (leadNode ? '' : ' mg-collapsible-head--no-lead');
+      head.replaceChildren(...children);
     };
-    fill(options);
-    const node = details(head, { key: options.key, className: 'mg-collapsible', open: options.open, path: options.path });
+    fill(settings);
+    const node = details(head, {
+      key: settings.key,
+      className: 'mg-collapsible' + tone,
+      open: settings.open,
+      path: settings.path,
+    });
     const body = el('div', null, 'mg-collapsible-body');
-    body.append(...(options.body || []));
+    body.append(...(settings.body || []));
     node.append(body);
     node.refresh = () => {
-      if (typeof options.describe === 'function') fill({ ...options, ...options.describe() });
+      if (typeof settings.describe === 'function') fill({ ...settings, ...settings.describe() });
     };
     return node;
+  }
+
+  /**
+   * One bordered item card, with three modes decided by the options: collapsible when `body` is given (a `<details>`
+   * head that keeps its open state by `key`), link when `onClick` is given (one `<button>` holding the lead and the
+   * main region; `status` and `tools` stay outside it), and static otherwise.
+   * `options`: `title`, `titleLines` (1-3 clamps the title by CSS; the full text stays in the DOM and the tooltip),
+   * `number` (index badge) or `leading` (a codicon before the title), `summary` (plain strings joined by ` · `),
+   * `meta` (rich segments: strings, `{ text, mono?, tone? }` or kit nodes; replaces `summary`), `status`
+   * (`{ icon, tone, text, spin?, compact? }` in the end slot), `alerts` (warning chips), `tools` (icon buttons in
+   * the end slot), `tone` (`info`, `warn` or `error` edge), `affordance` (the link mode's trailing icon, default
+   * `chevron-right`), `tip`, `key`, `path`, `open`, `describe`/`refresh` (collapsible header redraw).
+   */
+  function itemCard(options) {
+    const settings = options || {};
+    const segments = Array.isArray(settings.meta) ? settings.meta : [];
+    const parts = (settings.summary || []).filter((part) => part !== '');
+    const titleLines = TITLE_LINES[settings.titleLines] ? settings.titleLines : null;
+    const tone = settings.tone ? ' mg-item--' + settings.tone : '';
+    if (Array.isArray(settings.body)) return collapsibleItem(settings, segments, parts, titleLines, tone);
+
+    const lead = settings.number !== undefined
+      ? el('span', String(settings.number), 'mg-badge' + (settings.warn ? ' mg-badge--warn' : ''))
+      : settings.leading ? leadingNode(settings.leading) : null;
+    const main = itemMain(settings, segments, parts, titleLines);
+    const status = settings.status ? statusIndicator(settings.status) : null;
+    const tools = settings.tools && settings.tools.length > 0 ? el('span', null, 'mg-item-tools') : null;
+    if (tools) tools.append(...settings.tools);
+    const tip = headTip(settings, segments, parts);
+    const name = accessibleName(settings, segments, parts);
+    const link = typeof settings.onClick === 'function';
+    const head = el('div', null, 'mg-item-head' + (link ? '' : lead ? ' mg-item-head--lead' : ''));
+    if (settings.path) head.dataset.path = settings.path;
+    if (link) {
+      const button = el('button', null, 'mg-item-link' + (lead ? '' : ' mg-item-link--no-lead'));
+      button.type = 'button';
+      if (lead) button.append(lead);
+      button.append(main);
+      const afford = el('span', null, 'mg-item-afford');
+      afford.append(icon(settings.affordance || 'chevron-right'));
+      button.append(afford);
+      if (name) button.setAttribute('aria-label', name);
+      if (tip) button.setAttribute('data-tip', tip);
+      button.addEventListener('click', settings.onClick);
+      head.append(button);
+    } else {
+      if (lead) head.append(lead);
+      head.append(main);
+      if (tip) head.setAttribute('data-tip', tip);
+    }
+    const end = endSlot(status, tools);
+    if (end) head.append(end);
+    const node = el('div', null, 'mg-item mg-item--' + (link ? 'link' : 'static') + tone);
+    node.append(head);
+    return node;
+  }
+
+  /**
+   * A collapsible card on top of `itemCard`'s collapsible mode. It never passes `titleLines` or `meta`, so the title
+   * stays uncut and the summary stays the plain joined string; the `mg-collapsible*` head and class names are kept
+   * for the pages and tests that already depend on them.
+   * `options`: `key`, `number`, `title`, `summary`, `alerts`, `warn`, `open`, `path`, `tools`, `body`, `describe`.
+   */
+  function collapsibleCard(options) {
+    const settings = { ...(options || {}) };
+    delete settings.titleLines;
+    delete settings.meta;
+    return itemCard({ ...settings, body: settings.body || [] });
   }
 
   let closeOpenMenu = null;
@@ -498,7 +781,9 @@
     const settings = options || {};
     let className = 'mg-section';
     if (settings.variant) className += ' mg-section--' + settings.variant;
-    if (settings.accent) className += ' mg-section--accent';
+    if (settings.accent === 'warn') className += ' mg-section--accent-warn';
+    else if (settings.accent === 'error') className += ' mg-section--accent-error';
+    else if (settings.accent) className += ' mg-section--accent';
     if (settings.surface) className += ' mg-section--surface';
     const node = el('section', null, className);
     node.append(sectionHead(title, settings));
@@ -587,7 +872,14 @@
     empty,
     statusIndicator,
     listRow,
+    denseList,
+    plainList,
+    stack,
+    actions,
+    refValue,
+    keyValues,
     details,
+    itemCard,
     collapsibleCard,
     menuButton,
     pageTabs,

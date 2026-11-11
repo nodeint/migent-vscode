@@ -14,6 +14,7 @@ class FakeText {
 class FakeElement {
   public children: (FakeElement | FakeText)[] = [];
   public attrs: Record<string, string> = {};
+  public dataset: Record<string, string> = {};
   public listeners: Record<string, Handler[]> = {};
   public id = '';
   public className = '';
@@ -27,6 +28,16 @@ class FakeElement {
       if (force ?? !names.has(name)) names.add(name);
       else names.delete(name);
       this.className = [...names].join(' ');
+    },
+    add: (...names: string[]): void => {
+      const current = new Set(this.className.split(' ').filter(Boolean));
+      for (const name of names) current.add(name);
+      this.className = [...current].join(' ');
+    },
+    remove: (...names: string[]): void => {
+      const current = new Set(this.className.split(' ').filter(Boolean));
+      for (const name of names) current.delete(name);
+      this.className = [...current].join(' ');
     },
     contains: (name: string): boolean => this.className.split(' ').includes(name),
   };
@@ -274,7 +285,8 @@ describe('Overview page', () => {
     const [status] = page.sections();
     expect(status?.textContent).toContain('Running');
     expect(status?.textContent).toContain('Running stage draft.');
-    expect(status?.textContent).toContain('Latest update: drafting');
+    expect(status?.textContent).toContain('Latest update');
+    expect(status?.textContent).toContain('drafting');
     const buttons = page.statusButtons();
     expect(buttons.map((button) => button.textContent)).toEqual(['View log', 'Stop']);
     expect(buttons[0]?.className).toContain('mg-btn--primary');
@@ -300,8 +312,10 @@ describe('Overview page', () => {
 
     const [status] = page.sections();
     expect(status?.textContent).toContain('Blocked');
-    expect(status?.textContent).toContain('Blocked in draft · attempt 2');
-    expect(status?.textContent).toContain('Blocker: needs a token');
+    expect(status?.textContent).toContain('Blocked in');
+    expect(status?.textContent).toContain('draft · attempt 2');
+    expect(status?.textContent).toContain('Blocker');
+    expect(status?.textContent).toContain('needs a token');
     expect(page.statusButtons().map((button) => button.textContent)).toEqual(['View log']);
     expect(page.statusButtons()[0]?.className).toContain('mg-btn--secondary');
   });
@@ -329,8 +343,11 @@ describe('Overview page', () => {
 
     const [status] = page.sections();
     expect(status?.textContent).toContain('Failed');
-    expect(status?.textContent).toContain('Latest execution: draft · attempt 1 failed.');
-    expect(status?.textContent).toContain('Decision: go.');
+    expect(status?.textContent).toContain('Latest execution');
+    expect(status?.textContent).toContain('draft · attempt 1');
+    expect(status?.textContent).toContain('Decision');
+    expect(status?.textContent).toContain('go');
+    expect(status?.querySelector('.mg-kv')).not.toBeNull();
     expect(page.statusButtons().map((button) => button.textContent)).toEqual([
       'Continue',
       'Open failure report',
@@ -359,7 +376,8 @@ describe('Overview page', () => {
 
     const [status] = page.sections();
     expect(status?.textContent).toContain('1 question pending.');
-    expect(status?.textContent).toContain('Client quota resets at 12:34 UTC.');
+    expect(status?.textContent).toContain('Quota resets');
+    expect(status?.textContent).toContain('12:34 UTC');
   });
   it('lists every workflow stage in order with its attempt and latest decision', () => {
     const page = load();
@@ -375,18 +393,22 @@ describe('Overview page', () => {
     }));
 
     const progress = page.section('Progress');
-    const rows = progress?.descendants().filter((node) => node.classList.contains('mg-row')) ?? [];
-    expect(rows.map((row) => row.querySelector('.mg-row-main')?.textContent)).toEqual([
-      'planCompleted',
-      'implementRunning',
-      'reviewNot run',
+    const rows = progress?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
+    expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent)).toEqual([
+      'plan',
+      'implement',
+      'review',
     ]);
+    expect(rows.map((row) => row.querySelector('.mg-badge')?.textContent)).toEqual(['1', '2', '3']);
     expect(rows[0]?.textContent).toContain('attempt 2');
     expect(rows[0]?.textContent).toContain('decision revise');
     expect(rows[1]?.textContent).toContain('attempt 1');
     expect(rows[2]?.textContent).not.toContain('attempt');
-    const current = rows[1]?.querySelector('.mg-pill');
-    expect(current?.className).toContain('mg-status--info');
+    expect(rows[0]?.querySelector('.mg-status')?.className).toContain('mg-status--compact');
+    expect(rows[2]?.querySelector('.mg-status')?.className).toContain('mg-status--muted');
+    expect(rows[2]?.textContent).toContain('Not run');
+    const [, current] = rows;
+    expect(current?.className).toContain('mg-item--info');
     for (const row of rows) {
       expect(row.tagName).toBe('DIV');
       expect(row.descendants().some((node) => node.tagName === 'BUTTON')).toBe(false);
@@ -407,14 +429,12 @@ describe('Overview page', () => {
     }));
 
     const progress = page.section('Progress');
-    const rows = progress?.descendants().filter((node) => node.classList.contains('mg-row')) ?? [];
-    expect(rows.map((row) => row.querySelector('.mg-row-main')?.textContent)).toEqual([
-      'reviewCompleted',
-      'reviewFailed',
-    ]);
+    const rows = progress?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
+    expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent)).toEqual(['review', 'review']);
     expect(rows[0]?.textContent).toContain('attempt 1');
     expect(rows[0]?.textContent).toContain('decision go');
-    expect(rows[1]?.querySelector('.mg-pill')?.className).toContain('mg-status--error');
+    expect(rows[0]?.querySelector('.mg-status')?.className).toContain('mg-status--compact');
+    expect(rows[1]?.querySelector('.mg-status')?.className).toContain('mg-status--error');
   });
 
   it('shows one empty notice when there is no progress to list', () => {
@@ -424,7 +444,7 @@ describe('Overview page', () => {
     const progress = page.section('Progress');
     expect(progress?.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(1);
     expect(progress?.textContent).toContain('No stages or executions to list.');
-    expect(progress?.querySelector('.mg-list')).toBeNull();
+    expect(progress?.querySelector('.mg-card-stack')).toBeNull();
   });
   it('shows the five newest activity lines between Progress and Outputs while Running', () => {
     const page = load();
@@ -502,5 +522,117 @@ describe('Overview page', () => {
     expect(page.doc.root.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(1);
     expect(page.section('Outputs')?.querySelector('.mg-empty')).toBeNull();
     expect(page.section('Next steps')?.querySelector('.mg-empty')).toBeNull();
+  });
+
+  it('keeps a plain Completed session to its facts, without a state line', () => {
+    const page = load();
+    page.deliver(pageModel());
+
+    const status = page.section('Status');
+    expect(status?.textContent).toContain('Where the session stands and what you can do.');
+    expect(status?.descendants().some((node) => node.classList.contains('mg-status'))).toBe(false);
+  });
+
+  it('names no file in the empty Next steps state and shows a warn banner when the file cannot be used', () => {
+    const empty = load();
+    empty.deliver(pageModel({ next: { state: 'missing', detail: null, suggestions: [] } }));
+    const next = empty.section('Next steps');
+    expect(next?.textContent).toContain('This session suggested no next steps.');
+    expect(next?.textContent).not.toContain('next.json');
+
+    const invalid = load();
+    invalid.deliver(pageModel({ next: { state: 'invalid', detail: 'bad', suggestions: [] } }));
+    const section = invalid.section('Next steps');
+    const banner = section?.descendants().find((node) => node.classList.contains('mg-banner'));
+    expect(banner?.classList.contains('mg-banner--warn')).toBe(true);
+    expect(banner?.textContent).toContain('Next steps are invalid');
+    expect(banner?.textContent).toContain('bad');
+  });
+
+  it('clamps a long child task, keeps its full text, and puts the source id in a refValue with its copy outside the link', () => {
+    const page = load();
+    const task =
+      'A child task that is much longer than two lines so the item head cannot show all of it without a clamp.';
+    page.deliver(pageModel({
+      children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task }],
+      source: {
+        sessionId: '00000000-0000-4000-8000-0000000000b1',
+        title: 'Source',
+        availability: 'retained',
+        provenance: { state: 'ok', artifacts: [] },
+      },
+    }));
+
+    const children = page.section('Child sessions');
+    const title = children?.querySelector('.mg-item-title');
+    expect(title?.className).toContain('mg-item-title--clamp-2');
+    expect(title?.textContent).toBe(task);
+    const childLink = children?.descendants().find((node) => node.classList.contains('mg-item-link'));
+    expect(childLink?.attrs['aria-label']).toContain(task);
+    const childCopy = children?.descendants().find((node) => node.attrs['aria-label'] === 'Copy session ID');
+    expect(childCopy?.tagName).toBe('BUTTON');
+    expect(childLink?.descendants().some((node) => node === childCopy)).toBe(false);
+
+    const source = page.section('Source session');
+    const ref = source?.descendants().find((node) => node.classList.contains('mg-ref'));
+    expect(ref?.textContent).toBe('00000000-0000-4000-8000-0000000000b1');
+    expect(ref?.dataset.tip).toBe('00000000-0000-4000-8000-0000000000b1');
+    const sourceLink = source?.descendants().find((node) => node.classList.contains('mg-item-link'));
+    const sourceCopy = source?.descendants().find((node) => node.attrs['aria-label'] === 'Copy session ID');
+    expect(sourceCopy?.tagName).toBe('BUTTON');
+    expect(sourceLink?.descendants().some((node) => node === sourceCopy)).toBe(false);
+  });
+
+  it('keeps an output path as a mono meta segment, with the label still in the link name', () => {
+    const page = load();
+    page.deliver(pageModel({
+      outputs: { rows: [{ key: 'name:report', label: 'report.md', path: 'outputs/report.md', state: 'ok' }], directoryError: null },
+    }));
+    const meta = page.section('Outputs')?.querySelector('.mg-item-meta');
+    const segment = meta?.querySelector('.mg-mono');
+    expect(segment?.className).toBe('mg-mono');
+    expect(segment?.textContent).toBe('outputs/report.md');
+    const link = page.section('Outputs')?.querySelector('.mg-item-link');
+    expect(link?.textContent).toContain('report.md');
+    expect(link?.attrs['aria-label']).toBe('report.md — outputs/report.md');
+    expect(link?.attrs['data-tip']).toBe('outputs/report.md');
+  });
+
+  it('sends the copy intent for a child id and for both handoff values', () => {
+    const page = load();
+    page.deliver(pageModel({
+      children: [{ sessionId: 'c1', title: 'Child', state: 'Completed', task: 'Do it' }],
+      source: {
+        sessionId: 'src',
+        title: 'Source',
+        availability: 'retained',
+        provenance: {
+          state: 'ok',
+          artifacts: [{
+            name: 'a.md',
+            output: 'plan',
+            path: 'handoff/1/a.md',
+            localState: 'ok',
+            sha256: 'abc',
+            sourcePath: 'C:/x/a.md',
+          }],
+        },
+      },
+    }));
+
+    const click = (title: string, label: string): void => {
+      const button = page.section(title)?.descendants().find((node) => node.attrs['aria-label'] === label);
+      expect(button?.tagName, label).toBe('BUTTON');
+      button?.click();
+    };
+    click('Child sessions', 'Copy session ID');
+    click('Handoff', 'Copy SHA-256');
+    click('Handoff', 'Copy source path');
+
+    expect(page.posted.filter((message) => message.intent === 'copyValue')).toMatchObject([
+      { type: 'intent', intent: 'copyValue', kind: 'sessionId', sessionId: 'c1' },
+      { type: 'intent', intent: 'copyValue', kind: 'handoffHash', name: 'a.md' },
+      { type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 'a.md' },
+    ]);
   });
 });

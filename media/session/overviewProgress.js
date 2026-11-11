@@ -4,96 +4,65 @@
   'use strict';
 
   const ui = window.MigentUi;
-  const { el } = ui;
+  const header = window.MigentSessionHeader;
   const text = window.MigentSessionOverviewCopy;
 
-  /** The color of a row's state, from the tokens the shared styles already define. */
-  const TONES = {
-    running: 'info',
-    failed: 'error',
-    blocked: 'warn',
-    cancelled: 'warn',
-    stopped: 'muted',
-  };
-
-  function statePill(state, isCurrent) {
-    const tone = TONES[state] || (isCurrent ? 'info' : null);
-    return el('span', text.progress.state[state] || state, 'mg-pill' + (tone ? ' mg-status--' + tone : ''));
+  /** The shared state map, so a Progress row and the header badge agree; Completed stays icon-only. */
+  function statusOf(state) {
+    const base = header.sessionStates[state] || header.sessionStates.unknown;
+    return { ...base, text: text.progress.state[state] || state, compact: state === 'completed' };
   }
 
-  function metaLine(parts) {
-    const values = parts.filter((part) => part !== null && part !== '');
-    return values.length === 0 ? null : el('span', values.join(' · '), 'mg-row-meta mg-muted');
+  function stageCard(row, index) {
+    return ui.itemCard({
+      number: index + 1,
+      title: row.id,
+      summary: [
+        row.attempts === null ? '' : text.progress.attempt(row.attempts),
+        row.decision === null ? '' : text.progress.decision(row.decision),
+      ],
+      status: statusOf(row.state),
+      tone: row.isCurrent ? 'info' : undefined,
+    });
   }
 
-  function stageRow(row) {
-    const main = el('span', null, 'mg-row-main');
-    main.append(el('span', row.id), statePill(row.state, row.isCurrent));
-    const item = el('li');
-    const node = el('div', null, 'mg-row');
-    node.append(main);
-    const meta = metaLine([
-      row.attempts === null ? null : text.progress.attempt(row.attempts),
-      row.decision === null ? null : text.progress.decision(row.decision),
-    ]);
-    if (meta !== null) node.append(meta);
-    item.append(node);
-    return item;
-  }
-
-  function executionRow(row) {
-    const main = el('span', null, 'mg-row-main');
-    main.append(el('span', row.stage || row.executionId), statePill(row.state, row.isCurrent));
-    const item = el('li');
-    const node = el('div', null, 'mg-row');
-    node.append(main);
-    const meta = metaLine([
-      text.progress.attempt(row.attempt),
-      row.decision === null ? null : text.progress.decision(row.decision),
-    ]);
-    if (meta !== null) node.append(meta);
-    item.append(node);
-    return item;
+  function executionCard(row, index) {
+    return ui.itemCard({
+      number: index + 1,
+      title: row.stage || row.executionId,
+      summary: [
+        text.progress.attempt(row.attempt),
+        row.decision === null ? '' : text.progress.decision(row.decision),
+      ],
+      status: statusOf(row.state),
+      tone: row.isCurrent ? 'info' : undefined,
+    });
   }
 
   function renderProgress(model) {
     const progress = model.progress;
     if (progress.kind === 'empty') {
-      return ui.section(text.progress.title, { children: [el('p', text.progress.empty, 'mg-empty')] });
+      return ui.section(text.progress.title, {
+        note: text.progress.note,
+        children: [ui.empty(text.progress.empty)],
+      });
     }
-    const items = progress.kind === 'stages' ? progress.rows.map(stageRow) : progress.rows.map(executionRow);
-    const children = [];
-    if (items.length === 0) {
-      children.push(el('p', text.progress.empty, 'mg-empty'));
-    } else {
-      const list = el('ul', null, 'mg-list');
-      list.append(...items);
-      children.push(list);
-    }
+    const cards = progress.kind === 'stages' ? progress.rows.map(stageCard) : progress.rows.map(executionCard);
+    const children = cards.length === 0 ? [ui.empty(text.progress.empty)] : [ui.stack(cards, { gap: 'card' })];
     return ui.section(text.progress.title, {
-      count: items.length === 0 ? undefined : String(items.length),
+      note: progress.kind === 'stages' ? text.progress.note : text.progress.roleNote,
+      count: cards.length === 0 ? undefined : String(cards.length),
       children,
     });
-  }
-
-  function activityLine(line) {
-    const item = el('li');
-    item.append(el('span', line, 'mg-mono'));
-    return item;
   }
 
   /** The block is absent unless the host read events, which it does only while the session is Running. */
   function renderActivity(model) {
     if (!model.activity.visible) return null;
-    const children = [];
-    if (model.activity.lines.length === 0) {
-      children.push(el('p', text.activity.empty, 'mg-empty'));
-    } else {
-      const list = el('ul', null, 'mg-list');
-      list.append(...model.activity.lines.map(activityLine));
-      children.push(list);
-    }
-    return ui.section(text.activity.title, { children });
+    const children = model.activity.lines.length === 0
+      ? [ui.empty(text.activity.empty)]
+      : [ui.plainList(model.activity.lines, { mono: true })];
+    return ui.section(text.activity.title, { note: text.activity.note, surface: true, children });
   }
 
   window.MigentSessionOverviewProgress = { renderProgress, renderActivity };

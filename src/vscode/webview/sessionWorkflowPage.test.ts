@@ -761,12 +761,11 @@ describe('Session Overview and Metrics tabs', () => {
     const { root } = page.doc;
     expect(root.descendants().filter((node) => node.classList.contains('mg-section-head'))).toHaveLength(4);
     expect(root.descendants().some((node) => node.classList.contains('mg-empty'))).toBe(true);
-    const card = root.descendants().find((node) => node.classList.contains('mg-card'));
+    const card = root.descendants().find((node) => node.classList.contains('mg-collapsible'));
     expect(card).toBeDefined();
-    const nested = (card as FakeElement).descendants().filter((node) => ['BUTTON', 'DETAILS', 'INPUT'].includes(node.tagName));
+    const nested = (card as FakeElement).descendants().filter((node) => ['DETAILS', 'INPUT'].includes(node.tagName));
     expect(nested).toHaveLength(0);
-    const frame = root.descendants().find((node) => node.classList.contains('results-suggestion'));
-    expect(frame?.descendants().some((node) => node.tagName === 'DETAILS')).toBe(true);
+    expect(root.descendants().some((node) => node.classList.contains('results-suggestion'))).toBe(false);
   });
 });
 

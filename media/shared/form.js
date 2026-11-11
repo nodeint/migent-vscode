@@ -144,10 +144,11 @@
    * One labelled control. `options.hint` is a tooltip on the label; `options.issue` is `{ message, warning }` and sets
    * `aria-invalid` and `aria-describedby` on the control. `options.wide` spans every column of a field grid.
    * `options.action` is a node at the far end of the label row, for a control or state that belongs to the field
-   * but not to its value, such as an Override toggle or an "Overridden" tag.
+   * but not to its value, such as an Override toggle or an "Overridden" tag. `options.density` is `'roomy'` for the
+   * page's spacious form rhythm; the kit owns the gap, so a page never restyles it.
    */
   function field(options) {
-    const wrap = el('div', null, 'mg-field' + (options.wide ? ' mg-field--wide' : ''));
+    const wrap = el('div', null, 'mg-field' + (options.wide ? ' mg-field--wide' : '') + (options.density === 'roomy' ? ' mg-field--roomy' : ''));
     const id = options.id || controlId(options.path);
     const control = options.control;
     control.id = id;
@@ -180,9 +181,13 @@
     return wrap;
   }
 
-  /** A grid of fields; it reflows from one to several columns. */
-  function grid(children) {
-    const node = el('div', null, 'mg-field-grid');
+  /**
+   * A grid of fields; it reflows from one to several columns. `options.density` is `'roomy'` for the page's
+   * spacious form rhythm and applies to every field in the grid.
+   */
+  function grid(children, options) {
+    const settings = options || {};
+    const node = el('div', null, 'mg-field-grid' + (settings.density === 'roomy' ? ' mg-field-grid--roomy' : ''));
     if (children) node.append(...children);
     return node;
   }
@@ -222,6 +227,42 @@
     }
     if (described.length > 0) node.setAttribute('aria-describedby', described.join(' '));
     return node;
+  }
+
+  /**
+   * A labeled tag for the far end of a field's label row, such as the value another file overrides.
+   * `options`: `tone` (`warn`, the default, or `info`), `icon` (a codicon), `tip` (the tooltip and the tail of the
+   * accessible name). Focusable, so the keyboard reaches the tooltip.
+   */
+  function fieldTag(label, options) {
+    const settings = options || {};
+    const node = el('span', null, 'mg-field-tag' + (settings.tone === 'info' ? ' mg-field-tag--info' : ''));
+    if (settings.icon) node.append(icon(settings.icon));
+    node.append(el('span', label));
+    if (settings.tip) node.dataset.tip = settings.tip;
+    node.setAttribute('aria-label', settings.tip ? label + '. ' + settings.tip : label);
+    node.tabIndex = 0;
+    return node;
+  }
+
+  /**
+   * A compact checkbox for the field-action slot. The kit only reports `onChange(checked)`; the page keeps the
+   * meaning of the flag and its copy. `options`: `checked`, `path`, `ariaLabel`, `onChange`, `disabled`.
+   */
+  function fieldToggle(label, options) {
+    const settings = options || {};
+    const wrap = el('label', null, 'mg-field-toggle');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.checked = settings.checked === true;
+    box.disabled = settings.disabled === true;
+    if (settings.path) box.dataset.path = settings.path;
+    if (settings.ariaLabel) box.setAttribute('aria-label', settings.ariaLabel);
+    box.addEventListener('change', () => {
+      if (typeof settings.onChange === 'function') settings.onChange(box.checked);
+    });
+    wrap.append(box, el('span', label));
+    return wrap;
   }
 
   function datalist(options) {
@@ -404,6 +445,8 @@
     root,
     field,
     grid,
+    fieldTag,
+    fieldToggle,
     fieldset,
     checkboxList,
     stringList,

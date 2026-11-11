@@ -8,6 +8,7 @@ import type { SessionSnapshot } from './model';
 import {
   buildResultsModel,
   resolveHandoffPath,
+  resolveHandoffValue,
   resolveOutputPath,
   type ResultsInput,
 } from './resultsModel';
@@ -264,5 +265,17 @@ describe('intent resolution', () => {
     writeFileSync(path.join(dir, 'handoff', '1', 'note.md'), 'n');
     expect(resolveHandoffPath(input, 'context_note')).toBe(path.join(dir, 'handoff', '1', 'note.md'));
     expect(resolveHandoffPath(input, 'other')).toBeNull();
+  });
+
+  it('resolves a handoff artifact name to its hash or its source path only', () => {
+    const input = targetInput();
+    expect(resolveHandoffValue(input, 'context_note', 'hash')).toBe(
+      '02edbc066ee4147972f6aa6d611524c74135a06528ec94a2450cc84dd3bf084b',
+    );
+    expect(resolveHandoffValue(input, 'context_note', 'sourcePath')).toBe(
+      'C:\\project\\.migent\\sessions\\00000000-0000-4000-8000-0000000000b1\\outputs\\note.md',
+    );
+    expect(resolveHandoffValue(input, 'other', 'hash')).toBeNull();
+    expect(resolveHandoffValue({ ...input, snapshots: [] }, 'context_note', 'hash')).toBeNull();
   });
 });

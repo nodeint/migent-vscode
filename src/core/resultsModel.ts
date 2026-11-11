@@ -258,3 +258,17 @@ export function resolveHandoffPath(input: ResultsInput, name: string): string | 
   const artifact = handoff.artifacts.find((candidate) => candidate.name === name);
   return artifact?.localPath !== undefined && isFile(artifact.localPath) ? artifact.localPath : null;
 }
+
+/** A copyable value of a handoff artifact: its hash or the source path it was copied from. */
+export function resolveHandoffValue(
+  input: ResultsInput,
+  name: string,
+  kind: 'hash' | 'sourcePath',
+): string | null {
+  const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
+  const handoff = readHandoff(snapshot?.manifest ?? null, input.sessionDirPath);
+  if (handoff.kind !== 'ok') return null;
+  const artifact = handoff.artifacts.find((candidate) => candidate.name === name);
+  if (artifact === undefined) return null;
+  return kind === 'hash' ? artifact.sha256 : artifact.sourcePath;
+}

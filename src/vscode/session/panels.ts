@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import type { AnswerModel } from '../../core/answerModel';
 import { manifestPath, metricsPath, nextPath, sessionDir, workflowDraftPath, workflowsDir } from '../../core/paths';
 import type { ResultsIntent, SessionAction } from '../../core/resultsIntent';
-import { resolveHandoffPath, resolveOutputPath, type ResultsInput } from '../../core/resultsModel';
+import { resolveHandoffPath, resolveHandoffValue, resolveOutputPath, type ResultsInput } from '../../core/resultsModel';
 import { parseSessionPageMessage, type SessionPageIntent, type SessionPageMessage } from '../../core/sessionPageIntent';
 import { type SessionBatchRef, type SessionPageModel, type SessionTab,workflowHeader } from '../../core/sessionPageModel';
 import { readSessionWorkflow } from '../../core/sessionWorkflow';
@@ -454,6 +454,8 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
         else await openFile(file, 'Handoff file');
         return;
       }
+      case 'copyValue':
+        return this.#copyValue(input, intent);
       case 'openNextStep':
         this.#actions?.openNextStep(identity, intent.workflow);
         return;
@@ -472,6 +474,17 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       case 'openSession':
         this.#openSession(entry, context, intent.sessionId);
     }
+  }
+
+  async #copyValue(input: ResultsInput, intent: Extract<ResultsIntent, { intent: 'copyValue' }>): Promise<void> {
+    const value = intent.kind === 'sessionId'
+      ? intent.sessionId
+      : resolveHandoffValue(input, intent.name, intent.kind === 'handoffHash' ? 'hash' : 'sourcePath');
+    if (value === null) {
+      void vscode.window.showWarningMessage('This value is no longer available to copy.');
+      return;
+    }
+    await vscode.env.clipboard.writeText(value);
   }
 
   #openSession(entry: Entry, context: ProjectContext, sessionId: string): void {

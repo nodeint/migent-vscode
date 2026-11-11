@@ -174,8 +174,7 @@
     if (metrics.stages.length === 0) return ui.section(text.stages.title, { children: [ui.empty(text.stages.empty)] });
     const seconds = metrics.stages.map((stage) => stageSeconds(metrics, stage.id));
     const longest = Math.max(1, ...seconds.map((value) => (value === null ? 0 : value)));
-    const list = el('ul', null, 'mg-list');
-    metrics.stages.forEach((stage, index) => {
+    const rows = metrics.stages.map((stage, index) => {
       const spent = seconds[index];
       const main = [el('span', stage.id, 'mg-mono')];
       if (spent !== null) main.push(bar(spent, longest, false));
@@ -184,9 +183,13 @@
       if (isNumber(stage.revisions) && stage.revisions > 0) parts.push(text.stages.revisions(stage.revisions));
       if (isNumber(stage.failed) && stage.failed > 0) parts.push(text.stages.failed(stage.failed));
       if (isNumber(stage.blocked) && stage.blocked > 0) parts.push(text.stages.blocked(stage.blocked));
-      list.append(ui.listRow({ main, meta: [el('span', formatSeconds(spent), 'metrics-row-value'), el('span', parts.join(' · '))] }));
+      return ui.listRow({ main, meta: [el('span', formatSeconds(spent), 'metrics-row-value'), el('span', parts.join(' · '))] });
     });
-    return ui.section(text.stages.title, { count: String(metrics.stages.length), note: text.stages.note, children: [list] });
+    return ui.section(text.stages.title, {
+      count: String(metrics.stages.length),
+      note: text.stages.note,
+      children: [ui.denseList(rows)],
+    });
   }
 
   const TOKEN_FIELDS = Object.keys(text.usage.tokens);
@@ -222,21 +225,19 @@
   function renderUsage(metrics) {
     const usage = metrics.totals.usage;
     const longest = Math.max(1, ...TOKEN_FIELDS.map((field) => (isNumber(usage[field]) ? usage[field] : 0)));
-    const list = el('ul', null, 'mg-list');
-    for (const field of TOKEN_FIELDS) {
+    const tokenRows = TOKEN_FIELDS.map((field) => {
       const main = [el('span', text.usage.tokens[field])];
       if (isNumber(usage[field])) main.push(bar(usage[field], longest, true));
-      list.append(ui.listRow({ main, meta: count(usage[field]) }));
-    }
+      return ui.listRow({ main, meta: count(usage[field]) });
+    });
     const rows = clientRows(metrics);
-    const clients = el('ul', null, 'mg-list');
-    for (const [name, entry] of rows) {
-      clients.append(ui.listRow({ main: name, mainClass: 'mg-mono', meta: clientMeta(entry) }));
-    }
-    const providers = rows.size === 0 ? [ui.empty(text.usage.noProviders)] : [clients];
+    const clientRowsNodes = [...rows].map(([name, entry]) =>
+      ui.listRow({ main: name, mainClass: 'mg-mono', meta: clientMeta(entry) }),
+    );
+    const providers = rows.size === 0 ? [ui.empty(text.usage.noProviders)] : [ui.denseList(clientRowsNodes)];
     return ui.section(text.usage.title, {
       note: text.usage.note,
-      children: [list, ui.group(text.usage.providers, { children: providers })],
+      children: [ui.denseList(tokenRows), ui.group(text.usage.providers, { children: providers })],
     });
   }
 
@@ -249,10 +250,6 @@
       return { label: status.completed(execution.decision), tone: execution.decision === 'revise' ? 'mg-warn' : '' };
     }
     return { label: execution.status.charAt(0).toUpperCase() + execution.status.slice(1), tone: '' };
-  }
-
-  function fact(list, label, value) {
-    list.append(el('dt', label), el('dd', value));
   }
 
   /** The tone that needs attention, from the same rule as `statusLabel`; null for a neutral state (skipped too). */
@@ -289,44 +286,52 @@
   }
 
   function renderVerify(verify) {
-    const list = el('dl', null, 'metrics-kv');
-    fact(list, text.verify.runs, count(verify.runs));
-    fact(list, text.verify.redRuns, count(verify.red));
-    fact(list, text.verify.firstPass, verify.firstPass === null ? NONE : verify.firstPass ? text.verify.yes : text.verify.no);
+    const pairs = [
+      { label: text.verify.runs, value: count(verify.runs) },
+      { label: text.verify.redRuns, value: count(verify.red) },
+      {
+        label: text.verify.firstPass,
+        value: verify.firstPass === null ? NONE : verify.firstPass ? text.verify.yes : text.verify.no,
+      },
+    ];
     if (verify.failedCommands.length > 0) {
-      const commands = el('ul', null, 'metrics-plain');
-      for (const command of verify.failedCommands) commands.append(el('li', command, 'mg-mono'));
-      const cell = el('dd');
-      cell.append(commands);
-      list.append(el('dt', text.verify.failedCommands), cell);
+      pairs.push({ label: text.verify.failedCommands, value: ui.plainList(verify.failedCommands, { mono: true }) });
     }
-    return ui.group(text.verify.title, { children: [list] });
+    return ui.group(text.verify.title, { children: [ui.keyValues(pairs)] });
   }
 
   function executionBody(execution) {
-    const facts = el('dl', null, 'metrics-kv');
-    fact(facts, text.execution.status, text.execution.withDecision(execution.status, execution.decision));
+    const pairs = [
+      { label: text.execution.status, value: text.execution.withDecision(execution.status, execution.decision) },
+    ];
     if (isSkipped(execution)) {
-      fact(facts, text.execution.skipReason, execution.skipReason || text.execution.noSkipReason);
+      pairs.push({ label: text.execution.skipReason, value: execution.skipReason || text.execution.noSkipReason });
     } else {
-      fact(facts, text.execution.client, execution.client === null ? text.execution.noRoleClient : clientKey(execution));
+      pairs.push({
+        label: text.execution.client,
+        value: execution.client === null ? text.execution.noRoleClient : clientKey(execution),
+      });
     }
     const started = formatTime(execution.createdAt);
     const finished = formatTime(execution.completedAt);
-    if (started) fact(facts, text.execution.started, started);
-    if (finished) fact(facts, text.execution.finished, finished);
+    if (started) pairs.push({ label: text.execution.started, value: started });
+    if (finished) pairs.push({ label: text.execution.finished, value: finished });
     if (!isSkipped(execution)) {
-      fact(facts, text.execution.wallVerify, formatSeconds(execution.wallSeconds) + ' / ' + formatSeconds(execution.verifySeconds));
-      fact(facts, text.execution.turns, count(execution.turns));
-      fact(facts, text.execution.cost, costFact(execution));
+      pairs.push(
+        {
+          label: text.execution.wallVerify,
+          value: formatSeconds(execution.wallSeconds) + ' / ' + formatSeconds(execution.verifySeconds),
+        },
+        { label: text.execution.turns, value: count(execution.turns) },
+        { label: text.execution.cost, value: costFact(execution) },
+      );
     }
-    if (execution.resumesExecutionId) fact(facts, text.execution.resumes, execution.resumesExecutionId);
-    if (execution.routedFrom) fact(facts, text.execution.routedFrom, execution.routedFrom);
-    const body = [ui.group(text.execution.timing, { children: [facts] })];
+    if (execution.resumesExecutionId) pairs.push({ label: text.execution.resumes, value: execution.resumesExecutionId });
+    if (execution.routedFrom) pairs.push({ label: text.execution.routedFrom, value: execution.routedFrom });
+    const body = [ui.group(text.execution.timing, { children: [ui.keyValues(pairs)] })];
     if (isSkipped(execution)) return body;
-    const tokens = el('dl', null, 'metrics-kv');
-    for (const field of TOKEN_FIELDS) fact(tokens, text.usage.tokens[field], count(execution.usage[field]));
-    body.push(ui.group(text.execution.tokens, { children: [tokens] }));
+    const tokens = TOKEN_FIELDS.map((field) => ({ label: text.usage.tokens[field], value: count(execution.usage[field]) }));
+    body.push(ui.group(text.execution.tokens, { children: [ui.keyValues(tokens)] }));
     if (execution.verify) body.push(renderVerify(execution.verify));
     return body;
   }
@@ -369,15 +374,14 @@
   }
 
   function renderDetails(model) {
-    const facts = el('dl', null, 'metrics-kv');
-    fact(facts, text.details.session, model.sessionId);
-    if (model.workflowId) fact(facts, text.details.workflow, model.workflowId);
+    const pairs = [{ label: text.details.session, value: model.sessionId }];
+    if (model.workflowId) pairs.push({ label: text.details.workflow, value: model.workflowId });
     const completed = formatDateTime(model.completedAt);
-    if (completed) fact(facts, text.details.completed, completed);
-    fact(facts, text.details.record, text.details.recordNote);
+    if (completed) pairs.push({ label: text.details.completed, value: completed });
+    pairs.push({ label: text.details.record, value: text.details.recordNote });
     const row = el('p', null, 'metrics-block');
     row.append(action(text.openFile, { intent: 'openMetricsFile' }, 'secondary'));
-    return ui.section(copy.details, { children: [facts, row] });
+    return ui.section(copy.details, { children: [ui.keyValues(pairs), row] });
   }
 
   function render(root, model, host) {

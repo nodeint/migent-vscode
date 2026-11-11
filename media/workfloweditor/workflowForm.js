@@ -598,8 +598,7 @@
     function routeArtifactsEditor(route, base) {
       const path = base + '.artifacts';
       const shape = route.artifacts ? route.artifacts.kind : 'none';
-      const wrap = el('div', null, 'wf-route-artifacts');
-      wrap.append(
+      const parts = [
         ui.field({
           label: text.decisions.artifacts.label,
           control: ui.select({
@@ -622,11 +621,11 @@
           hint: text.decisions.artifacts.hint,
           issue: issueOf(path + '.kind'),
         }),
-      );
+      ];
       if (shape === 'ids') {
         const registry = uniqueValues(getForm().artifacts.map((item) => item.id));
         const unknown = route.artifacts.ids.filter((id) => !registry.includes(id));
-        wrap.append(
+        parts.push(
           ui.fieldset(text.stageArtifacts.writes, { children: [
             checkList({
               available: [...registry, ...unknown],
@@ -644,7 +643,7 @@
       } else if (shape === 'local') {
         route.artifacts.items.forEach((item, itemIndex) => {
           const itemPath = path + '.' + itemIndex;
-          wrap.append(
+          parts.push(
             ui.group(text.decisions.artifacts.heading(itemIndex + 1), { card: true,
               actions: [
                 ui.removeButton(copy.remove('artifact', itemIndex + 1), {
@@ -704,21 +703,21 @@
               ] }),
           );
         });
-        wrap.append(
+        parts.push(
           ui.addButton(text.decisions.artifacts.add, { onClick: () => {
             route.artifacts.items.push({ id: '', file: '', description: '' });
             edited(path + '.' + (route.artifacts.items.length - 1) + '.id');
           }, disabled: isFormReadOnly() }),
         );
       }
-      return wrap;
+      return ui.stack(parts, { gap: 'block' });
     }
 
     function decisionEditor(stage, index) {
-      const wrap = el('div', null, 'wf-decision-list');
+      const parts = [];
       (stage.decision || []).forEach((route, routeIndex) => {
         const base = stagePath(index, 'decision') + '.' + routeIndex;
-        wrap.append(
+        parts.push(
           ui.section(text.decisions.heading(routeIndex + 1), {
             level: 3,
             variant: 'card',
@@ -769,14 +768,14 @@
           }),
         );
       });
-      wrap.append(
+      parts.push(
         ui.addButton(text.decisions.add, { onClick: () => {
           stage.decision = stage.decision || [];
           stage.decision.push({ value: '', when: '', navigate: '', artifacts: null });
           edited(stagePath(index, 'decision') + '.' + (stage.decision.length - 1) + '.value');
         }, disabled: isFormReadOnly() }),
       );
-      return wrap;
+      return ui.stack(parts, { gap: 'card' });
     }
 
     function decisionsGroup(stage, index) {
@@ -787,63 +786,63 @@
       const facts = [];
       if (stage.verify.length > 0) facts.push(text.stages.advancedFacts.verifyCommands(stage.verify.length));
       if (stage.runWhenPaths.length > 0) facts.push(text.stages.advancedFacts.pathFilters(stage.runWhenPaths.length));
-      const heading = el('span', text.advanced.title);
-      if (facts.length > 0) heading.append(el('span', facts.join(', '), 'mg-summary'));
-      const advanced = details(heading, { key: 'stage:' + index + ':advanced', className: 'wf-advanced' });
-      const body = el('div', null, 'wf-advanced-body mg-stack');
-      body.append(
-        ui.grid([
-          ui.field({
-            label: text.advanced.verifyTimeout.label,
-            control: ui.number({
-              value: stage.verify_timeout,
+      const advanced = details(text.advanced.title, {
+        key: 'stage:' + index + ':advanced',
+        facts,
+        ruled: true,
+      });
+      const body = ui.stack(
+        [
+          ui.grid([
+            ui.field({
+              label: text.advanced.verifyTimeout.label,
+              control: ui.number({
+                value: stage.verify_timeout,
+                path: stagePath(index, 'verify_timeout'),
+                placeholder: text.advanced.verifyTimeout.placeholder,
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                  stage.verify_timeout = next;
+                },
+              }),
               path: stagePath(index, 'verify_timeout'),
-              placeholder: text.advanced.verifyTimeout.placeholder,
-              disabled: isFormReadOnly(),
-              onInput: (next) => {
-                stage.verify_timeout = next;
-              },
+              hint: text.advanced.verifyTimeout.hint,
+              issue: issueOf(stagePath(index, 'verify_timeout')),
             }),
-            path: stagePath(index, 'verify_timeout'),
-            hint: text.advanced.verifyTimeout.hint,
-            issue: issueOf(stagePath(index, 'verify_timeout')),
-          }),
-          ui.field({
-            label: text.advanced.maxVerify.label,
-            control: ui.number({
-              value: stage.max_verify,
+            ui.field({
+              label: text.advanced.maxVerify.label,
+              control: ui.number({
+                value: stage.max_verify,
+                path: stagePath(index, 'max_verify'),
+                placeholder: text.advanced.maxVerify.placeholder,
+                disabled: isFormReadOnly(),
+                onInput: (next) => {
+                  stage.max_verify = next;
+                },
+              }),
               path: stagePath(index, 'max_verify'),
-              placeholder: text.advanced.maxVerify.placeholder,
-              disabled: isFormReadOnly(),
-              onInput: (next) => {
-                stage.max_verify = next;
-              },
+              hint: text.advanced.maxVerify.hint,
+              issue: issueOf(stagePath(index, 'max_verify')),
             }),
-            path: stagePath(index, 'max_verify'),
-            hint: text.advanced.maxVerify.hint,
-            issue: issueOf(stagePath(index, 'max_verify')),
+          ]),
+          textList({
+            values: stage.verify,
+            path: stagePath(index, 'verify'),
+            label: text.advanced.verifyCommands.label,
+            placeholder: text.advanced.verifyCommands.placeholder,
+            addLabel: text.advanced.verifyCommands.add,
+            itemLabel: text.advanced.verifyCommands.item,
           }),
-        ]),
-      );
-      body.append(
-        textList({
-          values: stage.verify,
-          path: stagePath(index, 'verify'),
-          label: text.advanced.verifyCommands.label,
-          placeholder: text.advanced.verifyCommands.placeholder,
-          addLabel: text.advanced.verifyCommands.add,
-          itemLabel: text.advanced.verifyCommands.item,
-        }),
-      );
-      body.append(
-        textList({
-          values: stage.runWhenPaths,
-          path: stagePath(index, 'runWhenPaths'),
-          label: text.advanced.runWhenPaths.label,
-          placeholder: text.advanced.runWhenPaths.placeholder,
-          addLabel: text.advanced.runWhenPaths.add,
-          itemLabel: text.advanced.runWhenPaths.item,
-        }),
+          textList({
+            values: stage.runWhenPaths,
+            path: stagePath(index, 'runWhenPaths'),
+            label: text.advanced.runWhenPaths.label,
+            placeholder: text.advanced.runWhenPaths.placeholder,
+            addLabel: text.advanced.runWhenPaths.add,
+            itemLabel: text.advanced.runWhenPaths.item,
+          }),
+        ],
+        { gap: 'block' },
       );
       advanced.append(body);
       return advanced;

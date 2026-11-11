@@ -14,6 +14,8 @@ class FakeElement {
   public className = '';
   public dataset: Record<string, string> = {};
   public disabled = false;
+  public checked = false;
+  public tabIndex = 0;
   public open = false;
   public title = '';
   public type = '';
@@ -202,7 +204,7 @@ describe('UI kit builders', () => {
     let clicked = 0;
     const action = call(ui.listRow, {
       main: 'Open',
-      mainClass: 'mg-row-main--action',
+      mainClass: 'mg-mono',
       meta: [call(ui.pill, 'ok')],
       title: 'Whole task',
       onClick: () => (clicked += 1),
@@ -211,7 +213,7 @@ describe('UI kit builders', () => {
     expect(button.tagName).toBe('BUTTON');
     expect(button.type).toBe('button');
     expect(button.title).toBe('Whole task');
-    expect(button.children[0].className).toBe('mg-row-main mg-row-main--action');
+    expect(button.children[0].className).toBe('mg-row-main mg-mono');
     expect(button.children[1].children[0].className).toBe('mg-pill');
     button.click();
     expect(clicked).toBe(1);
@@ -245,5 +247,298 @@ describe('UI kit builders', () => {
     expect(select.children[0].textContent).toBe('x (not in list)');
     const blank = call(ui.select, { value: '', options: [{ value: 'a', label: 'A' }], onInput: () => undefined });
     expect(blank.children[0].textContent).toBe('(none)');
+  });
+
+  it('itemCard static: a div with no button, the number badge and the joined summary', () => {
+    const { ui } = load();
+    const card = call(ui.itemCard, { number: 2, title: 'review', summary: ['attempt 1', ''] });
+    expect(card.tagName).toBe('DIV');
+    expect(card.className).toBe('mg-item mg-item--static');
+    expect(card.descendants().some((node) => node.tagName === 'BUTTON')).toBe(false);
+    expect(card.descendants().some((node) => node.className.includes('mg-item-afford'))).toBe(false);
+    const [head] = card.children;
+    expect(head.className).toBe('mg-item-head mg-item-head--lead');
+    const [badge, main] = head.children;
+    expect(badge.className).toBe('mg-badge');
+    expect(badge.textContent).toBe('2');
+    expect(main.className).toBe('mg-item-main');
+    const [title, summary] = main.children;
+    expect(title.className).toBe('mg-item-title');
+    expect(summary.className).toBe('mg-item-summary');
+    expect(summary.textContent).toBe('attempt 1');
+  });
+
+  it('itemCard link: one button holds the lead and the main; status and tools stay outside it', () => {
+    const { ui } = load();
+    let clicked = 0;
+    const statusState = { icon: 'pass', tone: 'ok', text: 'Completed', compact: true };
+    const tool = call(ui.iconButton, 'Copy', { icon: 'copy', onClick: () => undefined });
+    const card = call(ui.itemCard, {
+      leading: 'file',
+      title: 'plan.md',
+      meta: [{ text: 'outputs/plan.md', mono: true }],
+      status: statusState,
+      tools: [tool],
+      onClick: () => (clicked += 1),
+    });
+    expect(card.className).toBe('mg-item mg-item--link');
+    const [head] = card.children;
+    expect(head.className).toBe('mg-item-head');
+    const [link, end] = head.children;
+    expect(link.tagName).toBe('BUTTON');
+    expect(link.type).toBe('button');
+    expect(link.className).toBe('mg-item-link');
+    expect(link.children.map((child) => child.className)).toEqual([
+      'mg-item-leading',
+      'mg-item-main',
+      'mg-item-afford',
+    ]);
+    expect(link.attrs['aria-label']).toBe('plan.md — outputs/plan.md');
+    expect(link.descendants().some((node) => node === tool)).toBe(false);
+    expect(end.className).toBe('mg-item-end');
+    const [status, tools] = end.children;
+    expect(status.className).toBe('mg-status mg-status--ok mg-status--compact');
+    expect(tools.children[0]).toBe(tool);
+    link.click();
+    expect(clicked).toBe(1);
+  });
+
+  it('itemCard link: a tip override is the tooltip only; the accessible name still carries the title and metadata', () => {
+    const { ui } = load();
+    const card = call(ui.itemCard, {
+      leading: 'file',
+      title: 'note.md',
+      meta: [{ text: 'outputs/note.md', mono: true }],
+      tip: 'outputs/note.md',
+      onClick: () => undefined,
+    });
+    const [head] = card.children;
+    const [link] = head.children;
+    expect(link.textContent).toContain('note.md');
+    expect(link.attrs['aria-label']).toBe('note.md — outputs/note.md');
+    expect(link.attrs['data-tip']).toBe('outputs/note.md');
+  });
+
+  it('itemCard collapsible keeps its open state by key and appends the body', () => {
+    const { ui } = load();
+    const first = call(ui.itemCard, { key: 'card:k', title: 'next', body: ['content'] });
+    expect(first.tagName).toBe('DETAILS');
+    expect(first.className).toBe('mg-details mg-collapsible');
+    expect(first.open).toBe(false);
+    expect(first.children[1].className).toBe('mg-collapsible-body');
+    first.open = true;
+    first.handlers.toggle[0]();
+    const second = call(ui.itemCard, { key: 'card:k', title: 'next', body: [] });
+    expect(second.open).toBe(true);
+  });
+
+  it('collapsibleCard alias keeps the previous head DOM: badge, uncut title, joined summary, tools', () => {
+    const { ui } = load();
+    const tool = call(ui.iconButton, 'Open', { icon: 'go-to-file', onClick: () => undefined });
+    const card = call(ui.collapsibleCard, {
+      key: 'card:wf',
+      number: 1,
+      title: 'next-wf',
+      summary: ['Do the next task', ''],
+      tools: [tool],
+      body: [],
+    });
+    expect(card.className).toBe('mg-details mg-collapsible');
+    const [summary] = card.children;
+    const [, heading] = summary.children;
+    const [head] = heading.children;
+    expect(head.className).toBe('mg-collapsible-head');
+    const [badge, main, tools] = head.children;
+    expect(badge.className).toBe('mg-badge');
+    expect(main.children[0].className).toBe('mg-collapsible-title');
+    expect(main.children[0].textContent).toBe('next-wf');
+    expect(main.children[1].className).toBe('mg-collapsible-summary');
+    expect(main.children[1].textContent).toBe('Do the next task');
+    expect(main.attrs['data-tip']).toBe('next-wf — Do the next task');
+    expect(tools.className).toBe('mg-collapsible-tools');
+    expect(tools.children[0]).toBe(tool);
+  });
+
+  it('itemCard titleLines and meta: the clamp class keeps the full text; a refValue carries its value in data-tip', () => {
+    const { ui } = load();
+    const full = 'A child task long enough that two lines cannot hold all of it';
+    const ref = call(ui.refValue, '123e4567-e89b-12d3-a456-426614174000', { kind: 'id' });
+    const card = call(ui.itemCard, { title: full, titleLines: 2, meta: ['first', { text: 'path', mono: true }, ref] });
+    const [head] = card.children;
+    const [main] = head.children;
+    const [title, meta] = main.children;
+    expect(title.className).toBe('mg-item-title mg-item-title--clamp-2');
+    expect(title.textContent).toBe(full);
+    expect(head.attrs['data-tip']).toBe(full + ' — first · path · 123e4567-e89b-12d3-a456-426614174000');
+    expect(meta.className).toBe('mg-item-meta');
+    expect(meta.children[1].className).toBe('mg-mono');
+    expect(ref.className).toBe('mg-ref mg-ref--id');
+    expect(ref.dataset.tip).toBe('123e4567-e89b-12d3-a456-426614174000');
+  });
+
+  it('refValue.copyButton is a named icon button, separate from the value', () => {
+    const { ui } = load();
+    let copied = 0;
+    const refValue = ui.refValue as unknown as {
+      copyButton: (label: string, onCopy: () => void) => FakeElement;
+    };
+    const button = refValue.copyButton('Copy session ID', () => (copied += 1));
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.className).toContain('mg-btn--icon');
+    expect(button.attrs['aria-label']).toBe('Copy session ID');
+    expect(button.attrs['data-tip']).toBe('Copy session ID');
+    button.click();
+    expect(copied).toBe(1);
+  });
+
+  it('details facts and ruled: a quiet summary beside the heading and the top rule', () => {
+    const { ui } = load();
+    const node = call(ui.details, 'Advanced', { facts: ['a', '', 'b'], ruled: true });
+    expect(node.className).toBe('mg-details mg-details--ruled');
+    const [summary] = node.children;
+    const [, heading] = summary.children;
+    expect(heading.textContent).toBe('Advanceda, b');
+    const [facts] = heading.children;
+    expect(facts.className).toBe('mg-summary');
+    expect(facts.textContent).toBe('a, b');
+  });
+
+  it('stack, actions, denseList and plainList build the kit wrappers', () => {
+    const { ui } = load();
+    expect(call(ui.stack, [call(ui.itemCard, { title: 'a' })], { gap: 'card' }).className).toBe('mg-card-stack');
+    expect(call(ui.stack, [call(ui.itemCard, { title: 'a' })]).className).toBe('mg-block-stack');
+    expect(call(ui.actions, [call(ui.button, 'A')]).className).toBe('mg-actions');
+    const dense = call(ui.denseList, ['a', { text: 'b', className: 'mg-muted' }]);
+    expect(dense.tagName).toBe('UL');
+    expect(dense.className).toBe('mg-list');
+    expect(dense.children.map((child) => [child.tagName, child.textContent, child.className])).toEqual([
+      ['LI', 'a', ''],
+      ['LI', 'b', 'mg-muted'],
+    ]);
+    const plain = call(ui.plainList, ['x', 'y'], { mono: true });
+    expect(plain.tagName).toBe('UL');
+    expect(plain.className).toBe('mg-list--plain');
+    expect(plain.children.map((child) => child.className)).toEqual(['mg-mono', 'mg-mono']);
+  });
+
+  it('keyValues: label/value pairs, a tone and a tool at the end of the row', () => {
+    const { ui } = load();
+    const tool = call(ui.iconButton, 'Copy', { icon: 'copy', onClick: () => undefined });
+    const list = call(ui.keyValues, [
+      { label: 'Latest execution', value: 'draft · attempt 1' },
+      { label: 'Blocker', value: 'needs a token', tone: 'warn', tools: [tool] },
+      { label: 'Hash', value: 'abc', mono: true },
+    ]);
+    expect(list.tagName).toBe('DL');
+    expect(list.className).toBe('mg-kv');
+    const [first, firstValue, , secondValue, , thirdValue] = list.children;
+    expect(first.tagName).toBe('DT');
+    expect(first.textContent).toBe('Latest execution');
+    expect(firstValue.tagName).toBe('DD');
+    expect(firstValue.children[0].className).toBe('mg-kv-value');
+    expect(firstValue.children[0].textContent).toBe('draft · attempt 1');
+    expect(secondValue.children[0].className).toBe('mg-kv-value mg-warn');
+    expect(secondValue.children[1].className).toBe('mg-kv-tools');
+    expect(secondValue.children[1].children[0]).toBe(tool);
+    expect(thirdValue.children[0].className).toBe('mg-kv-value mg-mono');
+  });
+
+  it('empty with an icon keeps the message and the icon; statusIndicator compact keeps the hidden text', () => {
+    const { ui } = load();
+    const empty = call(ui.empty, 'Nothing here', { icon: 'folder' });
+    expect(empty.className).toBe('mg-empty');
+    expect(empty.children[0].className).toBe('mg-empty-icon');
+    expect(empty.children[1].textContent).toBe('Nothing here');
+    const status = call(ui.statusIndicator, { icon: 'pass', tone: 'ok', text: 'Completed', compact: true });
+    expect(status.className).toBe('mg-status mg-status--ok mg-status--compact');
+    expect(status.classList.contains('mg-status--compact')).toBe(true);
+    expect(status.attrs['data-tip']).toBe('Completed');
+    expect(status.children[1].className).toBe('mg-visually-hidden');
+    expect(status.children[1].textContent).toBe('Completed');
+  });
+
+  it('fieldTag and fieldToggle: focusable tag with its tooltip, and a checkbox that reports its state', () => {
+    const { ui } = load();
+    const tag = call(ui.fieldTag, 'Overridden', { icon: 'warning', tip: 'Set in workspace settings' });
+    expect(tag.className).toBe('mg-field-tag');
+    expect(tag.children[1].textContent).toBe('Overridden');
+    expect(tag.dataset.tip).toBe('Set in workspace settings');
+    expect(tag.attrs['aria-label']).toBe('Overridden. Set in workspace settings');
+    expect(tag.tabIndex).toBe(0);
+    const seen: boolean[] = [];
+    const toggle = call(ui.fieldToggle, 'Override', {
+      checked: true,
+      path: 'agents.planner.override',
+      ariaLabel: 'Override the role',
+      onChange: (checked: boolean) => seen.push(checked),
+    });
+    expect(toggle.tagName).toBe('LABEL');
+    expect(toggle.className).toBe('mg-field-toggle');
+    const [box, label] = toggle.children;
+    expect(box.tagName).toBe('INPUT');
+    expect(box.type).toBe('checkbox');
+    expect(box.checked).toBe(true);
+    expect(box.dataset.path).toBe('agents.planner.override');
+    expect(box.attrs['aria-label']).toBe('Override the role');
+    expect(label.textContent).toBe('Override');
+    box.checked = false;
+    box.handlers.change[0]();
+    expect(seen).toEqual([false]);
+  });
+
+  it('field and grid density: roomy adds its modifier only when asked', () => {
+    const { ui } = load();
+    const control = call(ui.text, { value: '', path: 'a', onInput: () => undefined });
+    expect(call(ui.field, { label: 'A', path: 'a', control }).className).toBe('mg-field');
+    const roomy = call(ui.field, { label: 'A', path: 'a', control, density: 'roomy' });
+    expect(roomy.className).toBe('mg-field mg-field--roomy');
+    expect(call(ui.grid, []).className).toBe('mg-field-grid');
+    expect(call(ui.grid, [], { density: 'roomy' }).className).toBe('mg-field-grid mg-field-grid--roomy');
+  });
+});
+
+describe('UI kit boundaries', () => {
+  const TEXT_UTILITIES = new Set(['mg-muted', 'mg-warn', 'mg-error', 'mg-mono']);
+
+  it('page scripts write no mg-* class except the text utilities', () => {
+    const pages = [
+      'config/config.js',
+      'config/configform.js',
+      'workfloweditor/workflowEditor.js',
+      'workfloweditor/workflowForm.js',
+      'session/metrics.js',
+      'session/overview.js',
+      'session/overviewProgress.js',
+      'session/results.js',
+    ];
+    for (const file of pages) {
+      const source = readFileSync(path.join(media, file), 'utf8');
+      const found = [...source.matchAll(/\bmg-[a-z0-9-]+/g)].map((match) => match[0]);
+      expect(found.filter((name) => !TEXT_UTILITIES.has(name)), file).toEqual([]);
+    }
+  });
+
+  it('a reference id or hash is a box the layout can cut, so the ellipsis applies in key-value rows too', () => {
+    const css = readFileSync(path.join(media, 'shared/base.css'), 'utf8');
+    const block = /\.mg-ref--id,\s*\.mg-ref--hash\s*\{([^}]*)\}/.exec(css);
+    expect(block, 'the id/hash reference rule').not.toBeNull();
+    const [, rules] = block as RegExpExecArray;
+    expect(rules).toContain('display: inline-block');
+    expect(rules).toContain('max-width: min(22ch, 100%)');
+    expect(rules).toContain('overflow: hidden');
+    expect(rules).toContain('text-overflow: ellipsis');
+    expect(rules).toContain('white-space: nowrap');
+  });
+
+  it('no page stylesheet defines an mg-* selector; the two emptied sheets stay empty', () => {
+    for (const file of ['session/session.css', 'config/config.css', 'workfloweditor/workflowEditor.css', 'workfloweditor/workflowForm.css']) {
+      const source = readFileSync(path.join(media, file), 'utf8').replaceAll(/\/\*[\s\S]*?\*\//g, '');
+      expect(source, file).not.toMatch(/\.mg-[a-z]/);
+    }
+    expect(readFileSync(path.join(media, 'config/config.css'), 'utf8').replaceAll(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('');
+    expect(readFileSync(path.join(media, 'workfloweditor/workflowEditor.css'), 'utf8').replaceAll(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('');
+    const form = readFileSync(path.join(media, 'workfloweditor/workflowForm.css'), 'utf8');
+    expect(form).not.toMatch(/\.mg-[a-z]/);
+    expect(form).toContain('scroll-padding-top');
   });
 });

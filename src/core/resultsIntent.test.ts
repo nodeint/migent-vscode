@@ -40,6 +40,26 @@ describe('parseResultsMessage', () => {
     expect(parseResultsMessage({ type: 'intent', intent: 'reloadSuggestions' })).toBeNull();
   });
 
+  it('accepts the copy intent for a session id or a handoff value, and nothing else', () => {
+    expect(
+      parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'sessionId', sessionId: 's1' }),
+    ).toEqual({ type: 'intent', value: { intent: 'copyValue', kind: 'sessionId', sessionId: 's1' } });
+    expect(
+      parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'handoffHash', name: 'plan', path: 'C:/x' }),
+    ).toEqual({ type: 'intent', value: { intent: 'copyValue', kind: 'handoffHash', name: 'plan' } });
+    expect(
+      parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 'plan' }),
+    ).toEqual({ type: 'intent', value: { intent: 'copyValue', kind: 'handoffSourcePath', name: 'plan' } });
+    expect(parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'sessionId' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'sessionId', sessionId: '' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'handoffHash' })).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 7 })).toBeNull();
+    expect(
+      parseResultsMessage({ type: 'intent', intent: 'copyValue', kind: 'absolutePath', path: 'C:/x' }),
+    ).toBeNull();
+    expect(parseResultsMessage({ type: 'intent', intent: 'copyValue' })).toBeNull();
+  });
+
   it('accepts each of the header actions and nothing else', () => {
     for (const action of [
       'openResult',
