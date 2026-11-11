@@ -4,12 +4,14 @@ import type {
   GetModel,
   GetNativeOption,
   PrepareResult,
+  RenameResult,
   Static,
 } from '@nodeint/migent-contracts';
 
 import { type Wire, wireOf } from './contractRead';
 
 type PrepareOutput = Static<typeof PrepareResult>;
+type RenameOutput = Static<typeof RenameResult>;
 type ClientRow = Static<typeof GetClient>;
 type ModelRow = Static<typeof GetModel>;
 type NativeOptionRow = Static<typeof GetNativeOption>;
@@ -95,6 +97,25 @@ export function cancelArgs(sessionId: string): string[] {
 /** `session complete <id>`: marks a stopped workflow session completed without dispatching a stage. */
 export function completeArgs(sessionId: string): string[] {
   return ['session', 'complete', sessionId];
+}
+
+/** `session rename <id> <title>`: one argv entry per value, so the title is never quoted or split. */
+export function renameArgs(sessionId: string, title: string): string[] {
+  return ['session', 'rename', sessionId, title, '--json'];
+}
+
+/** What `session rename --json` printed: the new title, or null when it is not the documented object. */
+export function parseRenameOutput(text: string): { sessionId: string; title: string } | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const result = wireOf<RenameOutput, 'session_id' | 'title'>(value);
+  if (result === null) return null;
+  const { session_id: sessionId, title } = result;
+  return typeof sessionId === 'string' && typeof title === 'string' ? { sessionId, title } : null;
 }
 
 /** What `session prepare` printed, or null when it is not the documented object. */

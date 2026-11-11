@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.5.6 or newer; users on 0.5.5 must upgrade.
+- Support the short numeric session ids of CLI 0.5.6 (and unquoted integer ids in manifests) next to older ids.
+- Add Rename Session… to the Sessions row menu and the session page's More actions menu. The new title shows at once
+  in the Sessions view and the open session page.
+
 ## 0.1.9
 
 - A failure caused by an unusable handoff file now offers an Open handoff button for `handoff.json`.

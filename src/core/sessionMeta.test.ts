@@ -7,6 +7,7 @@ function snapshot(state: 'running' | 'completed', status: Record<string, unknown
   return {
     sessionId: 's',
     displayState: { state },
+    titleOverride: null,
     replyTargets: [],
     manifest: { createdAt: 'manifest-created' },
     status: {

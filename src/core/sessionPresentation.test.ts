@@ -18,6 +18,7 @@ import {
   sessionIcon,
   sessionLabel,
   sessionsDiagnostic,
+  sessionTitle,
   sessionTooltip,
   truncate,
 } from './sessionPresentation';
@@ -47,6 +48,40 @@ describe('formatting', () => {
     const long = 'x'.repeat(80);
     expect(truncate(long)).toHaveLength(60);
     expect(truncate(long).endsWith('…')).toBe(true);
+  });
+});
+
+describe('session title precedence', () => {
+  const base = snapshotFromDir(sessionFixture('completed'));
+  const withStatus = { ...base, titleOverride: null };
+
+  it('prefers title.json, then manifest, status, workflow id, then the short id', () => {
+    expect(sessionTitle({ ...withStatus, titleOverride: 'Renamed' })).toBe('Renamed');
+    expect(sessionTitle({ ...withStatus, manifest: base.manifest && { ...base.manifest, title: 'Manifest' } })).toBe('Manifest');
+    const noManifestTitle = { ...withStatus, manifest: base.manifest && { ...base.manifest, title: null } };
+    expect(sessionTitle(noManifestTitle)).toBe(base.status?.title ?? base.status?.workflowId);
+    const noIds = base.status && { ...base.status, title: null, workflowId: null };
+    const bare = { ...withStatus, manifest: null, status: noIds };
+    expect(sessionTitle(bare)).toBe(base.sessionId.slice(0, 8));
+    expect(sessionTitle({ ...bare, status: base.status && { ...base.status, title: null, workflowId: 'plan' } })).toBe('plan');
+  });
+
+  it('shows the overlay in the label and tooltip', () => {
+    const renamed = { ...withStatus, titleOverride: 'Renamed' };
+    expect(sessionLabel(renamed)).toBe('Renamed');
+    expect(sessionTooltip(renamed, NOW)).toContain('Renamed');
+  });
+});
+
+describe('numeric and legacy ids side by side', () => {
+  it('keeps node ids distinct and reads the captured 0.5.6 session', () => {
+    const numeric = snapshotFromDir(capturedDir('numeric-ids-0.5.6'));
+    const legacy = snapshotFromDir(sessionFixture('completed'));
+    expect(numeric.sessionId).not.toBe(legacy.sessionId);
+    expect(numeric.manifest?.sessionId).toBe('1');
+    expect(numeric.titleOverride).toBe('Renamed title');
+    expect(sessionLabel(numeric)).toBe('Renamed title');
+    expect(nodeIds.session('k', numeric.sessionId)).not.toBe(nodeIds.session('k', legacy.sessionId));
   });
 });
 

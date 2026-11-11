@@ -63,7 +63,7 @@ inspection even when the CLI is not installed; running workflows and controlling
 ### Prerequisites
 
 - Install the Migent extension in VS Code.
-- Install Migent CLI v0.5.5 or newer to run workflows and control sessions:
+- Install Migent CLI v0.5.6 or newer to run workflows and control sessions:
 
   ```bash
   npm install -g @nodeint/migent
@@ -103,7 +103,7 @@ Start from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 | `Migent: Refresh` | Re-read sessions and workflow definitions from disk. |
 
 Session actions are available from session rows, context menus, and page controls according to the session's state.
-Use these controls to **Save & Run**, **Continue**, **Stop**, answer questions, reply to blockers, inspect results,
+Use these controls to **Save & Run**, **Continue**, **Stop**, **Rename**, answer questions, reply to blockers, inspect results,
 or open the timeline and logs. Suggested workflow actions are available from the Results and Next step pages.
 
 ## Extension Settings
@@ -123,7 +123,7 @@ Configure the extension via VS Code settings (`Ctrl+,` or `Cmd+,`):
 
 ## Troubleshooting
 
-- **Cannot run workflows**: Check that Migent CLI v0.5.5 or newer is on `PATH`, then restart VS Code.
+- **Cannot run workflows**: Check that Migent CLI v0.5.6 or newer is on `PATH`, then restart VS Code.
   Use **Recheck CLI** on the CLI diagnostic row in the Sessions view to check again.
 - **"Schema is outdated" after upgrading the CLI**: Run `migent migrate` in the project. The migration
   deletes stage `options`; recreate any needed option as an inline `agent` on that stage.

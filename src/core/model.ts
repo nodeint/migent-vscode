@@ -182,6 +182,8 @@ export interface SessionSnapshot {
   /** True when status.json exists but did not parse after retries. */
   statusError: boolean;
   lock: LockProbe;
+  /** Title from the CLI's `title.json` overlay; null when absent or invalid. Wins over every other title. */
+  titleOverride: string | null;
   displayState: DisplayState;
   /** Executions a reply can answer now, computed by the store with the snapshot; empty when none. */
   replyTargets: readonly ReplyTarget[];

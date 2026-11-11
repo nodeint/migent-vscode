@@ -255,6 +255,12 @@
         "shortTitle": "Complete…"
       },
       {
+        "command": "migent.session.rename",
+        "title": "Rename Session…",
+        "category": "Migent",
+        "shortTitle": "Rename…"
+      },
+      {
         "command": "migent.session.repair",
         "title": "Repair Session…",
         "category": "Migent",
@@ -548,6 +554,11 @@
           "group": "3_more@3"
         },
         {
+          "command": "migent.session.rename",
+          "when": "view == migent.sessions && viewItem =~ /^session\\./",
+          "group": "3_more@5"
+        },
+        {
           "command": "migent.session.repair",
           "when": "view == migent.sessions && viewItem =~ /^session\\.(?!running)/",
           "group": "3_more@4"
@@ -671,6 +682,10 @@
           "when": "false"
         },
         {
+          "command": "migent.session.rename",
+          "when": "false"
+        },
+        {
           "command": "migent.session.repair",
           "when": "false"
         }
@@ -713,6 +728,10 @@
         {
           "command": "migent.session.complete",
           "group": "2_manage@1"
+        },
+        {
+          "command": "migent.session.rename",
+          "group": "2_manage@2"
         }
       ]
     },
@@ -740,7 +759,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@nodeint/migent-contracts": "0.5.5",
+    "@nodeint/migent-contracts": "0.5.6",
     "@types/node": "^26.6.5",
     "@types/vscode": "1.93.0",
     "@vscode/test-electron": "^3.1.0",

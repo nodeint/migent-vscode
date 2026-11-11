@@ -7,12 +7,14 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.5.5: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.5.6: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
 //                        A failed execution writes `failure.md`; `workflow validate` and `get` are implemented.
 //   MIGENT_FAKE_COMPLETE_WARN  1 makes `session complete` warn on stderr about a missing required artifact (exit 0)
+//   MIGENT_FAKE_IDS      numeric makes new sessions get short numeric ids (1, 2, ...) written as unquoted integers in
+//                        the manifest, like CLI 0.5.6; otherwise ids are UUIDs.
 //   MIGENT_FAKE_PREFLIGHT  fail makes `session run` fail the preflight (exit 2, nothing created or frozen) unless
 //                        `--skip-preflight` is passed. Ignored in legacy mode.
 //   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
@@ -55,9 +57,39 @@ function writeStatus(id, state, extra = {}) {
   });
 }
 
+function newSessionId() {
+  if (process.env.MIGENT_FAKE_IDS !== 'numeric') return crypto.randomUUID();
+  const used = fs.existsSync(sessionsDir) ? fs.readdirSync(sessionsDir).map(Number).filter(Number.isInteger) : [];
+  return String(Math.max(0, ...used) + 1);
+}
+
+// `session rename <id> <title> --json`: like the real CLI, takes no lock and writes only title.json.
+function rename() {
+  fs.appendFileSync(path.join(process.cwd(), 'fake-argv.log'), JSON.stringify(args) + '\n');
+  const [id, raw] = [args[2], args[3]];
+  if (id === undefined || !fs.existsSync(dirOf(id))) {
+    console.error(`Session not found: ${id}`);
+    process.exit(2);
+  }
+  if (raw === undefined || /[\r\n]/.test(raw) || raw.trim() === '') {
+    console.error('Title must be a non-empty single line.');
+    process.exit(2);
+  }
+  const file = path.join(dirOf(id), 'title.json');
+  const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { history: [] };
+  const title = raw.trim();
+  const at = new Date().toISOString();
+  writeJson(file, {
+    title,
+    updated_at: at,
+    history: [...(previous.history ?? []), ...(previous.title === undefined ? [] : [{ title: previous.title, changed_at: at }])],
+  });
+  console.log(JSON.stringify({ session_id: id, title, previous_title: previous.title ?? null }));
+}
+
 // Like the real CLI, `prepare` leaves task.md for the caller to write.
 function create(workflow, title) {
-  const id = crypto.randomUUID();
+  const id = newSessionId();
   fs.mkdirSync(dirOf(id), { recursive: true });
   fs.writeFileSync(
     path.join(dirOf(id), 'manifest.yaml'),
@@ -516,7 +548,7 @@ function doctor() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.5');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.6');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
 } else if ((args[0] === 'workflow' || args[0] === 'config') && args[1] === 'save' && !IS_LEGACY) {
@@ -536,6 +568,8 @@ if (args[0] === '--version') {
   run();
 } else if (args[0] === 'session' && args[1] === 'cancel') {
   cancel();
+} else if (args[0] === 'session' && args[1] === 'rename' && !IS_LEGACY) {
+  rename();
 } else if (args[0] === 'session' && args[1] === 'complete' && !IS_LEGACY) {
   complete();
 } else {

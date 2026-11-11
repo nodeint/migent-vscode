@@ -19,6 +19,7 @@ import {
   QUESTIONS_FILENAME,
   SESSIONS_DIRNAME,
   STATUS_FILENAME,
+  TITLE_FILENAME,
   WORKFLOWS_DIRNAME,
 } from './paths';
 import { isWorkflowFile } from './workflows';
@@ -52,7 +53,13 @@ export function watchTargetKey(target: WatchTarget): string {
   }
 }
 
-const SNAPSHOT_FILES = [MANIFEST_FILENAME, STATUS_FILENAME, LOCK_FILENAME, CANCEL_REQUEST_FILENAME] as const;
+const SNAPSHOT_FILES = [
+  MANIFEST_FILENAME,
+  STATUS_FILENAME,
+  LOCK_FILENAME,
+  CANCEL_REQUEST_FILENAME,
+  TITLE_FILENAME,
+] as const;
 
 const SESSION_PATTERN = `{${[
   ...SNAPSHOT_FILES,

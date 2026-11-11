@@ -25,7 +25,7 @@ import { type GateHandle, type GateKey, OperationGate } from '../core/operationG
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
-import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, workflowChange } from './controlHelpers';
+import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, runRename, workflowChange } from './controlHelpers';
 import type { ProjectContext, ProjectRegistry } from './projects';
 import { type PreparedSession, preparedSession, reportFailure } from './workflowDraft';
 
@@ -406,6 +406,11 @@ export class ControlService implements vscode.Disposable {
     } finally {
       handle.release();
     }
+  }
+
+  /** `session rename`: no session gate or lock check (the CLI takes no lock); the watcher reports the new title. */
+  public async rename(context: ProjectContext, snapshot: SessionSnapshot, title: string): Promise<void> {
+    await runRename({ context, snapshot, title }, this, [this.#launch(context), this.#env(context), this.#output]);
   }
 
   /** `doctor --json` shown in the Migent output channel. A failed check is a result, not an error. */

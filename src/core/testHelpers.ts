@@ -8,6 +8,7 @@ import { listExecutions } from './executions';
 import { readManifest } from './manifest';
 import type { LockProbe, SessionSnapshot } from './model';
 import { replyNeedsExecutions, replyTargets } from './replyFlow';
+import { readTitleOverride } from './sessionTitle';
 import { readStatus } from './statusReader';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -55,6 +56,7 @@ export function snapshotFromDir(dir: string, lock: LockProbe = { kind: 'none' })
     status,
     statusError: read.kind === 'error',
     lock,
+    titleOverride: readTitleOverride(path.join(dir, 'title.json')),
     displayState: deriveDisplayState(
       { status, statusError: read.kind === 'error' ? read.reason : null, manifest: manifestState },
       lock,

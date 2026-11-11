@@ -14,7 +14,9 @@ import {
   modelsDefaultFirst,
   parseDoctorOutput,
   parsePrepared,
+  parseRenameOutput,
   prepareArgs,
+  renameArgs,
   repairArgs,
   runDownstreamArgs,
   runNewArgs,
@@ -181,5 +183,17 @@ describe('reply, repair, doctor and init argv', () => {
     ]);
     expect(parseDoctorOutput('not json')).toBeNull();
     expect(parseDoctorOutput('{"checks":[1]}')).toBeNull();
+  });
+});
+
+describe('rename', () => {
+  it('passes the id and the title as separate argv values', () => {
+    expect(renameArgs('3', 'A "quoted" title; rm -rf')).toEqual(['session', 'rename', '3', 'A "quoted" title; rm -rf', '--json']);
+  });
+
+  it('reads the rename result and rejects other shapes', () => {
+    expect(parseRenameOutput('{"session_id":"3","title":"New","previous_title":null}')).toEqual({ sessionId: '3', title: 'New' });
+    expect(parseRenameOutput('{"session_id":3,"title":"New"}')).toBeNull();
+    expect(parseRenameOutput('nope')).toBeNull();
   });
 });

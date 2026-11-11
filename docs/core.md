@@ -61,9 +61,10 @@ background work; its caller chooses when to scan, refresh, and load details.
 
 | Source | Read trigger | Missing or invalid input |
 | :--- | :--- | :--- |
-| `manifest.yaml` | Snapshot construction | Returns null; an unavailable manifest makes display state Unknown |
+| `manifest.yaml` | Snapshot construction | Returns null; an unavailable manifest makes display state Unknown. `session_id`, `prior_session_id` and the handoff `source_session_id` may be quoted strings or unquoted non-negative integers (CLI 0.5.6 ids such as `3`); both read as the decimal string |
 | `status.json` | Snapshot construction | Missing is distinct from error; both result in Unknown display state |
 | `session.lock` | Snapshot construction | Uses the lock rules above |
+| `title.json` | Snapshot construction (`titleOverride`); changes refresh the snapshot through the session watcher | The CLI's rename overlay. Missing, unreadable, invalid, empty or multi-line input gives no override; `history` is not read. Only the CLI writes it |
 | `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
 | `events.jsonl` | Explicit `EventTail.poll()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset; a file smaller than the offset resets the tail (see below) |
 | `events.jsonl` (bounded recent read) | `readRecentEvents(file, limit)` on demand by the Overview tab, only while the session is Running | Missing, empty or unreadable input yields no lines; it reads the newest newline-terminated lines and keeps at most `limit` |
@@ -166,7 +167,7 @@ Evidence: [store.test.ts](../src/core/store.test.ts).
 [sessionPresentation.ts](../src/core/sessionPresentation.ts) holds the plain-text rules for the
 Sessions view, so they are tested without VS Code:
 
-- Label: the manifest title, else the status title, workflow id or short id, cut to 60
+- Label: the `title.json` title, else the manifest title, else the status title, workflow id or short id, cut to 60
   characters (the tooltip keeps the full title).
 - Description: `workflow · stage · time`, plus `N questions` when questions are pending. Time is the
   elapsed time since start for a Running session and the time since the last update for the others.

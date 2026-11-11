@@ -15,9 +15,23 @@ function snapshot(sessionId: string, priorSessionId: string | null): SessionSnap
     statusError: false,
     lock: { kind: 'none' },
     displayState: { state: 'completed', icon: 'pass', writable: true },
+    titleOverride: null,
     replyTargets: [],
   };
 }
+
+describe('readHandoff with numeric ids', () => {
+  it('reads an unquoted integer source_session_id', () => {
+    const manifest = parseManifest('session_id: 3\nhandoff: {"source_session_id": 2, "artifacts": {}}\n');
+    expect(readHandoff(manifest, '/tmp/x')).toMatchObject({ kind: 'ok', sourceSessionId: '2' });
+  });
+
+  it('links numeric-id sessions through childrenOf', () => {
+    const source = snapshot('2', null);
+    const child = snapshot('3', '2');
+    expect(childrenOf([source, child], '2').map((s) => s.sessionId)).toEqual(['3']);
+  });
+});
 
 describe('readHandoff', () => {
   const dir = capturedDir('handoff-target');

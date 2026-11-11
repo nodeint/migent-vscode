@@ -21,6 +21,7 @@ function fromFixture(dir: string, lock: LockProbe = { kind: 'none' }): SessionSn
     statusError: false,
     lock,
     displayState: deriveDisplayState({ status: read.status, statusError: null, manifest: 'ok' }, lock),
+    titleOverride: null,
     replyTargets: [],
   };
 }
@@ -33,6 +34,7 @@ function bare(state: 'unknown' | 'stopped' | 'failed' | 'completed' | 'prepared'
     ...base,
     status,
     displayState: deriveDisplayState({ status, statusError: null, manifest: 'ok' }, { kind: 'none' }),
+    titleOverride: null,
     replyTargets: [],
   };
 }

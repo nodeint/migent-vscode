@@ -23,10 +23,11 @@ export function truncate(text: string, max: number = LABEL_MAX_LENGTH): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Full title: manifest title, else status title, else workflow id, else the short id. */
+/** Full title: `title.json` overlay, else manifest title, else status title, else workflow id, else the short id. */
 export function sessionTitle(snapshot: SessionSnapshot): string {
   const { manifest, status } = snapshot;
-  return manifest?.title ?? status?.title ?? status?.workflowId ?? shortId(snapshot.sessionId);
+  const { titleOverride } = snapshot;
+  return titleOverride ?? manifest?.title ?? status?.title ?? status?.workflowId ?? shortId(snapshot.sessionId);
 }
 
 export function sessionLabel(snapshot: SessionSnapshot): string {

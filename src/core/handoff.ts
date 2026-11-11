@@ -1,3 +1,4 @@
+import { asSessionId } from './manifest';
 import type { SessionManifest, SessionSnapshot } from './model';
 import { resolveWithin } from './paths';
 import { isRecord } from './record';
@@ -33,7 +34,7 @@ export function readHandoff(manifest: SessionManifest | null, sessionDirPath: st
   const value = manifest?.raw.handoff;
   if (value === undefined || value === null) return { kind: 'absent' };
   if (!isRecord(value)) return { kind: 'invalid', reason: 'handoff is not a mapping' };
-  const sourceSessionId = str(value.source_session_id);
+  const sourceSessionId = asSessionId(value.source_session_id);
   if (sourceSessionId === null) return { kind: 'invalid', reason: 'source_session_id is missing' };
   if (!isRecord(value.artifacts)) return { kind: 'invalid', reason: 'artifacts is not a mapping' };
   const artifacts: HandoffArtifact[] = [];
