@@ -292,7 +292,11 @@ const scenarios: Scenario[] = [
         '02edbc066ee4147972f6aa6d611524c74135a06528ec94a2450cc84dd3bf084b',
       );
       await env.api.session.handle(target, { type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 'context_note' });
-      assert.ok((await vscode.env.clipboard.readText()).endsWith(path.join('outputs', 'note.md')));
+      // The recorded source path is copied verbatim; the captured fixture was recorded on Windows.
+      assert.equal(
+        await vscode.env.clipboard.readText(),
+        `C:\\project\\.migent\\sessions\\${SOURCE}\\outputs\\note.md`,
+      );
       assert.equal(env.api.session.count, 2);
       await waitFor('open panels hold outputs watchers', () => (env.project()?.watcher.watchCount ?? 0) > baseline);
       await closeAll(env);
