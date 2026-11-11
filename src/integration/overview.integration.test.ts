@@ -254,6 +254,9 @@ const scenarios: Scenario[] = [
       await expectOpens('next.json opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'next.json'));
       await env.api.session.handle(source, { type: 'intent', intent: 'openTargetWorkflow', workflow: 'probe-target' });
       await expectOpens('workflow opened', path.join(env.root, '.migent', 'workflows', 'probe-target.yaml'));
+      // Copy goes through the host: the closed intent carries identity only and the host writes the clipboard.
+      await env.api.session.handle(source, { type: 'intent', intent: 'copyValue', kind: 'sessionId', sessionId: SOURCE });
+      assert.equal(await vscode.env.clipboard.readText(), SOURCE);
       // Header actions run the existing session command for this panel's own session, never the active panel's.
       await env.api.session.handle(source, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
       await expectOpens('task.md of the panel session opened', path.join(env.root, '.migent', 'sessions', SOURCE, 'task.md'));
@@ -283,6 +286,13 @@ const scenarios: Scenario[] = [
       assert.equal(child.source.provenance.state, 'ok');
       await env.api.session.handle(target, { type: 'intent', intent: 'openHandoffFile', name: 'context_note' });
       await expectOpens('handoff file opened', path.join(env.root, '.migent', 'sessions', TARGET, 'handoff', '1', 'note.md'));
+      await env.api.session.handle(target, { type: 'intent', intent: 'copyValue', kind: 'handoffHash', name: 'context_note' });
+      assert.equal(
+        await vscode.env.clipboard.readText(),
+        '02edbc066ee4147972f6aa6d611524c74135a06528ec94a2450cc84dd3bf084b',
+      );
+      await env.api.session.handle(target, { type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 'context_note' });
+      assert.ok((await vscode.env.clipboard.readText()).endsWith(path.join('outputs', 'note.md')));
       assert.equal(env.api.session.count, 2);
       await waitFor('open panels hold outputs watchers', () => (env.project()?.watcher.watchCount ?? 0) > baseline);
       await closeAll(env);

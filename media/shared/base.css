@@ -126,6 +126,12 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* A page without a state badge names itself with an eyebrow label. Built by `pageHeader`. */
+.mg-eyebrow {
+  color: var(--mg-warn);
+  font-weight: 700;
+}
+
 .mg-title--clamp {
   font-size: 1.3em;
   display: -webkit-box;
@@ -375,14 +381,6 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 
 .mg-collapsible .mg-section--card > .mg-section-head {
   background: none;
-}
-
-.mg-section--accent {
-  border-left-color: var(--mg-info);
-}
-
-.mg-collapsible .mg-section--card > .mg-section-head {
-  background: none;
   border-bottom: 0;
 }
 
@@ -390,8 +388,29 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   padding-top: 0;
 }
 
+/* A toned left edge marks a card or a surface body that needs attention. */
 .mg-section--accent {
   border-left: 3px solid var(--mg-info);
+}
+
+.mg-section--accent-warn {
+  border-left-color: var(--mg-warn);
+}
+
+.mg-section--accent-error {
+  border-left-color: var(--mg-error);
+}
+
+.mg-section--surface.mg-section--accent > .mg-section-body {
+  border-left: 3px solid var(--mg-info);
+}
+
+.mg-section--surface.mg-section--accent-warn > .mg-section-body {
+  border-left-color: var(--mg-warn);
+}
+
+.mg-section--surface.mg-section--accent-error > .mg-section-body {
+  border-left-color: var(--mg-error);
 }
 
 /* Status indicator: icon + text + theme color, so status is never color alone. */
@@ -417,6 +436,24 @@ body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
 
 .mg-status--error {
   color: var(--mg-error);
+}
+
+/* Icon only, but the state keeps its name for assistive technology and a tooltip for the pointer. */
+.mg-status--compact {
+  gap: 0;
+}
+
+/* Visible to assistive technology, invisible on screen. */
+.mg-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Buttons */
@@ -562,11 +599,6 @@ button.mg-row:hover {
 .mg-row-main {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.mg-row-main--action {
-  color: var(--mg-link);
-  text-decoration: underline;
 }
 
 .mg-row-meta {
@@ -1298,6 +1330,11 @@ select.mg-select:disabled {
   column-gap: var(--mg-space-2);
 }
 
+/* A head without a badge or a leading icon keeps the main region in the first column. */
+.mg-collapsible-head--no-lead {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 /* Every part of the header's first line is centred in the same row, as high as a tool: the chevron, the number,
    the title and the tools share one middle line, whatever the width. */
 .mg-collapsible > summary .mg-details-arrow {
@@ -1319,6 +1356,22 @@ select.mg-select:disabled {
 }
 
 .mg-collapsible-head > .mg-badge--warn {
+  color: var(--mg-warn);
+  border-color: var(--mg-warn);
+}
+
+/* The same framed circle on a static or link item card. */
+.mg-item-head > .mg-badge {
+  box-sizing: border-box;
+  width: 1.8em;
+  min-width: 1.8em;
+  padding: 0;
+  color: var(--mg-fg);
+  background: var(--mg-surface);
+  border-color: var(--mg-border);
+}
+
+.mg-item-head > .mg-badge--warn {
   color: var(--mg-warn);
   border-color: var(--mg-warn);
 }
@@ -1400,10 +1453,333 @@ select.mg-select:disabled {
   }
 }
 
+/* Item card: one bordered item across every page. The head is one row: an optional index badge or leading icon, the
+   main region (title, alerts, meta), and an end slot for status and tools. The main region is the only part that is
+   cut or clamped, and the end slot never shrinks. Modes: a plain div (`--static`), a whole-head button (`--link`),
+   or a collapsible `<details>` (`.mg-collapsible`). */
+.mg-item {
+  margin-top: var(--mg-gap-card);
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius);
+  overflow: clip;
+}
+
+.mg-item--info {
+  border-left: 3px solid var(--mg-info);
+}
+
+.mg-item--warn {
+  border-left: 3px solid var(--mg-warn);
+}
+
+.mg-item--error {
+  border-left: 3px solid var(--mg-error);
+}
+
+.mg-item-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--mg-space-2);
+  padding: var(--mg-space-2) var(--mg-space-3);
+  background: var(--mg-surface-2);
+}
+
+.mg-item-head--lead {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.mg-item--static > .mg-item-head {
+  min-height: var(--mg-btn-height);
+}
+
+.mg-item--link > .mg-item-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0;
+  background: none;
+}
+
+.mg-item-link {
+  font: inherit;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--mg-space-2);
+  min-width: 0;
+  padding: var(--mg-space-2) var(--mg-space-3);
+  color: var(--mg-fg);
+  text-align: left;
+  background: var(--mg-surface-2);
+  border: 0;
+  cursor: pointer;
+}
+
+.mg-item-link--no-lead {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mg-item-link:hover {
+  background: var(--mg-hover);
+}
+
+.mg-item--link > .mg-item-head > .mg-item-end {
+  padding-right: var(--mg-space-3);
+}
+
+.mg-item-leading,
+.mg-item-afford {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mg-muted);
+}
+
+.mg-item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mg-space-2);
+  min-width: 0;
+  min-height: var(--mg-btn-height);
+}
+
+.mg-item-title {
+  flex: none;
+  max-width: 100%;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A title the page may shorten: the whole text stays in the DOM and in the head tooltip. */
+.mg-item-title--clamp-1,
+.mg-item-title--clamp-2,
+.mg-item-title--clamp-3 {
+  flex: 1 1 12em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.mg-item-title--clamp-1 {
+  -webkit-line-clamp: 1;
+}
+
+.mg-item-title--clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.mg-item-title--clamp-3 {
+  -webkit-line-clamp: 3;
+}
+
+.mg-item-alerts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--mg-space-1);
+}
+
+.mg-item-alerts .mg-chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The quiet metadata beside a title: a plain joined summary or a list of segments. */
+.mg-item-summary {
+  flex: 1 1 4em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mg-muted);
+  font-size: 0.9em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  color: var(--mg-muted);
+  font-size: 0.9em;
+}
+
+.mg-item-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--mg-space-1);
+  min-height: var(--mg-btn-height);
+}
+
+/* A reference value (an id, a hash or a path) is display only: mono, cut at the end or wrapped, full value in the
+   tooltip. The copy action is a separate tool outside any link button. */
+.mg-ref {
+  font-family: var(--mg-mono);
+  color: var(--mg-muted);
+}
+
+/* An id or hash is one unbreakable run: the box must be sized by the layout (a flex item in card metadata, an
+   inline-block inside a key-value cell) and never wider than the space it is given, so the ellipsis can apply. */
+.mg-ref--id,
+.mg-ref--hash {
+  display: inline-block;
+  max-width: min(22ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.mg-ref--path {
+  overflow-wrap: anywhere;
+}
+
+/* Key-value grid: a quiet label and its value, with an optional tool at the end of the row. */
+.mg-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--mg-space-1) var(--mg-space-3);
+  margin: 0;
+}
+
+.mg-kv--dense {
+  gap: var(--mg-space-1) var(--mg-space-2);
+}
+
+.mg-kv dt {
+  color: var(--mg-muted);
+}
+
+.mg-kv dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mg-space-1);
+  min-width: 0;
+  margin: 0;
+}
+
+.mg-kv-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mg-kv-tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+/* A plain list of lines without dividers: activity, commands, inherited options. */
+.mg-list--plain {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.mg-list--plain > li {
+  padding: var(--mg-space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+/* A stack sets one rhythm between its children and cancels their own neighbour margins. */
+.mg-card-stack,
+.mg-block-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.mg-card-stack {
+  gap: var(--mg-gap-card);
+}
+
+.mg-block-stack {
+  gap: var(--mg-gap-block);
+}
+
+.mg-card-stack > *,
+.mg-block-stack > * {
+  margin-top: 0;
+}
+
+/* A ruled block closes a form with settings of its own; the rule and the block gap mark the separation. */
+.mg-details--ruled {
+  margin-top: var(--mg-space-4);
+  padding-top: var(--mg-space-3);
+  border-top: 1px solid var(--mg-border);
+}
+
+/* A labeled tag for the far end of a field's label row (a value another file overrides). */
+.mg-field-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  color: var(--mg-warn);
+  font-size: 0.85em;
+  border-radius: var(--mg-radius-sm);
+}
+
+.mg-field-tag--info {
+  color: var(--mg-info);
+}
+
+.mg-field-tag .mg-icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.mg-field-tag:focus-visible {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+}
+
+/* A compact checkbox for the field-action slot. A native checkbox is taller than the label line, so it is sized
+   down; otherwise a field with a toggle would be taller than one without. */
+.mg-field-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mg-space-1);
+  color: var(--mg-muted);
+  font-size: 0.85em;
+}
+
+.mg-field-toggle input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--mg-accent);
+}
+
+.mg-field-toggle:focus-within {
+  outline: 1px solid var(--mg-focus);
+  outline-offset: 2px;
+}
+
+/* A roomy field grid keeps a label a step away from its control; the page chooses it, the kit defines it. */
+.mg-field-grid--roomy .mg-field {
+  gap: var(--mg-space-2);
+}
+
+.mg-field--roomy {
+  gap: var(--mg-space-2);
+}
+
+/* The icon of an empty block drawn with an icon. */
+.mg-empty-icon {
+  display: block;
+  margin-bottom: var(--mg-space-1);
+  color: var(--mg-muted);
+}
+
 /* Keyboard focus */
 .mg-btn:focus-visible,
 .mg-row:focus-visible,
 .mg-card:focus-visible,
+.mg-item-link:focus-visible,
 .mg-menu-item:focus-visible,
 .mg-details-summary:focus-visible {
   outline: 1px solid var(--mg-focus);

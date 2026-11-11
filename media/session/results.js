@@ -5,7 +5,8 @@
   'use strict';
 
   const ui = window.MigentUi;
-  const { el, details } = ui;
+  const { el } = ui;
+  const header = window.MigentSessionHeader;
   const copy = window.MigentCopy;
   const text = window.MigentSessionResultsCopy;
 
@@ -13,23 +14,22 @@
 
   const action = (label, intent, kind) => page.action(label, intent, kind);
 
-  const FILE_STATE = { ok: '', missing: copy.file.missing, rejected: copy.file.outsideSession };
-
-  function outputRow(row) {
+  function outputCard(row) {
     if (row.state === 'ok') {
-      return ui.listRow({
-        main: row.label,
-        mainClass: 'mg-row-main--action',
-        meta: row.path,
-        metaClass: 'mg-mono',
+      return ui.itemCard({
+        leading: 'file',
+        title: row.label,
+        meta: [{ text: row.path, mono: true }],
+        tip: row.path,
         onClick: () => page.send({ intent: 'openOutput', name: row.key }),
       });
     }
-    return ui.listRow({
-      main: row.label,
-      mainClass: 'mg-warn',
-      meta: row.path + FILE_STATE[row.state],
-      metaClass: 'mg-mono',
+    return ui.itemCard({
+      leading: 'file',
+      title: row.label,
+      meta: [{ text: row.path, mono: true }],
+      tip: row.path,
+      alerts: [ui.chip(text.outputs.state[row.state], { tone: 'warn' })],
     });
   }
 
@@ -38,133 +38,207 @@
     const children = [];
     if (rows.length === 0 && !model.outputs.directoryError) {
       children.push(ui.empty(text.outputs.empty));
-    } else {
-      const list = el('ul', null, 'mg-list');
-      for (const row of rows) list.append(outputRow(row));
-      children.push(list);
+    } else if (rows.length > 0) {
+      children.push(ui.stack(rows.map(outputCard), { gap: 'card' }));
     }
-    if (model.outputs.directoryError) children.push(el('p', text.outputs.unreadable(model.outputs.directoryError), 'mg-error'));
-    return ui.section(text.outputs.title, { count: String(rows.length), children });
+    if (model.outputs.directoryError) {
+      children.push(ui.alertLine(text.outputs.unreadable(model.outputs.directoryError), { tone: 'error' }));
+    }
+    return ui.section(text.outputs.title, {
+      note: text.outputs.note,
+      count: String(rows.length),
+      children,
+    });
   }
 
-  function suggestionDetails(suggestion) {
-    const node = details(copy.details, { key: 'card:' + suggestion.workflow });
-    let declared = text.suggestion.declared.unknown;
-    if (suggestion.declared === true) declared = text.suggestion.declared.yes;
-    else if (suggestion.declared === false) declared = text.suggestion.declared.no;
-    node.append(el('p', declared, 'mg-muted'));
-    if (suggestion.artifacts.length > 0) {
-      const list = el('ul', null, 'results-plain-list');
-      for (const artifact of suggestion.artifacts) {
-        list.append(
-          el(
-            'li',
-            text.suggestion.artifactLine(artifact.name, artifact.output, artifact.path, artifact.availability),
-            'mg-mono',
-          ),
-        );
-      }
-      node.append(list);
+  function declaredOf(suggestion) {
+    if (suggestion.declared === true) return text.suggestion.declared.yes;
+    if (suggestion.declared === false) return text.suggestion.declared.no;
+    return text.suggestion.declared.unknown;
+  }
+
+  function artifactLine(artifact) {
+    const line = el('span');
+    line.append(el('span', text.suggestion.artifactLine(artifact.name, artifact.output) + ' '));
+    line.append(ui.refValue(artifact.path, { kind: 'path' }));
+    if (artifact.availability !== 'ok') {
+      line.append(el('span', ' (' + artifact.availability + ')', 'mg-warn'));
     }
+    return line;
+  }
+
+  function suggestionCard(suggestion, index) {
+    const pairs = [{ label: text.suggestion.declared.label, value: declaredOf(suggestion) }];
+    if (suggestion.artifacts.length > 0) {
+      pairs.push({ label: text.suggestion.inputs, value: ui.plainList(suggestion.artifacts.map(artifactLine)) });
+    }
+    const body = [ui.keyValues(pairs)];
     if (suggestion.target !== 'not-found') {
-      node.append(action(text.suggestion.openWorkflow, { intent: 'openTargetWorkflow', workflow: suggestion.workflow }, 'secondary'));
+      body.push(
+        action(text.suggestion.openWorkflow, { intent: 'openTargetWorkflow', workflow: suggestion.workflow }, 'secondary'),
+      );
     }
-    return node;
-  }
-
-  /** One frame, two regions: the clickable card on top and, inside the same frame, the Details block under it. */
-  function renderSuggestion(suggestion) {
-    const group = el('div', null, 'results-suggestion');
-    const card = el('button', null, 'mg-card');
-    card.type = 'button';
-    card.append(el('span', suggestion.workflow, 'mg-card-title'));
-    if (suggestion.task) card.append(el('span', suggestion.task, 'mg-card-body'));
-    if (suggestion.artifacts.length > 0) {
-      const tags = el('span', null, 'mg-tags');
-      for (const artifact of suggestion.artifacts) tags.append(ui.pill(artifact.name));
-      card.append(tags);
-    }
-    card.addEventListener('click', () => page.send({ intent: 'openNextStep', workflow: suggestion.workflow }));
-    group.append(card);
     const targetNote = text.suggestion.target[suggestion.target];
-    if (targetNote) group.append(el('p', targetNote, 'mg-warn results-note'));
-    group.append(suggestionDetails(suggestion));
-    return group;
+    return ui.itemCard({
+      key: 'card:' + suggestion.workflow,
+      number: index + 1,
+      title: suggestion.workflow,
+      summary: [suggestion.task || ''],
+      alerts: targetNote ? [ui.chip(targetNote, { tone: 'warn' })] : [],
+      tools: [
+        ui.iconButton(text.suggestion.open, {
+          icon: 'go-to-file',
+          onClick: () => page.send({ intent: 'openNextStep', workflow: suggestion.workflow }),
+        }),
+      ],
+      body,
+    });
   }
 
   function renderNext(model) {
     const next = model.next;
     const children = [];
-    let note;
-    if (next.state !== 'ok') {
-      note = text.next.withDetail(text.next.state[next.state], next.detail);
-    } else if (next.suggestions.length === 0) {
+    if (next.state === 'missing' || (next.state === 'ok' && next.suggestions.length === 0)) {
       children.push(ui.empty(text.next.none));
+    } else if (next.state === 'ok') {
+      children.push(ui.stack(next.suggestions.map(suggestionCard), { gap: 'card' }));
     } else {
-      children.push(...next.suggestions.map(renderSuggestion));
-    }
-    if (next.state !== 'missing') {
-      const file = details(text.next.file, { key: 'next-json' });
-      file.append(action(text.next.openFile, { intent: 'openNextFile' }, 'secondary'));
-      children.push(file);
-    }
-    const count = next.state === 'ok' ? String(next.suggestions.length) : undefined;
-    return ui.section(text.next.title, { count, note, children });
-  }
-
-  function renderChildren(children) {
-    const list = el('ul', null, 'mg-list');
-    for (const child of children) {
-      const task = child.task || child.title;
-      list.append(
-        ui.listRow({
-          // The page only shortens the task visually (CSS clamp); the text and the tooltip stay complete.
-          title: task,
-          main: [el('span', task, 'results-clamp'), el('span', child.sessionId, 'results-id mg-muted mg-mono')],
-          meta: [ui.pill(child.state)],
-          onClick: () => page.send({ intent: 'openSession', sessionId: child.sessionId }),
+      const lines = [text.next.state[next.state]];
+      if (next.detail !== null) lines.push({ text: next.detail, className: 'mg-muted mg-mono' });
+      children.push(
+        ui.banner({
+          tone: 'warn',
+          lines,
+          actions: [action(text.next.openFile, { intent: 'openNextFile' }, 'secondary')],
         }),
       );
     }
-    return ui.section(text.children.title, { count: String(children.length), children: [list] });
+    const actions = next.state === 'ok' ? [action(text.next.openFile, { intent: 'openNextFile' }, 'quiet')] : [];
+    const count = next.state === 'ok' ? String(next.suggestions.length) : undefined;
+    return ui.section(text.next.title, { note: text.next.note, count, actions, children });
+  }
+
+  /** The shared state icon and tone for a child state, named by the state the host reports. */
+  function childStatus(state) {
+    const key = String(state).toLowerCase();
+    return {
+      ...(header.sessionStates[key] || header.sessionStates.unknown),
+      text: state,
+      compact: key === 'completed',
+    };
+  }
+
+  function childCard(child) {
+    const task = child.task || child.title;
+    return ui.itemCard({
+      title: task,
+      titleLines: 2,
+      tip: task + ' — ' + child.sessionId,
+      status: childStatus(child.state),
+      tools: [
+        ui.refValue.copyButton(text.children.copyId, () =>
+          page.send({ intent: 'copyValue', kind: 'sessionId', sessionId: child.sessionId }),
+        ),
+      ],
+      onClick: () => page.send({ intent: 'openSession', sessionId: child.sessionId }),
+    });
+  }
+
+  function renderChildren(children) {
+    return ui.section(text.children.title, {
+      note: text.children.note,
+      count: String(children.length),
+      children: [ui.stack(children.map(childCard), { gap: 'card' })],
+    });
+  }
+
+  function handoffCard(artifact) {
+    const pairs = [
+      { label: text.handoff.localCopy, value: artifact.path, mono: true },
+      {
+        label: text.handoff.sha256,
+        value: ui.refValue(artifact.sha256, { kind: 'hash' }),
+        tools: [
+          ui.refValue.copyButton(text.handoff.copyHash, () =>
+            page.send({ intent: 'copyValue', kind: 'handoffHash', name: artifact.name }),
+          ),
+        ],
+      },
+    ];
+    if (artifact.sourcePath !== null) {
+      pairs.push({
+        label: text.handoff.sourcePath,
+        value: ui.refValue(artifact.sourcePath, { kind: 'path' }),
+        tools: [
+          ui.refValue.copyButton(text.handoff.copySourcePath, () =>
+            page.send({ intent: 'copyValue', kind: 'handoffSourcePath', name: artifact.name }),
+          ),
+        ],
+      });
+    }
+    return ui.itemCard({
+      key: 'handoff:' + artifact.name,
+      title: artifact.name,
+      summary: [text.handoff.fromOutput(artifact.output)],
+      alerts: artifact.localState === 'ok' ? [] : [ui.chip(text.handoff.state[artifact.localState], { tone: 'warn' })],
+      tools: artifact.localState === 'ok'
+        ? [
+            ui.iconButton(text.handoff.openLocal, {
+              icon: 'go-to-file',
+              onClick: () => page.send({ intent: 'openHandoffFile', name: artifact.name }),
+            }),
+          ]
+        : [],
+      body: [ui.keyValues(pairs)],
+    });
   }
 
   function renderHandoff(provenance) {
     if (provenance.state === 'none') return null;
     if (provenance.state === 'invalid') {
       return ui.section(text.handoff.title, {
-        note: text.handoff.invalid(provenance.reason),
-        children: [action(text.handoff.openManifest, { intent: 'openManifest' }, 'secondary')],
+        note: text.handoff.note,
+        children: [
+          ui.banner({
+            tone: 'warn',
+            lines: [text.handoff.invalid(provenance.reason)],
+            actions: [action(text.handoff.openManifest, { intent: 'openManifest' }, 'secondary')],
+          }),
+        ],
       });
     }
-    const list = el('ul', null, 'results-plain-list');
-    for (const artifact of provenance.artifacts) {
-      const item = el('li');
-      item.append(el('span', text.handoff.artifact(artifact.name, artifact.output), 'mg-mono'));
-      if (artifact.localState === 'ok') {
-        item.append(action(artifact.path, { intent: 'openHandoffFile', name: artifact.name }, 'link'));
-      } else {
-        item.append(el('span', artifact.path + FILE_STATE[artifact.localState], 'mg-warn mg-mono'));
-      }
-      item.append(el('div', text.handoff.sha256(artifact.sha256), 'mg-muted mg-mono'));
-      if (artifact.sourcePath) item.append(el('div', text.handoff.sourcePath(artifact.sourcePath), 'mg-muted mg-mono'));
-      list.append(item);
-    }
-    return ui.section(text.handoff.title, { count: String(provenance.artifacts.length), children: [list] });
+    return ui.section(text.handoff.title, {
+      note: text.handoff.note,
+      count: String(provenance.artifacts.length),
+      children: [ui.stack(provenance.artifacts.map(handoffCard), { gap: 'card' })],
+    });
   }
 
   function renderSource(source) {
     const children = [];
     if (source.availability === 'retained') {
-      const row = el('p');
-      row.append(action(source.title || source.sessionId, { intent: 'openSession', sessionId: source.sessionId }, 'link'));
-      row.append(el('span', ' ' + source.sessionId, 'mg-muted mg-mono'));
-      children.push(row);
+      children.push(
+        ui.itemCard({
+          title: source.title || text.source.untitled,
+          meta: [ui.refValue(source.sessionId, { kind: 'id' })],
+          tools: [
+            ui.refValue.copyButton(text.source.copyId, () =>
+              page.send({ intent: 'copyValue', kind: 'sessionId', sessionId: source.sessionId }),
+            ),
+          ],
+          onClick: () => page.send({ intent: 'openSession', sessionId: source.sessionId }),
+        }),
+      );
     } else {
-      children.push(el('p', source.sessionId, 'mg-mono'));
-      children.push(el('p', source.availability === 'hidden' ? text.source.hidden : text.source.notFound, 'mg-muted'));
+      const reason = source.availability === 'hidden' ? text.source.hidden : text.source.notFound;
+      children.push(
+        ui.itemCard({
+          title: source.title || text.source.untitled,
+          meta: [reason, ui.refValue(source.sessionId, { kind: 'id' })],
+        }),
+      );
     }
-    return ui.section(text.source.title, { children });
+    return ui.section(text.source.title, { note: text.source.note, children });
   }
 
   function render(root, model, host) {

@@ -7,6 +7,7 @@
   window.MigentSessionOverviewCopy = {
     status: {
       title: 'Status',
+      note: 'Where the session stands and what you can do.',
       /** The state badge's label, by the display state the host reports. */
       state: {
         prepared: 'Prepared',
@@ -41,19 +42,28 @@
         'unrecognized-status': 'status.json names an unrecognized state.',
       },
       runningStage: (stage) => 'Running stage ' + stage + '.',
-      update: (summary) => 'Latest update: ' + summary,
-      blockedAt: (stage, attempt) => 'Blocked in ' + stage + ' · attempt ' + attempt,
-      blocker: (blocker) => 'Blocker: ' + blocker,
-      quotaReset: (time) => 'Client quota resets at ' + time + ' UTC.',
       pending: (count) => count + (count === 1 ? ' question pending.' : ' questions pending.'),
-      latest: (stage, attempt, status) => 'Latest execution: ' + stage + ' · attempt ' + attempt + ' ' + status + '.',
-      decision: (decision) => 'Decision: ' + decision + '.',
+      /** `HH:MM` in UTC, prefixed with the day, so the page names one clock. */
+      quotaReset: (time) => time + ' UTC',
+      /** A stage and attempt, as a quiet value in the key-value grid. */
+      execution: (stage, attempt) => stage + ' · attempt ' + attempt,
+      /** The labels of the Status key-value grid. */
+      labels: {
+        latestExecution: 'Latest execution',
+        decision: 'Decision',
+        blockedIn: 'Blocked in',
+        blocker: 'Blocker',
+        quotaResets: 'Quota resets',
+        latestUpdate: 'Latest update',
+      },
       unknownExecution: 'unknown',
     },
 
     /** The Progress block: one row per workflow stage, or per execution for a role session. */
     progress: {
       title: 'Progress',
+      note: 'Stages in workflow order and their latest attempt.',
+      roleNote: 'Executions of this role session.',
       empty: 'No stages or executions to list.',
       attempt: (count) => 'attempt ' + count,
       decision: (decision) => 'decision ' + decision,
@@ -74,6 +84,7 @@
     /** The Latest activity block; the host shows it only while the session is Running. */
     activity: {
       title: 'Latest activity',
+      note: 'Newest events while the session runs.',
       empty: 'No activity recorded yet.',
     },
 

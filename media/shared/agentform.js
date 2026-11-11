@@ -58,10 +58,12 @@
    * options.unknownHint    hint for a pair the list does not know (defaults to the shared wording)
    * options.optionKeysId   datalist id of the option keys; the page renders it with `datalists`
    * options.actions        per-unit nodes (`model`, `effort`, `clientOptions`) at the end of the label row
+   * options.density        `'roomy'` to match the page's field rhythm (the kit owns the gap)
    */
   function inlineEditor(options) {
     const { agent, path, issueOf, disabled } = options;
     const actions = options.actions || {};
+    const density = options.density;
     const known = isKnownModel(options.model, agent.clientType, agent.model);
     const hasModel = agent.clientType !== '' || agent.model !== '';
     let hint = text.modelHint.known;
@@ -86,6 +88,7 @@
             hint,
             action: actions.model,
             issue: issueOf(path + '.model'),
+            density,
           }),
           ui.field({
             label: text.effort.label,
@@ -103,8 +106,9 @@
             hint: text.effort.hint,
             action: actions.effort,
             issue: issueOf(path + '.effort'),
+            density,
           }),
-        ]),
+        ], { density }),
         ui.pairList({
           pairs: agent.clientOptions,
           path: path + '.clientOptions',
@@ -148,6 +152,7 @@
       hint: options.hint,
       action: options.action,
       issue: options.issue,
+      density: options.density,
     });
   }
 

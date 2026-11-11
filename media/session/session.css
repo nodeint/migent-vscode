@@ -41,49 +41,6 @@
   outline: 1px solid var(--mg-focus);
 }
 
-/* Results tab. */
-
-.results-plain-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 var(--mg-space-2);
-}
-
-.results-plain-list > li {
-  padding: var(--mg-space-1) 0;
-  overflow-wrap: anywhere;
-}
-
-/* A next-step suggestion is one frame: the card, then its Details inside the same border. */
-.results-suggestion {
-  display: grid;
-  gap: var(--mg-space-2);
-  padding: var(--mg-space-2);
-  border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius);
-  background: var(--mg-surface);
-}
-
-.results-note {
-  margin: var(--mg-space-1) 0 0;
-}
-
-/* The task is shortened visually only; the full text stays in the DOM and in the row tooltip. */
-.results-clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
-.results-id {
-  display: block;
-  margin-top: var(--mg-space-1);
-}
-
 /* Metrics tab. */
 
 .metrics-stats {
@@ -169,32 +126,6 @@
 .metrics-row-value {
   display: block;
   font-variant-numeric: tabular-nums;
-}
-
-.metrics-kv {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: var(--mg-space-1) var(--mg-space-3);
-  margin: 0;
-}
-
-.metrics-kv dt {
-  color: var(--mg-muted);
-}
-
-.metrics-kv dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.metrics-plain {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.metrics-plain > li {
-  padding: var(--mg-space-1) 0;
 }
 
 .metrics-lede {

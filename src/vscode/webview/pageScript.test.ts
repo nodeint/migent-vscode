@@ -203,10 +203,15 @@ describe('MigentSessionHeader.sessionHeader', () => {
 });
 
 describe('icon vocabulary', () => {
+  // The two progress-only states share the session map but are not display states of a session.
+  const PROGRESS_ONLY = ['not-run', 'skipped'];
+
   it('draws every session state with the icon the Sessions view uses', () => {
     const { page, icons } = load();
     const states = Object.entries(page.sessionStates);
-    const fromPage = Object.fromEntries(states.map(([state, known]) => [state, known.icon]));
+    const fromPage = Object.fromEntries(
+      states.filter(([state]) => !PROGRESS_ONLY.includes(state)).map(([state, known]) => [state, known.icon]),
+    );
     const fromView = Object.fromEntries(
       Object.entries(DISPLAY_STATE_ICONS).map(([state, id]) => [
         state,
@@ -217,10 +222,20 @@ describe('icon vocabulary', () => {
     for (const id of Object.values(fromPage)) expect(icons[id]?.length, id).toBeGreaterThan(0);
   });
 
+  it('gives the progress-only states a real icon and the muted tone', () => {
+    const { page, icons } = load();
+    for (const state of PROGRESS_ONLY) {
+      expect(page.sessionStates[state]?.tone).toBe('muted');
+      expect(icons[page.sessionStates[state]?.icon]?.length, state).toBeGreaterThan(0);
+    }
+  });
+
   it('colors every session state with the tone the tab icons use', () => {
     const { page } = load();
     const states = Object.entries(page.sessionStates);
-    const fromPage = Object.fromEntries(states.map(([state, known]) => [state, known.tone]));
+    const fromPage = Object.fromEntries(
+      states.filter(([state]) => !PROGRESS_ONLY.includes(state)).map(([state, known]) => [state, known.tone]),
+    );
     expect(fromPage).toEqual(DISPLAY_STATE_TONES);
   });
 

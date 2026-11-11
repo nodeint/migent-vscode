@@ -33,6 +33,8 @@ export type ResultsIntent =
   | { intent: 'openManifest' }
   | { intent: 'openTargetWorkflow'; workflow: string }
   | { intent: 'openHandoffFile'; name: string }
+  | { intent: 'copyValue'; kind: 'sessionId'; sessionId: string }
+  | { intent: 'copyValue'; kind: 'handoffHash' | 'handoffSourcePath'; name: string }
   | { intent: 'openSession'; sessionId: string }
   | { intent: 'sessionAction'; action: SessionAction };
 
@@ -46,6 +48,19 @@ function sessionAction(value: unknown): SessionAction | null {
   return SESSION_ACTIONS.find((action) => action === value) ?? null;
 }
 
+/** A copy intent: a session id, or a handoff artifact value resolved by name on the host. */
+function copyIntent(message: Record<string, unknown>): ResultsIntent | null {
+  if (message.kind === 'sessionId') {
+    const sessionId = text(message.sessionId);
+    return sessionId === null ? null : { intent: 'copyValue', kind: 'sessionId', sessionId };
+  }
+  if (message.kind === 'handoffHash' || message.kind === 'handoffSourcePath') {
+    const name = text(message.name);
+    return name === null ? null : { intent: 'copyValue', kind: message.kind, name };
+  }
+  return null;
+}
+
 function intentWith(message: Record<string, unknown>): ResultsIntent | null {
   switch (message.intent) {
     case 'openNextFile':
@@ -56,6 +71,8 @@ function intentWith(message: Record<string, unknown>): ResultsIntent | null {
       const name = text(message.name);
       return name === null ? null : { intent: message.intent, name };
     }
+    case 'copyValue':
+      return copyIntent(message);
     case 'openNextStep':
     case 'openTargetWorkflow': {
       const workflow = text(message.workflow);

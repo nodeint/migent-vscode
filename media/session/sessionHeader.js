@@ -14,6 +14,8 @@
    * completed green, the rest neutral. The text is always shown too, so color is never the only signal.
    */
   const SESSION_STATES = {
+    'not-run': { icon: 'circle-outline', tone: 'muted' },
+    skipped: { icon: 'skip', tone: 'muted' },
     prepared: { icon: 'circle', tone: 'muted' },
     running: { icon: 'sync', tone: 'info', spin: true },
     blocked: { icon: 'warning', tone: 'warn' },

@@ -566,10 +566,10 @@ describe('Configuration page', () => {
     expect(legendAction('Responsibilities')).toBeUndefined();
     const tags = page.doc.root
       .descendants()
-      .filter((node) => node.classList.contains('mg-override-tag'))
+      .filter((node) => node.classList.contains('mg-field-tag'))
       .map((node) => node.textContent);
     expect(tags).toEqual(['Overridden', 'Overridden', 'Overridden', 'Overridden']);
-    const tag = page.at('agents.0.model')?.parentElement?.querySelector('.mg-override-tag');
+    const tag = page.at('agents.0.model')?.parentElement?.querySelector('.mg-field-tag');
     expect(tag?.dataset.tip).toBe('config.local.yaml overrides this value. Change it on the Local tab.');
     expect(tag?.children.some((child) => child instanceof FakeElement && child.tagName === 'SVG')).toBe(true);
     // The Project tab still shows the value config.yaml holds; the tag states that local overrides it.

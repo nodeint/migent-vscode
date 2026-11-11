@@ -7,7 +7,7 @@
   'use strict';
 
   const ui = window.MigentUi;
-  const { el, icon } = ui;
+  const { el } = ui;
   const agents = window.MigentAgentForm;
   const copy = window.MigentCopy;
   const text = window.MigentConfigCopy;
@@ -100,15 +100,12 @@
     const localRole = (name) => getLocalForm().roles.find((entry) => entry.name === name);
 
     /** The tag a Project field shows when the saved config.local.yaml sets that merge unit. */
-    const overriddenTag = () => {
-      const tag = el('span', null, 'mg-override-tag');
-      tag.append(icon('warning'), el('span', text.project.overridden));
-      tag.dataset.tip = text.project.overriddenTip;
-      tag.setAttribute('aria-label', text.project.overridden + '. ' + text.project.overriddenTip);
-      // Focusable, so the keyboard reaches the tooltip.
-      tag.tabIndex = 0;
-      return tag;
-    };
+    const overriddenTag = () =>
+      ui.fieldTag(text.project.overridden, {
+        tone: 'warn',
+        icon: 'warning',
+        tip: text.project.overriddenTip,
+      });
 
     /**
      * On the Project tab, the tag at the end of each label row whose unit config.local.yaml sets. The value stays
@@ -146,23 +143,22 @@
      * config.yaml, so the field keeps one height and the reader sees what would be inherited.
      */
     function overrideField(options) {
-      const box = el('input');
-      box.type = 'checkbox';
-      box.checked = options.present;
-      box.dataset.path = options.path + '.override';
-      box.setAttribute('aria-label', text.local.overrideOf(options.label));
-      box.addEventListener('change', () => {
-        options.onToggle(box.checked);
-        edited(options.path + '.override');
+      const toggle = ui.fieldToggle(text.local.override, {
+        checked: options.present,
+        path: options.path + '.override',
+        ariaLabel: text.local.overrideOf(options.label),
+        onChange: (checked) => {
+          options.onToggle(checked);
+          edited(options.path + '.override');
+        },
       });
-      const toggle = el('label', null, 'mg-check mg-check--override');
-      toggle.append(box, el('span', text.local.override));
       return ui.field({
         label: options.label,
         hint: options.hint,
         path: options.path,
         issue: options.issue,
         action: toggle,
+        density: 'roomy',
         control: options.control({ disabled: !options.present }),
       });
     }
@@ -208,6 +204,7 @@
           onEdit: editedSynced,
           repaint,
           optionKeysId: 'st-keys-agents-' + index,
+          density: 'roomy',
         }),
       ];
     }
@@ -287,11 +284,17 @@
         }),
       ];
       if (inherited.length > 0) {
-        const list = el('ul', null, 'mg-list');
-        for (const pair of inherited) list.append(el('li', text.local.options.inherited(pair.key, pair.value), 'mg-muted'));
+        const list = ui.denseList(
+          inherited.map((pair) => el('li', text.local.options.inherited(pair.key, pair.value), 'mg-muted')),
+        );
         options.push(list, el('p', text.local.options.note, 'mg-muted'));
       }
-      return [ui.group(text.agents.group, { note: text.agents.inlineNote, children: [ui.grid(fields), ...options] })];
+      return [
+        ui.group(text.agents.group, {
+          note: text.agents.inlineNote,
+          children: [ui.grid(fields, { density: 'roomy' }), ...options],
+        }),
+      ];
     }
 
     function renderAgentCard(entry, index) {
@@ -320,21 +323,25 @@
             } }),
           ],
           body: [
-            ui.grid([
-              ui.field({
-                label: text.agents.name.label,
-                hint: text.agents.name.hint,
-                path: path + '.name',
-                issue: issueOf(path + '.name'),
-                control: ui.text({
-                  value: entry.name,
+            ui.grid(
+              [
+                ui.field({
+                  label: text.agents.name.label,
+                  hint: text.agents.name.hint,
                   path: path + '.name',
-                  onInput: (next) => {
-                    entry.name = next;
-                  },
+                  issue: issueOf(path + '.name'),
+                  density: 'roomy',
+                  control: ui.text({
+                    value: entry.name,
+                    path: path + '.name',
+                    onInput: (next) => {
+                      entry.name = next;
+                    },
+                  }),
                 }),
-              }),
-            ]),
+              ],
+              { density: 'roomy' },
+            ),
             ...(isLocal ? localAgentBody(entry, index, path) : projectAgentBody(entry, index, path)),
           ],
         }),
@@ -384,6 +391,7 @@
           value: selection.mode,
           modes: MODES(isLocal),
           issue: issueOf(path + '.agent'),
+          density: 'roomy',
           onInput: (next) => {
             if (next === 'absent') role.agent = { mode: 'absent' };
             else if (next === 'named') role.agent = { mode: 'named', name: '' };
@@ -402,6 +410,7 @@
             issue: issueOf(path + '.agentName') || (selection.name && !known.includes(selection.name)
               ? { message: text.roles.agent.unknown, warning: true }
               : undefined),
+            density: 'roomy',
             control: ui.select({
               value: selection.name,
               path: path + '.agentName',
@@ -427,6 +436,7 @@
             onEdit: editedSynced,
             repaint,
             optionKeysId: 'st-keys-roles-' + index,
+            density: 'roomy',
           }),
         );
         const base = projectRole(role.name);
@@ -478,6 +488,7 @@
             action: actions.description,
             path: path + '.description',
             issue: issueOf(path + '.description'),
+            density: 'roomy',
             control: ui.text({
               value: role.description,
               path: path + '.description',
@@ -519,22 +530,26 @@
           })
         : list(scratch, text.roles.responsibilities.label, false, actions.responsibilities);
       return [
-        ui.grid([
-          ui.field({
-            label: text.roles.name.label,
-            hint: text.roles.name.hint,
-            path: path + '.name',
-            issue: issueOf(path + '.name'),
-            control: ui.text({
-              value: role.name,
+        ui.grid(
+          [
+            ui.field({
+              label: text.roles.name.label,
+              hint: text.roles.name.hint,
               path: path + '.name',
-              onInput: (next) => {
-                role.name = next;
-              },
+              issue: issueOf(path + '.name'),
+              density: 'roomy',
+              control: ui.text({
+                value: role.name,
+                path: path + '.name',
+                onInput: (next) => {
+                  role.name = next;
+                },
+              }),
             }),
-          }),
-          description,
-        ]),
+            description,
+          ],
+          { density: 'roomy' },
+        ),
         responsibilities,
         roleAgentGroup(role, index, path),
       ];
