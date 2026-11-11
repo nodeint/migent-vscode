@@ -10,9 +10,10 @@ import {
   storedTask,
 } from '../../core/nextStep';
 import { sessionDir, workflowsDir } from '../../core/paths';
+import { text } from '../../text';
 import type { ProjectKey } from '../changes';
 import type { ControlService } from '../control';
-import { askTask, askTitle, LAUNCH_MODE_ITEMS, PREPARE, RUN_NOW, type TaskInput, titleOf } from '../launchPrompts';
+import { askTask, askTitle, LAUNCH_MODE_ITEMS, type TaskInput, titleOf } from '../launchPrompts';
 import { notify } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
@@ -100,9 +101,9 @@ export class NextStepFlow {
   }
 
   async #remember(identity: NextStepIdentity, task: string, suggested: string): Promise<void> {
-    const text = task.trim();
-    const isDefault = text === suggested;
-    await this.#memento.update(this.#taskKey(identity), isDefault ? undefined : text);
+    const trimmed = task.trim();
+    const isDefault = trimmed === suggested;
+    await this.#memento.update(this.#taskKey(identity), isDefault ? undefined : trimmed);
   }
 
   /** Ask for the action, then for what it needs, and carry it out. Cancelling any step ends the flow. */
@@ -118,8 +119,8 @@ export class NextStepFlow {
       return;
     }
     const existing: ChoiceItem[] = preview.activeChildren.map((child) => ({
-      label: '$(link-external) Open existing session',
-      description: `${child.title} (${child.state})`,
+      label: text('prompts.openExisting'),
+      description: text('prompts.existingDescription', { title: child.title, state: child.state }),
       choice: { kind: 'openSession', sessionId: child.sessionId },
     }));
     const modes: ChoiceItem[] = LAUNCH_MODE_ITEMS.map((item) => ({
@@ -131,7 +132,10 @@ export class NextStepFlow {
         ...existing,
         ...modes,
       ],
-      { title: `Next step · ${identity.workflow}`, placeHolder: `Run now or prepare, from ${preview.sourceTitle}` },
+      {
+        title: text('prompts.nextStepTitle', { workflow: identity.workflow }),
+        placeHolder: text('prompts.runOrPrepareFrom', { source: preview.sourceTitle }),
+      },
     );
     if (picked === undefined) return;
     const { choice } = picked;
@@ -142,7 +146,7 @@ export class NextStepFlow {
 
   /** Run now: a one-line task runs; Compose in editor prepares the session and opens its `task.md`. */
   async #askRun(identity: NextStepIdentity, suggested: string): Promise<void> {
-    const input = await this.ui.askTask(`${RUN_NOW} ${identity.workflow}`, this.rememberedTask(identity) ?? suggested);
+    const input = await this.ui.askTask(`${text('prompts.runNow')} ${identity.workflow}`, this.rememberedTask(identity) ?? suggested);
     if (input === undefined) return;
     if (input.text.trim().length > 0) await this.#remember(identity, input.text, suggested);
     await this.launch(identity, input.kind === 'task' ? 'run' : 'prepare', { task: input.text });
@@ -151,7 +155,7 @@ export class NextStepFlow {
   /** Prepare: a title; `task.md` starts from the remembered or suggested task. */
   async #askPrepare(identity: NextStepIdentity, suggested: string): Promise<void> {
     const task = this.rememberedTask(identity) ?? suggested;
-    const title = await this.ui.askTitle(`${PREPARE} ${identity.workflow}`, titleOf(task, 'Next step'));
+    const title = await this.ui.askTitle(`${text('prompts.prepare')} ${identity.workflow}`, titleOf(task, text('prompts.nextStepFallbackTitle')));
     if (title === undefined) return;
     await this.launch(identity, 'prepare', { task, title });
   }
@@ -164,7 +168,7 @@ export class NextStepFlow {
       return;
     }
     if (this.#control.isDownstreamBusy(context, identity.workflow, identity.sessionId)) {
-      vscode.window.setStatusBarMessage(`${identity.workflow} is already starting.`, INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.starting', { workflow: identity.workflow }), INFO_MESSAGE_MS);
       return;
     }
     const requested = options.task ?? previewNextStep(this.#inputFor(context, identity)).suggestedTask ?? '';
@@ -213,7 +217,7 @@ export class NextStepFlow {
     const prepared = await this.#control.prepare(context, {
       workflowId: launch.workflowId,
       priorSessionId: launch.priorSessionId,
-      title: title ?? titleOf(launch.taskText, 'Next step'),
+      title: title ?? titleOf(launch.taskText, text('prompts.nextStepFallbackTitle')),
       taskText: launch.taskText,
     });
     if (prepared === undefined) return;

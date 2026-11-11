@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { text } from '../text';
 import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
 import type { ProjectConfig } from './projectConfig';
 import type { WorkflowEntry, WorkflowScan } from './workflows';
@@ -34,11 +35,11 @@ export function projectRelative(projectRoot: string, file: string): string {
 export function workflowsDiagnostic(scan: WorkflowScan): WorkflowsDiagnostic | null {
   switch (scan.state) {
     case 'missing':
-      return { code: 'workflows-missing', label: 'No workflows directory', detail: `${WORKFLOWS_RELATIVE} does not exist` };
+      return { code: 'workflows-missing', label: text('views.noWorkflowsDir'), detail: text('views.workflowsDirMissing', { dir: WORKFLOWS_RELATIVE }) };
     case 'empty':
-      return { code: 'workflows-empty', label: 'No workflows', detail: `${WORKFLOWS_RELATIVE} has no .yaml or .yml files` };
+      return { code: 'workflows-empty', label: text('views.noWorkflows'), detail: text('views.workflowsEmpty', { dir: WORKFLOWS_RELATIVE }) };
     case 'unreadable':
-      return { code: 'workflows-unreadable', label: 'Workflows directory unreadable', detail: scan.error };
+      return { code: 'workflows-unreadable', label: text('views.workflowsUnreadable'), detail: scan.error };
     case 'ok':
       return null;
   }
@@ -47,12 +48,12 @@ export function workflowsDiagnostic(scan: WorkflowScan): WorkflowsDiagnostic | n
 /** A valid workflow shows its id; an invalid or unreadable one is listed by file name with its error. */
 export function workflowRow(entry: WorkflowEntry, relativePath: string): RowView {
   if (entry.state !== 'ok') {
-    const reason = entry.state === 'invalid' ? 'Invalid workflow' : 'Unreadable workflow';
-    const error = entry.error ?? 'unknown error';
+    const reason = text(entry.state === 'invalid' ? 'views.invalidWorkflow' : 'views.unreadableWorkflow');
+    const error = entry.error ?? text('views.unknownError');
     return {
       label: entry.file,
       description: error.split('\n')[0],
-      tooltip: `${reason}: ${error}\n${relativePath}`,
+      tooltip: text('views.workflowErrorTooltip', { reason, error, path: relativePath }),
       icon: 'error',
       color: 'list.errorForeground',
       contextValue: `workflow.${entry.state}`,
@@ -60,12 +61,12 @@ export function workflowRow(entry: WorkflowEntry, relativePath: string): RowView
   }
   const tooltip = [relativePath];
   if (entry.title !== null) tooltip.unshift(entry.title);
-  if (entry.stages.length > 0) tooltip.push(`Stages: ${entry.stages.join(' → ')}`);
+  if (entry.stages.length > 0) tooltip.push(text('views.workflowStages', { stages: entry.stages.join(' → ') }));
   if (entry.duplicate) {
-    tooltip.push(`Duplicate workflow id "${entry.id}": another file declares the same id.`);
+    tooltip.push(text('views.duplicateTooltip', { id: entry.id }));
     return {
       label: entry.id,
-      description: `duplicate id · ${entry.file}`,
+      description: text('views.duplicateDescription', { file: entry.file }),
       tooltip: tooltip.join('\n'),
       icon: 'warning',
       color: 'list.warningForeground',
@@ -87,7 +88,7 @@ export function configRow(config: ProjectConfig, relativePath: string): RowView 
     case 'ok':
       return {
         label: path.posix.basename(relativePath),
-        description: config.schemaVersion === null ? undefined : `schema ${config.schemaVersion}`,
+        description: config.schemaVersion === null ? undefined : text('views.configSchema', { version: String(config.schemaVersion) }),
         tooltip: relativePath,
         icon: 'settings-gear',
         contextValue: 'config.ok',
@@ -95,19 +96,19 @@ export function configRow(config: ProjectConfig, relativePath: string): RowView 
     case 'missing':
       return {
         label: path.posix.basename(relativePath),
-        description: 'not found',
-        tooltip: `Expected at ${relativePath}. The extension does not create it.`,
+        description: text('views.configNotFound'),
+        tooltip: text('views.configExpected', { path: relativePath }),
         icon: 'warning',
         color: 'list.warningForeground',
         contextValue: 'config.missing',
       };
     case 'invalid':
     case 'unreadable': {
-      const error = config.error ?? 'unknown error';
+      const error = config.error ?? text('views.unknownError');
       return {
         label: path.posix.basename(relativePath),
         description: error.split('\n')[0],
-        tooltip: `${config.state === 'invalid' ? 'Invalid' : 'Unreadable'} config: ${error}\n${relativePath}`,
+        tooltip: text(config.state === 'invalid' ? 'views.configInvalid' : 'views.configUnreadable', { error, path: relativePath }),
         icon: 'error',
         color: 'list.errorForeground',
         contextValue: `config.${config.state}`,

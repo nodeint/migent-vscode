@@ -1,0 +1,32 @@
+/** Button labels used by more than one notification, or by one notification at several call sites. */
+export const LABELS = {
+  viewLog: 'View log',
+  recheck: 'Recheck',
+  refresh: 'Refresh',
+  continue: 'Continue',
+  delete: 'Delete',
+  reply: 'Reply',
+  stopWaiting: 'Stop waiting',
+  openDraft: 'Open workflow.yaml',
+  openOverview: 'Open overview',
+  answerQuestions: 'Answer questions',
+  failureReport: 'Open failure report',
+  openVerify: 'Open verify',
+  openResponse: 'Open response',
+  openHandoff: 'Open handoff',
+  initializeProject: 'Initialize project',
+  runWorkflow: 'Run workflow',
+  installCli: 'Install Migent CLI',
+  updateCli: 'Update Migent CLI',
+  viewChanges: 'View changes',
+  keepSession: 'Use session version',
+  adoptUpdated: 'Use updated workflow',
+  moveToTrash: 'Move to Trash',
+  discardReply: 'Discard reply',
+  discardDraft: 'Discard draft',
+  continueWithoutReply: 'Continue without reply',
+  repair: 'Repair',
+  complete: 'Complete',
+} as const;
+
+export type ActionKey = keyof typeof LABELS;

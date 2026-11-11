@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse, stringify } from 'yaml';
 
+import { text as describe,text } from '../text';
 import { agentBody as agentBodyOf, type AgentForm, parseAgent } from './agentForm';
 import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope } from './authoring';
 import { wireOf } from './contractRead';
@@ -224,7 +225,7 @@ function fallbackId(file: string): string {
 }
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : describe('states.unknownError');
 }
 
 /** SHA-256 of the raw bytes, the base hash `workflow save` compares. */
@@ -544,13 +545,13 @@ export function workflowBodyFromForm(form: WorkflowForm, schemaVersion: number |
 export function duplicateArtifactProblem(form: WorkflowForm): string | null {
   const repeated = (ids: string[]): string | undefined => ids.find((id, index) => ids.indexOf(id) !== index);
   const registry = repeated(form.artifacts.map((item) => item.id));
-  if (registry !== undefined) return `The artifact id "${registry}" is used more than once. Give each artifact its own id.`;
+  if (registry !== undefined) return text('states.artifactRepeated', { id: registry });
   for (const stage of form.stages) {
     for (const route of stage.decision) {
       if (route.artifacts?.kind !== 'local') continue;
       const local = repeated(route.artifacts.items.map((item) => item.id));
       if (local !== undefined) {
-        return `Decision "${route.value}" of stage "${stage.id}" defines the artifact id "${local}" more than once.`;
+        return text('states.localArtifactRepeated', { value: route.value, stage: stage.id, id: local });
       }
     }
   }

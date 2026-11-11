@@ -10,7 +10,6 @@ import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
 import type { ReplyTarget, ReplyTargetKind, SessionSnapshot } from '../core/model';
-import { PROGRESS_MESSAGES } from '../core/notices';
 import type { GateHandle } from '../core/operationGate';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../core/paths';
 import { isRecord } from '../core/record';
@@ -24,6 +23,8 @@ import {
   replyText,
 } from '../core/replyFlow';
 import { sessionLabel } from '../core/sessionPresentation';
+import { text } from '../text';
+import { PROGRESS_MESSAGES } from '../text/notices';
 import type { ControlService } from './control';
 import { notify, show } from './notices';
 import type { ProjectContext, ProjectRegistry } from './projects';
@@ -229,12 +230,12 @@ export class ReplyService implements vscode.Disposable {
    */
   #validate(meta: DraftMeta): { context: ProjectContext; snapshot: SessionSnapshot; target: ReplyTarget } | string {
     const context = this.#registry.project(meta.project);
-    if (context === undefined) return 'The project is no longer open.';
+    if (context === undefined) return text('prompts.projectClosed');
     context.store.refreshSession(meta.sessionId);
     const snapshot = context.store.snapshot(meta.sessionId);
-    if (snapshot === undefined) return 'The session is not available.';
+    if (snapshot === undefined) return text('prompts.sessionUnavailable');
     const target = snapshot.replyTargets.find((candidate) => candidate.executionId === meta.executionId);
-    if (target === undefined) return 'The session can no longer take a reply for this stage. Your draft was kept.';
+    if (target === undefined) return text('prompts.replyTargetGone');
     return { context, snapshot, target };
   }
 
@@ -244,18 +245,18 @@ export class ReplyService implements vscode.Disposable {
    */
   public async send(meta: DraftMeta, onPhase: (message: string) => void = () => undefined): Promise<SendResult> {
     const content = await this.#savedContent(this.draftPath(meta));
-    if (content === undefined) return { kind: 'blocked', reason: 'The reply was not saved, so it was not sent.' };
-    const text = replyText(content);
-    if (text === '') return { kind: 'blocked', reason: 'Write a reply first, or use Continue without reply.' };
+    if (content === undefined) return { kind: 'blocked', reason: text('prompts.replyNotSaved') };
+    const body = replyText(content);
+    if (body === '') return { kind: 'blocked', reason: text('prompts.writeFirst') };
     const checked = this.#validate(meta);
     if (typeof checked === 'string') return { kind: 'blocked', reason: checked };
     const { context, snapshot, target } = checked;
     const handle = this.#acquire(context, snapshot, meta);
     if (typeof handle === 'string') return { kind: 'blocked', reason: handle };
     const replyFile = path.join(this.#dir, `send-${randomUUID()}.txt`);
-    const input: SendInput = { context, meta, target, text, content, replyFile, onPhase };
+    const input: SendInput = { context, meta, target, text: body, content, replyFile, onPhase };
     try {
-      await writeFile(replyFile, text, { encoding: 'utf8', flag: 'wx' });
+      await writeFile(replyFile, body, { encoding: 'utf8', flag: 'wx' });
       return await this.#dispatch(input, handle);
     } catch (error) {
       handle.release();
@@ -268,7 +269,7 @@ export class ReplyService implements vscode.Disposable {
   /** The session gate once the send is allowed, or the reason it is not. */
   #acquire(context: ProjectContext, snapshot: SessionSnapshot, meta: DraftMeta): GateHandle | string {
     const handle = this.#control.gate.tryAcquire(this.#control.sessionKey(context.key, meta.sessionId), 'Sending reply');
-    if (handle === null) return 'Another operation on this session is in progress.';
+    if (handle === null) return text('prompts.operationBusy');
     const blocked = this.#control.answerBlock(context, snapshot, true);
     if (blocked === null) return handle;
     handle.release();
@@ -280,7 +281,7 @@ export class ReplyService implements vscode.Disposable {
     const runtime = this.#control.runtime(context);
     if (runtime === undefined) {
       handle.release();
-      return { kind: 'blocked', reason: 'The Migent CLI is unavailable.' };
+      return { kind: 'blocked', reason: text('prompts.cliUnavailable') };
     }
     // The temporary file was written asynchronously: another process may have changed the attempt, the lock or the
     // CLI meanwhile, so the exact execution, state, lock and capability are checked again right before the spawn.
@@ -300,7 +301,7 @@ export class ReplyService implements vscode.Disposable {
     const { result } = early;
     if (result.kind === 'spawn-failed') {
       handle.release();
-      runtime.logError(`spawn failed: ${result.detail}`);
+      runtime.logError(text('documents.logSpawnFailed', { detail: result.detail }));
       return { kind: 'failed', detail: result.detail };
     }
     return this.#settle(input, result, handle);
@@ -340,7 +341,7 @@ export class ReplyService implements vscode.Disposable {
     // Otherwise the gate stays held until a later refresh shows the stage moved on, so nothing is sent twice.
     if (result.outcome === 'ConfigError' || result.outcome === 'Unknown') {
       handle.release();
-      const detail = result.stderrTail.at(-1) ?? `Migent exited with code ${result.exitCode ?? 'unknown'}.`;
+      const detail = result.stderrTail.at(-1) ?? (result.exitCode === null ? text('prompts.exitedUnknown') : text('prompts.exitedWithCode', { code: result.exitCode }));
       return { kind: 'failed', detail };
     }
     this.#followReply(input, handle);
@@ -414,7 +415,7 @@ export class ReplyService implements vscode.Disposable {
     this.#late.delete(following.stop);
     following.release();
     this.#following.delete(key);
-    vscode.window.setStatusBarMessage('Stopped waiting. The reply may already have been sent; Refresh to check.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.stoppedWaiting'), INFO_MESSAGE_MS);
   }
 
   /** Calls `onSeen` once the blocked execution was resumed; the returned function stops the watchers. */
@@ -475,9 +476,9 @@ export class ReplyService implements vscode.Disposable {
     const label = snapshot === undefined ? meta.sessionId : sessionLabel(snapshot);
     if (result.kind === 'sent') {
       if (result.hasKeptEdits) {
-        vscode.window.setStatusBarMessage('Reply sent. Edits made while sending were kept in the draft.', INFO_MESSAGE_MS);
+        vscode.window.setStatusBarMessage(text('prompts.replySentKept'), INFO_MESSAGE_MS);
       } else {
-        vscode.window.setStatusBarMessage(`Reply sent to ${label}`, STATUS_MESSAGE_MS);
+        vscode.window.setStatusBarMessage(text('prompts.replySent', { label }), STATUS_MESSAGE_MS);
       }
       return;
     }

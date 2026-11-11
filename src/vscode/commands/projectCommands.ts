@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 
 import { configPath, MIGENT_DIR, WORKFLOWS_DIRNAME, workflowsDir } from '../../core/paths';
 import { duplicateWorkflowText, workflowFileName, workflowIdProblem } from '../../core/workflowDraft';
+import { text } from '../../text';
 import type { CapabilityService } from '../capability';
 import type { ConfigPanels } from '../config/panels';
 import { confirm, notify } from '../notices';
@@ -23,35 +24,35 @@ const INFO_MESSAGE_MS = 5000;
  */
 async function openWorkflow(registry: ProjectRegistry, arg: unknown): Promise<void> {
   if (isMetaFileNode(arg) && arg.kind === 'workflow') {
-    await openFile(arg.file, 'Workflow');
+    await openFile(arg.file, text('documents.kindWorkflow'));
     return;
   }
   const context = await pickProject(registry);
   if (context === undefined) return;
   const { entries } = context.catalog.workflows();
   if (entries.length === 0) {
-    vscode.window.setStatusBarMessage('This project has no workflow files.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noWorkflowFiles'), INFO_MESSAGE_MS);
     return;
   }
   const picked = await vscode.window.showQuickPick(
     entries.map((entry) => ({
       label: entry.state === 'ok' ? entry.id : entry.file,
-      description: entry.state === 'ok' ? entry.file : `${entry.state} · ${entry.file}`,
+      description: entry.state === 'ok' ? entry.file : text('views.workflowStateFile', { state: entry.state, file: entry.file }),
       entry,
     })),
-    { title: 'Open workflow', matchOnDescription: true },
+    { title: text('prompts.openWorkflow'), matchOnDescription: true },
   );
   if (picked === undefined) return;
-  await openFile(path.join(context.root, MIGENT_DIR, WORKFLOWS_DIRNAME, picked.entry.file), 'Workflow');
+  await openFile(path.join(context.root, MIGENT_DIR, WORKFLOWS_DIRNAME, picked.entry.file), text('documents.kindWorkflow'));
 }
 
 async function openConfigFile(registry: ProjectRegistry, arg: unknown): Promise<void> {
   if (isMetaFileNode(arg) && arg.kind === 'config') {
-    await openFile(arg.file, 'Project config');
+    await openFile(arg.file, text('prompts.projectConfig'));
     return;
   }
   const context = await pickProject(registry);
-  if (context !== undefined) await openFile(configPath(context.root), 'Project config');
+  if (context !== undefined) await openFile(configPath(context.root), text('prompts.projectConfig'));
 }
 
 async function openConfig(registry: ProjectRegistry, config: ConfigPanels, arg: unknown): Promise<void> {
@@ -73,13 +74,13 @@ async function askWorkflowId(root: string, title: string, value: string): Promis
   const id = await vscode.window.showInputBox({
     title,
     value,
-    prompt: 'The id is also the file name (<id>.yaml).',
-    validateInput: (text) => {
-      const problem = workflowIdProblem(text.trim());
+    prompt: text('prompts.workflowIdPrompt'),
+    validateInput: (input) => {
+      const problem = workflowIdProblem(input.trim());
       if (problem !== null) return problem;
-      const file = workflowFileName(text.trim());
-      return existsSync(path.join(workflowsDir(root), file)) || existsSync(path.join(workflowsDir(root), `${text.trim()}.yml`))
-        ? `.migent/workflows/${file} already exists.`
+      const file = workflowFileName(input.trim());
+      return existsSync(path.join(workflowsDir(root), file)) || existsSync(path.join(workflowsDir(root), `${input.trim()}.yml`))
+        ? text('prompts.fileExists', { file })
         : undefined;
     },
   });
@@ -100,7 +101,7 @@ async function targetWorkflow(
   if (context === undefined) return undefined;
   const { entries } = context.catalog.workflows();
   if (entries.length === 0) {
-    vscode.window.setStatusBarMessage('This project has no workflow files.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noWorkflowFiles'), INFO_MESSAGE_MS);
     return undefined;
   }
   const picked = await vscode.window.showQuickPick(
@@ -114,7 +115,7 @@ async function targetWorkflow(
 async function newWorkflow(registry: ProjectRegistry, editor: WorkflowEditorPanels, arg: unknown): Promise<void> {
   const context = isMetaFileNode(arg) ? registry.project(arg.project) : await pickProject(registry);
   if (context === undefined) return;
-  const id = await askWorkflowId(context.root, 'New workflow', '');
+  const id = await askWorkflowId(context.root, text('prompts.newWorkflow'), '');
   if (id === undefined) return;
   editor.open({ project: context.key, file: workflowFileName(id) }, { isNew: true });
 }
@@ -136,29 +137,29 @@ async function createCopy(
 ): Promise<string | null> {
   let state = capability.state(context.key);
   if (state.kind === 'checking') state = await capability.windowReady();
-  if (state.kind !== 'ok' || state.launch === undefined) return 'Duplicating needs a usable Migent CLI.';
+  if (state.kind !== 'ok' || state.launch === undefined) return text('prompts.duplicateNeedsCli');
   return createWorkflowCopy(state.launch, context.root, draft);
 }
 
 /** Copy the saved file under a new id. */
 async function duplicateWorkflow(deps: DuplicateDeps, arg: unknown): Promise<void> {
-  const target = await targetWorkflow(deps.registry, arg, 'Duplicate workflow');
+  const target = await targetWorkflow(deps.registry, arg, text('prompts.duplicateWorkflowTitle'));
   if (target === undefined) return;
   const { context, file } = target;
-  let text: string;
+  let source: string;
   try {
-    text = readFileSync(path.join(workflowsDir(context.root), file), 'utf8');
+    source = readFileSync(path.join(workflowsDir(context.root), file), 'utf8');
   } catch (error) {
-    fail(error instanceof Error ? error.message : 'The file cannot be read.');
+    fail(error instanceof Error ? error.message : text('prompts.fileUnreadable'));
     return;
   }
-  const id = await askWorkflowId(context.root, `Duplicate ${file}`, `${path.basename(file, path.extname(file))}-copy`);
+  const id = await askWorkflowId(context.root, text('prompts.duplicateFile', { file }), `${path.basename(file, path.extname(file))}-copy`);
   if (id === undefined) return;
-  const copy = duplicateWorkflowText(text, id);
+  const copy = duplicateWorkflowText(source, id);
   const newFile = workflowFileName(id);
   const problem =
     copy === null
-      ? 'The file is not a workflow mapping.'
+      ? text('prompts.notMapping')
       : await createCopy(deps.capability, context, { file: newFile, text: copy });
   if (problem !== null) {
     fail(problem);
@@ -170,14 +171,14 @@ async function duplicateWorkflow(deps: DuplicateDeps, arg: unknown): Promise<voi
 
 /** Move the workflow file to the Trash after a modal confirmation, then close its page. */
 async function deleteWorkflow(registry: ProjectRegistry, editor: WorkflowEditorPanels, arg: unknown): Promise<void> {
-  const target = await targetWorkflow(registry, arg, 'Delete workflow');
+  const target = await targetWorkflow(registry, arg, text('prompts.deleteWorkflowTitle'));
   if (target === undefined) return;
   const { context, file } = target;
   if (!(await confirm('workflow.deleteConfirm', { file }))) return;
   try {
     await vscode.workspace.fs.delete(vscode.Uri.file(path.join(workflowsDir(context.root), file)), { useTrash: true });
   } catch (error) {
-    notify('workflow.deleteFailed', { detail: error instanceof Error ? error.message : 'unknown error' });
+    notify('workflow.deleteFailed', { detail: error instanceof Error ? error.message : text('states.unknownError') });
     return;
   }
   editor.close({ project: context.key, file });

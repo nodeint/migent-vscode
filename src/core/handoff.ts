@@ -1,3 +1,4 @@
+import { text as describe } from '../text';
 import { asSessionId } from './manifest';
 import type { SessionManifest, SessionSnapshot } from './model';
 import { resolveWithin } from './paths';
@@ -33,17 +34,17 @@ function str(value: unknown): string | null {
 export function readHandoff(manifest: SessionManifest | null, sessionDirPath: string): HandoffRead {
   const value = manifest?.raw.handoff;
   if (value === undefined || value === null) return { kind: 'absent' };
-  if (!isRecord(value)) return { kind: 'invalid', reason: 'handoff is not a mapping' };
+  if (!isRecord(value)) return { kind: 'invalid', reason: describe('states.handoffNotMapping') };
   const sourceSessionId = asSessionId(value.source_session_id);
-  if (sourceSessionId === null) return { kind: 'invalid', reason: 'source_session_id is missing' };
-  if (!isRecord(value.artifacts)) return { kind: 'invalid', reason: 'artifacts is not a mapping' };
+  if (sourceSessionId === null) return { kind: 'invalid', reason: describe('states.handoffSourceMissing') };
+  if (!isRecord(value.artifacts)) return { kind: 'invalid', reason: describe('states.handoffArtifactsNotMapping') };
   const artifacts: HandoffArtifact[] = [];
   for (const [name, entry] of Object.entries(value.artifacts)) {
     const output = isRecord(entry) ? str(entry.output) : null;
     const relative = isRecord(entry) ? str(entry.path) : null;
     const sha256 = isRecord(entry) ? str(entry.sha256) : null;
     if (!isRecord(entry) || output === null || relative === null || sha256 === null) {
-      return { kind: 'invalid', reason: `artifact ${name} lacks output, path or sha256` };
+      return { kind: 'invalid', reason: describe('states.handoffArtifactIncomplete', { name }) };
     }
     artifacts.push({
       name,

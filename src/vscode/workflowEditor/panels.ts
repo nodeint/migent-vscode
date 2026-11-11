@@ -17,6 +17,7 @@ import {
   type WorkflowEditorMessageType,
 } from '../../core/workflowEditorIntent';
 import { isWorkflowFile } from '../../core/workflows';
+import { text } from '../../text';
 import {
   EMPTY_VALIDATION,
   envelopeOf,
@@ -43,13 +44,10 @@ const PAGE: PageDescriptor = {
   folder: 'workfloweditor',
   styles: ['workflowForm.css', 'workflowEditor.css'],
   scripts: ['workflowCopy.js', 'workflowModel.js', 'workflowForm.js', 'workflowEditor.js'],
-  title: 'Workflow',
+  title: text('shell.workflowPanel'),
 };
 
 export { EMPTY_VALIDATION, envelopeOf, EXIT_CONFLICT, SAVE_TIMEOUT_MS, saveFailure, splitDiagnostics };
-
-const UNSAVABLE_MESSAGE =
-  'This workflow cannot be saved from the page. If it uses an older schema, run `migent migrate` and reload the page.';
 
 function notifySaveFailed(message: string): void {
   notify('workflow.saveFailed', { message });
@@ -108,7 +106,7 @@ class Entry {
     this.#lastJson = json;
     this.lastModel = model;
     this.revision += 1;
-    this.panel.title = `Workflow: ${model.id || model.file}`;
+    this.panel.title = text('shell.workflowPanelTitle', { name: model.id || model.file });
     void this.panel.webview.postMessage({
       type: 'model',
       revision: this.revision,
@@ -131,7 +129,7 @@ function unavailable(identity: WorkflowEditorIdentity): WorkflowEditorModel {
     schemaVersion: null,
     state: 'unreadable',
     isSupported: false,
-    readError: 'The project is no longer available.',
+    readError: text('prompts.projectGone'),
     form: emptyWorkflowForm(),
     yaml: '',
     roles: [],
@@ -224,7 +222,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     }
     const panel = vscode.window.createWebviewPanel(
       WORKFLOW_EDITOR_VIEW_TYPE,
-      `Workflow: ${identity.file}`,
+      text('shell.workflowPanelTitle', { name: identity.file }),
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -304,7 +302,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         this.#send(identity, true);
       },
       openFile: async () => {
-        if (file !== undefined) await openFile(file, 'Workflow');
+        if (file !== undefined) await openFile(file, text('documents.kindWorkflow'));
       },
       reveal: async () => {
         if (file !== undefined) await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(file));
@@ -337,10 +335,10 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     }
     if (this.#entries.get(keyOf(identity)) !== entry) return;
     if (entry.clients.length === 0) {
-      this.#error(identity, 'No client list is available. Check the Migent CLI, then Reload the page.');
+      this.#error(identity, text('prompts.noClientList'));
       return;
     }
-    const picked = await pickModel('Inline agent model', entry.clients, false);
+    const picked = await pickModel(text('prompts.inlineAgentModel'), entry.clients, false);
     if (picked === undefined || this.#entries.get(keyOf(identity)) !== entry) return;
     void entry.panel.webview.postMessage({
       type: 'modelPicked',
@@ -374,7 +372,7 @@ export class WorkflowEditorPanels implements vscode.Disposable {
     }
     const context = this.#registry.project(identity.project);
     if (context === undefined) {
-      this.#saveError(identity, 'The project is no longer available.');
+      this.#saveError(identity, text('prompts.projectGone'));
       return;
     }
     const launched = await usableLaunch(this.#capability, identity.project);
@@ -405,19 +403,19 @@ export class WorkflowEditorPanels implements vscode.Disposable {
         this.#send(identity, true, transient(null));
         return;
       case 'unconfirmed':
-        this.#saveError(identity, 'Migent did not confirm the save.');
+        this.#saveError(identity, text('prompts.saveNotConfirmed'));
         return;
       case 'conflict':
         entry.validation = splitDiagnostics(outcome.envelope.diagnostics);
         entry.validationHash = entry.lastModel?.savedHash ?? null;
-        notifySaveFailed('The file changed on disk. Reload it from disk before saving again.');
-        this.#publishLast(identity, 'The file changed on disk. Reload it from disk before saving again.');
+        notifySaveFailed(text('prompts.fileChanged'));
+        this.#publishLast(identity, text('prompts.fileChanged'));
         return;
       case 'invalid': {
         entry.validation = splitDiagnostics(outcome.envelope.diagnostics);
         entry.validationHash = entry.lastModel?.savedHash ?? null;
         const count = entry.validation.errors.length;
-        notifySaveFailed(`${count} problem${count === 1 ? '' : 's'} found. Fix them and save again.`);
+        notifySaveFailed(text('states.problemsFound', { count }));
         this.#send(identity, true, transient(null));
         return;
       }
@@ -532,9 +530,9 @@ export class WorkflowEditorPanels implements vscode.Disposable {
  * the page's own disabled state is not trusted: only a published model with `canSave` may be saved.
  */
 export function saveRefusal(identity: WorkflowEditorIdentity, model: Pick<WorkflowEditorModel, 'canSave'> | null): string | null {
-  if (model?.canSave !== true) return UNSAVABLE_MESSAGE;
+  if (model?.canSave !== true) return text('prompts.workflowUnsavable');
   if (!identity.file.endsWith('.yaml')) {
-    return 'Migent can only save .yaml workflow files. Rename this file to .yaml before editing it here.';
+    return text('prompts.onlyYaml');
   }
   return null;
 }

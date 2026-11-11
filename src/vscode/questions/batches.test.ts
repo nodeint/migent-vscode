@@ -71,6 +71,18 @@ function edit(model: { generation: number; fingerprint: string }, value: string,
 }
 
 describe('QuestionBatches', () => {
+  it('runs the session command of a header action for the batch session', async () => {
+    const { batches } = setup();
+    batches.attach(identity, surface());
+    const execute = vi.mocked((await import('vscode')).commands.executeCommand);
+    execute.mockClear();
+    await batches.handle(identity, { type: 'sessionAction', action: 'copyId' });
+    expect(execute).toHaveBeenCalledWith('migent.session.copyId', {
+      project: identity.project,
+      sessionId: identity.sessionId,
+    });
+  });
+
   it('posts the selected batch and updates it from an edit', async () => {
     const { batches } = setup();
     const target = surface();

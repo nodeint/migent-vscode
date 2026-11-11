@@ -1,5 +1,6 @@
-import { describeQuotaReset, type QuotaFailure } from './replyFlow';
-import { describeBlock, type WriteBlock } from './writeEligibility';
+import { type ActionKey, LABELS } from './labels';
+
+export { type ActionKey, LABELS };
 
 /**
  * The one catalog of notifications the extension shows (toasts, modal confirmations and progress titles). Every
@@ -7,39 +8,6 @@ import { describeBlock, type WriteBlock } from './writeEligibility';
  * to labels. Callers name an id and its params and receive an action key back, never a label. No `vscode` import;
  * `src/vscode/notices.ts` is the only code that calls the notification API.
  */
-
-/** Button labels used by more than one notification, or by one notification at several call sites. */
-export const LABELS = {
-  viewLog: 'View log',
-  recheck: 'Recheck',
-  refresh: 'Refresh',
-  continue: 'Continue',
-  delete: 'Delete',
-  reply: 'Reply',
-  stopWaiting: 'Stop waiting',
-  openDraft: 'Open workflow.yaml',
-  openOverview: 'Open overview',
-  answerQuestions: 'Answer questions',
-  failureReport: 'Open failure report',
-  openVerify: 'Open verify',
-  openResponse: 'Open response',
-  openHandoff: 'Open handoff',
-  initializeProject: 'Initialize project',
-  runWorkflow: 'Run workflow',
-  installCli: 'Install Migent CLI',
-  updateCli: 'Update Migent CLI',
-  viewChanges: 'View changes',
-  keepSession: 'Use session version',
-  adoptUpdated: 'Use updated workflow',
-  moveToTrash: 'Move to Trash',
-  discardReply: 'Discard reply',
-  discardDraft: 'Discard draft',
-  continueWithoutReply: 'Continue without reply',
-  repair: 'Repair',
-  complete: 'Complete',
-} as const;
-
-export type ActionKey = keyof typeof LABELS;
 
 export type Severity = 'info' | 'warning' | 'error';
 
@@ -110,15 +78,16 @@ export interface FailureParams {
   where: string;
   /** The recorded cause, or null for the generic sentence. */
   cause: string | null;
-  quota: QuotaFailure | null;
+  /** The quota-exhausted cause, with its reset phrase already worded by the producer; null when not a quota failure. */
+  quota: { reset: string } | null;
 }
 
 const STOP_NOT_CONFIRMED = 'Stop not confirmed. The session may still be running.';
 const WORKFLOW_INVALID = 'This workflow is not valid, so it cannot be run.';
 const NO_CAUSE = 'The cause is in the response or log.';
 
-function quotaCause(quota: QuotaFailure): string {
-  return `Client quota was exhausted; ${describeQuotaReset(quota)}. Continue reruns the stage.`;
+function quotaCause({ reset }: { reset: string }): string {
+  return `Client quota was exhausted; ${reset}. Continue reruns the stage.`;
 }
 
 export const NOTICES = {
@@ -141,7 +110,7 @@ export const NOTICES = {
   ),
 
   // Control
-  'control.writeBlocked': toast('warning', ({ block }: { block: WriteBlock }) => describeBlock(block), keys('recheck', 'refresh', 'viewLog')),
+  'control.writeBlocked': toast('warning', ({ message }: Message) => message, keys('recheck', 'refresh', 'viewLog')),
   'control.stopNotConfirmed': toast(
     'warning',
     ({ detail }: { detail: string | null }) => detail ?? STOP_NOT_CONFIRMED,
@@ -215,6 +184,7 @@ export const NOTICES = {
   'session.outputNotFound': toast('warning', ({ name }: { name: string }) => `Output not found: ${name}`),
   'session.handoffNotFound': toast('warning', ({ name }: { name: string }) => `Handoff file not found: ${name}`),
   'session.workflowNotFound': toast('warning', ({ workflow }: { workflow: string }) => `No workflow with id ${workflow} in this project.`),
+  'session.copyUnavailable': toast('warning', () => 'This value is no longer available to copy.'),
   'draft.missing': toast('warning', () => 'This session no longer has a workflow.yaml.'),
   'draft.openFailed': toast('error', ({ detail }: Detail) => `Could not open workflow.yaml: ${detail}`),
   'draft.prepared': toast('info', () => 'Session prepared. Its workflow can be edited before it runs.', keys('openDraft')),

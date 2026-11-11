@@ -21,10 +21,11 @@ import {
   type RunSettings,
 } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
-import { PROGRESS_MESSAGES } from '../core/notices';
 import { type GateHandle, type GateKey, OperationGate } from '../core/operationGate';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
+import { text } from '../text';
+import { PROGRESS_MESSAGES } from '../text/notices';
 import type { CapabilityService } from './capability';
 import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, runRename, workflowChange } from './controlHelpers';
 import { notify, progress, show } from './notices';
@@ -99,7 +100,7 @@ export class ControlService implements vscode.Disposable {
   constructor(registry: ProjectRegistry, capability: CapabilityService) {
     this.#registry = registry;
     this.#capability = capability;
-    this.#output = vscode.window.createOutputChannel('Migent', { log: true });
+    this.#output = vscode.window.createOutputChannel(text('shell.outputChannel'), { log: true });
   }
 
   public dispose(): void {
@@ -125,9 +126,9 @@ export class ControlService implements vscode.Disposable {
   }
 
   async #explain(block: WriteBlock): Promise<void> {
-    const text = describeBlock(block);
+    const message = describeBlock(block);
     if (block.recovery === 'none') {
-      vscode.window.setStatusBarMessage(text, INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(message, INFO_MESSAGE_MS);
       return;
     }
     const action = block.recovery;
@@ -135,7 +136,7 @@ export class ControlService implements vscode.Disposable {
       recheck: 'migent.cli.recheck',
       refresh: 'migent.refresh',
     }[block.recovery];
-    const picked = await show('control.writeBlocked', { block }, [action, 'viewLog']);
+    const picked = await show('control.writeBlocked', { message }, [action, 'viewLog']);
     if (picked === action) await vscode.commands.executeCommand(command);
     else if (picked === 'viewLog') this.showLog();
   }
@@ -174,7 +175,7 @@ export class ControlService implements vscode.Disposable {
     await this.#execute(context, {
       key: { kind: 'launch', project: context.key, workflowId },
       args: runNewArgs({ workflowId, task }, this.settings(context)),
-      title: `Running ${workflowId}`,
+      title: text('prompts.running', { label: workflowId }),
     });
   }
 
@@ -190,7 +191,7 @@ export class ControlService implements vscode.Disposable {
     return this.#execute(context, {
       key: { kind: 'launch', project: context.key, workflowId: input.workflowId, priorSessionId: input.priorSessionId },
       args: runDownstreamArgs(input, this.settings(context)),
-      title: `Running ${input.workflowId}`,
+      title: text('prompts.running', { label: input.workflowId }),
     });
   }
 
@@ -205,7 +206,7 @@ export class ControlService implements vscode.Disposable {
     await this.#execute(context, {
       key: this.#sessionKey(context, snapshot.sessionId),
       args: runPreparedArgs({ sessionId: snapshot.sessionId, workflowId }, this.settings(context)),
-      title: `Running ${sessionLabel(snapshot)}`,
+      title: text('prompts.running', { label: sessionLabel(snapshot) }),
       sessionId: snapshot.sessionId,
     });
   }
@@ -219,7 +220,7 @@ export class ControlService implements vscode.Disposable {
       ? checkWrite({ capability: this.#capability.state(context.key).kind, snapshot })
       : this.check(context, snapshot);
     if (!check.ok) return describeBlock(check);
-    if (snapshot.lock.kind === 'alive') return 'The session is running. Send is available once the runner stops.';
+    if (snapshot.lock.kind === 'alive') return text('prompts.sessionRunning');
     return null;
   }
 
@@ -273,7 +274,7 @@ export class ControlService implements vscode.Disposable {
     await this.#execute(context, {
       key: this.#sessionKey(context, snapshot.sessionId),
       args: continueArgs(input, this.settings(context)),
-      title: `${options.isOnce ? 'Running next stage of' : 'Continuing'} ${sessionLabel(snapshot)}`,
+      title: text(options.isOnce ? 'prompts.runNextStage' : 'prompts.continuing', { label: sessionLabel(snapshot) }),
       sessionId: snapshot.sessionId,
     });
   }
@@ -298,7 +299,7 @@ export class ControlService implements vscode.Disposable {
       priorSessionId: input.priorSessionId,
     });
     if (handle === null) {
-      vscode.window.setStatusBarMessage(`A ${input.workflowId} session is already being created.`, INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.creating', { workflow: input.workflowId }), INFO_MESSAGE_MS);
       return undefined;
     }
     try {
@@ -317,7 +318,9 @@ export class ControlService implements vscode.Disposable {
       timeoutMs: PREPARE_TIMEOUT_MS,
     });
     if (result.kind === 'error') {
-      this.#output.error(`prepare failed: ${result.error.detail} ${result.error.stderr}`.trim());
+      this.#output.error(
+        text('documents.logPrepareFailed', { detail: `${result.error.detail} ${result.error.stderr}`.trim() }),
+      );
       notify('control.prepareFailed', { detail: result.error.detail });
       return undefined;
     }
@@ -350,7 +353,7 @@ export class ControlService implements vscode.Disposable {
     const id = snapshot.sessionId;
     const handle = this.gate.tryAcquire(this.#sessionKey(context, id), 'Repairing');
     if (handle === null) {
-      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.operationBusy'), INFO_MESSAGE_MS);
       return;
     }
     try {
@@ -360,11 +363,11 @@ export class ControlService implements vscode.Disposable {
       );
       context.store.refreshSession(id);
       if (result.kind === 'ok') {
-        vscode.window.setStatusBarMessage(`Repaired ${sessionLabel(snapshot)}`, STATUS_MESSAGE_MS);
+        vscode.window.setStatusBarMessage(text('prompts.repaired', { label: sessionLabel(snapshot) }), STATUS_MESSAGE_MS);
         return;
       }
       const detail = result.error.stderr.trim() || result.error.detail;
-      this.#output.error(`repair failed: ${detail}`);
+      this.#output.error(text('documents.logRepairFailed', { detail }));
       const picked = await show('control.repairFailed', { detail });
       if (picked === 'viewLog') this.showLog();
     } finally {
@@ -383,7 +386,7 @@ export class ControlService implements vscode.Disposable {
     const id = snapshot.sessionId;
     const handle = this.gate.tryAcquire(this.#sessionKey(context, id), 'Completing');
     if (handle === null) {
-      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.operationBusy'), INFO_MESSAGE_MS);
       return;
     }
     try {
@@ -400,7 +403,7 @@ export class ControlService implements vscode.Disposable {
         return;
       }
       const detail = result.error.stderr.trim() || result.error.detail;
-      this.#output.error(`complete failed: ${detail}`);
+      this.#output.error(text('documents.logCompleteFailed', { detail }));
       const picked = await show('control.completeFailed', { detail });
       if (picked === 'viewLog') this.showLog();
     } finally {
@@ -435,7 +438,7 @@ export class ControlService implements vscode.Disposable {
     const existing = this.#handles.get(this.#handleKey(context, id));
     const handle = existing ?? this.gate.tryAcquire(this.#sessionKey(context, id), 'Stopping');
     if (handle === null) {
-      vscode.window.setStatusBarMessage('Another operation on this session is in progress.', INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.operationBusy'), INFO_MESSAGE_MS);
       return;
     }
     handle.setPhase('Stopping');
@@ -450,7 +453,7 @@ export class ControlService implements vscode.Disposable {
 
   async #reportStop(snapshot: SessionSnapshot, result: InvokeResult<unknown>, isStopped: boolean): Promise<void> {
     if (isStopped) {
-      vscode.window.setStatusBarMessage(`Stopped ${sessionLabel(snapshot)}`, STATUS_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.stopped', { label: sessionLabel(snapshot) }), STATUS_MESSAGE_MS);
       return;
     }
     const isRefused = result.kind === 'error' && result.error.exitCode === CANCEL_REFUSED_EXIT;
@@ -540,7 +543,7 @@ export class ControlService implements vscode.Disposable {
     if (launch === undefined) return undefined;
     const handle = this.gate.tryAcquire(job.key, 'Starting');
     if (handle === null) {
-      vscode.window.setStatusBarMessage('This action is already in progress.', INFO_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.actionBusy'), INFO_MESSAGE_MS);
       return undefined;
     }
     const known = job.sessionId;
@@ -572,7 +575,7 @@ export class ControlService implements vscode.Disposable {
   async #finish(context: ProjectContext, state: RunState, result: RunResult): Promise<void> {
     if (result.kind === 'spawn-failed') {
       this.#release(context, state);
-      this.#output.error(`spawn failed: ${result.detail}`);
+      this.#output.error(text('documents.logSpawnFailed', { detail: result.detail }));
       notify('control.spawnFailed', { detail: result.detail });
       return;
     }

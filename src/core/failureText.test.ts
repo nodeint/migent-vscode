@@ -57,6 +57,13 @@ describe('describeFailure', () => {
     );
   });
 
+  it('says the exit code is unknown when the CLI reported none', () => {
+    expect(describeFailure({ outcome: 'Unknown', exitCode: null, last: undefined, isDrafted: false })).toEqual({
+      message: 'Migent exited with code unknown.',
+      offersDraft: false,
+    });
+  });
+
   it('never blames the draft for another exit code', () => {
     expect(describeFailure({ outcome: 'Unknown', exitCode: 77, last: 'boom', isDrafted: true })).toEqual({
       message: 'Migent exited with code 77. boom',

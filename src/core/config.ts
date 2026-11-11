@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import type { ConfigLayer, InlineAgent, NamedAgentFragment, RoleEntry as ContractRoleEntry, Static } from '@nodeint/migent-contracts';
 import { parse, stringify } from 'yaml';
 
+import { text as describe,text } from '../text';
 import { agentBody, type AgentDraft, type AgentForm, agentFromClient, emptyAgent, parseAgent } from './agentForm';
 import type { Draft, Expect, OpenPart, Same, SameKeys } from './contractDraft';
 import { wireOf } from './contractRead';
@@ -193,7 +194,7 @@ export function hashOf(text: string): string {
 const EMPTY_VALIDATION: ConfigValidation = { errors: [], warnings: [] };
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
+  return error instanceof Error ? error.message : describe('states.unknownError');
 }
 
 function tabBase(scope: ConfigScope): Pick<ConfigTabModel, 'scope' | 'file' | 'path' | 'validation'> {
@@ -215,9 +216,9 @@ export function readConfigTab(projectRoot: string, scope: ConfigScope): ConfigTa
     form: emptyConfigForm(),
     canSave: false,
   });
-  let text: string;
+  let source: string;
   try {
-    text = readFileSync(filePath, 'utf8');
+    source = readFileSync(filePath, 'utf8');
   } catch (error) {
     if (isRecord(error) && error.code === 'ENOENT') {
       return {
@@ -236,19 +237,19 @@ export function readConfigTab(projectRoot: string, scope: ConfigScope): ConfigTa
   }
   let parsed: unknown;
   try {
-    parsed = parse(text);
+    parsed = parse(source);
   } catch (error) {
-    return failed('invalid', errorText(error), hashOf(text));
+    return failed('invalid', errorText(error), hashOf(source));
   }
   parsed ??= {};
-  if (!isRecord(parsed)) return failed('invalid', `${CONFIG_FILES[scope]} must be a YAML mapping`, hashOf(text));
+  if (!isRecord(parsed)) return failed('invalid', text('states.configNotMapping', { file: CONFIG_FILES[scope] }), hashOf(source));
   const form = configFormFromBody(parsed);
   const isSupported = form.schemaVersion === CONFIG_SCHEMA_VERSION;
   return {
     ...base,
     state: isSupported ? 'ok' : 'unsupported',
     exists: true,
-    hash: hashOf(text),
+    hash: hashOf(source),
     schemaVersion: form.schemaVersion,
     readError: null,
     form,
@@ -343,14 +344,16 @@ export function configBodyFromForm(form: ConfigForm, scope: ConfigScope): Config
 
 /** A name used twice would silently drop the earlier entry in a mapping keyed by name; refused before serializing. */
 export function duplicateNameProblem(form: ConfigForm): string | null {
-  for (const [label, names] of [
-    ['agent', form.agents.map((item) => item.name)],
-    ['role', form.roles.map((item) => item.name)],
-  ] as const) {
-    if (names.some((name) => name === '')) return `Every ${label} needs a name.`;
-    const repeated = names.find((name, index) => names.indexOf(name) !== index);
-    if (repeated !== undefined) return `The ${label} name "${repeated}" is used more than once.`;
-  }
+  const agents = form.agents.map((item) => item.name);
+  const roles = form.roles.map((item) => item.name);
+  const repeatedOf = (names: string[]): string | undefined =>
+    names.find((name, index) => names.indexOf(name) !== index);
+  if (agents.includes('')) return text('states.agentNameRequired');
+  const repeatedAgent = repeatedOf(agents);
+  if (repeatedAgent !== undefined) return text('states.agentNameRepeated', { name: repeatedAgent });
+  if (roles.includes('')) return text('states.roleNameRequired');
+  const repeatedRole = repeatedOf(roles);
+  if (repeatedRole !== undefined) return text('states.roleNameRepeated', { name: repeatedRole });
   return null;
 }
 

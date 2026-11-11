@@ -8,6 +8,7 @@ import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { DEFAULT_SESSION_LIMIT } from '../../core/store';
+import { text } from '../../text';
 import { openFile, openReadOnly } from '../openFile';
 import { type PickedSession,pickSession } from '../pick';
 import type { ProjectRegistry } from '../projects';
@@ -82,7 +83,7 @@ export async function resolveWith(host: CommandHost, arg: unknown, query: Resolv
   if (context !== undefined && snapshot !== undefined) return { context, snapshot, target };
   // A notification names its session explicitly: if that session is gone, say so instead of picking another.
   if (explicitTarget(arg) !== undefined) {
-    vscode.window.setStatusBarMessage('That session is no longer available. Refresh the Sessions view.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.sessionGone'), INFO_MESSAGE_MS);
     return undefined;
   }
   return pickSession(registry, query.title, query.isEligible);
@@ -93,7 +94,7 @@ export function resolve(host: CommandHost, arg: unknown, title: string): Promise
 }
 
 async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
-  const resolved = await resolve(host, arg, 'Open output of which session?');
+  const resolved = await resolve(host, arg, text('prompts.openOutputWhich'));
   if (resolved === undefined) return;
   if (resolved.target?.outputUri !== undefined) {
     await vscode.commands.executeCommand('vscode.open', resolved.target.outputUri);
@@ -104,7 +105,7 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
     (row) => row.state === 'ok' && row.absolutePath !== null,
   );
   if (rows.length === 0) {
-    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} has no output files.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noOutputFiles', { label: sessionLabel(snapshot) }), INFO_MESSAGE_MS);
     return;
   }
   const picked =
@@ -112,20 +113,20 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
       ? rows[0]
       : (await vscode.window.showQuickPick(
           rows.map((row) => ({ label: row.name ?? path.posix.basename(row.path), description: row.path, row })),
-          { title: 'Open output' },
+          { title: text('prompts.openOutput') },
         ))?.row;
   if (picked?.absolutePath !== undefined && picked.absolutePath !== null) {
-    await openFile(picked.absolutePath, 'Output');
+    await openFile(picked.absolutePath, text('prompts.fileKindOutput'));
   }
 }
 
 /** The file path of the selected execution, or undefined after reporting why it cannot be opened. */
 async function executionFilePath(host: CommandHost, arg: unknown, file: string): Promise<string | undefined> {
-  const resolved = await resolve(host, arg, `Open ${file} of which session?`);
+  const resolved = await resolve(host, arg, text('prompts.openFileWhich', { file }));
   if (resolved === undefined) return undefined;
   const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latestExecutionId ?? null;
   if (executionId === null) {
-    vscode.window.setStatusBarMessage(`Session ${sessionLabel(resolved.snapshot)} has no execution yet.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noExecutionYet', { label: sessionLabel(resolved.snapshot) }), INFO_MESSAGE_MS);
     return undefined;
   }
   const dir = sessionDir(resolved.context.root, resolved.snapshot.sessionId);
@@ -138,7 +139,7 @@ async function openExecutionFile(host: CommandHost, arg: unknown, file: string):
 }
 
 async function openSessionFile(host: CommandHost, arg: unknown, file: string): Promise<void> {
-  const resolved = await resolve(host, arg, `Open ${file} of which session?`);
+  const resolved = await resolve(host, arg, text('prompts.openFileWhich', { file }));
   if (resolved === undefined) return;
   await openFile(path.join(sessionDir(resolved.context.root, resolved.snapshot.sessionId), file), file);
 }
@@ -170,13 +171,13 @@ export function registerSessionCommands(host: CommandHost, gate: OperationGate):
     register('migent.session.openOutput', (arg) => openOutput(host, arg)),
     register('migent.session.openQuestions', (arg) => openSessionFile(host, arg, QUESTIONS_FILENAME)),
     register('migent.session.copyId', async (arg) => {
-      const resolved = await resolve(host, arg, 'Copy the id of which session?');
+      const resolved = await resolve(host, arg, text('prompts.copyIdWhich'));
       if (resolved === undefined) return;
       await vscode.env.clipboard.writeText(resolved.snapshot.sessionId);
-      vscode.window.setStatusBarMessage(`Copied session id ${resolved.snapshot.sessionId}`, STATUS_MESSAGE_MS);
+      vscode.window.setStatusBarMessage(text('prompts.copiedId', { id: resolved.snapshot.sessionId }), STATUS_MESSAGE_MS);
     }),
     register('migent.session.revealInExplorer', async (arg) => {
-      const resolved = await resolve(host, arg, 'Reveal which session?');
+      const resolved = await resolve(host, arg, text('prompts.revealWhich'));
       if (resolved === undefined) return;
       const uri = vscode.Uri.file(sessionDir(resolved.context.root, resolved.snapshot.sessionId));
       await vscode.commands.executeCommand('revealFileInOS', uri);

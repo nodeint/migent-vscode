@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 
+import { text } from '../text';
 import { CLI_COMMAND, type LaunchSpec, locateCli, type LocateOptions } from './locate';
 
 /**
@@ -123,13 +124,13 @@ async function versionState(
   }
   const output = await pending;
   if (output.kind === 'failed') {
-    return { ...base, kind: 'error', detail: `"--version" failed: ${output.detail}` };
+    return { ...base, kind: 'error', detail: text('states.cliVersionFailed', { detail: output.detail }) };
   }
   const detected = parseSemver(output.stdout);
   const minimum = parseSemver(base.required);
   if (detected === null || minimum === null) {
     const excerpt = output.stdout.trim().slice(0, OUTPUT_EXCERPT_LENGTH);
-    return { ...base, kind: 'unparsable', detail: `No version found in: ${excerpt}` };
+    return { ...base, kind: 'unparsable', detail: text('states.cliNoVersion', { excerpt }) };
   }
   const kind = compareSemver(detected, minimum) < 0 ? 'old' : 'ok';
   return { ...base, kind, detected: detected.text };
@@ -140,7 +141,7 @@ export async function probeCapability(input: CapabilityInput): Promise<Capabilit
   const required = input.required ?? MINIMUM_CLI_VERSION;
   const located = locateCli(input.locate);
   if (located.kind === 'missing') {
-    return { kind: 'missing', required, detail: `"${CLI_COMMAND}" was not found on PATH.` };
+    return { kind: 'missing', required, detail: text('states.cliNotOnPath', { command: CLI_COMMAND }) };
   }
   if (located.kind === 'unsupported') {
     return { kind: 'unsupported', required, resolvedPath: located.resolvedPath, detail: located.detail };

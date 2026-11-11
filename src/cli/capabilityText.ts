@@ -1,3 +1,4 @@
+import { text } from '../text';
 import type { CapabilityState } from './version';
 
 export interface CapabilityDiagnostic {
@@ -10,8 +11,8 @@ export interface CapabilityDiagnostic {
 export function describeCapability(state: CapabilityState): CapabilityDiagnostic | null {
   const lines: string[] = [];
   const versions = (): void => {
-    if (state.detected !== undefined) lines.push(`Detected version: ${state.detected}`);
-    lines.push(`Required version: ${state.required} or newer`);
+    if (state.detected !== undefined) lines.push(text('states.cliDetected', { version: state.detected }));
+    lines.push(text('states.cliRequired', { version: state.required }));
   };
   let label: string;
   switch (state.kind) {
@@ -19,30 +20,33 @@ export function describeCapability(state: CapabilityState): CapabilityDiagnostic
     case 'ok':
       return null;
     case 'missing':
-      label = 'Migent CLI not found';
-      lines.push('Install it with "npm install -g @nodeint/migent", then restart VS Code if it was installed just now.');
+      label = text('states.cliMissing');
+      lines.push(text('states.cliInstallHint'));
       versions();
       break;
     case 'unsupported':
-      label = 'Migent CLI launcher is not supported';
+      label = text('states.cliUnsupported');
       versions();
       break;
     case 'old':
-      label = `Migent CLI ${state.detected ?? ''} is older than ${state.required}`.replace('  ', ' ');
+      label =
+        state.detected === undefined
+          ? text('states.cliOldUnknown', { required: state.required })
+          : text('states.cliOld', { detected: state.detected, required: state.required });
       versions();
       break;
     case 'unparsable':
-      label = 'Migent CLI version not recognized';
+      label = text('states.cliUnparsable');
       versions();
       break;
     case 'error':
-      label = 'Migent CLI could not be run';
+      label = text('states.cliError');
       versions();
       break;
   }
-  if (state.resolvedPath !== undefined) lines.push(`Executable: ${state.resolvedPath}`);
+  if (state.resolvedPath !== undefined) lines.push(text('states.cliExecutable', { path: state.resolvedPath }));
   if (state.detail !== undefined) lines.push(state.detail);
-  lines.push('Sessions on disk stay visible. Use the Recheck action after fixing it.');
+  lines.push(text('states.cliSessionsVisible'));
   return { label, tooltip: lines.join('\n') };
 }
 
@@ -61,15 +65,13 @@ export type InstallOutcome =
  */
 export function describeInstallOutcome(state: CapabilityState, exitCode: number | undefined): InstallOutcome {
   if (state.kind === 'ok') {
-    return { kind: 'ready', message: `Migent CLI ${state.detected ?? ''} is ready.`.replace('  ', ' ') };
+    return { kind: 'ready', message: state.detected === undefined ? text('states.cliReadyUnknown') : text('states.cliReady', { detected: state.detected }) };
   }
   if (exitCode !== undefined && exitCode !== 0) {
-    return { kind: 'failed', message: 'Install failed. See the "Migent: Install CLI" terminal.' };
+    return { kind: 'failed', message: text('states.cliInstallFailed') };
   }
   return {
     kind: 'restart',
-    message:
-      'The install finished, but VS Code still cannot use the Migent CLI. Your shell may resolve a different "migent" ' +
-      'than VS Code does (PATH, nvm, or another package manager). Restart VS Code, then use Recheck.',
+    message: text('states.cliRestart'),
   };
 }

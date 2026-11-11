@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
-import { NOTICES } from '../core/notices';
+import { NOTICES } from '../text/notices';
 import { type DeleteError, deleteSession } from '../vscode/commands/deleteSession';
 import { READ_ONLY_DOC_SCHEME } from '../vscode/content/readOnlyDocs';
 import type { TreeNode } from '../vscode/views/nodes';

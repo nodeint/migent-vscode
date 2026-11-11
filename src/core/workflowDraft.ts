@@ -1,13 +1,14 @@
 import { parseDocument } from 'yaml';
 
+import { text } from '../text';
 import { isRecord } from './record';
 
 const WORKFLOW_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 /** Why a workflow id cannot name a new file, or null. The id is also the file name, so it stays path-safe. */
 export function workflowIdProblem(id: string): string | null {
-  if (id === '') return 'Enter a workflow id.';
-  if (!WORKFLOW_ID.test(id)) return 'Use letters, digits, "-" and "_", starting with a letter or digit.';
+  if (id === '') return text('states.enterWorkflowId');
+  if (!WORKFLOW_ID.test(id)) return text('states.workflowIdChars');
   return null;
 }
 

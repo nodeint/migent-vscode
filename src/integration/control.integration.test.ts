@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../core/model';
-import { LABELS, NOTICES } from '../core/notices';
+import { LABELS, NOTICES } from '../text/notices';
 import type { ProjectContext } from '../vscode/projects';
 import { openWorkflowDraft, type PreparedSession } from '../vscode/workflowDraft';
 import { createProject, type Env, freshLock, manifest, migentPath, openScenarioFolder, repoRoot, runScenarios, type Scenario, sleep, status, waitFor, write } from './harness';

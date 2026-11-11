@@ -47,6 +47,8 @@ place. It holds the session page tabs and the more menu (`copy.tab`, `copy.menu`
 - Group by meaning, not by page (`copy.menu.reloadFromDisk`, not `copy.workflowEditor.reload`). Text with a value in
   it is a function (`copy.remove('stage', 2)`), never a concatenation at the call site.
 - A string a test asserts is read from `MigentCopy` too, so a wording change does not break a test.
+- Boundary: text the extension host writes (including messages it puts into a page model, such as an answer state
+  message) lives in the host catalog `src/text/`; text a page writes itself lives in `media/`.
 
 `media/workfloweditor/workflowCopy.js` defines `MigentWorkflowCopy`: every label, hint, placeholder, note and message of
 the workflow form (`workflowForm.js` reads it as `text`), grouped by what the text is about (`basics`, `stages`,

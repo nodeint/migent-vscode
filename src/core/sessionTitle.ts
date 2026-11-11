@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 
+import { text } from '../text';
 import { isRecord } from './record';
 
 const LINE_BREAK = /[\n\r]/;
 
 /** Why a title is not acceptable, or null. Mirrors the CLI: reject line breaks in the raw value, then empty. */
 export function validateRenameTitle(raw: string): string | null {
-  if (LINE_BREAK.test(raw)) return 'The title must be a single line.';
-  if (raw.trim() === '') return 'The title must not be empty.';
+  if (LINE_BREAK.test(raw)) return text('states.titleSingleLine');
+  if (raw.trim() === '') return text('states.titleEmpty');
   return null;
 }
 

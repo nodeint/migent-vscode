@@ -1,3 +1,4 @@
+import { text } from '../text';
 import type { TailEvent } from './eventTail';
 import { parseExecutionId } from './executions';
 
@@ -38,7 +39,7 @@ function subject(event: TailEvent): string {
  * through unchanged and marked unrecognized.
  */
 export function formatTimelineLine(event: TailEvent, options: TimelineFormatOptions = {}): string {
-  if (event.rawLine !== null) return `${NO_TIME} [unrecognized] ${event.rawLine}`;
+  if (event.rawLine !== null) return text('documents.unrecognized', { line: event.rawLine });
   const label = (event.event ?? '').replace(/^execution\./, '');
   const head = [clock(event.timestamp, options.isUtc === true), subject(event), label].filter((part) => part !== '');
   const line = head.join(' ');
@@ -52,5 +53,5 @@ export function formatTimeline(
   options: TimelineFormatOptions = {},
 ): string[] {
   const lines = events.map((event) => formatTimelineLine(event, options));
-  return droppedCount > 0 ? [`… ${droppedCount} earlier events not shown`, ...lines] : lines;
+  return droppedCount > 0 ? [text('documents.earlierEvents', { count: droppedCount }), ...lines] : lines;
 }

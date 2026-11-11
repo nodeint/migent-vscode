@@ -1,4 +1,5 @@
 import type { RunOutcome } from '../cli/exitCode';
+import { text } from '../text';
 
 /** What the user is told about a finished command that did not succeed, and whether to offer the draft. */
 export interface FailureText {
@@ -17,7 +18,6 @@ const DRAFT_DIAGNOSTIC = /\bworkflow\.yaml\b/i;
  * (exit 2, nothing written). The problems are listed above that line, so the line alone says nothing about the cause.
  */
 const PREFLIGHT_FAILED = /^preflight failed\b/i;
-const PREFLIGHT_MESSAGE = "Migent's pre-run check failed. The log lists the problems; fix them and run again.";
 
 export function describeFailure({ outcome, exitCode, last, isDrafted }: {
   outcome: RunOutcome;
@@ -28,20 +28,20 @@ export function describeFailure({ outcome, exitCode, last, isDrafted }: {
   isDrafted: boolean;
 }): FailureText {
   if (outcome !== 'ConfigError') {
-    const code = typeof exitCode === 'number' ? String(exitCode) : 'unknown';
-    return { message: append(`Migent exited with code ${code}.`, last), offersDraft: false };
+    const exited = typeof exitCode === 'number' ? text('states.exitCode', { code: exitCode }) : text('states.exitCodeUnknown');
+    return { message: append(exited, last), offersDraft: false };
   }
   if (last !== undefined && PREFLIGHT_FAILED.test(last)) {
-    return { message: PREFLIGHT_MESSAGE, offersDraft: isDrafted };
+    return { message: text('states.preflightFailed'), offersDraft: isDrafted };
   }
-  const neutral = append('Migent reported a configuration error.', last);
+  const neutral = append(text('states.configError'), last);
   if (!isDrafted) return { message: neutral, offersDraft: false };
   if (last !== undefined && DRAFT_DIAGNOSTIC.test(last)) {
-    return { message: `Migent rejected this session's workflow.yaml. ${last}`, offersDraft: true };
+    return { message: text('states.draftRejected', { last }), offersDraft: true };
   }
-  return { message: `${neutral} Check this session's workflow.yaml and the log.`, offersDraft: true };
+  return { message: text('states.checkDraft', { neutral }), offersDraft: true };
 }
 
-function append(text: string, last: string | undefined): string {
-  return last === undefined ? text : `${text} ${last}`;
+function append(body: string, last: string | undefined): string {
+  return last === undefined ? body : text('states.appendLast', { text: body, last });
 }

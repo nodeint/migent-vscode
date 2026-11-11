@@ -1,6 +1,7 @@
 import { invokeJson } from '../../cli/invoke';
 import type { LaunchSpec } from '../../cli/locate';
 import { parseWorkflowAuthoringEnvelope } from '../../core/workflowEditor';
+import { text } from '../../text';
 import { envelopeOf, SAVE_TIMEOUT_MS, saveArgs, saveFailure } from '../workflowEditor/panels';
 
 /**
@@ -24,5 +25,5 @@ export async function createWorkflowCopy(
   const problem = envelope?.diagnostics.find((item) => item.severity === 'error')?.message;
   if (problem !== undefined) return problem;
   if (result.kind === 'error') return saveFailure(result.error.exitCode, result.error.stderr);
-  return 'Migent did not confirm the save.';
+  return text('prompts.saveNotConfirmed');
 }

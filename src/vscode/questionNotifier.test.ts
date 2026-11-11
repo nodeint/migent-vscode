@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PendingQuestion, SessionSnapshot } from '../core/model';
-import { LABELS, NOTICES } from '../core/notices';
+import { LABELS, NOTICES } from '../text/notices';
 
 const hoisted = vi.hoisted(() => ({
   enabled: new Map<string, boolean>(),

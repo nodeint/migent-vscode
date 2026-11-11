@@ -6,6 +6,7 @@ import type { ReplyTarget } from '../../core/model';
 import { blockKind, replyPrompt } from '../../core/replyFlow';
 import { sessionLabel, sessionTitle } from '../../core/sessionPresentation';
 import { normalizeRenameTitle, validateRenameTitle } from '../../core/sessionTitle';
+import { text, type TextId } from '../../text';
 import type { CapabilityService } from '../capability';
 import type { ControlService } from '../control';
 import { confirm, progress } from '../notices';
@@ -25,11 +26,11 @@ const canRunOnce = (snapshot: SessionSnapshot): boolean =>
 const isRepairable = (snapshot: SessionSnapshot): boolean => snapshot.displayState.state !== 'running';
 const hasReplyTargets = (snapshot: SessionSnapshot): boolean => snapshot.replyTargets.length > 0;
 
-const KIND_LABEL: Record<ReplyTarget['kind'], string> = {
-  blocker: 'blocked',
-  cancelled: 'interrupted',
-  roleTurn: 'role turn',
-};
+const KIND_TEXT = {
+  blocker: 'prompts.kindBlocked',
+  cancelled: 'prompts.kindInterrupted',
+  roleTurn: 'prompts.kindRoleTurn',
+} as const satisfies Record<ReplyTarget['kind'], TextId>;
 
 async function pickTarget(targets: readonly ReplyTarget[]): Promise<ReplyTarget | undefined> {
   const [only] = targets;
@@ -37,11 +38,11 @@ async function pickTarget(targets: readonly ReplyTarget[]): Promise<ReplyTarget 
   const picked = await vscode.window.showQuickPick(
     targets.map((target) => ({
       label: target.stageId ?? target.executionId,
-      description: `attempt ${target.attempt} · ${KIND_LABEL[target.kind]}`,
+      description: text('prompts.attemptKind', { attempt: target.attempt, kind: text(KIND_TEXT[target.kind]) }),
       detail: target.executionId,
       target,
     })),
-    { title: 'Reply to which stage?' },
+    { title: text('prompts.replyWhichStage') },
   );
   return picked?.target;
 }
@@ -50,9 +51,9 @@ async function pickTarget(targets: readonly ReplyTarget[]): Promise<ReplyTarget 
 function explainNoReply(snapshot: SessionSnapshot): void {
   const label = sessionLabel(snapshot);
   if (blockKind(snapshot) === 'question') {
-    vscode.window.setStatusBarMessage(`Session ${label} is waiting for answers. Use Answer questions.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.waitingForAnswers', { label }), INFO_MESSAGE_MS);
   } else {
-    vscode.window.setStatusBarMessage(`Session ${label} has nothing to reply to.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.nothingToReply', { label }), INFO_MESSAGE_MS);
   }
 }
 
@@ -62,18 +63,18 @@ type QuickReply = { kind: 'send'; text: string } | { kind: 'editor'; text: strin
 function promptReply(prompt: string): Promise<QuickReply | undefined> {
   return new Promise((resolve) => {
     const box = vscode.window.createInputBox();
-    box.title = 'Reply';
+    box.title = text('prompts.reply');
     box.prompt = prompt;
-    box.placeholder = 'Write a short reply, or open the editor for a long one';
+    box.placeholder = text('prompts.replyPlaceholder');
     box.ignoreFocusOut = true;
-    box.buttons = [{ iconPath: new vscode.ThemeIcon('edit'), tooltip: 'Open in editor' }];
+    box.buttons = [{ iconPath: new vscode.ThemeIcon('edit'), tooltip: text('prompts.openInEditor') }];
     let result: QuickReply | undefined;
     box.onDidChangeValue(() => {
       box.validationMessage = undefined;
     });
     box.onDidAccept(() => {
       if (box.value.trim() === '') {
-        box.validationMessage = 'Write a reply, or open the editor.';
+        box.validationMessage = text('prompts.writeReply');
         return;
       }
       result = { kind: 'send', text: box.value.trim() };
@@ -92,7 +93,7 @@ function promptReply(prompt: string): Promise<QuickReply | undefined> {
 }
 
 async function reply(host: CommandHost, replies: ReplyService, arg: unknown): Promise<void> {
-  const resolved = await resolveWith(host, arg, { title: 'Reply to which session?', isEligible: hasReplyTargets });
+  const resolved = await resolveWith(host, arg, { title: text('prompts.replyWhichSession'), isEligible: hasReplyTargets });
   if (resolved === undefined) return;
   const { context, snapshot } = resolved;
   const targets = snapshot.replyTargets;
@@ -143,7 +144,7 @@ async function sendReply(replies: ReplyService, arg: unknown): Promise<void> {
   const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
   const meta = uri === undefined ? undefined : replies.identityOf(uri);
   if (meta === undefined) {
-    vscode.window.setStatusBarMessage('Open a Migent reply draft to send it.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.openReplyDraft'), INFO_MESSAGE_MS);
     return;
   }
   await runSend(replies, meta);
@@ -162,7 +163,7 @@ async function continueOnce(
   snapshot: SessionSnapshot,
 ): Promise<void> {
   if (!canRunOnce(snapshot)) {
-    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} has no stage to run once.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.noStageOnce', { label: sessionLabel(snapshot) }), INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
@@ -187,7 +188,7 @@ async function continueWithoutReply(
 
 async function repair(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
   if (!isRepairable(snapshot)) {
-    vscode.window.setStatusBarMessage('A running session cannot be repaired. Stop it first.', INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.stopFirst'), INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
@@ -196,7 +197,7 @@ async function repair(control: ControlService, context: ProjectContext, snapshot
 
 async function complete(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
   if (!isCompletable(snapshot)) {
-    vscode.window.setStatusBarMessage(`Session ${sessionLabel(snapshot)} is not a stopped workflow session, so it cannot be completed.`, INFO_MESSAGE_MS);
+    vscode.window.setStatusBarMessage(text('prompts.notCompletable', { label: sessionLabel(snapshot) }), INFO_MESSAGE_MS);
     return;
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
@@ -207,10 +208,10 @@ async function rename(control: ControlService, context: ProjectContext, snapshot
   if (!(await control.ensureWritable(context))) return;
   const current = sessionTitle(snapshot);
   const entered = await vscode.window.showInputBox({
-    title: 'Rename Session',
-    prompt: 'The new session title (one line)',
+    title: text('prompts.renameSession'),
+    prompt: text('prompts.renamePrompt'),
     value: current,
-    validateInput: (text) => validateRenameTitle(text) ?? undefined,
+    validateInput: (input) => validateRenameTitle(input) ?? undefined,
   });
   if (entered === undefined) return;
   const title = normalizeRenameTitle(entered);
@@ -244,16 +245,16 @@ interface SessionAction {
 }
 
 const SESSION_ACTIONS: readonly SessionAction[] = [
-  { id: 'migent.session.continueOnce', title: 'Run the next stage of which session?', isEligible: canRunOnce, act: continueOnce },
+  { id: 'migent.session.continueOnce', title: text('prompts.runNextStageWhich'), isEligible: canRunOnce, act: continueOnce },
   {
     id: 'migent.session.continueWithoutReply',
-    title: 'Continue which blocked session?',
+    title: text('prompts.continueBlockedWhich'),
     isEligible: isOrdinaryBlocker,
     act: continueWithoutReply,
   },
-  { id: 'migent.session.complete', title: 'Complete which session?', isEligible: isCompletable, act: complete },
-  { id: 'migent.session.rename', title: 'Rename which session?', isEligible: () => true, act: rename },
-  { id: 'migent.session.repair', title: 'Repair which session?', isEligible: isRepairable, act: repair },
+  { id: 'migent.session.complete', title: text('prompts.completeWhich'), isEligible: isCompletable, act: complete },
+  { id: 'migent.session.rename', title: text('prompts.renameWhich'), isEligible: () => true, act: rename },
+  { id: 'migent.session.repair', title: text('prompts.repairWhich'), isEligible: isRepairable, act: repair },
 ];
 
 /** Reply, secondary actions and Doctor. Every write goes through `ControlService`'s runner and gate. */

@@ -1,3 +1,4 @@
+import { text } from '../text';
 import { childrenOf } from './handoff';
 import type { SessionSnapshot } from './model';
 import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext } from './nextWorkflows';
@@ -43,21 +44,21 @@ export function lookupSuggestion(
   published: readonly string[] | null,
 ): SuggestionLookup {
   const read = readNext(sessionDirPath);
-  if (read.kind === 'missing') return { kind: 'blocked', reason: 'next.json was not found.', suggestion: null };
+  if (read.kind === 'missing') return { kind: 'blocked', reason: text('states.nextMissing'), suggestion: null };
   if (read.kind !== 'ok') {
-    return { kind: 'blocked', reason: 'next.json is unreadable, invalid or unsupported.', suggestion: null };
+    return { kind: 'blocked', reason: text('states.nextUnusable'), suggestion: null };
   }
   const frozen = readFrozenDownstream(sessionDirPath);
   const marked = markDeclared(read.suggestions, frozen, published);
   const suggestion = marked.find((candidate) => candidate.workflow === targetWorkflow) ?? null;
   if (suggestion === null) {
-    return { kind: 'blocked', reason: `${targetWorkflow} is not a suggestion of this session.`, suggestion: null };
+    return { kind: 'blocked', reason: text('states.notSuggested', { workflow: targetWorkflow }), suggestion: null };
   }
   if (suggestion.declared !== true) {
     const reason =
       suggestion.declared === null
-        ? 'The downstream declaration of this session could not be read.'
-        : `${targetWorkflow} is not declared by the session's workflow.`;
+        ? text('states.downstreamUnreadable')
+        : text('states.notDeclared', { workflow: targetWorkflow });
     return { kind: 'blocked', reason, suggestion };
   }
   return { kind: 'ok', suggestion };
@@ -68,9 +69,9 @@ export function targetOf(workflows: readonly WorkflowEntry[], workflow: string):
   const match = workflows.find((entry) => entry.id === workflow);
   const reasons: Record<TargetWorkflowState, string | null> = {
     available: null,
-    duplicate: 'More than one workflow file has this id.',
-    invalid: match?.error ?? 'The target workflow file is invalid.',
-    'not-found': 'No workflow with this id in the project.',
+    duplicate: text('states.targetDuplicate'),
+    invalid: match?.error ?? text('states.targetInvalid'),
+    'not-found': text('states.targetNotFound'),
   };
   return { workflow, state, file: state === 'available' ? (match?.file ?? null) : null, error: reasons[state] };
 }
@@ -81,8 +82,8 @@ export function launchBlockOf(
   lookup: SuggestionLookup,
   target: NextStepTarget,
 ): string | null {
-  if (source === undefined) return 'The source session is not loaded.';
-  if (source.displayState.state !== 'completed') return 'The source session is not completed.';
+  if (source === undefined) return text('states.sourceNotLoaded');
+  if (source.displayState.state !== 'completed') return text('states.sourceNotCompleted');
   if (lookup.kind === 'blocked') return lookup.reason;
   return target.error;
 }
@@ -150,10 +151,10 @@ export function resolveLaunch(
   const target = targetOf(input.workflows, input.targetWorkflow);
   const block = launchBlockOf(source, lookup, target);
   if (block !== null || lookup.kind !== 'ok' || target.file === null) {
-    return { kind: 'blocked', reason: block ?? 'The suggestion is no longer available.' };
+    return { kind: 'blocked', reason: block ?? text('states.suggestionGone') };
   }
   const taskText = requestedTask.trim();
-  if (taskText.length === 0 && !allowEmpty) return { kind: 'blocked', reason: 'Enter a task.' };
+  if (taskText.length === 0 && !allowEmpty) return { kind: 'blocked', reason: text('states.enterTask') };
   return {
     kind: 'ok',
     launch: {

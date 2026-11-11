@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { text } from '../text';
 import { listExecutions, parseExecutionId, readExecution } from './executions';
 import type { ExecutionSnapshot, ReplyTarget, SessionSnapshot } from './model';
 import { EXECUTIONS_DIRNAME } from './paths';
@@ -106,8 +107,8 @@ export function quotaFailure(snapshot: SessionSnapshot): QuotaFailure | null {
 
 /** `Nov 3, 2026, 2:05 PM GMT+7`; says so instead of inventing a time when none is known. */
 export function describeQuotaReset(failure: QuotaFailure, locale?: string): string {
-  if (failure.retryAt === null) return 'no reset time was recorded';
-  const absolute = new Intl.DateTimeFormat(locale, {
+  if (failure.retryAt === null) return text('states.noResetTime');
+  const when = new Intl.DateTimeFormat(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -115,7 +116,7 @@ export function describeQuotaReset(failure: QuotaFailure, locale?: string): stri
     minute: '2-digit',
     timeZoneName: 'short',
   }).format(new Date(failure.retryAt));
-  return `resets ${absolute}`;
+  return text('states.resetsAt', { when });
 }
 
 /** Stable identity of one reply draft: stage name alone is not enough once an attempt changes. */
@@ -156,19 +157,18 @@ export interface ReplyHeaderInput {
 
 function contextLines(input: ReplyHeaderInput): string[] {
   const { target } = input;
-  const stage = commentSafe(target.stageId ?? input.role ?? 'role');
+  const stage = commentSafe(target.stageId ?? input.role ?? text('states.roleFallback'));
   switch (target.kind) {
     case 'cancelled':
-      return [
-        `<!-- Interrupted stage: ${stage} (attempt ${target.attempt}) -->`,
-        '<!-- The workflow keeps running after this reply. -->',
-      ];
+      return [text('states.replyInterrupted', { stage, attempt: target.attempt }), text('states.replyKeepsRunning')];
     case 'roleTurn':
-      return [`<!-- Role: ${stage} (execution ${commentSafe(target.executionId)}) -->`];
+      return [text('states.replyRole', { stage, executionId: commentSafe(target.executionId) })];
     default:
       return [
-        `<!-- Blocked stage: ${stage} (attempt ${target.attempt}) -->`,
-        `<!-- Blocker: ${input.blocker === null ? 'unavailable' : commentSafe(input.blocker)} -->`,
+        text('states.replyBlocked', { stage, attempt: target.attempt }),
+        input.blocker === null
+          ? text('states.replyBlockerUnavailable')
+          : text('states.replyBlocker', { blocker: commentSafe(input.blocker) }),
       ];
   }
 }
@@ -178,8 +178,8 @@ export function replyHeader(input: ReplyHeaderInput): string {
   const lines = [
     HEADER_BEGIN,
     ...contextLines(input),
-    input.responsePath === null ? null : `<!-- Previous response: ${commentSafe(input.responsePath)} -->`,
-    '<!-- Write your reply below this block, then use Send Reply. -->',
+    input.responsePath === null ? null : text('states.replyPrevious', { path: commentSafe(input.responsePath) }),
+    text('states.replyWrite'),
     HEADER_END,
     '',
     '',
@@ -191,11 +191,13 @@ export function replyHeader(input: ReplyHeaderInput): string {
 export function replyPrompt(target: ReplyTarget, role: string | null): string {
   switch (target.kind) {
     case 'cancelled':
-      return `Reply to the interrupted stage ${target.stageId ?? ''} (attempt ${target.attempt}). The workflow keeps running after the reply.`;
+      return text('states.replyPromptCancelled', { stage: target.stageId ?? '', attempt: target.attempt });
     case 'roleTurn':
-      return `Reply to ${role === null ? 'the role' : `role ${role}`} (execution ${target.executionId}). It starts a new turn.`;
+      return role === null
+        ? text('states.replyPromptRoleUnnamed', { executionId: target.executionId })
+        : text('states.replyPromptRole', { role, executionId: target.executionId });
     default:
-      return `Reply to the blocked stage ${target.stageId ?? ''} (attempt ${target.attempt}).`;
+      return text('states.replyPromptBlocked', { stage: target.stageId ?? '', attempt: target.attempt });
   }
 }
 

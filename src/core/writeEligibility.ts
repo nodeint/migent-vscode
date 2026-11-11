@@ -1,4 +1,5 @@
 import type { CapabilityKind } from '../cli/version';
+import { text } from '../text';
 import type { SessionSnapshot } from './model';
 
 /** Why a write command is unavailable, and what the user can do about it (plans/03-control.md §2). */
@@ -40,19 +41,44 @@ export function checkWrite(input: WriteInput): WriteCheck {
   return { ok: true };
 }
 
+/**
+ * The phase values (`Starting`, `Sending reply`, ...) are identifiers owned by `operationGate.ts`; this maps each to
+ * its catalog wording, and an unknown value is lowercased as it always was.
+ */
+function phaseWording(phase: string): string {
+  switch (phase) {
+    case 'Starting':
+      return text('states.phaseStarting');
+    case 'Running':
+      return text('states.phaseRunning');
+    case 'Sending reply':
+      return text('states.phaseSendingReply');
+    case 'Repairing':
+      return text('states.phaseRepairing');
+    case 'Completing':
+      return text('states.phaseCompleting');
+    case 'Stopping':
+      return text('states.phaseStopping');
+    case 'Deleting':
+      return text('states.phaseDeleting');
+    default:
+      return phase.toLowerCase();
+  }
+}
+
 /** One sentence for a notification or tooltip; the recovery action is offered separately. */
 export function describeBlock(block: WriteBlock): string {
   switch (block.reason) {
     case 'cli':
-      return block.kind === 'checking'
-        ? 'The Migent CLI is still being checked.'
-        : `The Migent CLI is unavailable (${block.kind}).`;
+      return block.kind === 'checking' ? text('states.cliChecking') : text('states.cliUnavailable', { kind: block.kind });
     case 'foreign-lock': {
-      const owner = [block.host, block.pid === null ? null : `pid ${block.pid}`].filter(Boolean).join(' ');
-      const beat = block.heartbeatAt === null ? '' : `, last heartbeat ${block.heartbeatAt}`;
-      return `Another process holds this session (${owner || 'unknown'}${beat}).`;
+      const owner = [block.host, block.pid === null ? null : text('states.lockOwnerPid', { pid: block.pid })]
+        .filter(Boolean)
+        .join(' ');
+      const beat = block.heartbeatAt === null ? '' : text('states.lockHeartbeat', { at: block.heartbeatAt });
+      return text('states.foreignLock', { owner: owner || text('states.lockOwnerUnknown'), beat });
     }
     case 'busy':
-      return `Another operation on this session is still running (${block.phase.toLowerCase()}).`;
+      return text('states.busy', { phase: phaseWording(block.phase) });
   }
 }

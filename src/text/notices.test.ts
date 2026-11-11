@@ -39,7 +39,7 @@ const PINS: Record<NoticeId, Pin> = {
     also: [
       [{ label: 'S', where: '', cause: null, quota: null }, 'Session S failed. The cause is in the response or log.'],
       [
-        { label: 'S', where: 'plan', cause: 'x', quota: { retryAt: null } },
+        { label: 'S', where: 'plan', cause: 'x', quota: { reset: 'no reset time was recorded' } },
         'Session S failed (plan). Client quota was exhausted; no reset time was recorded. Continue reruns the stage.',
       ],
     ],
@@ -54,15 +54,8 @@ const PINS: Record<NoticeId, Pin> = {
     buttons: ['Answer questions'],
   },
   'control.writeBlocked': {
-    params: { block: { reason: 'cli', kind: 'checking', recovery: 'recheck' } },
-    text: 'The Migent CLI is still being checked.',
-    also: [
-      [{ block: { reason: 'cli', kind: 'missing', recovery: 'recheck' } }, 'The Migent CLI is unavailable (missing).'],
-      [
-        { block: { reason: 'busy', phase: 'Stopping', recovery: 'refresh' } },
-        'Another operation on this session is still running (stopping).',
-      ],
-    ],
+    params: { message: 'blocked because' },
+    text: 'blocked because',
     severity: 'warning',
     buttons: ['Recheck', 'Refresh', FIX_LOG],
   },
@@ -186,6 +179,7 @@ const PINS: Record<NoticeId, Pin> = {
     text: 'No workflow with id w in this project.',
     severity: 'warning',
   },
+  'session.copyUnavailable': { text: 'This value is no longer available to copy.', severity: 'warning' },
   'draft.missing': { text: 'This session no longer has a workflow.yaml.', severity: 'warning' },
   'draft.openFailed': { params: D, text: 'Could not open workflow.yaml: d', severity: 'error' },
   'draft.prepared': {

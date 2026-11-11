@@ -8,6 +8,7 @@ import type {
   Static,
 } from '@nodeint/migent-contracts';
 
+import { text } from '../text';
 import { type Wire, wireOf } from './contractRead';
 
 type PrepareOutput = Static<typeof PrepareResult>;
@@ -328,9 +329,9 @@ export function parseDoctorOutput(text: string): DoctorCheck[] | null {
 export function doctorLines(checks: readonly DoctorCheck[]): string[] {
   const lines: string[] = [];
   for (const check of checks) {
-    lines.push(`${check.ok ? 'ok  ' : 'FAIL'} ${check.name}`);
-    for (const problem of check.problems) lines.push(`     problem: ${problem}`);
-    for (const warning of check.warnings) lines.push(`     warning: ${warning}`);
+    lines.push(text(check.ok ? 'documents.doctorOk' : 'documents.doctorFail', { name: check.name }));
+    for (const problem of check.problems) lines.push(text('documents.doctorProblem', { problem }));
+    for (const warning of check.warnings) lines.push(text('documents.doctorWarning', { warning }));
   }
   return lines;
 }

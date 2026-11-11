@@ -146,7 +146,7 @@ neither are notification buttons in the test host. Notifications are covered at 
 `notices.test.ts` (the facade: severity, buttons, picked key, modal confirmations, progress) and `notifier.test.ts` and
 `questionNotifier.test.ts` (when a notification fires, queueing, which command a button runs, the settings), plus
 `deleteSession.test.ts` for the delete ids. Their rules are covered by `transitions.test.ts`, `notificationGate.test.ts`,
-`batchWatch.test.ts` and `replyFlow.test.ts`; the catalog's exact wording by `src/core/notices.test.ts`. A test that
+`batchWatch.test.ts` and `replyFlow.test.ts`; the catalog's exact wording by `src/text/notices.test.ts`. A test that
 asserts notification text reads it from the catalog (`NOTICES`), as webview text is read from `MigentCopy`. Clicking
 a real notification button stays a manual check.
 

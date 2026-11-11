@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { SessionSnapshot } from '../../core/model';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { formatTimeline, formatTimelineLine } from '../../core/timelineFormat';
+import { text } from '../../text';
 import type { ProjectKey } from '../changes';
 import type { ProjectRegistry } from '../projects';
 import type { TailHandle, TailManager } from '../tails';
@@ -92,7 +93,7 @@ export class LogChannels implements vscode.Disposable {
         project,
         snapshot.sessionId,
         vscode.window.createOutputChannel(
-          `Migent: ${snapshot.sessionId.slice(0, SHORT_ID_LENGTH)} ${sessionLabel(snapshot)}`,
+          text('shell.sessionChannel', { id: snapshot.sessionId.slice(0, SHORT_ID_LENGTH), label: sessionLabel(snapshot) }),
           { log: true },
         ),
       );

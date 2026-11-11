@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { text } from '../../text';
 import { timelineUri } from '../content/sessionDocs';
 import type { LogChannels } from '../log/channels';
 import { type CommandHost, resolve } from './sessionCommands';
@@ -8,14 +9,14 @@ import { type CommandHost, resolve } from './sessionCommands';
 export function registerTimelineCommands(host: CommandHost, logs: LogChannels): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('migent.session.showTimeline', async (arg: unknown) => {
-      const resolved = await resolve(host, arg, 'Show the timeline of which session?');
+      const resolved = await resolve(host, arg, text('prompts.timelineWhich'));
       if (resolved === undefined) return;
       const uri = timelineUri(resolved.context.key, resolved.snapshot.sessionId);
       const document = await vscode.workspace.openTextDocument(uri);
       await vscode.window.showTextDocument(document, { preview: false });
     }),
     vscode.commands.registerCommand('migent.session.showLog', async (arg: unknown) => {
-      const resolved = await resolve(host, arg, 'Show the log of which session?');
+      const resolved = await resolve(host, arg, text('prompts.logWhich'));
       if (resolved === undefined) return;
       logs.show(resolved.context.key, resolved.snapshot);
     }),

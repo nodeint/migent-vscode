@@ -6,7 +6,7 @@ import { groupOf, type SessionGroup, summarize } from '../../core/attention';
 import { readExecutionSummary } from '../../core/executions';
 import type { DisplayStateName, ExecutionSnapshot } from '../../core/model';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
-import { RECENT_PERIOD_LABELS } from '../../core/recentPeriod';
+import { RECENT_PERIOD_TEXT } from '../../core/recentPeriod';
 import {
   executionContextValue,
   executionDescription,
@@ -20,6 +20,7 @@ import {
   sessionTooltip,
 } from '../../core/sessionPresentation';
 import { type WatchTarget, watchTargetKey } from '../../core/watchPlan';
+import { text, type TextId } from '../../text';
 import type { CapabilityService } from '../capability';
 import type { MigentChange } from '../changes';
 import type { ProjectContext, ProjectRegistry } from '../projects';
@@ -33,12 +34,12 @@ import {
 } from './sessionChildren';
 import { SessionFiles } from './sessionFiles';
 
-const GROUP_LABELS: Readonly<Record<SessionGroup, string>> = {
-  running: 'Running',
-  attention: 'Needs attention',
-  prepared: 'Prepared',
-  recent: 'Recent',
-};
+const GROUP_TEXT = {
+  running: 'views.groupRunning',
+  attention: 'views.groupAttention',
+  prepared: 'views.groupPrepared',
+  recent: 'views.groupRecent',
+} as const satisfies Record<SessionGroup, TextId>;
 
 const STATE_COLORS: Readonly<Partial<Record<DisplayStateName, string>>> = {
   running: 'charts.blue',
@@ -355,10 +356,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       this.#view.badge = undefined;
       return;
     }
-    const lines = [`${summary.needsAttention} session(s) need attention`];
-    if (summary.asking + summary.pendingQuestions > 0) lines.push(`${summary.pendingQuestions} pending question(s)`);
-    if (summary.blocked > 0) lines.push(`${summary.blocked} blocked`);
-    if (summary.failed > 0) lines.push(`${summary.failed} failed`);
+    const lines = [text('views.needAttention', { count: summary.needsAttention })];
+    if (summary.asking + summary.pendingQuestions > 0) lines.push(text('views.pendingQuestions', { count: summary.pendingQuestions }));
+    if (summary.blocked > 0) lines.push(text('views.blocked', { count: summary.blocked }));
+    if (summary.failed > 0) lines.push(text('views.failed', { count: summary.failed }));
     this.#view.badge = { value: summary.needsAttention, tooltip: lines.join('\n') };
   }
 
@@ -374,7 +375,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
       case 'group':
         return this.#groupItem(node.group, node.project, context);
       case 'recentPeriod': {
-        const item = new vscode.TreeItem(RECENT_PERIOD_LABELS[node.period], vscode.TreeItemCollapsibleState.Expanded);
+        const label = text(RECENT_PERIOD_TEXT[node.period]);
+        const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
         item.contextValue = 'recentPeriod';
         return item;
       }
@@ -390,10 +392,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   }
 
   #groupItem(group: SessionGroup, project: string, context: ProjectContext | undefined): vscode.TreeItem {
-    const item = new vscode.TreeItem(GROUP_LABELS[group], vscode.TreeItemCollapsibleState.Expanded);
+    const item = new vscode.TreeItem(text(GROUP_TEXT[group]), vscode.TreeItemCollapsibleState.Expanded);
     item.description = String(context?.store.all().filter((snapshot) => groupOf(snapshot) === group).length ?? 0);
     item.contextValue = `group.${group}`;
-    item.tooltip = `${GROUP_LABELS[group]} · ${project}`;
+    item.tooltip = text('views.groupTooltip', { group: text(GROUP_TEXT[group]), project });
     return item;
   }
 
@@ -407,7 +409,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     item.iconPath = icon(sessionIcon(snapshot), STATE_COLORS[snapshot.displayState.state]);
     item.contextValue = sessionContextValue(snapshot);
     // Every row opens its Session page on click and stays expandable.
-    item.command = { command: 'migent.session.open', title: 'Open Session', arguments: [node] };
+    item.command = { command: 'migent.session.open', title: text('views.openSession'), arguments: [node] };
     return item;
   }
 
@@ -429,7 +431,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     item.contextValue = view.contextValue;
     if (view.uri !== undefined) {
       item.resourceUri = view.uri;
-      item.command = { command: 'vscode.open', title: 'Open', arguments: [view.uri] };
+      item.command = { command: 'vscode.open', title: text('views.open'), arguments: [view.uri] };
     } else if (view.command !== undefined) {
       item.command = view.command;
     }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { text } from '../text';
 import type { PendingQuestion, QuestionBase, QuestionOption } from './model';
 import type { QuestionRecord, QuestionsRead } from './questions';
 
@@ -60,10 +61,10 @@ export function checkBatch(questions: readonly QuestionBase[]): BatchProblem | n
   const ids = new Set<string>();
   for (const question of questions) {
     if (question.stageId !== first.stageId || question.executionId !== first.executionId) {
-      return { kind: 'mixed-batch', detail: 'questions belong to different stages or executions' };
+      return { kind: 'mixed-batch', detail: text('states.mixedStages') };
     }
     // A standalone role session has no stage; the execution still identifies the batch.
-    if (question.executionId === null) return { kind: 'mixed-batch', detail: 'a question has no execution' };
+    if (question.executionId === null) return { kind: 'mixed-batch', detail: text('states.noExecution') };
     if (ids.has(question.id)) return { kind: 'duplicate-id', questionId: question.id };
     ids.add(question.id);
     if (modeOf(question) === null) return { kind: 'unsupported-mode', questionId: question.id };
@@ -242,12 +243,20 @@ export type Verified =
   /** The batch cannot be submitted from here; monitoring and raw files stay available. */
   | { kind: 'unsupported'; reason: string };
 
-const HISTORY_PROBLEMS: Readonly<Record<string, string>> = {
-  missing: 'No structured question history (questions.json) is available for this session.',
-  unreadable: 'questions.json could not be read.',
-  invalid: 'questions.json is malformed.',
-  unsupported: 'questions.json uses an unsupported schema version.',
-};
+function historyProblem(kind: string): string {
+  switch (kind) {
+    case 'missing':
+      return text('states.historyMissing');
+    case 'unreadable':
+      return text('states.historyUnreadable');
+    case 'invalid':
+      return text('states.historyInvalid');
+    case 'unsupported':
+      return text('states.historyUnsupported');
+    default:
+      return text('states.historyUnusable');
+  }
+}
 
 function sameIds(left: readonly { id: string }[], right: readonly { id: string }[]): boolean {
   return left.length === right.length && left.every((item, index) => item.id === right[index]?.id);
@@ -260,27 +269,27 @@ function sameIds(left: readonly { id: string }[], right: readonly { id: string }
  */
 export function verifyBatch(input: VerifyInput): Verified {
   const { history, target } = input;
-  if (history.kind !== 'ok') return { kind: 'unsupported', reason: HISTORY_PROBLEMS[history.kind] ?? 'questions.json is unusable.' };
+  if (history.kind !== 'ok') return { kind: 'unsupported', reason: historyProblem(history.kind) };
   const isTarget = (item: { executionId: string | null; stageId: string | null }): boolean =>
     item.executionId === target.executionId && item.stageId === target.stageId;
   // A malformed record of this batch (or one that names no execution) is never validated by its remnants.
   const broken = history.malformed.find((item) => item.executionId === null || isTarget(item));
   if (broken !== undefined) {
-    return { kind: 'unsupported', reason: `questions.json has a malformed record (${broken.reason}).` };
+    return { kind: 'unsupported', reason: text('states.malformedRecord', { reason: broken.reason }) };
   }
   const summary = input.summary.filter(isTarget);
   const records = history.questions.filter((record) => isTarget(record) && record.status === 'pending');
-  if (summary.length === 0 || records.length === 0) return { kind: 'changed', reason: 'These questions are no longer waiting for an answer.' };
+  if (summary.length === 0 || records.length === 0) return { kind: 'changed', reason: text('states.noLongerWaiting') };
   if (!sameIds(summary, records)) {
-    return { kind: 'unsupported', reason: 'The session files disagree about these questions, so they cannot be answered safely.' };
+    return { kind: 'unsupported', reason: text('states.filesDisagree') };
   }
   if (records.some((record) => record.recipient !== HUMAN_RECIPIENT)) {
-    return { kind: 'unsupported', reason: 'These questions are not meant for a person, so they cannot be answered here.' };
+    return { kind: 'unsupported', reason: text('states.notForPerson') };
   }
   const problem = checkBatch(records);
   if (problem !== null) return { kind: 'unsupported', reason: describeBatchProblem(problem) };
   if (batchFingerprint(records) !== input.fingerprint) {
-    return { kind: 'changed', reason: 'The questions have changed since you opened this page.' };
+    return { kind: 'changed', reason: text('states.questionsChanged') };
   }
   return { kind: 'ok', questions: records };
 }
@@ -288,14 +297,14 @@ export function verifyBatch(input: VerifyInput): Verified {
 export function describeBatchProblem(problem: BatchProblem): string {
   switch (problem.kind) {
     case 'empty':
-      return 'There are no pending questions.';
+      return text('states.noPending');
     case 'mixed-batch':
-      return `These questions cannot be sent together (${problem.detail}).`;
+      return text('states.cannotSendTogether', { detail: problem.detail });
     case 'unsupported-mode':
-      return `Question ${problem.questionId} has an unsupported selection mode.`;
+      return text('states.unsupportedMode', { questionId: problem.questionId });
     case 'bad-options':
-      return `Question ${problem.questionId} does not have 2-26 distinct options.`;
+      return text('states.badOptions', { questionId: problem.questionId });
     case 'duplicate-id':
-      return `Question ${problem.questionId} appears twice in the batch.`;
+      return text('states.duplicateQuestion', { questionId: problem.questionId });
   }
 }
