@@ -1,0 +1,17 @@
+schema_version: 7
+id: pr
+
+artifacts:
+  pr:
+    file: pr.md
+    description: Branch, commit, pull request URL, CI result, and any failures or skipped checks.
+
+stages:
+  - id: open_pr
+    role: operator
+    ask: human
+    instructions:
+      - Use the prior implement-summary when provided for the commit message and the pull request title and body; otherwise derive them from the diff. Link the related issue when one exists.
+      - Stage files by name. Add a CHANGELOG line under Unreleased for a user-visible change.
+      - Do not merge. Report the branch, commit, pull request URL, and CI result.
+    artifacts: [pr]

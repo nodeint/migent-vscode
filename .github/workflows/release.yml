@@ -93,12 +93,6 @@ jobs:
         run: |
           mkdir release-artifact
           mv ./*.vsix release-artifact/
-      - name: Publish to VS Code Marketplace
-        run: pnpm exec vsce publish --oidc --packagePath release-artifact/*.vsix
-      - name: Publish to Open VSX
-        run: pnpm exec ovsx publish release-artifact/*.vsix --trusted-publishing
-      - name: Verify publication
-        run: node scripts/verify-publication.mjs "${{ steps.plan.outputs.version }}"
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -107,6 +101,10 @@ jobs:
         run: |
           main="$(git ls-remote origin refs/heads/main | cut -f1)"
           if [ "$main" != "${{ steps.plan.outputs.sha }}" ]; then
-            echo "::error::Published ${{ steps.plan.outputs.tag }} but main did not advance (main=$main). Allow the GitHub Actions app to push main, then re-run this workflow."
+            echo "::error::Released ${{ steps.plan.outputs.tag }} but main did not advance (main=$main); registry publishing was skipped. Allow the GitHub Actions app to push main, then re-run this workflow."
             exit 1
           fi
+      - name: Publish to VS Code Marketplace
+        run: pnpm exec vsce publish --oidc --packagePath release-artifact/*.vsix
+      - name: Publish to Open VSX
+        run: pnpm exec ovsx publish release-artifact/*.vsix --trusted-publishing
