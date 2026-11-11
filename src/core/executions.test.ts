@@ -61,6 +61,23 @@ describe('listExecutions', () => {
     expect(listExecutions(fixture('completed'))[0]?.blocker).toBeNull();
   });
 
+  it('reads a protocol 3 execution.json like a protocol 2 one', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    const executionDir = path.join(dir, 'executions', '0001-plan--attempt-01');
+    mkdirSync(executionDir, { recursive: true });
+    writeFileSync(
+      path.join(executionDir, 'execution.json'),
+      JSON.stringify({
+        status: 'blocked',
+        response_protocol: 3,
+        corrections: [{ kind: 'handoff_file_invalid', turn: 2 }],
+        outcome: { status: 'blocked', blocker: 'needs a decision', decision: null },
+      }),
+    );
+    expect(listExecutions(dir)[0]).toMatchObject({ status: 'blocked', blocker: 'needs a decision', decision: null });
+  });
+
   it('flags an execution that wrote failure.md, and only that one', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
     temps.push(dir);

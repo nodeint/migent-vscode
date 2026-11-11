@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { listExecutionFiles } from './executionFiles';
+import { type ExecutionFile, listExecutionFiles } from './executionFiles';
 import { readExecution } from './executions';
 import type { SessionSnapshot } from './model';
 import { EXECUTIONS_DIRNAME } from './paths';
@@ -61,7 +61,7 @@ export interface FailureDetails {
   /** One concise sentence about the cause, or null when the execution records none. */
   cause: string | null;
   /** Absolute path of the exact verify or response file for the failing execution, when one exists. */
-  file: { kind: 'verify' | 'response'; absolutePath: string } | null;
+  file: { kind: 'verify' | 'response' | 'handoff'; absolutePath: string } | null;
   /** Absolute path of the execution's `failure.md` report, written by CLI 0.3.6 and later. */
   failureReport: string | null;
   stageId: string | null;
@@ -69,6 +69,8 @@ export interface FailureDetails {
 }
 
 export const FAILURE_REPORT_BUTTON = 'Open failure report';
+
+const FILE_BUTTONS = { verify: 'Open verify', response: 'Open response', handoff: 'Open handoff' } as const;
 
 /**
  * Button labels of a failed-execution notification. The failure report button needs a report that exists;
@@ -80,7 +82,7 @@ export function failureButtons(details: FailureDetails | undefined): string[] {
   return [
     'Continue',
     ...(report === null ? [] : [FAILURE_REPORT_BUTTON]),
-    ...(file === null ? [] : [file.kind === 'verify' ? 'Open verify' : 'Open response']),
+    ...(file === null ? [] : [FILE_BUTTONS[file.kind]]),
     'View log',
   ];
 }
@@ -106,6 +108,21 @@ function causeOf(record: Record<string, unknown> | null): string | null {
   return words ?? detail;
 }
 
+/** The file a failure points at: verify output, else `handoff.json` for an invalid handoff, else the response. */
+function failureFile(files: readonly ExecutionFile[], reason: string): FailureDetails['file'] {
+  const verify = files.filter((file) => file.kind === 'verify').at(-1);
+  const response = files.find((file) => file.kind === 'response');
+  const handoff = files.find((file) => file.kind === 'handoff');
+  if (verify !== undefined && /verify/i.test(reason)) {
+    return { kind: 'verify', absolutePath: verify.absolutePath };
+  }
+  if (reason === 'handoff_file_invalid' && handoff !== undefined) {
+    return { kind: 'handoff', absolutePath: handoff.absolutePath };
+  }
+  if (response !== undefined) return { kind: 'response', absolutePath: response.absolutePath };
+  return verify === undefined ? null : { kind: 'verify', absolutePath: verify.absolutePath };
+}
+
 /** The cause and the exact files of a failed execution. Verify output is preferred when the failure names it. */
 export function failureDetails(sessionDir: string, executionId: string | null): FailureDetails {
   if (executionId === null) {
@@ -115,17 +132,9 @@ export function failureDetails(sessionDir: string, executionId: string | null): 
   const record = readExecution(dir);
   const cause = causeOf(record);
   const { files } = listExecutionFiles(dir);
-  const verify = files.filter((file) => file.kind === 'verify').at(-1);
-  const response = files.find((file) => file.kind === 'response');
   const failureReport = files.find((file) => file.kind === 'failure')?.absolutePath ?? null;
   const reason = typeof record?.failure_reason === 'string' ? record.failure_reason : '';
-  const isVerifyFailure = /verify/i.test(reason);
-  let file: FailureDetails['file'] = null;
-  if (verify !== undefined && (isVerifyFailure || response === undefined)) {
-    file = { kind: 'verify', absolutePath: verify.absolutePath };
-  } else if (response !== undefined) {
-    file = { kind: 'response', absolutePath: response.absolutePath };
-  }
+  const file = failureFile(files, reason);
   const stageId = typeof record?.stage_id === 'string' ? record.stage_id : null;
   const attempt = typeof record?.stage_attempt === 'number' ? record.stage_attempt : null;
   return { cause, file, failureReport, stageId, attempt };

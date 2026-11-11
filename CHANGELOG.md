@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- Require Migent CLI 0.5.4. The extension's types for CLI output, exit codes and editable drafts are now checked at
-  build time against the CLI's published contracts, so an upstream change surfaces as a build failure.
+- A failure caused by an unusable handoff file now offers an Open handoff button for `handoff.json`.
+- Require Migent CLI 0.5.5 or newer; users on 0.5.4 must upgrade. The extension's types for CLI output, exit codes
+  and editable drafts are now checked at build time against the CLI's published contracts, so an upstream change
+  surfaces as a build failure.
 
 ## 0.1.8
 

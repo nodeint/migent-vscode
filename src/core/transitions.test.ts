@@ -97,6 +97,11 @@ describe('failureButtons', () => {
       .toEqual(['Continue', 'Open response', 'View log']);
     expect(failureButtons(undefined)).toEqual(['Continue', 'View log']);
   });
+
+  it('labels the handoff file button', () => {
+    expect(failureButtons(details({ file: { kind: 'handoff', absolutePath: '/f/h' } })))
+      .toEqual(['Continue', 'Open handoff', 'View log']);
+  });
 });
 
 describe('failureDetails', () => {
@@ -123,6 +128,39 @@ describe('failureDetails', () => {
       { 'response.md': 'x', [path.join('turns', 'turn-01', 'verify.md')]: 'v' },
     );
     expect(failureDetails(dir, id).file?.kind).toBe('verify');
+  });
+
+  it('points at handoff.json for an invalid handoff file, and falls back to the response when it is absent', () => {
+    const present = execution(
+      { failure_reason: 'handoff_file_invalid', error: 'schema_version is required' },
+      { 'response.md': 'x', 'handoff.json': '{}' },
+    );
+    const details = failureDetails(present.dir, present.id);
+    expect(details.cause).toBe('handoff file invalid: schema_version is required');
+    expect(details.file).toEqual({
+      kind: 'handoff',
+      absolutePath: path.join(present.dir, 'executions', present.id, 'handoff.json'),
+    });
+    const absent = execution({ failure_reason: 'handoff_file_invalid' }, { 'response.md': 'x' });
+    expect(failureDetails(absent.dir, absent.id).file?.kind).toBe('response');
+  });
+
+  it('prefers handoff.json over verify output when response.md is absent', () => {
+    const { dir, id } = execution(
+      { failure_reason: 'handoff_file_invalid' },
+      { 'handoff.json': '{}', [path.join('turns', 'turn-01', 'verify.md')]: 'v' },
+    );
+    expect(failureDetails(dir, id).file?.kind).toBe('handoff');
+  });
+
+  it('keeps pointing at response.md for other reasons even when handoff.json exists', () => {
+    const { dir, id } = execution({ failure_reason: 'provider_failed' }, { 'response.md': 'x', 'handoff.json': '{}' });
+    expect(failureDetails(dir, id).file?.kind).toBe('response');
+  });
+
+  it.each(['stage_output_missing', 'response_contract_invalid'])('words the cause of %s', (reason) => {
+    const { dir, id } = execution({ failure_reason: reason, error: 'detail' }, { 'response.md': 'x' });
+    expect(failureDetails(dir, id).cause).toBe(`${reason.replaceAll('_', ' ')}: detail`);
   });
 
   it('offers the failure report only when the execution wrote one', () => {

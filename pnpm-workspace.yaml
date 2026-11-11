@@ -2,4 +2,4 @@ allowBuilds:
   '@vscode/vsce-sign': true
   esbuild: true
 minimumReleaseAgeExclude:
-  - '@nodeint/migent-contracts@0.5.4'
+  - '@nodeint/migent-contracts@0.5.5'
