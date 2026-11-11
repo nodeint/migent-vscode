@@ -8,7 +8,6 @@ import { deriveDisplayState } from './displayState';
 import type { SessionSnapshot } from './model';
 import { parseStatus } from './statusReader';
 import {
-  FAILURE_REPORT_BUTTON,
   failureButtons,
   type FailureDetails,
   failureDetails,
@@ -93,15 +92,15 @@ describe('failureButtons', () => {
 
   it('offers the failure report only when the execution wrote one', () => {
     expect(failureButtons(details({ failureReport: '/f/failure.md', file: { kind: 'verify', absolutePath: '/f/v' } })))
-      .toEqual(['Continue', FAILURE_REPORT_BUTTON, 'Open verify', 'View log']);
+      .toEqual(['continue', 'failureReport', 'openVerify', 'viewLog']);
     expect(failureButtons(details({ file: { kind: 'response', absolutePath: '/f/r' } })))
-      .toEqual(['Continue', 'Open response', 'View log']);
-    expect(failureButtons(undefined)).toEqual(['Continue', 'View log']);
+      .toEqual(['continue', 'openResponse', 'viewLog']);
+    expect(failureButtons(undefined)).toEqual(['continue', 'viewLog']);
   });
 
-  it('labels the handoff file button', () => {
+  it('keys the handoff file button', () => {
     expect(failureButtons(details({ file: { kind: 'handoff', absolutePath: '/f/h' } })))
-      .toEqual(['Continue', 'Open handoff', 'View log']);
+      .toEqual(['continue', 'openHandoff', 'viewLog']);
   });
 });
 

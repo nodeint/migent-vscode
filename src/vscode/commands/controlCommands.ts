@@ -8,6 +8,7 @@ import { sessionDir, TASK_FILENAME, workflowDraftPath } from '../../core/paths';
 import type { WorkflowEntry } from '../../core/workflows';
 import type { ControlService, WorkflowChoice } from '../control';
 import { askTask, askTitle, LAUNCH_MODE_ITEMS, titleOf } from '../launchPrompts';
+import { notify, show } from '../notices';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
@@ -101,7 +102,7 @@ function workflowTarget(host: CommandHost, arg: unknown): { context: ProjectCont
 async function saveWorkflow(file: string): Promise<boolean> {
   const document = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === file);
   if (document?.isDirty !== true || (await document.save())) return true;
-  void vscode.window.showErrorMessage('The workflow was not saved, so it was not run.');
+  notify('control.workflowNotSaved');
   return false;
 }
 
@@ -124,7 +125,7 @@ async function runWorkflowFile({ control, host, memento }: Deps, arg: unknown): 
   target.context.catalog.reloadWorkflow(name);
   const entry = target.context.catalog.workflows().entries.find((candidate) => candidate.file === name);
   if (entry?.state !== 'ok' || entry.duplicate) {
-    void vscode.window.showErrorMessage(entry?.error ?? 'This workflow is not valid, so it cannot be run.');
+    notify('control.workflowInvalid', { error: entry?.error ?? null });
     return;
   }
   await memento.update(`${LAST_WORKFLOW_KEY}.${target.context.key}`, entry.id);
@@ -193,12 +194,12 @@ async function taskTarget(control: ControlService, host: CommandHost, arg: unkno
 async function savedTask(target: TaskTarget): Promise<string | undefined> {
   const document = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === target.uri?.fsPath);
   if (document?.isDirty === true && !(await document.save())) {
-    void vscode.window.showErrorMessage('The task.md file was not saved, so the session was not started.');
+    notify('control.noTaskSaved');
     return undefined;
   }
   const text = document?.getText() ?? (await readTask(target.context, target.sessionId));
   if (text === undefined || text.trim().length === 0) {
-    void vscode.window.showErrorMessage('The task.md file is empty. Write the task, then run again.');
+    notify('control.taskEmpty');
     return undefined;
   }
   return text;
@@ -217,9 +218,7 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   const target = await taskTarget(control, host, arg);
   if (target === undefined || (await savedTask(target)) === undefined) return;
   if (hasUnsavedDraft(target)) {
-    void vscode.window.showErrorMessage(
-      'The session workflow.yaml has unsaved changes, so the session was not started. Save it, or discard the changes, then run again.',
-    );
+    notify('control.draftUnsaved');
     return;
   }
   // The identity is re-read after the save, so a stale snapshot never starts the wrong state.
@@ -228,15 +227,12 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   if (snapshot === undefined || !isPrepared(snapshot)) {
     vscode.window.setStatusBarMessage('This session is no longer prepared.', INFO_MESSAGE_MS);
   } else if (workflowId === null || workflowId === undefined) {
-    void vscode.window.showErrorMessage('The session does not record which workflow to run.');
+    notify('control.noWorkflowRecorded');
   } else {
     await control.runPrepared(target.context, snapshot, workflowId);
   }
 }
 
-const KEEP = 'Use session version';
-const ADOPT = 'Use updated workflow';
-const VIEW = 'View changes';
 
 /** Ask which workflow definition to continue with; View changes returns to the same decision. */
 export async function chooseWorkflow(
@@ -246,12 +242,9 @@ export async function chooseWorkflow(
 ): Promise<WorkflowChoice | undefined> {
   const change = control.workflowChange(context, snapshot);
   if (change === undefined) return 'session';
-  const message =
-    'The workflow changed since this session started. Continue resets revision counts. ' +
-    'Choose which definition to use.';
   for (;;) {
-    const picked = await vscode.window.showWarningMessage(message, VIEW, KEEP, ADOPT);
-    if (picked === VIEW) {
+    const picked = await show('control.workflowChanged', undefined);
+    if (picked === 'viewChanges') {
       await vscode.commands.executeCommand(
         'vscode.diff',
         vscode.Uri.file(change.frozen),
@@ -260,8 +253,8 @@ export async function chooseWorkflow(
       );
       continue;
     }
-    if (picked === KEEP) return 'session';
-    if (picked === ADOPT) return 'updated';
+    if (picked === 'keepSession') return 'session';
+    if (picked === 'adoptUpdated') return 'updated';
     return undefined;
   }
 }

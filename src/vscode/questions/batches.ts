@@ -20,6 +20,7 @@ import { sessionTitle } from '../../core/sessionPresentation';
 import type { AnswerRequest, AnswerSubmitter } from '../answers';
 import type { MigentChange } from '../changes';
 import type { ControlService } from '../control';
+import { confirm } from '../notices';
 import { openFile } from '../openFile';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { SESSION_ACTION_COMMANDS } from '../sessionActions';
@@ -302,12 +303,7 @@ export class QuestionBatches implements vscode.Disposable {
 
   async #discard(entry: Entry): Promise<void> {
     if (!entry.isEditable && entry.state !== 'stale') return;
-    const pick = await vscode.window.showWarningMessage(
-      'Discard the saved answers for this batch?',
-      { modal: true },
-      'Discard draft',
-    );
-    if (pick !== 'Discard draft') return;
+    if (!(await confirm('questions.discardConfirm'))) return;
     entry.clearDraft();
     try {
       await this.#drafts.delete(entry.identity);

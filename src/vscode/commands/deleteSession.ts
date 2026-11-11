@@ -4,23 +4,28 @@ import type { SessionSnapshot } from '../../core/model';
 import type { OperationGate } from '../../core/operationGate';
 import { sessionDir } from '../../core/paths';
 import { sessionLabel } from '../../core/sessionPresentation';
+import { confirm, notify } from '../notices';
 import type { ProjectContext, ProjectRegistry } from '../projects';
 import { isTreeNode } from '../views/nodes';
 
-interface DeleteUI {
+/** The error notices a delete can report; the seam passes the id and params and never writes text. */
+export type DeleteError =
+  | { id: 'deleteSession.busy' | 'deleteSession.running' }
+  | { id: 'deleteSession.failed'; params: { detail: string } };
+
+export interface DeleteUI {
   confirm: (label: string) => Promise<boolean>;
   remove: (uri: vscode.Uri) => Thenable<void>;
-  error: (message: string) => void;
+  error: (error: DeleteError) => void;
 }
 
 const defaultUI: DeleteUI = {
-  confirm: async (label) => (await vscode.window.showWarningMessage(
-    `Delete session ${label}?`,
-    { modal: true, detail: 'The session folder and its contents will be deleted. VS Code uses the trash when available.' },
-    'Delete',
-  )) === 'Delete',
+  confirm: (label) => confirm('deleteSession.confirm', { label }),
   remove: (uri) => vscode.workspace.fs.delete(uri, { recursive: true, useTrash: true }),
-  error: (message) => { void vscode.window.showErrorMessage(message); },
+  error: (error) => {
+    if (error.id === 'deleteSession.failed') notify(error.id, error.params);
+    else notify(error.id);
+  },
 };
 
 interface DeleteHost {
@@ -50,7 +55,7 @@ async function removeTarget(host: DeleteHost, target: DeleteTarget, ui: DeleteUI
   const { project, sessionId, context } = target;
   const handle = gate.tryAcquire({ kind: 'session', project, sessionId }, 'Deleting');
   if (handle === null) {
-    ui.error('Cannot delete a session while an operation is in progress.');
+    ui.error({ id: 'deleteSession.busy' });
     return;
   }
   try {
@@ -59,13 +64,16 @@ async function removeTarget(host: DeleteHost, target: DeleteTarget, ui: DeleteUI
     const current = context.store.snapshot(sessionId);
     if (current === undefined) return;
     if (current.lock.kind === 'alive' || current.displayState.state === 'running') {
-      ui.error('Cannot delete a running session. Stop it first.');
+      ui.error({ id: 'deleteSession.running' });
       return;
     }
     await ui.remove(vscode.Uri.file(sessionDir(context.root, sessionId)));
     context.store.load();
   } catch (error) {
-    ui.error(`Could not delete session: ${error instanceof Error ? error.message : String(error)}`);
+    ui.error({
+      id: 'deleteSession.failed',
+      params: { detail: error instanceof Error ? error.message : String(error) },
+    });
   } finally {
     handle.release();
   }

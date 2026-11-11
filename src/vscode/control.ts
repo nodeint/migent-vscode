@@ -21,11 +21,13 @@ import {
   type RunSettings,
 } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
+import { PROGRESS_MESSAGES } from '../core/notices';
 import { type GateHandle, type GateKey, OperationGate } from '../core/operationGate';
 import { sessionLabel } from '../core/sessionPresentation';
 import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../core/writeEligibility';
 import type { CapabilityService } from './capability';
 import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, runRename, workflowChange } from './controlHelpers';
+import { notify, progress, show } from './notices';
 import type { ProjectContext, ProjectRegistry } from './projects';
 import { type PreparedSession, preparedSession, reportFailure } from './workflowDraft';
 
@@ -128,21 +130,21 @@ export class ControlService implements vscode.Disposable {
       vscode.window.setStatusBarMessage(text, INFO_MESSAGE_MS);
       return;
     }
-    const action = { recheck: 'Recheck', refresh: 'Refresh' }[block.recovery];
+    const action = block.recovery;
     const command = {
       recheck: 'migent.cli.recheck',
       refresh: 'migent.refresh',
     }[block.recovery];
-    const picked = await vscode.window.showWarningMessage(text, action, 'View log');
+    const picked = await show('control.writeBlocked', { block }, [action, 'viewLog']);
     if (picked === action) await vscode.commands.executeCommand(command);
-    else if (picked === 'View log') this.showLog();
+    else if (picked === 'viewLog') this.showLog();
   }
 
   /** Offer Refresh and View log after a result that persisted state does not confirm. */
-  async #offerRecovery(message: string): Promise<void> {
-    const picked = await vscode.window.showWarningMessage(message, 'Refresh', 'View log');
-    if (picked === 'Refresh') await vscode.commands.executeCommand('migent.refresh');
-    else if (picked === 'View log') this.showLog();
+  async #offerRecovery(shown: Promise<'refresh' | 'viewLog' | undefined>): Promise<void> {
+    const picked = await shown;
+    if (picked === 'refresh') await vscode.commands.executeCommand('migent.refresh');
+    else if (picked === 'viewLog') this.showLog();
   }
 
   public settings(context: ProjectContext): RunSettings {
@@ -316,12 +318,12 @@ export class ControlService implements vscode.Disposable {
     });
     if (result.kind === 'error') {
       this.#output.error(`prepare failed: ${result.error.detail} ${result.error.stderr}`.trim());
-      void vscode.window.showErrorMessage(`Could not prepare the session: ${result.error.detail}`);
+      notify('control.prepareFailed', { detail: result.error.detail });
       return undefined;
     }
     const prepared = parsePrepared(result.value);
     if (prepared === null) {
-      void vscode.window.showErrorMessage('Could not prepare the session: unexpected CLI output.');
+      notify('control.prepareUnexpected');
       return undefined;
     }
     const taskFile = path.resolve(context.root, prepared.taskPath);
@@ -336,7 +338,7 @@ export class ControlService implements vscode.Disposable {
       await writeFile(file, content, { encoding: 'utf8' });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(`The session was prepared but task.md was not written: ${detail}`);
+      notify('control.taskNotWritten', { detail });
     }
   }
 
@@ -353,9 +355,8 @@ export class ControlService implements vscode.Disposable {
     }
     try {
       const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
-      const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: `Repairing ${sessionLabel(snapshot)}` },
-        () => invokeText(launch, repairArgs(id), options),
+      const result = await progress('control.repairing', { label: sessionLabel(snapshot) }, () =>
+        invokeText(launch, repairArgs(id), options),
       );
       context.store.refreshSession(id);
       if (result.kind === 'ok') {
@@ -364,8 +365,8 @@ export class ControlService implements vscode.Disposable {
       }
       const detail = result.error.stderr.trim() || result.error.detail;
       this.#output.error(`repair failed: ${detail}`);
-      const picked = await vscode.window.showErrorMessage(`Could not repair the session: ${detail}`, 'View log');
-      if (picked === 'View log') this.showLog();
+      const picked = await show('control.repairFailed', { detail });
+      if (picked === 'viewLog') this.showLog();
     } finally {
       handle.release();
     }
@@ -387,9 +388,8 @@ export class ControlService implements vscode.Disposable {
     }
     try {
       const options = { cwd: context.root, env: this.#env(context), timeoutMs: PREPARE_TIMEOUT_MS };
-      const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: `Completing ${sessionLabel(snapshot)}` },
-        () => invokeCaptured(launch, completeArgs(id), options),
+      const result = await progress('control.completing', { label: sessionLabel(snapshot) }, () =>
+        invokeCaptured(launch, completeArgs(id), options),
       );
       context.store.refreshSession(id);
       if (result.kind === 'ok') {
@@ -401,8 +401,8 @@ export class ControlService implements vscode.Disposable {
       }
       const detail = result.error.stderr.trim() || result.error.detail;
       this.#output.error(`complete failed: ${detail}`);
-      const picked = await vscode.window.showErrorMessage(`Could not complete the session: ${detail}`, 'View log');
-      if (picked === 'View log') this.showLog();
+      const picked = await show('control.completeFailed', { detail });
+      if (picked === 'viewLog') this.showLog();
     } finally {
       handle.release();
     }
@@ -455,8 +455,7 @@ export class ControlService implements vscode.Disposable {
     }
     const isRefused = result.kind === 'error' && result.error.exitCode === CANCEL_REFUSED_EXIT;
     const detail = result.kind === 'error' ? result.error.stderr.trim() : '';
-    const fallback = 'Stop not confirmed. The session may still be running.';
-    await this.#offerRecovery(isRefused && detail.length > 0 ? detail : fallback);
+    await this.#offerRecovery(show('control.stopNotConfirmed', { detail: isRefused && detail.length > 0 ? detail : null }));
   }
 
   async #requestStop(
@@ -464,16 +463,15 @@ export class ControlService implements vscode.Disposable {
     launch: LaunchSpec,
     snapshot: SessionSnapshot,
   ): Promise<InvokeResult<unknown>> {
-    const options = { location: vscode.ProgressLocation.Window, title: `Stopping ${sessionLabel(snapshot)}` };
-    const result = await vscode.window.withProgress(options, async (progress) => {
-      progress.report({ message: 'Sending stop request…' });
+    const result = await progress('control.stopping', { label: sessionLabel(snapshot) }, async (reporter) => {
+      reporter.report({ message: PROGRESS_MESSAGES.stopSending });
       const pending = invokeJson(launch, cancelArgs(snapshot.sessionId), {
         cwd: context.root,
         env: this.#env(context),
         timeoutMs: STOP_TIMEOUT_MS,
       });
       await sleep(RECONCILE_DELAY_MS);
-      progress.report({ message: 'Waiting for session to stop…' });
+      reporter.report({ message: PROGRESS_MESSAGES.stopWaiting });
       return pending;
     });
     context.store.refreshSession(snapshot.sessionId);
@@ -568,18 +566,14 @@ export class ControlService implements vscode.Disposable {
   }
 
   async #showProgress(state: RunState, done: Promise<RunResult>): Promise<RunResult> {
-    const options = {
-      location: vscode.ProgressLocation.Window,
-      title: `${state.title} — continues after closing VS Code`,
-    };
-    return vscode.window.withProgress(options, () => done);
+    return progress('control.running', { title: state.title }, () => done);
   }
 
   async #finish(context: ProjectContext, state: RunState, result: RunResult): Promise<void> {
     if (result.kind === 'spawn-failed') {
       this.#release(context, state);
       this.#output.error(`spawn failed: ${result.detail}`);
-      void vscode.window.showErrorMessage(`Could not start the Migent CLI: ${result.detail}`);
+      notify('control.spawnFailed', { detail: result.detail });
       return;
     }
     const isConfirmed = await this.#reconcile(context, state);
@@ -603,7 +597,7 @@ export class ControlService implements vscode.Disposable {
       unsubscribe();
       this.#release(context, state);
     });
-    await this.#offerRecovery('Status not confirmed.');
+    await this.#offerRecovery(show('control.statusNotConfirmed', undefined));
   }
 
   /** Project of the editor document `uri` and its session id, when it is a session's `task.md`. */

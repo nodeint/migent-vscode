@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CapabilityState } from '../../cli/version';
+import { NOTICES } from '../../core/notices';
 import { OperationGate } from '../../core/operationGate';
 import type { CapabilityService } from '../capability';
 
@@ -185,9 +186,7 @@ describe('initializeProject', () => {
     ])('shows the no-client error and opens no picker when %s', async (_name, clients, models) => {
       discovery(clients, models);
       await run();
-      expect(vscodeMock.window.showErrorMessage).toHaveBeenCalledWith(
-        'No client with models is available. Install an agent CLI first.',
-      );
+      expect(vscodeMock.window.showErrorMessage).toHaveBeenCalledWith(NOTICES['init.noClients'].text(undefined));
       expect(vscodeMock.window.createQuickPick).not.toHaveBeenCalled();
       expect(invoke.text).not.toHaveBeenCalled();
     });
