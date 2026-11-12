@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+- The Questions tab now sits after Overview and is always there (disabled until the session asks a question), with a
+  badge counting the questions waiting. Pick any attempt to see its questions and answers, and the Sessions view's
+  Answer button opens Questions directly. Pending questions are no longer a header fact.
+
 ## 0.1.11
 
 - Require Migent CLI 0.6.0 or newer; users on 0.5.x must upgrade.
 - Initialize Project asks for one model per template agent (`planning`, `review`, `coding`), or one for all, and
   passes `--agent` as CLI 0.6.0 requires; the removed role flags are no longer sent.
-
 ## 0.1.10
 
 - Overview rows now look like what they do: plain facts, links with a chevron, and expandable rows. Next steps come

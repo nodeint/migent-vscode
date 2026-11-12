@@ -45,6 +45,12 @@
         "icon": "$(book)"
       },
       {
+        "command": "migent.session.answer",
+        "title": "Answer Questions",
+        "category": "Migent",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "migent.session.openNextStep",
         "title": "Open Next Step…",
         "category": "Migent",
@@ -464,7 +470,7 @@
           "group": "inline@1"
         },
         {
-          "command": "migent.session.open",
+          "command": "migent.session.answer",
           "when": "view == migent.sessions && viewItem =~ /^session..*;questions(;|$)/",
           "group": "inline@3"
         },
@@ -575,6 +581,10 @@
         },
         {
           "command": "migent.session.open",
+          "when": "false"
+        },
+        {
+          "command": "migent.session.answer",
           "when": "false"
         },
         {

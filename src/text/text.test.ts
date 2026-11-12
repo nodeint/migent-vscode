@@ -398,6 +398,7 @@ const PINS: Record<TextId, Pin> = {
   'prompts.draftNotSavedNothingSent': [{'error':'<error>'}, 'Your draft could not be saved (<error>), so nothing was sent.'],
   'prompts.draftNotSaved': [{'error':'<error>'}, 'Draft not saved: <error>'],
   'prompts.noPendingQuestions': [undefined, 'No questions are pending for this session.'],
+  'prompts.questionsSuperseded': [undefined, 'These questions were not answered; the session moved on without them.'],
   'prompts.unconfirmed': [undefined, 'Could not confirm that your answers arrived. Check again before sending them a second time.'],
   'prompts.sending': [undefined, 'Sending your answers…'],
   'prompts.answersSent': [{'note':'<note>'}, 'Answers sent.<note>'],

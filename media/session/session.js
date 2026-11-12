@@ -1,6 +1,6 @@
 // The one Session page: a single header and the body of the tab the host last posted. Overview, Metrics, Workflow
-// and Questions each keep their own renderer in this folder; the shell only draws the shared header, the batch
-// selector and the tab switch. The shared UI kit and host adapter in media/shared load first (see docs/ui.md).
+// and Questions each keep their own renderer in this folder; the shell only draws the shared header and the tab
+// switch. The shared UI kit and host adapter in media/shared load first (see docs/ui.md).
 (function () {
   'use strict';
 
@@ -10,9 +10,6 @@
   const copy = window.MigentCopy;
   const text = window.MigentSessionCopy;
   const root = document.getElementById('root');
-
-  // Once the reader has seen Questions, its tab stays until the panel closes, also after the answers are recorded.
-  let questionsVisible = false;
 
   function selectTab(tab) {
     return () => page.send({ intent: 'selectTab', tab });
@@ -40,15 +37,24 @@
 
   function header(model) {
     const { header: data } = model;
-    if (data.meta.pendingQuestions > 0 || model.tab === 'questions') questionsVisible = true;
-    const tabs = [];
-    if (questionsVisible) tabs.push({ key: 'questions', label: copy.tab.questions, onSelect: selectTab('questions') });
-    tabs.push(
+    // Questions is always there; its badge counts the questions still waiting for an answer.
+    const waiting = data.meta.pendingQuestions;
+    const tabs = [
       { key: 'overview', label: copy.tab.overview, onSelect: selectTab('overview') },
+      {
+        key: 'questions',
+        label: copy.tab.questions,
+        onSelect: selectTab('questions'),
+        // Nothing to show until the session asks a question.
+        disabled: data.hasQuestions === false,
+        title: data.hasQuestions === false ? text.noQuestions : undefined,
+        badge: waiting > 0 ? waiting : null,
+        badgeLabel: waiting > 0 ? text.questionsTab(waiting) : null,
+      },
       { key: 'metrics', label: copy.tab.metrics, onSelect: selectTab('metrics') },
       { key: 'workflow', label: copy.tab.workflow, onSelect: selectTab('workflow') },
       { key: 'task', label: copy.tab.task, onSelect: () => page.send(sessionAction('openTask')) },
-    );
+    ];
     return sessionHeader(page, {
       state: data.state,
       title: data.title,
@@ -58,33 +64,6 @@
       tabs,
       menuItems: menuFor(model),
     });
-  }
-
-  function sameBatch(batch, selected) {
-    return selected !== null && selected.executionId === batch.executionId && selected.stageId === batch.stageId;
-  }
-
-  /** The chip row that picks one pending batch, shown only when the session has more than one. */
-  function batchSelector(questions) {
-    if (questions.batches.length < 2) return null;
-    const nav = el('nav', null, 'q-batches');
-    nav.setAttribute('aria-label', text.batches.label);
-    for (const batch of questions.batches) {
-      const isCurrent = sameBatch(batch, questions.selected);
-      const label = text.batches.chip(batch.stageId === null ? text.batches.roleSession : batch.stageId, batch.count);
-      const button = el('button', label, 'q-batch' + (isCurrent ? ' q-batch--current' : ''));
-      button.type = 'button';
-      button.title = batch.executionId;
-      if (isCurrent) {
-        button.setAttribute('aria-current', 'true');
-      } else {
-        button.addEventListener('click', () =>
-          page.send({ intent: 'selectBatch', batch: { stageId: batch.stageId, executionId: batch.executionId } }),
-        );
-      }
-      nav.append(button);
-    }
-    return nav;
   }
 
   function unavailable(sessionId) {
@@ -101,24 +80,22 @@
   // and keeps the local draft, the focus and the caret instead of rebuilding the controls under the reader.
   const headerHost = el('div');
   const bodyHost = el('div');
-  const selectorHost = el('div');
   const questionsMount = el('div');
   root.append(headerHost, bodyHost);
   let isQuestionsBody = false;
 
   function renderQuestions(model) {
     if (!isQuestionsBody) {
-      bodyHost.replaceChildren(selectorHost, questionsMount);
+      bodyHost.replaceChildren(questionsMount);
       isQuestionsBody = true;
     }
-    const selector = batchSelector(model.questions);
-    selectorHost.replaceChildren(...(selector ? [selector] : []));
-    if (model.questions.model === null) {
+    const { model: answers, attempts, selected } = model.questions;
+    if (answers === null) {
       window.MigentSessionQuestions.reset();
-      questionsMount.replaceChildren(el('p', text.noQuestions, 'mg-muted'));
+      questionsMount.replaceChildren(window.MigentUi.empty(text.noQuestions, { icon: 'comment-discussion' }));
       return;
     }
-    window.MigentSessionQuestions.render(questionsMount, model.questions.model, page);
+    window.MigentSessionQuestions.render(questionsMount, answers, page, { attempts, selected });
   }
 
   function renderOther(model, transient) {

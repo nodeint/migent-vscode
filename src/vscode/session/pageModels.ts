@@ -1,10 +1,11 @@
 import type { AnswerModel } from '../../core/answerModel';
 import { buildAnswerModel } from '../../core/answerModel';
 import { readRecentEvents } from '../../core/eventTail';
-import { listExecutions, parseExecutionId } from '../../core/executions';
+import { listExecutions } from '../../core/executions';
 import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
 import { eventsPath, sessionDir } from '../../core/paths';
-import { groupPendingQuestions, type QuestionGroup } from '../../core/questions';
+import { attemptRecords, type QuestionAttempt, questionAttempts } from '../../core/questionHistory';
+import { type QuestionRecord, readQuestions } from '../../core/questions';
 import { type ResultsInput, titleCase } from '../../core/resultsModel';
 import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
 import { buildSessionMeta } from '../../core/sessionMeta';
@@ -14,7 +15,6 @@ import {
   metricsHeader,
   overviewHeader,
   type SessionBatchRef,
-  type SessionBatchSummary,
   type SessionHeader,
   type SessionPageModel,
 } from '../../core/sessionPageModel';
@@ -25,40 +25,6 @@ import type { ProjectRegistry } from '../projects';
 import type { BatchIdentity } from '../questions/entry';
 import type { Entry, Identity } from './entry';
 
-export type AddressableGroup = QuestionGroup & { executionId: string };
-
-export function addressable(groups: readonly QuestionGroup[]): AddressableGroup[] {
-  return groups.filter((group): group is AddressableGroup => group.executionId !== null);
-}
-
-export function summariesOf(groups: readonly AddressableGroup[]): SessionBatchSummary[] {
-  return groups.map((group) => ({
-    stageId: group.stageId,
-    executionId: group.executionId,
-    count: group.questions.length,
-  }));
-}
-
-/** The most recent pending batch: highest execution order, then latest attempt, else the last one seen. */
-export function latestOf(groups: readonly AddressableGroup[]): AddressableGroup | undefined {
-  let best: AddressableGroup | undefined;
-  for (const group of groups) {
-    if (best === undefined) {
-      best = group;
-      continue;
-    }
-    const next = parseExecutionId(group.executionId);
-    const current = parseExecutionId(best.executionId);
-    if (next !== null && current !== null) {
-      const isLater = next.order > current.order || (next.order === current.order && next.attempt > current.attempt);
-      if (isLater) best = group;
-    } else {
-      best = group;
-    }
-  }
-  return best;
-}
-
 export function batchOf(identity: Identity, ref: SessionBatchRef): BatchIdentity {
   return {
     project: identity.project,
@@ -68,9 +34,22 @@ export function batchOf(identity: Identity, ref: SessionBatchRef): BatchIdentity
   };
 }
 
-export function batchGroups(entry: Entry, registry: ProjectRegistry): AddressableGroup[] {
+/** The session's question history (`questions.json`); empty when the file is missing or cannot be read. */
+export function questionRecords(entry: PageEntry, registry: ProjectRegistry): QuestionRecord[] {
+  const context = registry.project(entry.project);
+  if (context === undefined) return [];
+  const read = readQuestions(sessionDir(context.root, entry.sessionId));
+  return read.kind === 'ok' ? read.questions : [];
+}
+
+/** Every attempt of the session that asked questions, from the history and the pending questions. */
+export function attemptsOf(
+  entry: PageEntry,
+  registry: ProjectRegistry,
+  records: readonly QuestionRecord[],
+): QuestionAttempt[] {
   const snapshot = registry.project(entry.project)?.store.snapshot(entry.sessionId);
-  return addressable(groupPendingQuestions(snapshot?.status?.questions ?? []));
+  return questionAttempts(records, snapshot?.status?.questions ?? []);
 }
 
 /** The fields a page builder needs from an entry; tests can pass a plain object. */
@@ -129,7 +108,7 @@ export function buildMetricsPage(entry: Entry, registry: ProjectRegistry): Sessi
   return { tab: 'metrics', header: metricsHeader(model), metrics: model };
 }
 
-/** The Questions tab for the selected batch, or for the session's current pending batches. */
+/** The Questions tab for the selected attempt, with the session's attempts for the selector. */
 export function buildQuestionsPage(
   entry: Entry,
   registry: ProjectRegistry,
@@ -143,12 +122,43 @@ export function buildQuestionsPage(
     questions: {
       model,
       selected: { stageId: batch.stageId, executionId: batch.executionId },
-      batches: summariesOf(batchGroups(entry, registry)),
+      attempts: attemptsOf(entry, registry, questionRecords(entry, registry)),
     },
   };
 }
 
-/** A session with no pending batch still has a header: the same one an unavailable answer page would show. */
+/**
+ * A read-only record of an attempt that no longer waits for answers: its questions and what was answered, or a
+ * note that the session moved on without an answer.
+ */
+export function buildAttemptRecord(
+  entry: PageEntry,
+  registry: ProjectRegistry,
+  shown: { attempt: QuestionAttempt; records: readonly QuestionRecord[] },
+): AnswerModel {
+  const { attempt, records } = shown;
+  const snapshot = registry.project(entry.project)?.store.snapshot(entry.sessionId);
+  const own = attemptRecords(records, attempt);
+  const isAnswered = attempt.status === 'answered';
+  return buildAnswerModel({
+    revision: 1,
+    generation: 0,
+    fingerprint: `record:${attempt.executionId}`,
+    title: snapshot === undefined ? entry.sessionId : sessionTitle(snapshot),
+    workflowId: snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null,
+    sessionState: snapshot === undefined ? 'Unavailable' : titleCase(snapshot.displayState.state),
+    meta: buildSessionMeta(snapshot),
+    state: isAnswered ? 'recorded' : 'answered-elsewhere',
+    message: isAnswered ? null : text('prompts.questionsSuperseded'),
+    questions: own.map((record) => ({ ...record, file: null })),
+    draft: {},
+    blockReason: null,
+    records: own,
+    archive: null,
+  });
+}
+
+/** A session that never asked a question still has a header: the same one an unavailable answer page would show. */
 export function buildEmptyAnswerHeader(entry: Entry, registry: ProjectRegistry): SessionHeader {
   const snapshot = registry.project(entry.project)?.store.snapshot(entry.sessionId);
   const title = snapshot === undefined ? entry.sessionId : sessionTitle(snapshot);

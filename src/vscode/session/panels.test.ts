@@ -145,9 +145,18 @@ function setup(root: string, current: SessionSnapshot | undefined = undefined) {
       | {
           model: {
             tab: string;
-            header: { title: string; state: string };
+            header: { title: string; state: string; hasQuestions?: boolean };
             workflow?: { isLocked: boolean; canSave: boolean; validation: { errors: { message: string }[] } };
-            questions?: { model: { questions: { id: string }[] } | null; selected: { executionId: string } | null };
+            questions?: {
+              model: {
+                questions: { id: string }[];
+                state: string;
+                editable: boolean;
+                recorded: Record<string, string> | null;
+              } | null;
+              selected: { executionId: string } | null;
+              attempts: { executionId: string; status: string }[];
+            };
           };
           transient?: { saving: boolean; error: string | null };
         }
@@ -230,6 +239,57 @@ describe('SessionPanels tabs', () => {
     const model = last()?.model.questions;
     expect(model?.selected?.executionId).toBe('0001-plan--attempt-01');
     expect(model?.model?.questions.map((item) => item.id)).toEqual(['1']);
+  });
+
+  it('always has a Questions tab: an empty one when the session never asked a question', () => {
+    const { panels, last } = setup(makeRoot(false), snapshot());
+    panels.open(identity, { tab: 'questions' });
+    expect(last()?.model.questions).toEqual({ model: null, selected: null, attempts: [] });
+  });
+
+  it('tells every tab whether the session ever asked a question', async () => {
+    const { panels, last } = setup(makeRoot(false), snapshot());
+    panels.open(identity);
+    expect(last()?.model.header.hasQuestions).toBe(false);
+    const asking = setup(makeRoot(false), snapshot(QUESTIONS));
+    asking.panels.open(identity);
+    expect(asking.last()?.model.header.hasQuestions).toBe(true);
+  });
+
+  it('lists answered attempts from questions.json and shows one as a read-only record', async () => {
+    const root = makeRoot(false);
+    const answered = {
+      id: '1',
+      question: 'Which plan?',
+      context: 'ctx',
+      selection: 'single',
+      options: [{ id: 'A', label: 'Small' }, { id: 'B', label: 'Large' }],
+      recommended: [],
+      execution_id: '0001-plan--attempt-01',
+      stage_id: 'plan',
+      status: 'answered',
+      answer: { selected: ['B'] },
+      answered_at: '2026-11-01T11:00:00Z',
+    };
+    writeFileSync(path.join(sessionDir(root, 's1'), 'questions.json'), JSON.stringify({ schema_version: 1, questions: [answered] }));
+    const { panels, last } = setup(root, snapshot([question('2', '0002-review--attempt-01', 'review')]));
+    panels.open(identity, { tab: 'questions' });
+    const tab = last()?.model.questions;
+    expect(tab?.attempts.map((attempt) => [attempt.executionId, attempt.status])).toEqual([
+      ['0001-plan--attempt-01', 'answered'],
+      ['0002-review--attempt-01', 'pending'],
+    ]);
+    // The latest attempt still waiting is shown first.
+    expect(tab?.selected?.executionId).toBe('0002-review--attempt-01');
+    await panels.handle(identity, {
+      type: 'intent',
+      intent: 'selectBatch',
+      batch: { stageId: 'plan', executionId: '0001-plan--attempt-01' },
+    });
+    const record = last()?.model.questions?.model;
+    expect(record?.state).toBe('recorded');
+    expect(record?.editable).toBe(false);
+    expect(record?.recorded).toEqual({ '1': 'B. Large' });
   });
 
   it('keeps one panel per session when opened twice', () => {

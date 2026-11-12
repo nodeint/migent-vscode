@@ -8,6 +8,13 @@
     /** The chip on each question card. */
     state: { sent: 'Sent', answered: 'Answered', notAnswered: 'Not answered' },
 
+    /** The attempt selector at the left of the bar above the questions. */
+    attempts: {
+      label: 'Attempt',
+      roleSession: 'Role session',
+      option: (stage, attempt) => stage + (attempt === null ? '' : ' - attempt ' + attempt),
+    },
+
     /** The jump chips above the questions. */
     jumps: {
       label: 'Questions',
@@ -25,7 +32,7 @@
       placeholder: 'Type your own answer',
       answerLabel: (id) => 'Your answer to question ' + id,
       ambiguous: 'This answer is just an option letter, so it will be read as that option. Add a word to make it your own answer.',
-      recorded: (answer) => 'Recorded: ' + answer,
+      recorded: 'Recorded',
     },
 
     archived: {
