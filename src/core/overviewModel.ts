@@ -1,7 +1,7 @@
 import type { TailEvent } from './eventTail';
 import type { ExecutionSnapshot, SessionSnapshot } from './model';
 import { type OverviewActions,overviewActions } from './overviewActions';
-import { buildResultsModel, type ResultsInput, type ResultsModel } from './resultsModel';
+import { buildResultsModel, type ResultsInput, type ResultsModel,type ResultsNext } from './resultsModel';
 import { buildActivity, type SessionActivity } from './sessionActivity';
 import { buildProgress, type SessionProgress } from './sessionProgress';
 import { buildSummary, NO_SESSION_SUMMARY, type SessionSummary } from './sessionSummary';
@@ -17,7 +17,31 @@ export type OverviewModel = ResultsModel & {
   progress: SessionProgress;
   activity: SessionActivity;
   actions: OverviewActions;
+  /** What to do after a Completed session; null for any other state or an unusable `next.json`. */
+  nextStep: NextStepAction | null;
 };
+
+export type NextStepAction =
+  | { kind: 'run'; workflow: string }
+  | { kind: 'choose'; count: number }
+  | { kind: 'blocked'; count: number }
+  | { kind: 'done' };
+
+/**
+ * The next action of a Completed session, from the per-suggestion launch states. Only suggestions that can launch
+ * and have no child yet count as actionable; blocked ones never raise a count or turn `run` into `choose`.
+ */
+export function nextStepAction(state: string, next: ResultsNext): NextStepAction | null {
+  if (state !== 'completed') return null;
+  if (next.state === 'missing') return { kind: 'done' };
+  if (next.state !== 'ok') return null;
+  const notRun = next.suggestions.filter((suggestion) => suggestion.children.length === 0);
+  const actionable = notRun.filter((suggestion) => suggestion.launch.state === 'ready');
+  if (actionable.length === 1) return { kind: 'run', workflow: actionable[0].workflow };
+  if (actionable.length > 1) return { kind: 'choose', count: actionable.length };
+  if (notRun.length > 0) return { kind: 'blocked', count: notRun.length };
+  return { kind: 'done' };
+}
 
 export interface OverviewInput extends ResultsInput {
   executions: readonly ExecutionSnapshot[];
@@ -45,6 +69,7 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
       progress: { kind: 'empty' },
       activity: { visible: false },
       actions: { primary: null, secondary: [] },
+      nextStep: null,
     };
   }
 
@@ -60,5 +85,6 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
     }),
     activity: summary.isRunning ? buildActivity(input.events) : { visible: false },
     actions: overviewActions(snapshot, summary.latestExecution),
+    nextStep: nextStepAction(snapshot.displayState.state, base.next),
   };
 }

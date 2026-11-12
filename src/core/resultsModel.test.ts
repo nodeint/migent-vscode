@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { SessionSnapshot } from './model';
+import { previewNextStep } from './nextStep';
 import {
   buildResultsModel,
   resolveHandoffPath,
@@ -75,7 +76,9 @@ describe('buildResultsModel', () => {
       source: null,
     });
     // The captured sample does not include outputs/note.md.
-    expect(model.outputs.rows).toEqual([{ key: 'name:note', label: 'note', path: 'outputs/note.md', state: 'missing' }]);
+    expect(model.outputs.rows).toEqual([
+      { key: 'name:note', label: 'note', path: 'outputs/note.md', state: 'missing', stage: null, attempt: null, publishedAt: null },
+    ]);
     expect(model.next).toMatchObject({ state: 'ok' });
     expect(model.next.suggestions).toEqual([
       {
@@ -83,13 +86,101 @@ describe('buildResultsModel', () => {
         task: 'Acknowledge the note.',
         declared: true,
         target: 'available',
+        launch: { state: 'ready' },
+        children: [{ sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed', createdAt: expect.any(String) }],
         artifacts: [{ name: 'context_note', output: 'note', path: 'outputs/note.md', availability: 'missing' }],
       },
     ]);
-    expect(model.children).toEqual([
-      { sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed', task: null },
+    expect(model.children).toMatchObject([
+      {
+        sessionId: TARGET,
+        title: 'Acknowledge the note.',
+        state: 'Completed',
+        task: null,
+        workflowId: 'probe-target',
+        createdAt: expect.any(String),
+      },
     ]);
     expect(JSON.stringify(model)).not.toContain('argv');
+  });
+
+  it('marks a suggestion launchable exactly when the Next step flow reports no block', () => {
+    const cases: WorkflowEntry[][] = [
+      [workflow('probe-target')],
+      [],
+      [workflow('probe-target'), workflow('probe-target', { file: 'other.yaml' })],
+      [workflow('probe-target', { state: 'invalid' })],
+    ];
+    for (const workflows of cases) {
+      const input = sourceInput(workflows);
+      const [row] = buildResultsModel(input).next.suggestions;
+      const preview = previewNextStep({
+        sourceId: input.sessionId,
+        sessionDirPath: input.sessionDirPath,
+        snapshots: input.snapshots,
+        workflows,
+        targetWorkflow: 'probe-target',
+      });
+      expect(row?.launch.state === 'ready').toBe(preview.launchBlock === null);
+    }
+    // A source that is not Completed blocks both.
+    const input = sourceInput([workflow('probe-target')]);
+    const source = { ...input.snapshots[0], displayState: { ...input.snapshots[0].displayState, state: 'running' as const } };
+    const snapshots = [source, input.snapshots[1]];
+    const [row] = buildResultsModel({ ...input, snapshots }).next.suggestions;
+    const preview = previewNextStep({
+      sourceId: input.sessionId,
+      sessionDirPath: input.sessionDirPath,
+      snapshots,
+      workflows: input.workflows,
+      targetWorkflow: 'probe-target',
+    });
+    expect(row?.launch).toEqual({ state: 'blocked', reason: 'sourceNotCompleted' });
+    expect(preview.launchBlock).not.toBeNull();
+  });
+
+  it('resolves who published an output from the session executions', () => {
+    const input = sourceInput([workflow('probe-target')]);
+    const [{ status }] = input.snapshots;
+    if (status === null) throw new Error('fixture has no status');
+    const snapshots = [
+      {
+        ...input.snapshots[0],
+        status: {
+          ...status,
+          outputs: [{ name: 'note', path: 'outputs/note.md', sourceExecutionId: 'e1', publishedByExecutionId: 'e1' }],
+        },
+      },
+      input.snapshots[1],
+    ];
+    const executions = [
+      {
+        id: 'e1', order: 1, stage: 'draft', attempt: 2, status: 'completed', decision: null, blocker: null,
+        client: null, model: null, hasFailureReport: false, kind: null, createdAt: null,
+        completedAt: '2026-11-01T11:00:00Z',
+      },
+    ];
+    expect(buildResultsModel({ ...input, snapshots, executions }).outputs.rows[0]).toMatchObject({
+      stage: 'draft',
+      attempt: 2,
+      publishedAt: '2026-11-01T11:00:00Z',
+    });
+  });
+
+  it('gives a child the stage selection policy of the header: running, else latest', () => {
+    const input = sourceInput([workflow('probe-target')]);
+    const [source, target] = input.snapshots;
+    if (target.status === null) throw new Error('fixture has no status');
+    const withStage = (state: 'blocked' | 'running', runningStages: { stageId: string | null }[]) => ({
+      ...target,
+      displayState: { ...target.displayState, state },
+      status: { ...target.status!, latestStageId: 'review', runningStages: runningStages as never },
+    });
+    const stageOfChild = (child: SessionSnapshot): string | null =>
+      buildResultsModel({ ...input, snapshots: [source, child] }).children[0]?.stageId ?? null;
+    expect(stageOfChild(withStage('blocked', []))).toBe('review');
+    expect(stageOfChild(withStage('running', []))).toBe('review');
+    expect(stageOfChild(withStage('running', [{ stageId: 'build' }]))).toBe('build');
   });
 
   it('reports the target workflow as not found, duplicate or invalid', () => {

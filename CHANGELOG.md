@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-- Redesign the session Overview with shared item cards, clearer progress and status, expandable next steps and handoff
-  details, and copy actions for session ids, handoff hashes and source paths.
+- Overview rows now look like what they do: plain facts, links with a chevron, and expandable rows. Next steps come
+  after Outputs as simple cards you click to run, Progress is a flat list with one row per attempt, and a child
+  session links back to its parent.
+- Redesign the session Overview with shared item cards, clearer progress and status, and copy actions for session
+  ids.
 - Require Migent CLI 0.5.6 or newer; users on 0.5.5 must upgrade.
 - Support the short numeric session ids of CLI 0.5.6 (and unquoted integer ids in manifests) next to older ids.
 - Add Rename Session… to the Sessions row menu and the session page's More actions menu. The new title shows at once

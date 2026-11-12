@@ -25,6 +25,8 @@ function execution(
     model: null,
     hasFailureReport: false,
     kind: null,
+    createdAt: null,
+    completedAt: null,
     ...overrides,
   };
 }

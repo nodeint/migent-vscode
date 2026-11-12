@@ -29,14 +29,6 @@
     });
   }
 
-  /** At most one primary action, then the ordered secondary actions; Stop is the only danger. */
-  function actionRow(actions) {
-    const children = [];
-    if (actions.primary !== null) children.push(actionButton(actions.primary, 'primary'));
-    for (const name of actions.secondary) children.push(actionButton(name, name === 'stop' ? 'danger' : 'secondary'));
-    return ui.actions(children);
-  }
-
   /** The Status badge: the shared state icon and tone, with the Overview copy's label. */
   function stateBadge(summary) {
     const states = header.sessionStates;
@@ -66,30 +58,10 @@
     return Number.isFinite(ms) ? new Date(ms).toISOString().slice(11, 16) : null;
   }
 
-  /** A status icon only: the tooltip names the state, so color is never the only signal. */
-  function executionStatus(status) {
-    const state = status || 'unknown';
-    return ui.statusIndicator({
-      ...(header.sessionStates[state] || header.sessionStates.unknown),
-      text: text.progress.state[state] || state,
-      compact: true,
-    });
-  }
-
   /** The quiet facts of the Status block, as one key-value grid. */
   function pairsOf(summary) {
+    // The latest execution and its decision are shown by Progress, so they are not repeated here.
     const pairs = [];
-    if (summary.latestExecution !== null) {
-      const execution = summary.latestExecution;
-      pairs.push({
-        label: text.status.labels.latestExecution,
-        value: text.status.execution(execution.stage, execution.attempt),
-        tools: [executionStatus(execution.status)],
-      });
-      if (execution.decision !== null) {
-        pairs.push({ label: text.status.labels.decision, value: execution.decision });
-      }
-    }
     for (const blocked of summary.blocked) {
       pairs.push({
         label: text.status.labels.blockedIn,
@@ -118,16 +90,32 @@
     return undefined;
   }
 
+  /**
+   * The next action of a Completed session as one line that points to Next steps or says nothing is left; a single
+   * runnable step adds nothing here because its Next steps card is the action. The host decided it from the launch state of every suggestion.
+   */
+  function nextStepNode(nextStep) {
+    const words = text.status.nextStep;
+    if (nextStep.kind === 'choose') return el('span', words.choose(nextStep.count), 'mg-muted');
+    if (nextStep.kind === 'blocked') return el('span', words.blocked, 'mg-muted');
+    return el('span', words.done, 'mg-muted');
+  }
+
   function renderStatus(model) {
-    const { summary, actions } = model;
+    const { summary, actions, nextStep } = model;
     const children = [];
     const reason = reasonOf(summary);
-    if (reason !== null) {
-      children.push(ui.actions([ui.statusIndicator(stateBadge(summary)), el('span', reason, 'mg-muted')]));
-    }
+    const lead = [ui.statusIndicator(stateBadge(summary))];
+    if (reason !== null) lead.push(el('span', reason, 'mg-muted'));
+    children.push(ui.actions(lead));
     const pairs = pairsOf(summary);
     if (pairs.length > 0) children.push(ui.keyValues(pairs));
-    if (actions.primary !== null || actions.secondary.length > 0) children.push(actionRow(actions));
+    const buttons = [];
+    if (actions.primary !== null) buttons.push(actionButton(actions.primary, 'primary'));
+    for (const name of actions.secondary) buttons.push(actionButton(name, name === 'stop' ? 'danger' : 'secondary'));
+    if (buttons.length > 0) children.push(ui.actions(buttons));
+    if (nextStep && nextStep.kind !== 'run') children.push(nextStepNode(nextStep));
+    if (buttons.length === 0 && (!nextStep || nextStep.kind === 'run')) children.push(el('span', text.status.noAction, 'mg-muted'));
     return ui.section(text.status.title, {
       note: text.status.note,
       surface: true,
@@ -138,12 +126,18 @@
 
   function render(root, model, host) {
     page = host;
-    const parts = [renderStatus(model), window.MigentSessionOverviewProgress.renderProgress(model)];
-    const activity = window.MigentSessionOverviewProgress.renderActivity(model);
-    if (activity !== null) parts.push(activity);
-    const results = el('div');
-    window.MigentSessionResults.render(results, model, page);
-    parts.push(...results.children);
+    const progress = window.MigentSessionOverviewProgress;
+    const results = window.MigentSessionResults.sections(model, page);
+    // The one section order: Status, Progress, Latest activity, Outputs, Next steps, Child sessions, then the Details grid of the source session (no section).
+    const parts = [
+      renderStatus(model),
+      progress.renderProgress(model),
+      progress.renderActivity(model),
+      results.outputs,
+      results.next,
+      results.children,
+      results.fromSession,
+    ].filter((part) => part !== null);
     root.replaceChildren(ui.stack(parts));
   }
 

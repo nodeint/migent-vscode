@@ -752,16 +752,19 @@ describe('Session Overview and Metrics tabs', () => {
         next: {
           state: 'ok',
           detail: null,
-          suggestions: [{ workflow: 'next-wf', task: 'Go', declared: true, target: 'ok', artifacts: [] }],
+          suggestions: [
+            { workflow: 'next-wf', task: 'Go', declared: true, target: 'available', launch: { state: 'ready' }, children: [], artifacts: [] },
+          ],
         },
         children: [],
         source: null,
+        nextStep: null,
       },
     });
     const { root } = page.doc;
     expect(root.descendants().filter((node) => node.classList.contains('mg-section-head'))).toHaveLength(4);
     expect(root.descendants().some((node) => node.classList.contains('mg-empty'))).toBe(true);
-    const card = root.descendants().find((node) => node.classList.contains('mg-collapsible'));
+    const card = root.descendants().find((node) => node.classList.contains('mg-item--link'));
     expect(card).toBeDefined();
     const nested = (card as FakeElement).descendants().filter((node) => ['DETAILS', 'INPUT'].includes(node.tagName));
     expect(nested).toHaveLength(0);

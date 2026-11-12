@@ -161,6 +161,8 @@ describe('execution rows', () => {
     hasFailureReport: false,
     blocker: null,
     kind: null,
+    createdAt: null,
+    completedAt: null,
   };
 
   it('labels by stage and attempt, describes by provider and decision', () => {

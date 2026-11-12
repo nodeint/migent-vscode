@@ -2,12 +2,13 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { text } from '../text';
-import { childrenOf, type HandoffArtifact, readHandoff } from './handoff';
-import type { SessionSnapshot } from './model';
+import { childrenForWorkflow, childrenOf, type HandoffArtifact, readHandoff } from './handoff';
+import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
-import { listOutputs, type OutputFileState } from './outputs';
+import { listOutputs, type OutputFileState, type OutputRow } from './outputs';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
-import { sessionTitle } from './sessionPresentation';
+import { sessionTitle, stageOf } from './sessionPresentation';
 import { readSessionTask } from './sessionTask';
 import type { WorkflowEntry } from './workflows';
 
@@ -23,9 +24,12 @@ export interface ResultsOutput {
   label: string;
   path: string;
   state: OutputFileState;
+  /** The stage that published it; null when status names no execution or it is not listed. */
+  stage: string | null;
+  attempt: number | null;
+  /** When the publishing execution completed; null when unknown. */
+  publishedAt: string | null;
 }
-
-export type TargetWorkflowState = 'available' | 'duplicate' | 'invalid' | 'not-found';
 
 export interface ResultsSuggestion {
   workflow: string;
@@ -33,7 +37,18 @@ export interface ResultsSuggestion {
   /** True when the frozen workflow declares it; null when the declaration could not be read. */
   declared: boolean | null;
   target: TargetWorkflowState;
+  /** Whether the Next step flow would let this suggestion launch; the same policy as `launchBlockOf`. */
+  launch: LaunchEligibility;
+  /** Sessions started from this one that run the suggestion's workflow, newest first. */
+  children: ResultsSuggestionChild[];
   artifacts: SuggestionArtifact[];
+}
+
+export interface ResultsSuggestionChild {
+  sessionId: string;
+  title: string;
+  state: string;
+  createdAt: string | null;
 }
 
 export interface ResultsNext {
@@ -76,6 +91,9 @@ export interface ResultsChild {
   state: string;
   /** Full text of the child's `task.md`, trimmed of surrounding whitespace; null when missing, unreadable or blank. */
   task: string | null;
+  workflowId: string | null;
+  stageId: string | null;
+  createdAt: string | null;
 }
 
 export interface ResultsModel {
@@ -101,6 +119,8 @@ export interface ResultsInput {
   /** Every eligible session id of the project, retained or hidden. */
   eligibleIds: readonly string[];
   workflows: readonly WorkflowEntry[];
+  /** The session's executions, oldest first; they resolve who published an output. Empty when not read. */
+  executions?: readonly ExecutionSnapshot[];
 }
 
 /** Published names and unnamed paths live in separate namespaces, so one can never select the other's file. */
@@ -121,14 +141,53 @@ function isFile(absolute: string | null): boolean {
   }
 }
 
-export function targetState(workflow: string, workflows: readonly WorkflowEntry[]): TargetWorkflowState {
-  const matches = workflows.filter((entry) => entry.id === workflow);
-  if (matches.length === 0) return 'not-found';
-  if (matches.length > 1) return 'duplicate';
-  return matches[0]?.state === 'ok' ? 'available' : 'invalid';
+function newestFirst<T extends { createdAt: string | null }>(items: T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (b.item.createdAt ?? '').localeCompare(a.item.createdAt ?? '') || b.index - a.index)
+    .map(({ item }) => item);
 }
 
-function nextModel(input: ResultsInput): ResultsNext {
+function childCreatedAt(child: SessionSnapshot): string | null {
+  return child.manifest?.createdAt ?? child.status?.createdAt ?? null;
+}
+
+function suggestionChild(child: SessionSnapshot): ResultsSuggestionChild {
+  return {
+    sessionId: child.sessionId,
+    title: sessionTitle(child),
+    state: titleCase(child.displayState.state),
+    createdAt: childCreatedAt(child),
+  };
+}
+
+function outputRow(row: OutputRow, executions: readonly ExecutionSnapshot[]): ResultsOutput {
+  const publisherId = row.publishedByExecutionId ?? row.sourceExecutionId;
+  const publisher = executions.find((execution) => execution.id === publisherId);
+  return {
+    key: outputKey(row),
+    label: row.name ?? path.posix.basename(row.path),
+    path: row.path,
+    state: row.state,
+    stage: publisher?.stage ?? null,
+    attempt: publisher?.attempt ?? null,
+    publishedAt: publisher?.completedAt ?? null,
+  };
+}
+
+function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
+  return {
+    sessionId: child.sessionId,
+    title: sessionTitle(child),
+    state: titleCase(child.displayState.state),
+    task: readSessionTask(path.join(path.dirname(input.sessionDirPath), child.sessionId)),
+    workflowId: child.manifest?.workflowId ?? child.status?.workflowId ?? null,
+    stageId: stageOf(child),
+    createdAt: childCreatedAt(child),
+  };
+}
+
+function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
   const status = input.snapshots.find((snapshot) => snapshot.sessionId === input.sessionId)?.status;
   const published = status === undefined || status === null ? null : status.outputs.map((output) => output.name);
   const read = readNext(input.sessionDirPath);
@@ -152,14 +211,21 @@ function nextModel(input: ResultsInput): ResultsNext {
         ...base,
         state: 'ok',
         detail: null,
-        suggestions: markDeclared(read.suggestions, frozen, published).map((suggestion) => ({
-          workflow: suggestion.workflow,
-          task: suggestion.task,
-          declared: suggestion.declared,
-          target: targetState(suggestion.workflow, input.workflows),
-          // `argv` is dropped on purpose: it is never shown or run.
-          artifacts: suggestion.artifacts,
-        })),
+        suggestions: markDeclared(read.suggestions, frozen, published).map((suggestion) => {
+          const target = targetState(suggestion.workflow, input.workflows);
+          return {
+            workflow: suggestion.workflow,
+            task: suggestion.task,
+            declared: suggestion.declared,
+            target,
+            launch: classifyLaunch({ sourceState, declared: suggestion.declared, target }),
+            children: newestFirst(
+              childrenForWorkflow(input.snapshots, input.sessionId, suggestion.workflow).map(suggestionChild),
+            ),
+            // `argv` is dropped on purpose: it is never shown or run.
+            artifacts: suggestion.artifacts,
+          };
+        }),
       };
   }
 }
@@ -216,6 +282,7 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
   if (snapshot === undefined) return unavailable(input.sessionId);
   const listing = listOutputs(input.sessionDirPath, snapshot.status?.outputs ?? []);
+  const executions = input.executions ?? [];
   return {
     availability: 'ok',
     sessionId: snapshot.sessionId,
@@ -224,22 +291,12 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
     workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
     meta: buildSessionMeta(snapshot),
     outputs: {
-      rows: listing.rows.map((row) => ({
-        key: outputKey(row),
-        label: row.name ?? path.posix.basename(row.path),
-        path: row.path,
-        state: row.state,
-      })),
+      rows: listing.rows.map((row) => outputRow(row, executions)),
       directoryError: listing.directoryError,
     },
-    next: nextModel(input),
+    next: nextModel(input, snapshot.displayState.state),
     source: sourceModel(input, snapshot),
-    children: childrenOf(input.snapshots, snapshot.sessionId).map((child) => ({
-      sessionId: child.sessionId,
-      title: sessionTitle(child),
-      state: titleCase(child.displayState.state),
-      task: readSessionTask(path.join(path.dirname(input.sessionDirPath), child.sessionId)),
-    })),
+    children: childrenOf(input.snapshots, snapshot.sessionId).map((child) => childRow(child, input)),
   };
 }
 

@@ -963,7 +963,7 @@ describe('shared form kit', () => {
     const summary = all([card]).find((n) => n.className === 'mg-collapsible-summary');
     expect(summary?.textContent).toBe('planner \u00b7 role agent \u00b7 6 instructions');
     const main = all([card]).find((n) => n.className === 'mg-collapsible-main');
-    expect(main?.attrs['data-tip']).toBe('Plan \u2014 planner \u00b7 role agent \u00b7 6 instructions');
+    expect(main?.attrs['data-tip']).toBeUndefined();
     const chips = all([card]).filter((n) => n.className.split(' ').includes('mg-chip'));
     expect(chips.map((n) => n.textContent)).toEqual(['2 problems']);
     const bare = kit.collapsibleCard({ key: 'k3', number: 1, title: 'Plan' });

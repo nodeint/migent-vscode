@@ -67,6 +67,8 @@ function summaryFrom(
     model: str(record?.model),
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
     kind: str(record?.kind),
+    createdAt: str(record?.created_at),
+    completedAt: str(record?.completed_at),
   };
 }
 

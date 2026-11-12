@@ -1,8 +1,8 @@
 import { text } from '../text';
-import { childrenOf } from './handoff';
+import { childrenForWorkflow } from './handoff';
 import type { SessionSnapshot } from './model';
+import { classifyLaunch, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext } from './nextWorkflows';
-import { targetState, type TargetWorkflowState } from './resultsModel';
 import { sessionTitle } from './sessionPresentation';
 import type { WorkflowEntry } from './workflows';
 
@@ -83,9 +83,13 @@ export function launchBlockOf(
   target: NextStepTarget,
 ): string | null {
   if (source === undefined) return text('states.sourceNotLoaded');
-  if (source.displayState.state !== 'completed') return text('states.sourceNotCompleted');
+  // The source check is the shared policy; the lookup and the target keep their specific messages.
+  const sourceState = source.displayState.state;
+  const verdict = classifyLaunch({ sourceState, declared: true, target: 'available' });
+  if (verdict.state === 'blocked') return text('states.sourceNotCompleted');
   if (lookup.kind === 'blocked') return lookup.reason;
-  return target.error;
+  const full = classifyLaunch({ sourceState, declared: lookup.suggestion.declared, target: target.state });
+  return full.state === 'ready' ? null : (target.error ?? text('states.targetInvalid'));
 }
 
 /** A session already created from this source and target that is still Prepared or Running. */
@@ -112,12 +116,8 @@ export function previewNextStep(input: NextStepInput): NextStepPreview {
   const target = targetOf(input.workflows, input.targetWorkflow);
   const lookup = lookupSuggestion(input.sessionDirPath, input.targetWorkflow, publishedNames(source));
   return {
-    activeChildren: childrenOf(input.snapshots, input.sourceId)
-      .filter(
-        (child) =>
-          child.manifest?.workflowId === input.targetWorkflow &&
-          (child.displayState.state === 'prepared' || child.displayState.state === 'running'),
-      )
+    activeChildren: childrenForWorkflow(input.snapshots, input.sourceId, input.targetWorkflow)
+      .filter((child) => child.displayState.state === 'prepared' || child.displayState.state === 'running')
       .map((child) => ({ sessionId: child.sessionId, title: sessionTitle(child), state: child.displayState.state })),
     sourceTitle: source === undefined ? input.sourceId : sessionTitle(source),
     suggestedTask: lookup.suggestion?.task ?? null,

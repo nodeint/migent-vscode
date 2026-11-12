@@ -16,12 +16,26 @@ export type ProgressState =
   | 'skipped'
   | 'unknown';
 
+/** One attempt of a stage, for the attempt history. */
+export interface StageAttempt {
+  /** The execution order in the session, so attempts of every stage sort in the order they ran. */
+  order: number;
+  attempt: number;
+  state: ProgressState;
+  decision: string | null;
+  completedAt: string | null;
+}
+
 /** One workflow stage. `attempts` is the latest run's attempt, null until it runs. */
 export interface StageProgressRow {
   id: string;
   state: ProgressState;
   attempts: number | null;
   decision: string | null;
+  /** Every non-skipped attempt, oldest first. The last one is the latest. */
+  history: StageAttempt[];
+  /** When the latest attempt completed; null while it runs or when unknown. */
+  completedAt: string | null;
   isCurrent: boolean;
 }
 
@@ -32,6 +46,7 @@ export interface ExecutionProgressRow {
   attempt: number;
   state: ProgressState;
   decision: string | null;
+  completedAt: string | null;
   isCurrent: boolean;
 }
 
@@ -100,6 +115,16 @@ function stageRow(id: string, context: StageContext): StageProgressRow {
     state: chosen === null ? 'not-run' : stateOf(chosen.status),
     attempts: chosen?.attempt ?? null,
     decision: chosen?.decision ?? null,
+    history: stageExecutions
+      .filter((execution) => execution.status !== 'skipped')
+      .map((execution) => ({
+        order: execution.order,
+        attempt: execution.attempt,
+        state: stateOf(execution.status),
+        decision: execution.decision,
+        completedAt: execution.completedAt,
+      })),
+    completedAt: chosen?.completedAt ?? null,
     isCurrent:
       context.runningStageIds.has(id) ||
       (context.runningStageIds.size === 0 && context.running?.stage === id),
@@ -127,6 +152,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
         attempt: execution.attempt,
         state: stateOf(execution.status),
         decision: execution.decision,
+        completedAt: execution.completedAt,
         isCurrent: execution.id === running?.id,
       })),
     };

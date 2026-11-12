@@ -46,6 +46,8 @@ function execution(hasFailureReport: boolean): ExecutionSnapshot {
     model: null,
     hasFailureReport,
     kind: null,
+    createdAt: null,
+    completedAt: null,
   };
 }
 

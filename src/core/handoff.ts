@@ -65,3 +65,15 @@ export function readHandoff(manifest: SessionManifest | null, sessionDirPath: st
 export function childrenOf(snapshots: readonly SessionSnapshot[], sessionId: string): SessionSnapshot[] {
   return snapshots.filter((snapshot) => snapshot.manifest?.priorSessionId === sessionId);
 }
+
+/**
+ * Children of `sessionId` that run `workflowId`: the one rule that ties a Next step suggestion to the sessions
+ * started from it, shared by the Next step flow and the Overview.
+ */
+export function childrenForWorkflow(
+  snapshots: readonly SessionSnapshot[],
+  sessionId: string,
+  workflowId: string,
+): SessionSnapshot[] {
+  return childrenOf(snapshots, sessionId).filter((child) => child.manifest?.workflowId === workflowId);
+}

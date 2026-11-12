@@ -164,6 +164,8 @@ function execution(overrides: Record<string, unknown> = {}) {
     model: null,
     hasFailureReport: false,
     kind: null,
+    createdAt: null,
+    completedAt: null,
     ...overrides,
   };
 }
@@ -188,6 +190,7 @@ function pageModel(overrides: Record<string, unknown> = {}) {
       progress: { kind: 'empty' },
       activity: { visible: false },
       actions: { primary: null, secondary: [] },
+      nextStep: null,
       ...overrides,
     },
   };
@@ -256,7 +259,10 @@ function load() {
     sections().find((candidate) => candidate.querySelector('.mg-section-title')?.textContent === title);
   const statusButtons = (): FakeElement[] =>
     (sections()[0]?.descendants() ?? []).filter((node) => node.tagName === 'BUTTON' && node.className.startsWith('mg-btn'));
-  return { doc, posted, deliver, sections, section, titles, statusButtons };
+  /** The source session's Details grid, which sits after the sections with no section of its own. */
+  const source = (): FakeElement | undefined =>
+    doc.root.descendants().find((node) => node.tagName === 'DETAILS' && node.className.includes('mg-details--ruled'));
+  return { doc, posted, deliver, sections, section, titles, statusButtons, source };
 }
 
 describe('Overview page', () => {
@@ -264,15 +270,15 @@ describe('Overview page', () => {
     const page = load();
     page.deliver(pageModel());
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs', 'Next steps']);
-    expect(page.doc.root.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(3);
+    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs']);
+    expect(page.doc.root.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(2);
   });
 
-  it('keeps Outputs and Next steps on a Prepared session with no data and no Child, Source or Handoff frame', () => {
+  it('keeps Outputs on a Prepared session with no data and no Next steps, Child or From session frame', () => {
     const page = load();
     page.deliver(pageModel({ summary: summary({ state: 'prepared' }), actions: { primary: 'start', secondary: ['openTask'] } }));
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs', 'Next steps']);
+    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs']);
   });
 
   it('explains a Running session and draws exactly one primary action plus the danger Stop', () => {
@@ -343,11 +349,10 @@ describe('Overview page', () => {
 
     const [status] = page.sections();
     expect(status?.textContent).toContain('Failed');
-    expect(status?.textContent).toContain('Latest execution');
-    expect(status?.textContent).toContain('draft · attempt 1');
-    expect(status?.textContent).toContain('Decision');
-    expect(status?.textContent).toContain('go');
-    expect(status?.querySelector('.mg-kv')).not.toBeNull();
+    // Progress shows the latest execution and its decision, so Status does not repeat them.
+    expect(status?.textContent).not.toContain('Latest execution');
+    expect(status?.textContent).not.toContain('Decision');
+    expect(status?.querySelector('.mg-status')?.className).toContain('mg-status--error');
     expect(page.statusButtons().map((button) => button.textContent)).toEqual([
       'Continue',
       'Open failure report',
@@ -379,41 +384,126 @@ describe('Overview page', () => {
     expect(status?.textContent).toContain('Quota resets');
     expect(status?.textContent).toContain('12:34 UTC');
   });
-  it('lists every workflow stage in order with its attempt and latest decision', () => {
+  const stageRow = (overrides: Record<string, unknown>) => ({
+    id: 'plan',
+    state: 'completed',
+    attempts: 1,
+    decision: null,
+    history: [{ order: 1, attempt: 1, state: 'completed', decision: null, completedAt: null }],
+    completedAt: null,
+    isCurrent: false,
+    ...overrides,
+  });
+
+  it('draws a one-attempt stage as a static row with its status at the leading edge', () => {
     const page = load();
     page.deliver(pageModel({
       progress: {
         kind: 'stages',
         rows: [
-          { id: 'plan', state: 'completed', attempts: 2, decision: 'revise', isCurrent: false },
-          { id: 'implement', state: 'running', attempts: 1, decision: null, isCurrent: true },
-          { id: 'review', state: 'not-run', attempts: null, decision: null, isCurrent: false },
+          stageRow({ id: 'plan' }),
+          stageRow({
+            id: 'implement',
+            state: 'running',
+            isCurrent: true,
+            history: [{ order: 2, attempt: 1, state: 'running', decision: null, completedAt: null }],
+          }),
+          stageRow({ id: 'review', state: 'not-run', attempts: null, history: [] }),
         ],
       },
     }));
 
     const progress = page.section('Progress');
     const rows = progress?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
-    expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent)).toEqual([
-      'plan',
-      'implement',
-      'review',
-    ]);
-    expect(rows.map((row) => row.querySelector('.mg-badge')?.textContent)).toEqual(['1', '2', '3']);
-    expect(rows[0]?.textContent).toContain('attempt 2');
-    expect(rows[0]?.textContent).toContain('decision revise');
-    expect(rows[1]?.textContent).toContain('attempt 1');
-    expect(rows[2]?.textContent).not.toContain('attempt');
-    expect(rows[0]?.querySelector('.mg-status')?.className).toContain('mg-status--compact');
-    expect(rows[2]?.querySelector('.mg-status')?.className).toContain('mg-status--muted');
-    expect(rows[2]?.textContent).toContain('Not run');
-    const [, current] = rows;
-    expect(current?.className).toContain('mg-item--info');
+    expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent)).toEqual(['plan', 'implement', 'review']);
+    expect(rows.map((row) => row.className.includes('mg-item--static'))).toEqual([true, true, true]);
     for (const row of rows) {
-      expect(row.tagName).toBe('DIV');
-      expect(row.descendants().some((node) => node.tagName === 'BUTTON')).toBe(false);
+      const main = row.querySelector('.mg-item-main');
+      expect((main?.children[0] as FakeElement).classList.contains('mg-status')).toBe(true);
+      expect(row.querySelector('.mg-badge')).toBeNull();
+      expect(row.descendants().some((node) => node.tagName === 'BUTTON' || node.className.includes('mg-item-afford'))).toBe(false);
       expect(row.listeners.click).toBeUndefined();
     }
+    expect(rows[0]?.querySelector('.mg-status')?.className).not.toContain('mg-status--compact');
+    expect(rows[0]?.querySelector('.mg-visually-hidden')).toBeNull();
+    expect(rows[0]?.querySelector('.mg-status')?.textContent).toBe('Completed');
+    expect(rows[2]?.querySelector('.mg-status')?.className).toContain('mg-status--muted');
+    expect(rows[2]?.textContent).toContain('Not run');
+    expect(rows[0]?.textContent).not.toContain('attempt');
+    expect(rows[1]?.className).toContain('mg-item--info');
+  });
+
+  it('draws a multi-attempt stage as one static row per attempt, oldest first, with decision badges', () => {
+    const page = load();
+    page.deliver(pageModel({
+      progress: {
+        kind: 'stages',
+        rows: [stageRow({
+          attempts: 2,
+          decision: 'approved',
+          history: [
+            { order: 1, attempt: 1, state: 'completed', decision: 'revise', completedAt: '2026-11-01T10:00:00.000Z' },
+            { order: 2, attempt: 2, state: 'completed', decision: 'approved', completedAt: '2026-11-01T11:00:00.000Z' },
+          ],
+        })],
+      },
+    }));
+
+    const progress = page.section('Progress');
+    expect(progress?.descendants().some((node) => node.tagName === 'DETAILS')).toBe(false);
+    const lines = progress?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
+    expect(lines.map((line) => line.querySelector('.mg-item-title')?.textContent)).toEqual(['plan', 'plan']);
+    expect(lines.map((line) => line.textContent.includes('attempt ' + (lines.indexOf(line) + 1)))).toEqual([true, true]);
+    expect(lines.every((line) => line.className.includes('mg-item--static'))).toBe(true);
+    const decisions = lines.map((line) => line.descendants().filter((node) => node.classList.contains('mg-status')).at(-1));
+    expect(decisions.map((node) => node?.textContent)).toEqual(['revise', 'approved']);
+    expect(decisions.map((node) => node?.className)).toEqual(['mg-status mg-status--warn', 'mg-status mg-status--ok']);
+  });
+
+  it('orders attempts of every stage by when they ran, then the stages that never ran', () => {
+    const page = load();
+    const attempt = (order: number, n: number) => ({ order, attempt: n, state: 'completed', decision: null, completedAt: null });
+    page.deliver(pageModel({
+      progress: {
+        kind: 'stages',
+        rows: [
+          stageRow({ id: 'implement', attempts: 2, history: [attempt(1, 1), attempt(3, 2)] }),
+          stageRow({ id: 'review', attempts: 2, history: [attempt(2, 1), attempt(4, 2)] }),
+          stageRow({ id: 'pr', state: 'not-run', attempts: null, history: [] }),
+        ],
+      },
+    }));
+    const rows = page.section('Progress')?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
+    expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent + ' ' + (row.textContent.match(/attempt \d/)?.[0] ?? '')))
+      .toEqual(['implement attempt 1', 'review attempt 1', 'implement attempt 2', 'review attempt 2', 'pr ']);
+  });
+
+  it('maps a decision to a tone: approved ok, approved-with-comments ok, revise warn, anything else neutral', () => {
+    const page = load();
+    const toneOf = (decision: string): string => {
+      page.deliver(pageModel({ progress: { kind: 'stages', rows: [stageRow({ decision, history: [{ order: 1, attempt: 1, state: 'completed', decision, completedAt: null }] })] } }));
+      const badges = (page.section('Progress')?.descendants() ?? []).filter((node) => node.textContent === decision);
+      return badges.find((node) => node.classList.contains('mg-status'))?.className ?? '';
+    };
+    expect(toneOf('approved')).toContain('mg-status--ok');
+    expect(toneOf('approved-with-comments')).toContain('mg-status--ok');
+    expect(toneOf('revise')).toContain('mg-status--warn');
+    expect(toneOf('other')).toContain('mg-status--muted');
+  });
+
+  it('gives every progress state a distinct icon and text, and distinct tones to running, waiting, failed and completed', () => {
+    const page = load();
+    const states = ['running', 'question', 'blocked', 'failed', 'completed', 'stopped', 'cancelled', 'prepared', 'not-run', 'skipped', 'unknown'];
+    page.deliver(pageModel({
+      progress: { kind: 'stages', rows: states.map((state) => stageRow({ id: state, state, history: [] })) },
+    }));
+    const rows = page.section('Progress')?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
+    const badges = rows.map((row) => row.querySelector('.mg-status'));
+    expect(badges.every((badge) => (badge?.textContent ?? '') !== '')).toBe(true);
+    const icons = badges.map((badge) => JSON.stringify(badge?.descendants().map((node) => node.attrs.d ?? '')));
+    expect(new Set(icons).size).toBe(states.length);
+    const tone = (state: string): string => badges[states.indexOf(state)]?.className ?? '';
+    expect(new Set(['running', 'question', 'failed', 'completed'].map(tone)).size).toBe(4);
   });
 
   it('lists the execution turns of a role session', () => {
@@ -422,8 +512,8 @@ describe('Overview page', () => {
       progress: {
         kind: 'executions',
         rows: [
-          { executionId: '0001-review--attempt-01', stage: 'review', attempt: 1, state: 'completed', decision: 'go', isCurrent: false },
-          { executionId: '0002-review--attempt-02', stage: 'review', attempt: 2, state: 'failed', decision: null, isCurrent: false },
+          { executionId: '0001-review--attempt-01', stage: 'review', attempt: 1, state: 'completed', decision: 'approved', completedAt: null, isCurrent: false },
+          { executionId: '0002-review--attempt-02', stage: 'review', attempt: 2, state: 'failed', decision: null, completedAt: null, isCurrent: false },
         ],
       },
     }));
@@ -432,8 +522,10 @@ describe('Overview page', () => {
     const rows = progress?.descendants().filter((node) => node.classList.contains('mg-item')) ?? [];
     expect(rows.map((row) => row.querySelector('.mg-item-title')?.textContent)).toEqual(['review', 'review']);
     expect(rows[0]?.textContent).toContain('attempt 1');
-    expect(rows[0]?.textContent).toContain('decision go');
-    expect(rows[0]?.querySelector('.mg-status')?.className).toContain('mg-status--compact');
+    expect(rows[0]?.textContent).toContain('approved');
+    expect(rows[0]?.querySelector('.mg-status')?.className).not.toContain('mg-status--compact');
+    expect(rows[0]?.querySelector('.mg-visually-hidden')).toBeNull();
+    expect(rows[0]?.querySelector('.mg-status')?.textContent).toBe('Completed');
     expect(rows[1]?.querySelector('.mg-status')?.className).toContain('mg-status--error');
   });
 
@@ -453,7 +545,7 @@ describe('Overview page', () => {
       activity: { visible: true, lines: ['10:15:30 plan started', '10:15:31 draft started'] },
     }));
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Latest activity', 'Outputs', 'Next steps']);
+    expect(page.titles()).toEqual(['Status', 'Progress', 'Latest activity', 'Outputs']);
     const activity = page.section('Latest activity');
     expect(activity?.descendants().filter((node) => node.classList.contains('mg-mono')).map((node) => node.textContent)).toEqual([
       '10:15:30 plan started',
@@ -476,37 +568,54 @@ describe('Overview page', () => {
     const activity = page.section('Latest activity');
     expect(activity?.textContent).toContain('No activity recorded yet.');
   });
-  it('renders Outputs, Next steps, Child sessions, Source session and Handoff after Activity in that order', () => {
+  const suggestion = (overrides: Record<string, unknown> = {}) => ({
+    workflow: 'next-wf',
+    task: 'Go',
+    declared: true,
+    target: 'available',
+    launch: { state: 'ready' },
+    children: [],
+    artifacts: [],
+    ...overrides,
+  });
+
+  const SOURCE_MODEL = {
+    sessionId: 'source',
+    title: 'Source',
+    availability: 'retained',
+    provenance: {
+      state: 'ok',
+      artifacts: [{
+        name: 'a.md',
+        output: 'report.md',
+        path: 'handoff/1/a.md',
+        localState: 'ok',
+        sha256: 'abc',
+        sourcePath: 'C:/x/a.md',
+      }],
+    },
+  };
+
+  const outputRow = (key: string, overrides: Record<string, unknown> = {}) => ({
+    key,
+    label: key,
+    path: 'outputs/' + key,
+    state: 'ok',
+    stage: null,
+    attempt: null,
+    publishedAt: null,
+    ...overrides,
+  });
+
+  it('renders Status, Progress, Activity, Outputs, Next steps and Child sessions in that order, then the source Details with no section', () => {
     const page = load();
     page.deliver(pageModel({
       summary: summary({ state: 'running', isRunning: true }),
       activity: { visible: true, lines: ['10:15:30 plan started'] },
-      outputs: {
-        rows: [{ key: 'name:report.md', label: 'report.md', path: 'outputs/report.md', state: 'ok' }],
-        directoryError: null,
-      },
-      next: {
-        state: 'ok',
-        detail: null,
-        suggestions: [{ workflow: 'next-wf', task: 'Go', declared: true, target: 'ok', artifacts: [] }],
-      },
-      children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task: 'Do the next task' }],
-      source: {
-        sessionId: 'source',
-        title: 'Source',
-        availability: 'retained',
-        provenance: {
-          state: 'ok',
-          artifacts: [{
-            name: 'a.md',
-            output: 'report.md',
-            path: 'handoff/1/a.md',
-            localState: 'ok',
-            sha256: 'abc',
-            sourcePath: null,
-          }],
-        },
-      },
+      outputs: { rows: [outputRow('report.md')], directoryError: null },
+      next: { state: 'ok', detail: null, suggestions: [suggestion()] },
+      children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task: 'Do the next task', stageId: null, createdAt: null }],
+      source: SOURCE_MODEL,
     }));
 
     expect(page.titles()).toEqual([
@@ -516,29 +625,25 @@ describe('Overview page', () => {
       'Outputs',
       'Next steps',
       'Child sessions',
-      'Source session',
-      'Handoff',
     ]);
-    expect(page.doc.root.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(1);
+    const stack = page.doc.root.descendants().find((node) => node.children.includes(page.sections()[0] as FakeElement));
+    expect(stack?.children.at(-1)).toBe(page.source());
     expect(page.section('Outputs')?.querySelector('.mg-empty')).toBeNull();
-    expect(page.section('Next steps')?.querySelector('.mg-empty')).toBeNull();
   });
 
-  it('keeps a plain Completed session to its facts, without a state line', () => {
+  it('shows a count chip only for two or more items', () => {
     const page = load();
-    page.deliver(pageModel());
-
-    const status = page.section('Status');
-    expect(status?.textContent).toContain('Where the session stands and what you can do.');
-    expect(status?.descendants().some((node) => node.classList.contains('mg-status'))).toBe(false);
+    const chip = (title: string) => page.section(title)?.querySelector('.mg-chip');
+    page.deliver(pageModel({ outputs: { rows: [outputRow('a.md')], directoryError: null } }));
+    expect(chip('Outputs')).toBeNull();
+    page.deliver(pageModel({ outputs: { rows: [outputRow('a.md'), outputRow('b.md')], directoryError: null } }));
+    expect(chip('Outputs')?.textContent).toBe('2');
   });
 
-  it('names no file in the empty Next steps state and shows a warn banner when the file cannot be used', () => {
+  it('shows no Next steps section without a suggestion, and a warn banner with Open next.json when the file is unusable', () => {
     const empty = load();
     empty.deliver(pageModel({ next: { state: 'missing', detail: null, suggestions: [] } }));
-    const next = empty.section('Next steps');
-    expect(next?.textContent).toContain('This session suggested no next steps.');
-    expect(next?.textContent).not.toContain('next.json');
+    expect(empty.titles()).not.toContain('Next steps');
 
     const invalid = load();
     invalid.deliver(pageModel({ next: { state: 'invalid', detail: 'bad', suggestions: [] } }));
@@ -547,92 +652,153 @@ describe('Overview page', () => {
     expect(banner?.classList.contains('mg-banner--warn')).toBe(true);
     expect(banner?.textContent).toContain('Next steps are invalid');
     expect(banner?.textContent).toContain('bad');
+    expect(banner?.textContent).toContain('Open next.json');
   });
 
-  it('clamps a long child task, keeps its full text, and puts the source id in a refValue with its copy outside the link', () => {
+  it('draws each next step as a clickable card that runs it, naming the newest child that already ran it', () => {
+    const links = (host: ReturnType<typeof load>) =>
+      (host.section('Next steps')?.descendants() ?? []).filter((node) => node.classList.contains('mg-item-link'));
+    const page = load();
+    page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion()] } }));
+    const [card] = links(page);
+    expect(card?.textContent).toContain('next-wf');
+    expect(card?.textContent).toContain('Go');
+    card?.click();
+    expect(page.posted.at(-1)).toMatchObject({ type: 'intent', intent: 'openNextStep', workflow: 'next-wf' });
+
+    const ran = load();
+    ran.deliver(pageModel({
+      next: {
+        state: 'ok',
+        detail: null,
+        suggestions: [suggestion({
+          children: [
+            { sessionId: 'c2', title: 'Newest', state: 'Completed', createdAt: null },
+            { sessionId: 'c1', title: 'Older', state: 'Completed', createdAt: null },
+          ],
+        })],
+      },
+    }));
+    expect(links(ran)).toHaveLength(1);
+    expect(links(ran)[0]?.textContent).toContain('Ran → Newest');
+  });
+
+  it('shows a blocked step with its reason chip; only an invalid or duplicate target is clickable, opening its workflow', () => {
+    const cases: [Record<string, unknown>, string, boolean][] = [
+      [{ declared: false, launch: { state: 'blocked', reason: 'notDeclared' } }, 'not declared', false],
+      [{ declared: null, launch: { state: 'blocked', reason: 'declarationUnreadable' } }, 'declaration unreadable', false],
+      [{ target: 'not-found', launch: { state: 'blocked', reason: 'targetNotFound' } }, 'target not found', false],
+      [{ target: 'invalid', launch: { state: 'blocked', reason: 'targetInvalid' } }, 'target invalid', true],
+      [{ target: 'duplicate', launch: { state: 'blocked', reason: 'targetDuplicate' } }, 'target duplicate', true],
+    ];
+    for (const [overrides, chip, clickable] of cases) {
+      const page = load();
+      page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion(overrides)] } }));
+      const next = page.section('Next steps');
+      expect(next?.textContent, chip).toContain(chip);
+      const link = next?.descendants().find((node) => node.classList.contains('mg-item-link'));
+      expect(Boolean(link), chip).toBe(clickable);
+      link?.click();
+      if (clickable) expect(page.posted.at(-1)).toMatchObject({ intent: 'openTargetWorkflow', workflow: 'next-wf' });
+    }
+  });
+
+  it('puts the next action in Status as a line, never a run button', () => {
+    const run = load();
+    run.deliver(pageModel({ nextStep: { kind: 'run', workflow: 'next-wf' } }));
+    expect(run.statusButtons().map((node) => node.textContent)).toEqual([]);
+
+    const lines: [Record<string, unknown>, string][] = [
+      [{ kind: 'choose', count: 2 }, '2 next steps can run. Pick one under Next steps.'],
+      [{ kind: 'blocked', count: 1 }, 'The next steps are blocked. See Next steps for each reason.'],
+      [{ kind: 'done' }, 'Nothing left to run.'],
+    ];
+    for (const [nextStep, line] of lines) {
+      const page = load();
+      page.deliver(pageModel({ nextStep }));
+      expect(page.section('Status')?.textContent).toContain(line);
+      expect(page.statusButtons().map((node) => node.textContent)).toEqual([]);
+    }
+  });
+
+  it('always draws the overall state badge in Status, with an explanation when no action exists', () => {
+    const page = load();
+    page.deliver(pageModel({ summary: summary({ state: 'cancelled' }) }));
+    const status = page.section('Status');
+    expect(status?.descendants().some((node) => node.classList.contains('mg-status'))).toBe(true);
+    expect(status?.textContent).toContain('Cancelled');
+    expect(status?.textContent).toContain('No action is available.');
+  });
+
+  it('clamps a long child task, shows its facts, and sends openSession from the whole row with no other control', () => {
     const page = load();
     const task =
       'A child task that is much longer than two lines so the item head cannot show all of it without a clamp.';
     page.deliver(pageModel({
-      children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task }],
-      source: {
-        sessionId: '00000000-0000-4000-8000-0000000000b1',
-        title: 'Source',
-        availability: 'retained',
-        provenance: { state: 'ok', artifacts: [] },
-      },
+      children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task, stageId: 'draft', createdAt: '2026-11-01T10:00:00.000Z' }],
     }));
 
     const children = page.section('Child sessions');
     const title = children?.querySelector('.mg-item-title');
     expect(title?.className).toContain('mg-item-title--clamp-2');
     expect(title?.textContent).toBe(task);
-    const childLink = children?.descendants().find((node) => node.classList.contains('mg-item-link'));
-    expect(childLink?.attrs['aria-label']).toContain(task);
-    const childCopy = children?.descendants().find((node) => node.attrs['aria-label'] === 'Copy session ID');
-    expect(childCopy?.tagName).toBe('BUTTON');
-    expect(childLink?.descendants().some((node) => node === childCopy)).toBe(false);
-
-    const source = page.section('Source session');
-    const ref = source?.descendants().find((node) => node.classList.contains('mg-ref'));
-    expect(ref?.textContent).toBe('00000000-0000-4000-8000-0000000000b1');
-    expect(ref?.dataset.tip).toBe('00000000-0000-4000-8000-0000000000b1');
-    const sourceLink = source?.descendants().find((node) => node.classList.contains('mg-item-link'));
-    const sourceCopy = source?.descendants().find((node) => node.attrs['aria-label'] === 'Copy session ID');
-    expect(sourceCopy?.tagName).toBe('BUTTON');
-    expect(sourceLink?.descendants().some((node) => node === sourceCopy)).toBe(false);
+    const link = children?.querySelector('.mg-item-link');
+    expect(link?.attrs['aria-label']).toContain(task);
+    expect(link?.textContent).toContain('c1');
+    expect(link?.textContent).toContain('draft');
+    expect(link?.textContent).toContain('Running');
+    expect((link?.children.at(-1) as FakeElement).className).toBe('mg-item-afford');
+    expect(children?.descendants().filter((node) => node.tagName === 'BUTTON')).toHaveLength(1);
+    link?.click();
+    expect(page.posted.at(-1)).toMatchObject({ intent: 'openSession', sessionId: 'c1' });
   });
 
-  it('keeps an output path as a mono meta segment, with the label still in the link name', () => {
+  it('shows the source session as one open Details grid with no section: upstream and each file as links, no hash, source path or output', () => {
     const page = load();
-    page.deliver(pageModel({
-      outputs: { rows: [{ key: 'name:report', label: 'report.md', path: 'outputs/report.md', state: 'ok' }], directoryError: null },
-    }));
-    const meta = page.section('Outputs')?.querySelector('.mg-item-meta');
-    const segment = meta?.querySelector('.mg-mono');
-    expect(segment?.className).toBe('mg-mono');
-    expect(segment?.textContent).toBe('outputs/report.md');
-    const link = page.section('Outputs')?.querySelector('.mg-item-link');
-    expect(link?.textContent).toContain('report.md');
-    expect(link?.attrs['aria-label']).toBe('report.md — outputs/report.md');
-    expect(link?.attrs['data-tip']).toBe('outputs/report.md');
+    page.deliver(pageModel({ source: { ...SOURCE_MODEL, sessionId: '00000000-0000-4000-8000-0000000000b1' } }));
+
+    const details = page.source();
+    expect((details as unknown as { open: boolean }).open).toBe(true);
+    const labels = details?.descendants().filter((node) => node.tagName === 'DT').map((node) => node.textContent);
+    expect(labels).toEqual(['upstream', 'a.md']);
+    expect(details?.textContent).not.toContain('abc');
+    expect(details?.textContent).not.toContain('C:/x/a.md');
+    expect(details?.textContent).not.toContain('← output');
+    expect(details?.descendants().some((node) => node.attrs['aria-label']?.startsWith('Copy'))).toBe(false);
+
+    const link = (label: string) =>
+      details?.descendants().find((node) => node.tagName === 'BUTTON' && node.className.includes('mg-btn--link') && node.textContent === label);
+    link('Source')?.click();
+    expect(page.posted.at(-1)).toMatchObject({ intent: 'openSession', sessionId: '00000000-0000-4000-8000-0000000000b1' });
+    link('handoff/1/a.md')?.click();
+    expect(page.posted.at(-1)).toMatchObject({ intent: 'openHandoffFile', name: 'a.md' });
   });
 
-  it('sends the copy intent for a child id and for both handoff values', () => {
+  it('shows an unavailable parent as plain text with its reason', () => {
+    const page = load();
+    page.deliver(pageModel({ source: { ...SOURCE_MODEL, availability: 'hidden', provenance: { state: 'none' } } }));
+    const from = page.source();
+    expect(from?.descendants().some((node) => node.classList.contains('mg-item-link'))).toBe(false);
+    expect(from?.textContent).toContain('Show more in the Sessions view to load the source.');
+  });
+
+  it('keeps an output path as a mono segment only when it adds information, and shows who published it', () => {
     const page = load();
     page.deliver(pageModel({
-      children: [{ sessionId: 'c1', title: 'Child', state: 'Completed', task: 'Do it' }],
-      source: {
-        sessionId: 'src',
-        title: 'Source',
-        availability: 'retained',
-        provenance: {
-          state: 'ok',
-          artifacts: [{
-            name: 'a.md',
-            output: 'plan',
-            path: 'handoff/1/a.md',
-            localState: 'ok',
-            sha256: 'abc',
-            sourcePath: 'C:/x/a.md',
-          }],
-        },
+      outputs: {
+        rows: [
+          outputRow('report', { path: 'outputs/report.md', stage: 'draft', attempt: 2, publishedAt: '2026-11-01T10:00:00.000Z' }),
+          outputRow('plan', { path: 'elsewhere/plan.md' }),
+        ],
+        directoryError: null,
       },
     }));
-
-    const click = (title: string, label: string): void => {
-      const button = page.section(title)?.descendants().find((node) => node.attrs['aria-label'] === label);
-      expect(button?.tagName, label).toBe('BUTTON');
-      button?.click();
-    };
-    click('Child sessions', 'Copy session ID');
-    click('Handoff', 'Copy SHA-256');
-    click('Handoff', 'Copy source path');
-
-    expect(page.posted.filter((message) => message.intent === 'copyValue')).toMatchObject([
-      { type: 'intent', intent: 'copyValue', kind: 'sessionId', sessionId: 'c1' },
-      { type: 'intent', intent: 'copyValue', kind: 'handoffHash', name: 'a.md' },
-      { type: 'intent', intent: 'copyValue', kind: 'handoffSourcePath', name: 'a.md' },
-    ]);
+    const links = page.section('Outputs')?.descendants().filter((node) => node.classList.contains('mg-item-link')) ?? [];
+    expect(links[0]?.querySelector('.mg-mono')).toBeNull();
+    expect(links[0]?.textContent).toContain('draft · attempt 2');
+    expect(links[0]?.attrs['data-tip']).toBeUndefined();
+    expect(links[1]?.querySelector('.mg-mono')?.textContent).toBe('elsewhere/plan.md');
+    for (const link of links) expect((link.children.at(-1) as FakeElement).className).toBe('mg-item-afford');
   });
+
 });

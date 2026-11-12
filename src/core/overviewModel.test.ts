@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { TailEvent } from './eventTail';
 import { readRecentEvents } from './eventTail';
 import type { ExecutionSnapshot, SessionSnapshot } from './model';
-import { buildOverviewModel, type OverviewInput } from './overviewModel';
+import { buildOverviewModel, nextStepAction, type OverviewInput } from './overviewModel';
+import type { ResultsNext, ResultsSuggestion } from './resultsModel';
 import { buildResultsModel } from './resultsModel';
 import { NO_SESSION_SUMMARY } from './sessionSummary';
 import { capturedDir, snapshotFromDir } from './testHelpers';
@@ -108,6 +109,8 @@ function execution(id: string, stage: string, status: string): ExecutionSnapshot
     model: null,
     hasFailureReport: false,
     kind: null,
+    createdAt: null,
+    completedAt: null,
   };
 }
 
@@ -177,5 +180,64 @@ describe('buildOverviewModel', () => {
     expect(model.progress).toEqual({ kind: 'empty' });
     expect(model.activity).toEqual({ visible: false });
     expect(model.actions).toEqual({ primary: null, secondary: [] });
+  });
+});
+
+function suggestion(workflow: string, launch: ResultsSuggestion['launch'], ran = false): ResultsSuggestion {
+  return {
+    workflow,
+    task: null,
+    declared: true,
+    target: 'available',
+    launch,
+    children: ran ? [{ sessionId: 'c', title: 't', state: 'Completed', createdAt: null }] : [],
+    artifacts: [],
+  };
+}
+
+const READY = { state: 'ready' } as const;
+const BLOCKED = { state: 'blocked', reason: 'notDeclared' } as const;
+
+function nextOf(...suggestions: ResultsSuggestion[]): ResultsNext {
+  return { state: 'ok', detail: null, suggestions };
+}
+
+describe('nextStepAction', () => {
+  it('runs the one actionable suggestion, even beside a blocked one', () => {
+    expect(nextStepAction('completed', nextOf(suggestion('a', READY)))).toEqual({ kind: 'run', workflow: 'a' });
+    expect(nextStepAction('completed', nextOf(suggestion('a', READY), suggestion('b', BLOCKED)))).toEqual({
+      kind: 'run',
+      workflow: 'a',
+    });
+  });
+
+  it('asks to choose only among actionable suggestions', () => {
+    expect(nextStepAction('completed', nextOf(suggestion('a', READY), suggestion('b', READY)))).toEqual({
+      kind: 'choose',
+      count: 2,
+    });
+    expect(
+      nextStepAction('completed', nextOf(suggestion('a', READY), suggestion('b', READY), suggestion('c', BLOCKED))),
+    ).toEqual({ kind: 'choose', count: 2 });
+  });
+
+  it('reports blocked, never run, when no suggestion can launch', () => {
+    for (const reason of ['notDeclared', 'declarationUnreadable', 'targetNotFound', 'targetInvalid', 'targetDuplicate'] as const) {
+      expect(nextStepAction('completed', nextOf(suggestion('a', { state: 'blocked', reason })))).toEqual({
+        kind: 'blocked',
+        count: 1,
+      });
+    }
+  });
+
+  it('is done when every suggestion already ran or there are none', () => {
+    expect(nextStepAction('completed', nextOf(suggestion('a', READY, true)))).toEqual({ kind: 'done' });
+    expect(nextStepAction('completed', nextOf())).toEqual({ kind: 'done' });
+    expect(nextStepAction('completed', { state: 'missing', detail: null, suggestions: [] })).toEqual({ kind: 'done' });
+  });
+
+  it('is null for a session that is not Completed or an unusable next.json', () => {
+    expect(nextStepAction('running', nextOf(suggestion('a', READY)))).toBeNull();
+    expect(nextStepAction('completed', { state: 'invalid', detail: 'x', suggestions: [] })).toBeNull();
   });
 });

@@ -292,6 +292,8 @@ describe('replyTargets', () => {
       hasFailureReport: false,
       blocker: null,
       kind,
+      createdAt: null,
+      completedAt: null,
     };
   };
 

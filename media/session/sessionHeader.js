@@ -27,6 +27,13 @@
     unknown: { icon: 'question', tone: 'muted' },
   };
 
+  /** The status badge of a decision: `approved` and `approved-with-comments` ok, `revise` warn, anything else neutral. */
+  function decisionTone(decision) {
+    if (decision === 'approved' || decision === 'approved-with-comments') return { icon: 'check', tone: 'ok' };
+    if (decision === 'revise') return { icon: 'history', tone: 'warn' };
+    return { icon: 'circle', tone: 'muted' };
+  }
+
   /** `state` is a session state name, or `{ icon, tone, text }` for a page with its own states. */
   function stateBadge(state) {
     if (typeof state !== 'string') return state;
@@ -95,5 +102,5 @@
     });
   }
 
-  window.MigentSessionHeader = { sessionHeader, sessionStates: SESSION_STATES };
+  window.MigentSessionHeader = { sessionHeader, sessionStates: SESSION_STATES, decisionTone };
 })();

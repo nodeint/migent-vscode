@@ -78,6 +78,23 @@ describe('listExecutions', () => {
     expect(listExecutions(dir)[0]).toMatchObject({ status: 'blocked', blocker: 'needs a decision', decision: null });
   });
 
+  it('reads created_at and completed_at, and null when absent', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, record] of [
+      ['0001-a--attempt-01', { created_at: '2026-11-01T10:00:00Z', completed_at: '2026-11-01T10:05:00Z' }],
+      ['0002-b--attempt-01', {}],
+    ] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify(record));
+    }
+    expect(listExecutions(dir).map((execution) => [execution.createdAt, execution.completedAt])).toEqual([
+      ['2026-11-01T10:00:00Z', '2026-11-01T10:05:00Z'],
+      [null, null],
+    ]);
+  });
+
   it('flags an execution that wrote failure.md, and only that one', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
     temps.push(dir);
