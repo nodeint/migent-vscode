@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.10
+
 - Overview rows now look like what they do: plain facts, links with a chevron, and expandable rows. Next steps come
   after Outputs as simple cards you click to run, Progress is a flat list with one row per attempt, and a child
   session links back to its parent.

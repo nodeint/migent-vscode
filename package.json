@@ -2,7 +2,7 @@
   "name": "migent-vscode",
   "displayName": "Migent",
   "description": "Workflow runner and AI agent orchestrator for VS Code.",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "publisher": "nodeint",
   "icon": "media/migent.png",
   "license": "MIT",
