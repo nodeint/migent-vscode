@@ -7,6 +7,8 @@
 - The Questions tab now sits after Overview and is always there (disabled until the session asks a question), with a
   badge counting the questions waiting. Pick any attempt to see its questions and answers, and the Sessions view's
   Answer button opens Questions directly. Pending questions are no longer a header fact.
+- The Overview now shows a Progress timeline of the session's stages with effort, errors and usage metrics, and the
+  session layout and metrics display are tidier.
 
 ## 0.1.11
 
