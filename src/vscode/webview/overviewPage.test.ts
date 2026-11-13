@@ -270,7 +270,7 @@ describe('Overview page', () => {
     const page = load();
     page.deliver(pageModel());
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs']);
+    expect(page.titles()).toEqual(['Status', 'Outputs', 'Progress']);
     expect(page.doc.root.descendants().filter((node) => node.classList.contains('mg-empty'))).toHaveLength(2);
   });
 
@@ -278,7 +278,7 @@ describe('Overview page', () => {
     const page = load();
     page.deliver(pageModel({ summary: summary({ state: 'prepared' }), actions: { primary: 'start', secondary: ['openTask'] } }));
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Outputs']);
+    expect(page.titles()).toEqual(['Status', 'Outputs', 'Progress']);
   });
 
   it('explains a Running session and draws exactly one primary action plus the danger Stop', () => {
@@ -574,13 +574,14 @@ describe('Overview page', () => {
     // The cost follows the effort; the token breakdown is its tooltip. No cost reads "no cost record", still tipped.
     expect(sub(rows[0])?.textContent).toMatch(/ · 0\.09\$$/);
     expect(tip(rows[0])).toBe('8 in · 1.1k out · 16k cw · 3.7M cr');
-    expect(sub(rows[1])?.textContent).toMatch(/ · no cost record$/);
+    // Attempt 2 has no model or effort, so the cost stands alone with no leading dot.
+    expect(sub(rows[1])?.textContent).toBe('no cost record');
     expect(tip(rows[1])).toBe('72.1k in · 3.6k out · 0 cw · 706k cr');
     expect(rows[0]?.querySelector('.mg-tl-sub-end')).toBeFalsy();
 
     const progress = page.section('Progress');
     expect(progress?.textContent).toContain('2 attempts');
-    const total = progress?.querySelector('.mg-progress-totals');
+    const total = progress?.querySelector('.mg-section-note');
     expect(total?.textContent).toBe('active 4m 42s · wall 24m 18s · 0.09$+');
     expect(total?.descendants().find((node) => node.textContent === '0.09$+')?.attrs['data-tip'])
       .toBe('72.1k in · 4.7k out · 16k cw · 4.4M cr; 1 attempt has no cost');
@@ -596,7 +597,7 @@ describe('Overview page', () => {
       },
     }));
     expect(entries(page)[0]?.querySelector('.mg-tl-sub')?.textContent).toMatch(/no cost record$/);
-    expect(page.section('Progress')?.querySelector('.mg-progress-totals')?.textContent).toBe('wall 1m 30s · no cost record');
+    expect(page.section('Progress')?.querySelector('.mg-section-note')?.textContent).toBe('wall 1m 30s · no cost record');
   });
 
   it('shows a total cost without the plus when every attempt reported one', () => {
@@ -608,7 +609,7 @@ describe('Overview page', () => {
         totals: { activeSeconds: null, wallSeconds: null, usage: usage({ costUsd: 2.281 }), costMissing: 0 },
       },
     }));
-    const total = page.section('Progress')?.querySelector('.mg-progress-totals');
+    const total = page.section('Progress')?.querySelector('.mg-section-note');
     expect(total?.textContent).toBe('2.28$');
     expect(total?.descendants().some((node) => node.attrs['data-tip'] !== undefined)).toBe(false);
   });
@@ -682,7 +683,7 @@ describe('Overview page', () => {
     expect(row?.querySelector('.mg-tl-note')).toBeNull();
     expect(page.section('Progress')?.textContent).not.toMatch(/unknown|—|undefined|null|NaN/i);
     // No attempt reports figures, so the head carries no totals.
-    expect(page.section('Progress')?.querySelector('.mg-progress-totals')).toBeNull();
+    expect(page.section('Progress')?.querySelector('.mg-section-note')?.textContent).toBe('Every attempt, in the order it ran.');
     expect(row?.querySelector('.mg-tl-sub-end')).toBeNull();
 
     // A model whose attempts predate every extra field still renders.
@@ -819,14 +820,14 @@ describe('Overview page', () => {
     expect(progress?.textContent).toContain('No stages or executions to list.');
     expect(progress?.querySelector('.mg-card-stack')).toBeNull();
   });
-  it('shows the five newest activity lines between Progress and Outputs while Running', () => {
+  it('shows the five newest activity lines after Progress while Running', () => {
     const page = load();
     page.deliver(pageModel({
       summary: summary({ state: 'running', isRunning: true }),
       activity: { visible: true, lines: ['10:15:30 plan started', '10:15:31 draft started'] },
     }));
 
-    expect(page.titles()).toEqual(['Status', 'Progress', 'Latest activity', 'Outputs']);
+    expect(page.titles()).toEqual(['Status', 'Outputs', 'Progress', 'Latest activity']);
     const activity = page.section('Latest activity');
     expect(activity?.descendants().filter((node) => node.classList.contains('mg-mono')).map((node) => node.textContent)).toEqual([
       '10:15:30 plan started',

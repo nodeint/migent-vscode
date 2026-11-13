@@ -177,7 +177,7 @@
     const usage = usageNode(totals.usage, { costMissing: totals.costMissing });
     if (usage) parts.push(usage);
     if (parts.length === 0) return null;
-    const node = el('span', null, 'mg-progress-totals');
+    const node = el('span');
     parts.forEach((part, index) => {
       if (index > 0) node.append(el('span', ' · '));
       node.append(part);
