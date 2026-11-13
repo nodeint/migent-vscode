@@ -22,6 +22,7 @@ test("release workflow parses and covers merge, tag, and manual retry entries", 
 
 test("CI workflow parses", () => {
   const ci = workflow("ci.yml");
-  assert.deepEqual(ci.on.push.branches, ["next"]);
+  assert.deepEqual(Object.keys(ci.on), ["pull_request"]);
+  assert.deepEqual(ci.on.pull_request.branches, ["next"]);
   assert.deepEqual(ci.jobs.test.strategy.matrix.os, ["macos-latest", "windows-latest"]);
 });

@@ -20,9 +20,15 @@
     'answered-elsewhere': 'warn',
     'recorded-waiting': 'warn',
   };
-  // Shown while the batch can still be answered or is being sent; afterwards the banner says what happened.
-  const ANSWERING_STATES = ['editing', 'rejected', 'sending'];
+  // The status chip of a question card: icon, tone and text.
+  const CARD_STATES = {
+    recorded: { icon: 'pass', tone: 'ok', text: text.state.sent },
+    answered: { icon: 'pass', tone: 'ok', text: text.state.answered },
+    open: { icon: 'circle', tone: 'muted', text: text.state.notAnswered },
+  };
   let model = null;
+  // The session's attempts and the selected one, for the attempt selector: `{ attempts, selected }`.
+  let nav = { attempts: [], selected: null };
   // Context blocks the reader expanded; kept across re-renders.
   const expandedContext = new Set();
   let page = null;
@@ -32,6 +38,7 @@
   // in that window cancels the composition, so a model that arrives meanwhile waits until it ends.
   let isComposing = false;
   let deferred = null;
+  let isDeferredNavChanged = false;
   let viewObserver = null;
 
   function draftOf(id) {
@@ -57,26 +64,30 @@
     return model.canSubmit && count === model.questions.length;
   }
 
+  function cardState(q, isDone) {
+    if (isRecordedCard(q)) return CARD_STATES.recorded;
+    return isDone ? CARD_STATES.answered : CARD_STATES.open;
+  }
+
+  // The kit status badge, refilled in place so the card around it is not redrawn on every keystroke.
+  function paintState(node, state) {
+    node.className = 'mg-status mg-status--' + state.tone;
+    node.replaceChildren(icon(state.icon), el('span', state.text));
+  }
+
   function updateChrome() {
-    const done = completeness();
-    const count = done.filter(Boolean).length;
+    const drafted = completeness();
+    const count = drafted.filter(Boolean).length;
     model.questions.forEach((q, index) => {
+      const isDone = isRecordedCard(q) || drafted[index];
       const jump = document.getElementById('jump-' + q.id);
       if (jump) {
-        jump.replaceChildren(q.id, ...(done[index] ? [icon('check')] : []));
-        jump.classList.toggle('q-jump--done', done[index]);
-        jump.setAttribute('aria-label', text.jumps.goTo(q.id, done[index]));
+        jump.replaceChildren(q.id, ...(isDone ? [icon('check')] : []));
+        jump.classList.toggle('q-jump--done', isDone);
+        jump.setAttribute('aria-label', text.jumps.goTo(q.id, isDone));
       }
       const chip = document.getElementById('qs-' + q.id);
-      if (chip) {
-        const isRecorded = isRecordedCard(q);
-        const isDone = isRecorded || done[index];
-        chip.replaceChildren(
-          icon(isDone ? 'pass' : 'circle'),
-          isRecorded ? text.state.sent : isDone ? text.state.answered : text.state.notAnswered,
-        );
-        chip.className = 'q-state mg-status mg-status--' + (isDone ? 'ok' : 'muted');
-      }
+      if (chip) paintState(chip, cardState(q, isDone));
     });
     const submitButton = document.getElementById('submit');
     if (submitButton && model.state !== 'sending') {
@@ -134,19 +145,20 @@
     ctx.id = 'ctx-' + q.id;
     wrapper.append(ctx);
     if (isLong) {
-      const toggle = el('button', isOpen ? text.question.showLess : text.question.showMore, 'mg-btn mg-btn--link');
+      const toggle = ui.button(isOpen ? text.question.showLess : text.question.showMore, {
+        kind: 'link',
+        onClick: () => {
+          if (expandedContext.has(q.id)) expandedContext.delete(q.id);
+          else expandedContext.add(q.id);
+          const open = expandedContext.has(q.id);
+          ctx.classList.toggle('q-context--clamped', !open);
+          toggle.textContent = open ? text.question.showLess : text.question.showMore;
+          toggle.setAttribute('aria-expanded', String(open));
+        },
+      });
       toggle.id = 'ctxbtn-' + q.id;
-      toggle.type = 'button';
       toggle.setAttribute('aria-controls', ctx.id);
       toggle.setAttribute('aria-expanded', String(isOpen));
-      toggle.addEventListener('click', () => {
-        if (expandedContext.has(q.id)) expandedContext.delete(q.id);
-        else expandedContext.add(q.id);
-        const open = expandedContext.has(q.id);
-        ctx.classList.toggle('q-context--clamped', !open);
-        toggle.textContent = open ? text.question.showLess : text.question.showMore;
-        toggle.setAttribute('aria-expanded', String(open));
-      });
       wrapper.append(toggle);
     }
     return wrapper;
@@ -175,31 +187,37 @@
     return label;
   }
 
+  // What was recorded for a question, as one kit key-value row.
+  function recordedRow(answer) {
+    return ui.keyValues([{ label: text.question.recorded, value: answer, tone: 'ok' }], { dense: true });
+  }
+
+  // A question is a kit card section: the question as its title, the selection mode as its note and the answer
+  // state as its action; the body holds the context, the options and what was recorded.
   function question(q) {
     const d = draftOf(q.id);
-    const box = el('section', null, 'q-question');
+    const state = ui.statusIndicator(CARD_STATES.open);
+    state.id = 'qs-' + q.id;
+    const box = ui.section(q.question, {
+      variant: 'card',
+      note: text.question.eyebrow(q.id, model.questions.length, q.selection === 'single'),
+      actions: [state],
+    });
+    box.className += ' q-card';
     box.id = 'card-' + q.id;
     box.setAttribute('role', 'group');
     box.setAttribute('aria-labelledby', 'qt-' + q.id);
-    const top = el('div', null, 'q-top');
-    top.append(el('span', text.question.eyebrow(q.id, model.questions.length, q.selection === 'single'), 'q-eyebrow'));
-    const state = el('span', null, 'q-state mg-status mg-status--muted');
-    state.id = 'qs-' + q.id;
-    top.append(state);
-    const title = el('h2', q.question, 'q-title');
-    title.id = 'qt-' + q.id;
-    box.append(top, title);
+    box.querySelector('.mg-section-title').id = 'qt-' + q.id;
+    const body = box.querySelector('.mg-section-body');
     if (isRecordedCard(q)) {
-      const recorded = el('div', null, 'q-recorded');
-      recorded.append(icon('pass'), ' ' + model.recorded[q.id]);
-      box.append(recorded);
+      body.append(recordedRow(model.recorded[q.id]));
       return box;
     }
-    if (q.context) box.append(contextBlock(q));
+    if (q.context) body.append(contextBlock(q));
     const options = el('div', null, 'q-options');
     for (const option of q.options) options.append(optionRow(q, option));
     options.append(otherRow(q, d));
-    box.append(options);
+    body.append(options);
     if (d.mode === 'text') {
       const area = el('textarea', null, 'mg-input q-text');
       area.id = 'text' + q.id;
@@ -217,23 +235,18 @@
         setTimeout(() => {
           if (isComposing || deferred === null) return;
           const waiting = deferred;
+          const isWaitingNavChanged = isDeferredNavChanged;
           deferred = null;
-          applyModel(waiting);
+          isDeferredNavChanged = false;
+          applyModel(waiting, isWaitingNavChanged);
         }, 0);
       });
-      box.append(area);
+      body.append(area);
       if (model.ambiguous.includes(q.id)) {
-        const warning = el('p', null, 'mg-alert mg-warn');
-        warning.append(icon('warning'), ' ' + text.question.ambiguous);
-        warning.setAttribute('role', 'status');
-        box.append(warning);
+        body.append(ui.alertLine(text.question.ambiguous, { tone: 'warn', role: 'status' }));
       }
     }
-    if (model.recorded && model.recorded[q.id] !== undefined) {
-      const recorded = el('div', null, 'q-recorded');
-      recorded.append(icon('pass'), ' ' + text.question.recorded(model.recorded[q.id]));
-      box.append(recorded);
-    }
+    if (model.recorded && model.recorded[q.id] !== undefined) body.append(recordedRow(model.recorded[q.id]));
     return box;
   }
 
@@ -250,20 +263,52 @@
     return ui.banner({ tone, lines });
   }
 
-  // Jump chips while the batch can be answered; with the answers sent the page is a record, not a form.
+  // One jump chip per question of the shown attempt: the number, then a check once answered.
   function jumps() {
-    if (!ANSWERING_STATES.includes(model.state)) return null;
-    const nav = el('nav', null, 'q-jumps');
-    nav.setAttribute('aria-label', text.jumps.label);
+    const strip = el('nav', null, 'q-jumps');
+    strip.setAttribute('aria-label', text.jumps.label);
     for (const q of model.questions) {
       const jump = el('button', q.id, 'q-jump');
       jump.type = 'button';
       jump.id = 'jump-' + q.id;
       jump.title = q.question;
       jump.addEventListener('click', () => document.getElementById('card-' + q.id).scrollIntoView());
-      nav.append(jump);
+      strip.append(jump);
     }
-    return nav;
+    return strip;
+  }
+
+  const refKey = (ref) => (ref.stageId || '') + '/' + ref.executionId;
+
+  function attemptLabel(attempt) {
+    const stage = attempt.stageId === null ? text.attempts.roleSession : attempt.stageId;
+    return text.attempts.option(stage, attempt.attempt);
+  }
+
+  // The attempt selector: every attempt that asked questions, the selected one shown. Picking another asks the
+  // host for it; the host answers with that attempt's model.
+  function attemptSelect() {
+    const attempts = nav.attempts;
+    const control = ui.select({
+      value: nav.selected === null ? '' : refKey(nav.selected),
+      options: attempts.map((attempt) => ({ value: refKey(attempt), label: attemptLabel(attempt) })),
+      onInput: (value) => {
+        const picked = attempts.find((attempt) => refKey(attempt) === value);
+        if (picked) page.send({ intent: 'selectBatch', batch: { stageId: picked.stageId, executionId: picked.executionId } });
+      },
+    });
+    control.id = 'attempt-select';
+    control.setAttribute('aria-label', text.attempts.label);
+    return control;
+  }
+
+  // The sticky bar above the questions: the attempt on the left, the jump chips on the right.
+  function toolbar() {
+    const bar = el('div', null, 'q-toolbar');
+    const pick = el('div', null, 'q-toolbar-attempt');
+    pick.append(attemptSelect());
+    bar.append(pick, jumps());
+    return bar;
   }
 
   // Marks the chip of the question in view. Skipped where IntersectionObserver is missing.
@@ -292,9 +337,7 @@
   function archivedSection() {
     const box = details(text.archived.title, { key: 'archived' });
     box.querySelector('summary').id = 'archived-summary';
-    for (const item of model.archived) {
-      box.append(el('p', text.archived.line(item.id, item.question, item.answer), 'q-archived'));
-    }
+    box.append(ui.plainList(model.archived.map((item) => text.archived.line(item.id, item.question, item.answer))));
     return box;
   }
 
@@ -338,12 +381,11 @@
     const area = active && active.tagName === 'TEXTAREA' ? active : null;
     const caret = area ? [area.selectionStart, area.selectionEnd, area.selectionDirection, area.scrollTop] : null;
     const scroll = window.scrollY;
-    mount.replaceChildren();
+    mount.replaceChildren(toolbar());
     const status = note();
     if (status) mount.append(status);
-    const strip = jumps();
-    if (strip) mount.append(strip);
-    for (const q of model.questions) mount.append(question(q));
+    const cards = model.questions.map(question);
+    if (cards.length > 0) mount.append(ui.stack(cards, { gap: 'card' }));
     if (model.archived) mount.append(archivedSection());
     const actions = footer();
     if (actions) mount.append(actions);
@@ -374,10 +416,11 @@
     return JSON.stringify(value, (key, item) => (DRAFT_DERIVED.includes(key) ? undefined : item));
   }
 
-  function applyModel(next) {
+  function applyModel(next, isNavChanged) {
     if (!next) return;
     if (isComposing) {
       deferred = next;
+      isDeferredNavChanged = isDeferredNavChanged || Boolean(isNavChanged);
       return;
     }
     const previous = model;
@@ -387,7 +430,7 @@
     const isSameBatch = previous && previous.generation === model.generation && previous.fingerprint === model.fingerprint;
     if (isSameBatch) model.draft = previous.draft;
     // An echo of an edit keeps the DOM, so typing never replaces the control being typed in.
-    if (isSameBatch && drawnSignature(previous) === drawnSignature(model)) {
+    if (isSameBatch && !isNavChanged && drawnSignature(previous) === drawnSignature(model)) {
       updateChrome();
       return;
     }
@@ -395,16 +438,20 @@
     rerender();
   }
 
-  function render(container, next, host) {
+  // `attempts` is `{ attempts, selected }` from the Questions tab model, for the attempt selector.
+  function render(container, next, host, attempts) {
     page = host;
     const isNewMount = container !== mount;
     mount = container;
+    const nextNav = attempts || { attempts: [], selected: null };
+    const isNavChanged = JSON.stringify(nextNav) !== JSON.stringify(nav);
+    nav = nextNav;
     if (isNewMount) {
       model = next;
       rerender();
       return;
     }
-    applyModel(next);
+    applyModel(next, isNavChanged);
   }
 
   window.addEventListener('keydown', (event) => {

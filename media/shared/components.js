@@ -680,6 +680,12 @@
       const node = el('button', tab.label, 'mg-tab');
       node.type = 'button';
       if (tab.title) node.title = tab.title;
+      // A count beside the label (such as questions waiting); `badgeLabel` names the tab with it for assistive
+      // technology, so the number is never read on its own.
+      if (tab.badge) {
+        node.append(el('span', String(tab.badge), 'mg-pill mg-tab-badge'));
+        if (tab.badgeLabel) node.setAttribute('aria-label', tab.badgeLabel);
+      }
       if (tab.key === options.current) node.setAttribute('aria-current', 'page');
       else if (tab.disabled) node.disabled = true;
       else node.addEventListener('click', tab.onSelect);

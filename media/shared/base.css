@@ -225,6 +225,13 @@ body {
   outline-offset: -1px;
 }
 
+/* A count beside a tab label, such as the questions waiting for answers. */
+.mg-tab-badge {
+  margin-left: var(--mg-space-1);
+  font-size: 0.8em;
+  line-height: 1.5;
+}
+
 body.vscode-high-contrast .mg-tab[aria-current='page'],
 body.vscode-high-contrast-light .mg-tab[aria-current='page'] {
   border-bottom-color: var(--mg-focus);

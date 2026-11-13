@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import type { AnswerModel } from '../../core/answerModel';
 import { metricsPath, workflowDraftPath } from '../../core/paths';
+import { defaultAttempt, findAttempt, type QuestionAttempt } from '../../core/questionHistory';
 import type { SessionAction } from '../../core/resultsIntent';
 import { parseSessionPageMessage, type SessionPageIntent, type SessionPageMessage } from '../../core/sessionPageIntent';
 import { type SessionBatchRef, type SessionPageModel, type SessionTab,workflowHeader } from '../../core/sessionPageModel';
@@ -30,14 +31,14 @@ import {
   type Transient,
 } from './entry';
 import {
-  batchGroups,
+  attemptsOf,
   batchOf,
+  buildAttemptRecord,
   buildEmptyAnswerHeader,
   buildMetricsPage,
   buildOverviewPage,
   buildQuestionsPage,
-  latestOf,
-  summariesOf,
+  questionRecords,
 } from './pageModels';
 import { runResultsIntent } from './resultsActions';
 import { type SaveRequest, WorkflowSaver } from './workflowSave';
@@ -328,30 +329,56 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
         this.#sendQuestions(entry, isForced);
         return;
       case 'overview':
-        entry.publish(buildOverviewPage(entry, this.#registry), isForced);
+        entry.publish(this.#withQuestions(entry, buildOverviewPage(entry, this.#registry)), isForced);
         return;
       case 'metrics':
-        entry.publish(buildMetricsPage(entry, this.#registry), isForced);
+        entry.publish(this.#withQuestions(entry, buildMetricsPage(entry, this.#registry)), isForced);
         return;
       case 'workflow':
         this.#sendWorkflow(entry, isForced);
     }
   }
 
+  /**
+   * Show the selected attempt: a batch still waiting (or one this panel is answering) is attached to the answer
+   * flow; any other attempt is a read-only record from `questions.json`. Without a selection the latest waiting
+   * attempt is shown, else the latest one.
+   */
+  /** The model with the header's `hasQuestions`, which every tab shows (the Questions tab is disabled without). */
+  #withQuestions(entry: Entry, model: SessionPageModel): SessionPageModel {
+    const attempts =
+      model.tab === 'questions' ? model.questions.attempts : attemptsOf(entry, this.#registry, questionRecords(entry, this.#registry));
+    return { ...model, header: { ...model.header, hasQuestions: attempts.length > 0 } };
+  }
+
   #sendQuestions(entry: Entry, isForced: boolean): void {
-    const groups = batchGroups(entry, this.#registry);
-    if (entry.questionBatch === null) {
-      const latest = latestOf(groups);
-      if (latest !== undefined) entry.setBatch(batchOf(entry, latest));
-    }
+    const records = questionRecords(entry, this.#registry);
+    const attempts = attemptsOf(entry, this.#registry, records);
+    this.#settleAttempt(entry, attempts);
     const batch = entry.questionBatch;
+    const attempt = findAttempt(attempts, batch);
     if (batch === null) {
       entry.setAnswerModel(null);
       const header = buildEmptyAnswerHeader(entry, this.#registry);
-      entry.publish({ tab: 'questions', header, questions: { model: null, selected: null, batches: summariesOf(groups) } }, isForced);
+      entry.publish(this.#withQuestions(entry, { tab: 'questions', header, questions: { model: null, selected: null, attempts } }), isForced);
       return;
     }
-    this.#questions.attach(batch, this.#surface(entry));
+    if (attempt === undefined || attempt.status === 'pending' || this.#questions.has(batch)) {
+      this.#questions.attach(batch, this.#surface(entry));
+      return;
+    }
+    const model = buildAttemptRecord(entry, this.#registry, { attempt, records });
+    entry.setAnswerModel(model);
+    const page = buildQuestionsPage(entry, this.#registry, model);
+    if (page !== null) entry.publish(this.#withQuestions(entry, page), isForced);
+  }
+
+  /** Keep the selected attempt while the session lists it (or this panel answers it), else show the default one. */
+  #settleAttempt(entry: Entry, attempts: readonly QuestionAttempt[]): void {
+    const selected = entry.questionBatch;
+    if (selected !== null && (findAttempt(attempts, selected) !== undefined || this.#questions.has(selected))) return;
+    const fallback = defaultAttempt(attempts);
+    entry.setBatch(fallback === undefined ? null : batchOf(entry, fallback));
   }
 
   #surface(entry: Entry): QuestionSurface {
@@ -359,7 +386,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       post: (model) => {
         entry.setAnswerModel(model);
         const page = buildQuestionsPage(entry, this.#registry, model);
-        if (page !== null) entry.publish(page, false);
+        if (page !== null) entry.publish(this.#withQuestions(entry, page), false);
       },
       close: () => {
         this.#selectTab(entry, 'overview', undefined);
@@ -384,7 +411,7 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
       entry.setValidation(EMPTY_VALIDATION, null);
     }
     model.validation = entry.validation;
-    entry.publish({ tab: 'workflow', header: workflowHeader(model), workflow: model }, isForced, state);
+    entry.publish(this.#withQuestions(entry, { tab: 'workflow', header: workflowHeader(model), workflow: model }), isForced, state);
   }
 
   async #runIntent(entry: Entry, intent: SessionPageIntent): Promise<void> {

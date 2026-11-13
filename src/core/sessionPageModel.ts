@@ -1,5 +1,6 @@
 import type { AnswerModel } from './answerModel';
 import type { OverviewModel } from './overviewModel';
+import type { QuestionAttempt } from './questionHistory';
 import type { ResultsModel } from './resultsModel';
 import type { SessionMeta } from './sessionMeta';
 import type { SessionMetricsModel } from './sessionMetricsModel';
@@ -24,6 +25,11 @@ export interface SessionHeader {
   state: string;
   workflowId: string | null;
   meta: SessionMeta;
+  /**
+   * Whether the session ever asked a question; the Questions tab is disabled without one. Set by the panel when it
+   * posts the model, so the tab builders leave it out.
+   */
+  hasQuestions?: boolean;
 }
 
 /** The batch a Questions tab is bound to. */
@@ -32,18 +38,16 @@ export interface SessionBatchRef {
   executionId: string;
 }
 
-/** One pending batch of the session, as the batch selector shows it. */
-export interface SessionBatchSummary extends SessionBatchRef {
-  count: number;
-}
-
 export interface SessionQuestionsTab {
-  /** The selected batch, as `answerModel.ts` builds it; null when the session has no batch at all. */
+  /**
+   * The selected attempt, as `answerModel.ts` builds it: a form while it waits for answers, a read-only record
+   * once answered or superseded; null when the session never asked a question.
+   */
   model: AnswerModel | null;
-  /** The selected batch; null when there is nothing to select. */
+  /** The selected attempt; null when there is nothing to select. */
   selected: SessionBatchRef | null;
-  /** The pending batches of the session; a single entry needs no selector. */
-  batches: SessionBatchSummary[];
+  /** Every attempt that asked questions, in the order they ran; the attempt selector lists them. */
+  attempts: QuestionAttempt[];
 }
 
 export type SessionPageModel =

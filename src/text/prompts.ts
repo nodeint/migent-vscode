@@ -177,6 +177,7 @@ export const PROMPTS = {
 
   // Page-model messages
   'prompts.noPendingQuestions': () => 'No questions are pending for this session.',
+  'prompts.questionsSuperseded': () => 'These questions were not answered; the session moved on without them.',
   'prompts.unconfirmed': () => 'Could not confirm that your answers arrived. Check again before sending them a second time.',
   'prompts.sending': () => 'Sending your answers…',
   'prompts.answersSent': ({ note }: { note: string }) => `Answers sent.${note}`,

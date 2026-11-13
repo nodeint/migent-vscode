@@ -239,6 +239,14 @@ const scenarios: Scenario[] = [
         menus.commandPalette?.filter((item) => item.command === 'migent.session.open').map((item) => item.when),
         ['false'],
       );
+      // The inline Answer action of a session with questions opens the page on Questions, not on Overview.
+      const answerActions = (menus['view/item/context'] ?? []).filter(
+        (item) => item.group?.startsWith('inline') === true && item.when?.includes(';questions') === true,
+      );
+      assert.deepEqual(answerActions.map((item) => item.command), ['migent.session.answer']);
+      await vscode.commands.executeCommand('migent.session.answer', id);
+      await waitFor('questions tab shown', () => env.api.session.lastModel(id)?.tab === 'questions');
+      assert.equal(env.api.session.count, 1, 'the Answer action reused the open page');
       await closeAll(env);
     },
   },

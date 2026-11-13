@@ -46,7 +46,7 @@
 
   /**
    * The session facts every session page's header shows, in a fixed order and hidden when unknown: the stage, the
-   * duration (to now while running), the time since the last update and the pending questions.
+   * duration (to now while running), the time since the last update. Pending questions are the Questions tab's badge.
    * `meta` is the model's `SessionMeta`. Returns `[{ icon, text, title?, tone?, live? }]`; `live` re-computes the text.
    */
   function sessionFacts(meta) {
@@ -61,9 +61,6 @@
     if (updated !== null) {
       const ago = () => formatAgo(Date.now() - updated);
       facts.push({ icon: 'history', text: ago(), title: 'Updated ' + new Date(updated).toLocaleString(), live: ago });
-    }
-    if (meta.pendingQuestions > 0) {
-      facts.push({ icon: 'comment-discussion', text: meta.pendingQuestions + ' pending', title: 'Pending questions', tone: 'warn' });
     }
     return facts;
   }

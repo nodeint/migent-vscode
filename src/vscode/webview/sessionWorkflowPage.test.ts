@@ -684,6 +684,17 @@ describe('Session Overview and Metrics tabs', () => {
     expect(cards().map((card) => card.open)).toEqual([true, false]);
   });
 
+  it('disables the Questions tab while the session has asked no question', () => {
+    const page = load();
+    const questionsTab = (): FakeElement | undefined =>
+      page.find((node) => node.className === 'mg-tab' && node.textContent.startsWith('Questions'));
+    page.deliverPage(metricsPage([execution({})], { ...HEADER, hasQuestions: false }));
+    expect(questionsTab()?.disabled).toBe(true);
+    expect(questionsTab()?.title).toBe('This session has not asked any questions.');
+    page.deliverPage(metricsPage([execution({})], { ...HEADER, hasQuestions: true }));
+    expect(questionsTab()?.disabled).toBe(false);
+  });
+
   it('keeps the Session header tiers: state, title, facts, then tabs and the menu', () => {
     const page = load();
     const meta = {
@@ -706,11 +717,14 @@ describe('Session Overview and Metrics tabs', () => {
     const chips = facts.children.map((chip) => (chip as FakeElement).textContent);
     expect(chips[0]).toBe('plan');
     expect(chips[1]).toBe('5m 0s');
-    expect(chips.at(-1)).toBe('2 pending');
+    // Pending questions are the Questions tab's badge, not a fact.
+    expect(chips.some((chip) => chip.endsWith('pending'))).toBe(false);
     const barKinds = bar.children.map((child) => (child as FakeElement).className.split(' ')[0]);
     expect(barKinds).toEqual(['mg-tabs', 'mg-menu']);
-    const tabs = (bar.children[0] as FakeElement).children.map((tab) => (tab as FakeElement).textContent);
-    expect(tabs).toEqual(['Questions', 'Overview', 'Metrics', 'Workflow', 'Task']);
+    const tabNodes = (bar.children[0] as FakeElement).children as FakeElement[];
+    // Questions is always a tab; its badge counts the questions waiting for an answer.
+    expect(tabNodes.map((tab) => tab.textContent)).toEqual(['Overview', 'Questions2', 'Metrics', 'Workflow', 'Task']);
+    expect(tabNodes[1]?.attrs['aria-label']).toBe('Questions, 2 waiting for an answer');
     const items = bar.descendants().filter((node) => node.classList.contains('mg-menu-item'));
     expect(items.map((item) => item.textContent).slice(0, 4)).toEqual([
       'View log',

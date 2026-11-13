@@ -38,6 +38,9 @@ class FakeElement {
       this.className = [...names].join(' ');
     },
     contains: (name: string): boolean => this.className.split(' ').includes(name),
+    add: (name: string): void => {
+      if (!this.className.split(' ').includes(name)) this.className = `${this.className} ${name}`.trim();
+    },
   };
 
   public constructor(
@@ -189,12 +192,14 @@ function model(revision: number, overrides: Record<string, unknown> = {}) {
 }
 
 /** The Session page model of the Questions tab for an answer model, as the host builds it. */
-function sessionPage(answer: Record<string, unknown>, batches: Record<string, unknown>[] = []) {
-  const { title, workflowId, sessionState, meta } = answer;
+const ONE_ATTEMPT = [{ stageId: 'plan', executionId: 'e1', attempt: 1, count: 2, status: 'pending' }];
+
+function sessionPage(answer: Record<string, unknown> | null, attempts: Record<string, unknown>[] = ONE_ATTEMPT) {
+  const { title, workflowId, sessionState, meta } = answer ?? model(1);
   return {
     tab: 'questions',
     header: { availability: 'ok', sessionId: 's1', title, state: sessionState, workflowId, meta },
-    questions: { model: answer, selected: { stageId: 'plan', executionId: 'e1' }, batches },
+    questions: { model: answer, selected: answer === null ? null : { stageId: 'plan', executionId: 'e1' }, attempts },
   };
 }
 
@@ -247,12 +252,12 @@ function load() {
     const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next) };
     for (const handler of windowListeners.message ?? []) handler({ data });
   };
-  const deliverBatches = (
+  const deliverAttempts = (
     revision: number,
-    next: Record<string, unknown>,
-    batches: Record<string, unknown>[],
+    next: Record<string, unknown> | null,
+    attempts: Record<string, unknown>[],
   ): void => {
-    const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next, batches) };
+    const data = { type: 'model', revision, identity: { a: 1 }, model: sessionPage(next, attempts) };
     for (const handler of windowListeners.message ?? []) handler({ data });
   };
   const byId = (id: string): FakeElement => {
@@ -263,28 +268,67 @@ function load() {
   const key = (init: Record<string, unknown>): void => {
     for (const handler of windowListeners.keydown ?? []) handler(init);
   };
-  return { doc, posted, window, deliver, deliverBatches, byId, key, observers };
+  return { doc, posted, window, deliver, deliverAttempts, byId, key, observers };
 }
 
 describe('Questions page', () => {
-  it('offers a chip per pending batch only when there are several, and selecting one posts its identity', () => {
+  it('lists every attempt in the selector beside the jump chips, and picking one posts its identity', () => {
     const page = load();
-    const batches = [
-      { stageId: 'plan', executionId: 'e1', count: 2 },
-      { stageId: null, executionId: 'e2', count: 1 },
+    const attempts = [
+      { stageId: 'plan', executionId: 'e1', attempt: 1, count: 2, status: 'pending' },
+      { stageId: 'plan', executionId: 'e0', attempt: 2, count: 1, status: 'answered' },
+      { stageId: null, executionId: 'e2', attempt: null, count: 1, status: 'superseded' },
     ];
-    const chips = (): FakeElement[] => page.doc.root.descendants().filter((node) => node.tagName === 'BUTTON' && node.className.startsWith('q-batch'));
-    page.deliver(1, model(1));
-    expect(chips()).toEqual([]);
-    page.deliverBatches(2, model(2), batches);
-    expect(chips().map((chip) => chip.textContent)).toEqual(['plan · 2', 'Role session · 1']);
-    expect(chips()[0]?.attrs['aria-current']).toBe('true');
-    chips()[1]?.click();
+    page.deliverAttempts(1, model(1), attempts);
+    const toolbar = page.doc.root.querySelector('.q-toolbar');
+    if (toolbar === null) throw new Error('no toolbar');
+    const [left, right] = toolbar.children as FakeElement[];
+    expect(left?.className).toBe('q-toolbar-attempt');
+    expect(right?.className).toBe('q-jumps');
+    const select = page.byId('attempt-select');
+    const options = select.children as FakeElement[];
+    expect(options.map((option) => option.textContent)).toEqual([
+      'plan - attempt 1',
+      'plan - attempt 2',
+      'Role session',
+    ]);
+    const isSelected = (option: FakeElement): boolean =>
+      (option as unknown as { selected?: boolean }).selected === true;
+    expect(options.map(isSelected)).toEqual([true, false, false]);
+    select.value = '/e2';
+    for (const handler of select.listeners.change ?? []) handler({ target: select });
     expect(page.posted.at(-1)).toMatchObject({
       type: 'intent',
       intent: 'selectBatch',
       batch: { stageId: null, executionId: 'e2' },
     });
+  });
+
+  it('redraws the selector when only the attempts change', () => {
+    const page = load();
+    page.deliver(1, model(1));
+    const before = page.byId('attempt-select');
+    page.deliverAttempts(2, model(2), [...ONE_ATTEMPT, { stageId: 'plan', executionId: 'e3', attempt: 2, count: 1, status: 'pending' }]);
+    expect(page.byId('attempt-select')).not.toBe(before);
+    expect(page.byId('attempt-select').children).toHaveLength(2);
+  });
+
+  it('shows an empty state when the session never asked a question', () => {
+    const page = load();
+    page.deliverAttempts(1, null, []);
+    expect(page.doc.root.querySelector('.q-toolbar')).toBeNull();
+    const empty = page.doc.root.descendants().find((node) => node.className === 'mg-empty-text');
+    expect(empty?.textContent).toBe('This session has not asked any questions.');
+  });
+
+  it('shows a recorded attempt read-only, with its answers and a checked jump chip per question', () => {
+    const page = load();
+    page.deliver(1, model(1, { state: 'recorded', editable: false, canSubmit: false, recorded: { '1': 'A. One', '2': 'B. Two' } }));
+    expect(page.byId('jump-1').className).toContain('q-jump--done');
+    expect(page.byId('qs-1').textContent).toBe('Sent');
+    const values = page.doc.root.descendants().filter((node) => node.className.startsWith('mg-kv-value'));
+    expect(values.map((node) => node.textContent)).toEqual(['A. One', 'B. Two']);
+    expect(page.doc.root.querySelector('footer')).toBeNull();
   });
 
 
@@ -304,13 +348,13 @@ describe('Questions page', () => {
     expect(page.byId('jump-1').className).toContain('q-jump--done');
   });
 
-  it('shows the shared session header with Questions, Overview, Metrics, Workflow and Task tabs', () => {
+  it('shows the shared session header with Overview, Questions, Metrics, Workflow and Task tabs', () => {
     const page = load();
     page.deliver(1, model(1));
     const tabs = page.doc.root.descendants().filter((node) => node.className === 'mg-tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Questions', 'Overview', 'Metrics', 'Workflow', 'Task']);
-    expect(tabs[0]?.attrs['aria-current']).toBe('page');
-    tabs[1]?.click();
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Overview', 'Questions3', 'Metrics', 'Workflow', 'Task']);
+    expect(tabs[1]?.attrs['aria-current']).toBe('page');
+    tabs[0]?.click();
     tabs[2]?.click();
     expect(page.posted.slice(-2)).toMatchObject([
       { type: 'intent', intent: 'selectTab', tab: 'overview' },
@@ -324,7 +368,6 @@ describe('Questions page', () => {
       'plan',
       '9m 48s',
       expect.stringMatching(/ ago$/),
-      '3 pending',
     ]);
     const banners = (): string[] =>
       page.doc.root
@@ -334,8 +377,8 @@ describe('Questions page', () => {
     expect(banners()).toEqual([]);
     page.deliver(2, model(2, { state: 'recorded', message: 'Answers recorded.', editable: false, canSubmit: false }));
     expect(banners()).toEqual(['mg-banner mg-banner--ok']);
-    // Once the answers are sent the page is a record: no jump chips and no footer.
-    expect(page.doc.root.descendants().some((node) => node.className === 'q-jumps')).toBe(false);
+    // Once the answers are sent the page is a record: the jump chips stay for navigation, the footer goes.
+    expect(page.doc.root.descendants().some((node) => node.className === 'q-jumps')).toBe(true);
     expect(page.doc.root.querySelector('footer')).toBeNull();
     // The session facts do not depend on the page's own state.
     const again = page.doc.root.descendants().filter((node) => node.className.includes('mg-meta-item'));

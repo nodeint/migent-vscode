@@ -53,24 +53,26 @@ function optionsFor(
  * The one way to open a Session page. Called with a tree node, a notification target or an explicit
  * `{ project, sessionId, tab?, stageId?, executionId? }`; it resolves the session afresh and opens the requested tab.
  * A request that names an execution opens on Questions; every other request opens on Overview.
+ * `migent.session.answer` is the same command on the Questions tab, for the Sessions view's Answer action.
  */
 export function registerSessionPageCommands(
   host: CommandHost,
   session: SessionPanels,
   nextStep: NextStepFlow,
 ): vscode.Disposable[] {
+  const open = async (arg: unknown, requested: Requested): Promise<void> => {
+    const resolved = await resolve(host, arg, text('prompts.openWhichSession'));
+    if (resolved === undefined) return;
+    const { context, snapshot, target } = resolved;
+    const executionId = requested.batch?.executionId ?? target?.executionId;
+    session.open({ project: context.key, sessionId: snapshot.sessionId }, optionsFor(snapshot, requested, executionId));
+  };
   return [
-    vscode.commands.registerCommand('migent.session.open', async (arg: unknown) => {
-      const requested = requestedFrom(arg);
-      const resolved = await resolve(host, arg, text('prompts.openWhichSession'));
-      if (resolved === undefined) return;
-      const { context, snapshot, target } = resolved;
-      const executionId = requested.batch?.executionId ?? target?.executionId;
-      session.open(
-        { project: context.key, sessionId: snapshot.sessionId },
-        optionsFor(snapshot, requested, executionId),
-      );
-    }),
+    vscode.commands.registerCommand('migent.session.open', (arg: unknown) => open(arg, requestedFrom(arg))),
+    // The Answer action of a session with pending questions: the same page, on the Questions tab.
+    vscode.commands.registerCommand('migent.session.answer', (arg: unknown) =>
+      open(arg, { ...requestedFrom(arg), tab: 'questions' }),
+    ),
     ...registerNextStepCommands(host, nextStep),
   ];
 }
