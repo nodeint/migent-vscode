@@ -398,7 +398,7 @@ const scenarios: Scenario[] = [
 
         writeAtomic(migentPath(root, 'sessions', 's1', 'status.json'), status('active', { latest_stage_id: 'implement' }));
         addSession(root, 's3', 'completed');
-        await waitFor('update visible', () => String(itemOf(env, sessionNode(env, 's1')).description).includes('implement'));
+        await waitFor('update visible', () => String(itemOf(env, sessionNode(env, 's1')).tooltip).includes('implement'));
         await waitFor('new session visible', () => env.project()?.store.snapshot('s3') !== undefined);
         await sleep(SETTLE_MS);
 
