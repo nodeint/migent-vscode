@@ -23,6 +23,8 @@ function execution(
     blocker: null,
     client: null,
     model: null,
+    effort: null,
+    error: null,
     hasFailureReport: false,
     kind: null,
     createdAt: null,

@@ -1,3 +1,4 @@
+import type { MetricsExecution } from './metrics';
 import type { ExecutionSnapshot } from './model';
 import type { SessionStagePlan } from './workflowStages';
 
@@ -16,8 +17,34 @@ export type ProgressState =
   | 'skipped'
   | 'unknown';
 
+/** Another attempt, named by its stage and attempt number. */
+export interface AttemptRef {
+  stage: string;
+  attempt: number;
+}
+
+/**
+ * What an attempt shows beyond its state: the model and effort it ran with, its blocker, its times, and the
+ * duration and tokens from `metrics.json`. Every field is null when the source does not say.
+ */
+export interface AttemptFacts {
+  model: string | null;
+  effort: string | null;
+  blocker: string | null;
+  /** The recorded failure reason and error; null when none. */
+  error: string | null;
+  createdAt: string | null;
+  wallSeconds: number | null;
+  /** Input plus output tokens; null unless metrics report at least one of them. */
+  tokens: number | null;
+  /** The earlier attempt this one resumed, when `metrics.json` names one that is in the session. */
+  resumes: AttemptRef | null;
+  /** The attempt whose decision routed to this one, when `metrics.json` names one that is in the session. */
+  routedFrom: AttemptRef | null;
+}
+
 /** One attempt of a stage, for the attempt history. */
-export interface StageAttempt {
+export interface StageAttempt extends AttemptFacts {
   /** The execution order in the session, so attempts of every stage sort in the order they ran. */
   order: number;
   attempt: number;
@@ -40,7 +67,7 @@ export interface StageProgressRow {
 }
 
 /** One execution, used for role sessions and workflows whose plan is unknown. */
-export interface ExecutionProgressRow {
+export interface ExecutionProgressRow extends AttemptFacts {
   executionId: string;
   stage: string;
   attempt: number;
@@ -63,6 +90,8 @@ export interface ProgressInput {
   runningStageIds: readonly string[];
   /** `status.json` `latest_execution_id`, used to find the latest running execution. */
   latestExecutionId: string | null;
+  /** `metrics.json` executions; absent for an old or running session, which then shows no duration or tokens. */
+  metrics?: readonly MetricsExecution[];
 }
 
 function stateOf(status: string | null): ProgressState {
@@ -98,7 +127,40 @@ function latestRunning(
   return lastMatching(executions, (execution) => execution.status === 'running');
 }
 
+function sum(values: readonly (number | null)[]): number | null {
+  const present = values.filter((value): value is number => value !== null);
+  return present.length === 0 ? null : present.reduce((total, value) => total + value, 0);
+}
+
+/** The facts of every execution by id, resolving `resumes` and `routed from` to named attempts. */
+function factsOf(
+  executions: readonly ExecutionSnapshot[],
+  metrics: readonly MetricsExecution[],
+): (execution: ExecutionSnapshot) => AttemptFacts {
+  const byId = new Map(executions.map((execution) => [execution.id, execution]));
+  const metricsById = new Map(metrics.map((entry) => [entry.id, entry]));
+  const refOf = (id: string | null | undefined): AttemptRef | null => {
+    const target = id === null || id === undefined ? undefined : byId.get(id);
+    return target === undefined ? null : { stage: target.stage, attempt: target.attempt };
+  };
+  return (execution) => {
+    const measured = metricsById.get(execution.id);
+    return {
+      model: execution.model,
+      effort: execution.effort,
+      blocker: execution.blocker,
+      error: execution.error,
+      createdAt: execution.createdAt,
+      wallSeconds: measured?.wallSeconds ?? null,
+      tokens: measured === undefined ? null : sum([measured.usage.inputTokens, measured.usage.outputTokens]),
+      resumes: refOf(measured?.resumesExecutionId),
+      routedFrom: refOf(measured?.routedFrom),
+    };
+  };
+}
+
 interface StageContext {
+  facts: (execution: ExecutionSnapshot) => AttemptFacts;
   executions: readonly ExecutionSnapshot[];
   runningStageIds: ReadonlySet<string>;
   running: ExecutionSnapshot | null;
@@ -123,6 +185,7 @@ function stageRow(id: string, context: StageContext): StageProgressRow {
         state: stateOf(execution.status),
         decision: execution.decision,
         completedAt: execution.completedAt,
+        ...context.facts(execution),
       })),
     completedAt: chosen?.completedAt ?? null,
     isCurrent:
@@ -142,6 +205,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
     (left, right) => left.order - right.order || (left.id < right.id ? -1 : 1),
   );
   const running = latestRunning(executions, input.latestExecutionId);
+  const facts = factsOf(executions, input.metrics ?? []);
 
   if (input.plan.kind !== 'ok' || input.plan.stages.length === 0) {
     return {
@@ -154,6 +218,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
         decision: execution.decision,
         completedAt: execution.completedAt,
         isCurrent: execution.id === running?.id,
+        ...facts(execution),
       })),
     };
   }
@@ -169,6 +234,6 @@ export function buildProgress(input: ProgressInput): SessionProgress {
   return {
     kind: 'stages',
     rows: [...input.plan.stages, ...extraStages].map((id) =>
-      stageRow(id, { executions, runningStageIds, running })),
+      stageRow(id, { facts, executions, runningStageIds, running })),
   };
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { listExecutions } from './executions';
+import type { MetricsExecution } from './metrics';
 import type { ExecutionSnapshot } from './model';
 import { buildProgress, type SessionProgress, type StageProgressRow } from './sessionProgress';
 import type { SessionStagePlan } from './workflowStages';
@@ -31,6 +32,8 @@ function execution(
     blocker: null,
     client: null,
     model: null,
+    effort: null,
+    error: null,
     hasFailureReport: false,
     kind: null,
     createdAt: null,
@@ -72,7 +75,7 @@ describe('buildProgress', () => {
       latestExecutionId: '0001-plan--attempt-01',
     });
 
-    expect(stagesOf(progress)).toEqual([
+    expect(stagesOf(progress)).toMatchObject([
       { id: 'plan', state: 'running', attempts: 1, decision: null, history: [{ order: 1, attempt: 1, state: 'running', decision: null, completedAt: null }], completedAt: null, isCurrent: true },
       { id: 'review', state: 'not-run', attempts: null, decision: null, history: [], completedAt: null, isCurrent: false },
     ]);
@@ -103,7 +106,7 @@ describe('buildProgress', () => {
       latestExecutionId: null,
     });
 
-    expect(stagesOf(progress)).toEqual([
+    expect(stagesOf(progress)).toMatchObject([
       { id: 'plan', state: 'completed', attempts: 1, decision: 'approved', history: [{ order: 1, attempt: 1, state: 'completed', decision: 'approved', completedAt: null }], completedAt: null, isCurrent: false },
     ]);
   });
@@ -212,4 +215,104 @@ describe('buildProgress', () => {
 
     expect(stagesOf(progress)[0]?.state).toBe('unknown');
   });
+
+describe('attempt facts', () => {
+  const usage = (inputTokens: number | null, outputTokens: number | null) => ({
+    inputTokens, outputTokens, reasoningTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null,
+  });
+  const measured = (id: string, extra: Partial<MetricsExecution>): MetricsExecution => ({
+    id,
+    order: Number(id.slice(0, 4)),
+    stageId: 'plan',
+    attempt: 1,
+    role: null,
+    client: null,
+    model: null,
+    status: 'completed',
+    decision: null,
+    createdAt: null,
+    completedAt: null,
+    wallSeconds: null,
+    verifySeconds: null,
+    turns: null,
+    usage: usage(null, null),
+    usageMissing: usage(null, null),
+    verify: null,
+    skipReason: null,
+    resumesExecutionId: null,
+    routedFrom: null,
+    ...extra,
+  });
+
+  it('carries model, effort, blocker and start time from the execution, and no figures without metrics.json', () => {
+    const plain = execution('0001-plan--attempt-01', 'plan', 1, 'blocked');
+    const progress = buildProgress({
+      executions: [{ ...plain, model: 'claude-sonnet-5-5', effort: 'medium', blocker: 'needs a token', error: 'verify failed: red', createdAt: '2026-11-01T10:00:00Z' }],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+    });
+    expect(stagesOf(progress)[0]?.history[0]).toMatchObject({
+      model: 'claude-sonnet-5-5',
+      effort: 'medium',
+      blocker: 'needs a token',
+      error: 'verify failed: red',
+      createdAt: '2026-11-01T10:00:00Z',
+      wallSeconds: null,
+      tokens: null,
+      resumes: null,
+      routedFrom: null,
+    });
+  });
+
+  it('takes duration and input plus output tokens from metrics, and names resumed and routed attempts that exist', () => {
+    const executions = [
+      execution('0001-plan--attempt-01', 'plan', 1, 'completed'),
+      execution('0002-review--attempt-01', 'review', 1, 'completed', 'revise'),
+      execution('0003-plan--attempt-02', 'plan', 2, 'completed'),
+    ];
+    const metrics = [
+      measured('0001-plan--attempt-01', { wallSeconds: 62, usage: usage(10, 5) }),
+      measured('0003-plan--attempt-02', {
+        wallSeconds: 220,
+        usage: usage(null, 7),
+        resumesExecutionId: '0001-plan--attempt-01',
+        routedFrom: '0002-review--attempt-01',
+      }),
+    ];
+    const rows = stagesOf(buildProgress({ executions, plan: plan(['plan', 'review']), runningStageIds: [], latestExecutionId: null, metrics }));
+    const [first, second] = rows[0]?.history ?? [];
+    expect(first).toMatchObject({ wallSeconds: 62, tokens: 15, resumes: null, routedFrom: null });
+    expect(second).toMatchObject({
+      wallSeconds: 220,
+      tokens: 7,
+      resumes: { stage: 'plan', attempt: 1 },
+      routedFrom: { stage: 'review', attempt: 1 },
+    });
+    // An execution metrics.json does not list keeps no figures.
+    expect(rows[1]?.history[0]).toMatchObject({ wallSeconds: null, tokens: null });
+  });
+
+  it('does not name an attempt that is not in the session, and keeps tokens null when none is reported', () => {
+    const progress = buildProgress({
+      executions: [execution('0001-plan--attempt-01', 'plan', 1, 'completed')],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+      metrics: [measured('0001-plan--attempt-01', { resumesExecutionId: '0009-gone--attempt-01', routedFrom: '0008-gone--attempt-01' })],
+    });
+    expect(stagesOf(progress)[0]?.history[0]).toMatchObject({ tokens: null, resumes: null, routedFrom: null });
+  });
+
+  it('gives the same facts to execution rows of a role session', () => {
+    const progress = buildProgress({
+      executions: [{ ...execution('0001-developer--attempt-01', 'developer', 1, 'completed'), model: 'm', effort: 'high' }],
+      plan: { kind: 'missing' },
+      runningStageIds: [],
+      latestExecutionId: null,
+      metrics: [measured('0001-developer--attempt-01', { wallSeconds: 5, usage: usage(1, 2) })],
+    });
+    expect(progress.kind === 'executions' ? progress.rows[0] : null).toMatchObject({ model: 'm', effort: 'high', wallSeconds: 5, tokens: 3 });
+  });
+});
 });

@@ -43,6 +43,31 @@ function outcomeFrom(record: Record<string, unknown> | null): Record<string, unk
   return isRecord(record?.outcome) ? record.outcome : {};
 }
 
+function effortFrom(record: Record<string, unknown> | null): string | null {
+  return isRecord(record?.options) ? str(record.options.effort) : null;
+}
+
+const CAUSE_MAX = 200;
+
+function clip(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const flat = value.replaceAll(/\s+/g, ' ').trim();
+  return flat.length > CAUSE_MAX ? `${flat.slice(0, CAUSE_MAX - 1)}…` : flat;
+}
+
+/**
+ * The CLI records `failure_reason` (such as `verify_failed`) and `error` at the top level of `execution.json`;
+ * an `outcome.error` or `outcome.message` is accepted too. The reason code is shown as words.
+ */
+export function executionCause(record: Record<string, unknown> | null): string | null {
+  const outcome = record !== null && isRecord(record.outcome) ? record.outcome : {};
+  const detail = clip(record?.error) ?? clip(outcome.error) ?? clip(outcome.message);
+  const reason = clip(record?.failure_reason) ?? clip(outcome.failure_reason);
+  const words = reason?.replaceAll('_', ' ') ?? null;
+  if (words !== null && detail !== null) return `${words}: ${detail}`;
+  return words ?? detail;
+}
+
 function stageFrom(record: Record<string, unknown> | null, parsed: ParsedExecutionId | null): string {
   return str(record?.stage_id) ?? parsed?.stageId ?? '';
 }
@@ -63,8 +88,10 @@ function summaryFrom(
     status: str(record?.status),
     decision: str(outcome.decision),
     blocker: str(outcome.blocker),
+    error: executionCause(record),
     client: str(record?.client),
     model: str(record?.model),
+    effort: effortFrom(record),
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
     kind: str(record?.kind),
     createdAt: str(record?.created_at),

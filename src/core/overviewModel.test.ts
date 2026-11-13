@@ -107,6 +107,8 @@ function execution(id: string, stage: string, status: string): ExecutionSnapshot
     blocker: null,
     client: null,
     model: null,
+    effort: null,
+    error: null,
     hasFailureReport: false,
     kind: null,
     createdAt: null,

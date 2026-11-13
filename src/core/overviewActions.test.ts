@@ -44,6 +44,8 @@ function execution(hasFailureReport: boolean): ExecutionSnapshot {
     blocker: null,
     client: null,
     model: null,
+    effort: null,
+    error: null,
     hasFailureReport,
     kind: null,
     createdAt: null,

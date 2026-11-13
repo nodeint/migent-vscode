@@ -163,6 +163,8 @@ describe('execution rows', () => {
     decision: 'approved',
     client: 'claude',
     model: 'sonnet',
+    effort: null,
+    error: null,
     hasFailureReport: false,
     blocker: null,
     kind: null,

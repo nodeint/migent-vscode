@@ -280,6 +280,33 @@ describe('UI kit builders', () => {
     expect(card.descendants().some((node) => node.tagName === 'BUTTON')).toBe(false);
   });
 
+  it('timeline composes as ui.timeline with item, marker, head, sub and note, and skips empty parts', () => {
+    const { ui } = load();
+    const find = (root: FakeElement, name: string): FakeElement | undefined =>
+      root.descendants().find((node) => node.className.split(' ').includes(name));
+    type Part = (...args: unknown[]) => FakeElement | null;
+    const timeline = ui.timeline as unknown as ((items: FakeElement[]) => FakeElement) & Record<string, Part>;
+    const item = timeline.item(
+      { marker: timeline.marker({ icon: 'pass', tone: 'ok', text: 'Completed' }, { tip: 'Completed · now' }), tone: 'info' },
+      [timeline.head(['plan', '#1'], ['1m 2s']), timeline.sub(['claude-opus-5-5', '', 'high']), timeline.note(null)],
+    ) as FakeElement;
+    const list = timeline([item]);
+    expect(list.tagName).toBe('UL');
+    expect(list.className).toBe('mg-tl');
+    expect(item.tagName).toBe('LI');
+    expect(item.className).toBe('mg-tl-item mg-tl-item--info');
+    const dot = find(item, 'mg-status');
+    expect(dot?.className).toBe('mg-status mg-status--ok mg-status--compact');
+    expect(dot?.attrs['data-tip']).toBe('Completed · now');
+    expect(dot && find(dot, 'mg-visually-hidden')?.textContent).toBe('Completed');
+    expect(find(item, 'mg-tl-main')?.textContent).toBe('plan#1');
+    expect(find(item, 'mg-tl-meta')?.textContent).toBe('1m 2s');
+    expect(find(item, 'mg-tl-sub')?.textContent).toBe('claude-opus-5-5 · high');
+    expect(find(item, 'mg-tl-note')).toBeUndefined();
+    expect(timeline.sub([])).toBeNull();
+    expect(timeline.note('')).toBeNull();
+  });
+
   it('itemCard link: one button holds everything, the chevron is last, and tools are ignored', () => {
     const { ui } = load();
     let clicked = 0;

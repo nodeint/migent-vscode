@@ -1,5 +1,5 @@
-// Progress and Latest activity of the Overview tab. Progress is a flat list of static rows (no control, no intent):
-// one per attempt of every stage, in the order they ran, then the stages that never ran. The shared kit in media/shared
+// Progress and Latest activity of the Overview tab. Progress is a timeline (no control, no intent): one entry per
+// attempt of every stage, in the order they ran, then the stages that never ran. The shared kit in media/shared
 // loads first; this file loads after `overviewCopy.js`.
 (function () {
   'use strict';
@@ -23,61 +23,105 @@
     return badge;
   }
 
-  function timeNode(iso) {
-    const described = utils.describeTime(iso);
-    if (described === null) return null;
-    const node = el('span', described.text);
-    node.setAttribute('data-tip', described.title);
-    return node;
+  const tokenFormat = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+  function isNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value);
   }
 
-  /** The quiet meta of a row: the attempt (only when more than one), the decision badge and the time. */
-  function metaOf(attempts, decision, completedAt) {
-    const meta = [];
-    if (attempts !== null && attempts > 1) meta.push(text.progress.attempt(attempts));
-    if (decision !== null) meta.push(decisionBadge(decision));
-    const time = timeNode(completedAt);
-    if (time !== null) meta.push(time);
-    return meta;
+  function durationText(seconds) {
+    return isNumber(seconds) ? utils.formatDuration(seconds * 1000) : null;
+  }
+
+  function tokenText(tokens) {
+    return isNumber(tokens) ? text.progress.tokens(tokenFormat.format(tokens).replace('K', 'k')) : null;
+  }
+
+  /** The time and token figures of one attempt, as the quiet meta on the right; each is left out when unknown. */
+  function figuresOf(entry) {
+    return [durationText(entry.wallSeconds), tokenText(entry.tokens)].filter((part) => part !== null);
+  }
+
+  function reasonOf(entry) {
+    const reasons = [];
+    if (entry.resumes) reasons.push(text.progress.resumes(entry.resumes.stage, entry.resumes.attempt));
+    if (entry.routedFrom) reasons.push(text.progress.routedFrom(entry.routedFrom.stage, entry.routedFrom.attempt));
+    return reasons;
+  }
+
+  /** The marker tooltip: the state name and the absolute times; the state name also reaches assistive technology. */
+  function markerTip(status, entry) {
+    const parts = [status.text];
+    const started = entry.createdAt ? utils.describeTime(entry.createdAt) : null;
+    const finished = entry.completedAt ? utils.describeTime(entry.completedAt) : null;
+    if (started !== null) parts.push(text.progress.started(started.title));
+    if (finished !== null) parts.push(text.progress.finished(finished.title));
+    return parts.join(' · ');
   }
 
   /**
-   * The stage rows in the order they ran: one per attempt of every stage, sorted by execution order (the attempt is
-   * named only when its stage has several), then one row for each stage that never ran, in workflow order. The current
-   * stage tones its latest attempt.
+   * One ran attempt as a timeline entry: the dot (state), the stage with its number, decision and reason, the
+   * duration and tokens, then the model and effort and a blocker when there is one.
    */
-  function stageCards(rows) {
+  function attemptItem(entry, name, tone) {
+    const status = statusOf(entry.state);
+    const main = [name, text.progress.attemptNumber(entry.attempt)];
+    if (entry.decision !== null && entry.decision !== undefined) main.push(decisionBadge(entry.decision));
+    const reasons = reasonOf(entry);
+    if (reasons.length > 0) main.push(reasons.join(' '));
+    return ui.timeline.item({ marker: ui.timeline.marker(status, { tip: markerTip(status, entry) }), tone }, [
+      ui.timeline.head(main, figuresOf(entry)),
+      ui.timeline.sub([entry.model, entry.effort]),
+      ui.timeline.note(entry.blocker),
+      ui.timeline.note(entry.error),
+    ]);
+  }
+
+  /** A stage that never ran: an empty dot and muted text. */
+  function notRunItem(row) {
+    const status = statusOf(row.state);
+    return ui.timeline.item({ marker: ui.timeline.marker(status), tone: 'muted' }, [ui.timeline.head([row.id])]);
+  }
+
+  /**
+   * The attempts in the order they ran (by execution order), then the stages that never ran in workflow order. The
+   * current stage tones its latest attempt. Returns the entries and the attempts they show.
+   */
+  function stageItems(rows) {
     const ran = [];
     const notRun = [];
     for (const row of rows) {
-      const tone = row.isCurrent ? 'info' : undefined;
       if (row.history.length === 0) {
-        notRun.push(ui.itemCard({ title: row.id, meta: metaOf(row.attempts, row.decision, row.completedAt), status: statusOf(row.state), tone }));
+        notRun.push(notRunItem(row));
         continue;
       }
-      const several = row.history.length > 1;
       const last = row.history.length - 1;
       row.history.forEach((entry, index) => ran.push({
         order: entry.order,
-        card: ui.itemCard({
-          title: row.id,
-          meta: [...(several ? [text.progress.attempt(entry.attempt)] : []), ...metaOf(null, entry.decision, entry.completedAt)],
-          status: statusOf(entry.state),
-          tone: index === last ? tone : undefined,
-        }),
+        entry,
+        item: attemptItem(entry, row.id, row.isCurrent && index === last ? 'info' : undefined),
       }));
     }
     ran.sort((left, right) => left.order - right.order);
-    return [...ran.map((entry) => entry.card), ...notRun];
+    return { items: [...ran.map((one) => one.item), ...notRun], attempts: ran.map((one) => one.entry) };
   }
 
-  function executionCard(row) {
-    return ui.itemCard({
-      title: row.stage || row.executionId,
-      meta: [text.progress.attempt(row.attempt), ...metaOf(null, row.decision, row.completedAt)],
-      status: statusOf(row.state),
-      tone: row.isCurrent ? 'info' : undefined,
-    });
+  function executionItems(rows) {
+    return {
+      items: rows.map((row) => attemptItem(row, row.stage || row.executionId, row.isCurrent ? 'info' : undefined)),
+      attempts: rows,
+    };
+  }
+
+  function sumOf(attempts, field) {
+    const known = attempts.map((entry) => entry[field]).filter(isNumber);
+    return known.length === 0 ? null : known.reduce((total, value) => total + value, 0);
+  }
+
+  /** The section head's trailing totals, left out when no attempt reports them. */
+  function totalsNode(attempts) {
+    const parts = figuresOf({ wallSeconds: sumOf(attempts, 'wallSeconds'), tokens: sumOf(attempts, 'tokens') });
+    return parts.length === 0 ? null : el('span', parts.join(' · '), 'mg-muted');
   }
 
   function renderProgress(model) {
@@ -88,11 +132,13 @@
         children: [ui.empty(text.progress.empty)],
       });
     }
-    const cards = progress.kind === 'stages' ? stageCards(progress.rows) : progress.rows.map(executionCard);
-    const children = cards.length === 0 ? [ui.empty(text.progress.empty)] : [ui.stack(cards, { gap: 'card' })];
+    const built = progress.kind === 'stages' ? stageItems(progress.rows) : executionItems(progress.rows);
+    const children = built.items.length === 0 ? [ui.empty(text.progress.empty)] : [ui.timeline(built.items)];
+    const totals = totalsNode(built.attempts);
     return ui.section(text.progress.title, {
       note: progress.kind === 'stages' ? text.progress.note : text.progress.roleNote,
-      count: cards.length >= 2 ? String(cards.length) : undefined,
+      count: built.attempts.length >= 1 ? text.progress.attempts(built.attempts.length) : undefined,
+      actions: totals === null ? undefined : [totals],
       children,
     });
   }

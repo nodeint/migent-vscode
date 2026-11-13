@@ -72,6 +72,17 @@
       roleNote: 'Executions of this role session.',
       empty: 'No stages or executions to list.',
       attempt: (count) => 'attempt ' + count,
+      /** The short attempt number of a timeline entry. */
+      attemptNumber: (count) => '#' + count,
+      /** The count in the section head. */
+      attempts: (count) => count + (count === 1 ? ' attempt' : ' attempts'),
+      /** Why an attempt ran, only when `metrics.json` names the attempt it came from. */
+      resumes: (stage, attempt) => '← resumes ' + stage + ' #' + attempt,
+      routedFrom: (stage, attempt) => '← routed from ' + stage + ' #' + attempt,
+      tokens: (count) => count + ' tok',
+      /** The marker's tooltip: the state, then the absolute times that are known. */
+      started: (time) => 'started ' + time,
+      finished: (time) => 'finished ' + time,
       /** The tooltip of a decision badge. */
       decision: (decision) => 'decision ' + decision,
       /** The state of a stage or execution row. */

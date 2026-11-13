@@ -748,6 +748,73 @@
     return header;
   }
 
+  // ---------- timeline ----------
+
+  /**
+   * A vertical timeline: a list whose items hang on a rail, each with a status dot, no frame of its own. Parts compose
+   * under the root as `timeline.item`, `timeline.marker`, `timeline.head`, `timeline.sub` and `timeline.note`; the kit
+   * owns the rail, dot, spacing and typography of each slot, the page owns the content. `items` are `timeline.item`
+   * nodes.
+   */
+  function timeline(items) {
+    const list = el('ul', null, 'mg-tl');
+    for (const item of items || []) list.append(item);
+    return list;
+  }
+
+  /**
+   * One entry: `options.marker` (a `timeline.marker`), `options.tone` (`info` marks the current entry, `muted` one that
+   * has not happened) and `children`, any nodes (nulls are skipped), stacked beside the marker.
+   */
+  timeline.item = function item(options, children) {
+    const settings = options || {};
+    const node = el('li', null, 'mg-tl-item' + (settings.tone ? ' mg-tl-item--' + settings.tone : ''));
+    const marker = settings.marker || el('span', null, 'mg-tl-marker');
+    node.append(marker);
+    const body = el('div', null, 'mg-tl-body');
+    for (const child of children || []) if (child) body.append(child);
+    node.append(body);
+    return node;
+  };
+
+  /** The dot: a compact `statusIndicator` for `state`; `options.tip` replaces its tooltip (the name stays for readers). */
+  timeline.marker = function marker(state, options) {
+    const node = el('span', null, 'mg-tl-marker');
+    const dot = statusIndicator({ ...state, compact: true });
+    if (options && options.tip) dot.setAttribute('data-tip', options.tip);
+    node.append(dot);
+    return node;
+  };
+
+  /** The main line: `main` (strings or nodes) wraps on the left, `meta` (nodes) stays together on the right. */
+  timeline.head = function head(main, meta) {
+    const node = el('div', null, 'mg-tl-head');
+    const left = el('span', null, 'mg-tl-main');
+    for (const part of main || []) if (part) left.append(typeof part === 'string' ? el('span', part) : part);
+    node.append(left);
+    const right = (meta || []).filter(Boolean);
+    if (right.length > 0) {
+      const end = el('span', null, 'mg-tl-meta');
+      for (const part of right) end.append(typeof part === 'string' ? el('span', part) : part);
+      node.append(end);
+    }
+    return node;
+  };
+
+  /** The quiet mono line under the head: `parts` (strings; empty ones dropped) joined by a dot, cut with an ellipsis. */
+  timeline.sub = function sub(parts) {
+    const kept = (parts || []).filter((part) => typeof part === 'string' && part !== '');
+    if (kept.length === 0) return null;
+    const node = el('div', kept.join(' · '), 'mg-tl-sub');
+    node.setAttribute('data-tip', node.textContent);
+    return node;
+  };
+
+  /** A note under the entry (a blocker or an error); null when there is no text. */
+  timeline.note = function note(message) {
+    return message ? el('p', message, 'mg-tl-note') : null;
+  };
+
   // ---------- sections ----------
 
   /** A section heading: title, an optional count chip, a note and trailing actions. */
@@ -877,6 +944,7 @@
     keyValues,
     details,
     itemCard,
+    timeline,
     collapsibleCard,
     menuButton,
     pageTabs,
