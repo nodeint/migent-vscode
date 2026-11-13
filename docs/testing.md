@@ -124,8 +124,13 @@ follows without changing focus or opening another panel. The pickers are driven 
 
 The Overview page's pure parts have their own tests: `sessionSummary.test.ts` derives the Status facts,
 `overviewActions.test.ts` holds the state action table, `sessionProgress.test.ts` maps stages or executions to
-rows, `sessionActivity.test.ts` bounds and formats the activity lines, and `overviewModel.test.ts` composes them
-without reading disk. `overviewPage.test.ts` renders the fixed block order against the fake DOM.
+rows (with each attempt's model, effort, blocker, error, duration, separate usage fields, why it ran, whether it asked
+a question and the section totals, and none of the metrics figures without `metrics.json`), `executions.test.ts` also
+covers `turn_kind`, `outcome.status` and the codex effort key,
+`sessionActivity.test.ts` bounds and formats the activity lines, and
+`overviewModel.test.ts` composes them without reading disk. `overviewPage.test.ts` renders the fixed block order
+and the Progress timeline against the fake DOM (usage format, tooltips, the asked marker, run-reason labels and
+the header totals), and `uiKit.test.ts` covers the `ui.timeline` parts.
 
 `nextStep.integration.test.ts` drives the Next step flow through the fixture CLI, which records
 `prior_session_id` and logs the argv of `session run` and `session prepare`. It covers one child from concurrent

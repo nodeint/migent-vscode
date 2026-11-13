@@ -128,13 +128,13 @@
     page = host;
     const progress = window.MigentSessionOverviewProgress;
     const results = window.MigentSessionResults.sections(model, page);
-    // The one section order: Status, Progress, Latest activity, Outputs, Next steps, Child sessions, then the Details grid of the source session (no section).
+    // The one section order: Status, Outputs, Next steps, Progress, Latest activity, Child sessions, then the Details grid of the source session (no section).
     const parts = [
       renderStatus(model),
-      progress.renderProgress(model),
-      progress.renderActivity(model),
       results.outputs,
       results.next,
+      progress.renderProgress(model),
+      progress.renderActivity(model),
       results.children,
       results.fromSession,
     ].filter((part) => part !== null);

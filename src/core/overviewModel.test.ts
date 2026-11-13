@@ -107,6 +107,10 @@ function execution(id: string, stage: string, status: string): ExecutionSnapshot
     blocker: null,
     client: null,
     model: null,
+    effort: null,
+    turnKind: null,
+    outcomeStatus: null,
+    error: null,
     hasFailureReport: false,
     kind: null,
     createdAt: null,
@@ -121,7 +125,11 @@ describe('buildOverviewModel', () => {
 
     expect(model).toMatchObject(buildResultsModel(input));
     expect(model.summary.state).toBe('completed');
-    expect(model.progress).toEqual({ kind: 'executions', rows: [] });
+    expect(model.progress).toEqual({
+      kind: 'executions',
+      rows: [],
+      totals: { activeSeconds: null, wallSeconds: null, usage: null, costMissing: 0 },
+    });
     expect(model.activity).toEqual({ visible: false });
     expect(model.actions).toEqual({ primary: null, secondary: [] });
   });

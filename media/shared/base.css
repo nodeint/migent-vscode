@@ -1469,6 +1469,129 @@ select.mg-select:disabled {
   }
 }
 
+/* Timeline: a vertical list on a rail. Each entry has a status dot in the first column and its content beside it; the
+   rail runs from under the dot to the next entry and is absent on the last. Nothing is framed. */
+.mg-tl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mg-tl-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: var(--mg-space-2);
+  padding-bottom: var(--mg-space-4);
+}
+
+.mg-tl-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 20px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--vscode-editorWidget-border, var(--vscode-panel-border, currentColor));
+}
+
+.mg-tl-item:last-child {
+  padding-bottom: 0;
+}
+
+.mg-tl-marker {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 20px;
+}
+
+.mg-tl-body {
+  min-width: 0;
+}
+
+.mg-tl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--mg-space-3);
+  min-height: 20px;
+}
+
+.mg-tl-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--mg-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mg-tl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--mg-space-2);
+  color: var(--mg-muted);
+  white-space: nowrap;
+}
+
+.mg-tl-subline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--mg-space-3);
+  margin-top: 2px;
+  font-family: var(--mg-mono);
+  color: var(--mg-muted);
+}
+
+.mg-tl-sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The trailing cluster sits right-aligned beside the model; when it does not fit it drops to its own line, and when
+   that line is still too narrow it wraps between figures instead of being cut or scrolling sideways. */
+.mg-tl-sub-end {
+  margin-left: auto;
+  max-width: 100%;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.mg-tl-sep {
+  opacity: 0.6;
+}
+
+/* The Progress header totals: the times above the usage cluster, both right-aligned. */
+.mg-tl-totals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--mg-muted);
+}
+
+.mg-tl-note {
+  margin: 2px 0 0;
+  color: var(--mg-muted);
+  overflow-wrap: anywhere;
+}
+
+.mg-tl-item--info .mg-tl-main {
+  font-weight: 600;
+}
+
+.mg-tl-item--muted .mg-tl-main {
+  color: var(--mg-muted);
+}
+
 /* Item card: one bordered item across every page. The head is one row: an optional index badge or leading icon, the
    main region (title, alerts, meta), and an end slot for status and tools. The main region is the only part that is
    cut or clamped, and the end slot never shrinks. Modes: a plain div (`--static`), a whole-head button (`--link`),

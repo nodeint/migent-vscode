@@ -748,9 +748,117 @@
     return header;
   }
 
+  // ---------- timeline ----------
+
+  /**
+   * A vertical timeline: a list whose items hang on a rail, each with a status dot, no frame of its own. Parts compose
+   * under the root as `timeline.item`, `timeline.marker`, `timeline.head`, `timeline.sub` and `timeline.note`; the kit
+   * owns the rail, dot, spacing and typography of each slot, the page owns the content. `items` are `timeline.item`
+   * nodes.
+   */
+  function timeline(items) {
+    const list = el('ul', null, 'mg-tl');
+    for (const item of items || []) list.append(item);
+    return list;
+  }
+
+  /**
+   * One entry: `options.marker` (a `timeline.marker`), `options.tone` (`info` marks the current entry, `muted` one that
+   * has not happened) and `children`, any nodes (nulls are skipped), stacked beside the marker.
+   */
+  timeline.item = function item(options, children) {
+    const settings = options || {};
+    const node = el('li', null, 'mg-tl-item' + (settings.tone ? ' mg-tl-item--' + settings.tone : ''));
+    const marker = settings.marker || el('span', null, 'mg-tl-marker');
+    node.append(marker);
+    const body = el('div', null, 'mg-tl-body');
+    for (const child of children || []) if (child) body.append(child);
+    node.append(body);
+    return node;
+  };
+
+  /** The dot: a compact `statusIndicator` for `state`; `options.tip` replaces its tooltip (the name stays for readers). */
+  timeline.marker = function marker(state, options) {
+    const node = el('span', null, 'mg-tl-marker');
+    const dot = statusIndicator({ ...state, compact: true });
+    if (options && options.tip) dot.setAttribute('data-tip', options.tip);
+    node.append(dot);
+    return node;
+  };
+
+  /** The main line: `main` (strings or nodes) wraps on the left, `meta` (nodes) stays together on the right. */
+  timeline.head = function head(main, meta) {
+    const node = el('div', null, 'mg-tl-head');
+    const left = el('span', null, 'mg-tl-main');
+    for (const part of main || []) if (part) left.append(typeof part === 'string' ? el('span', part) : part);
+    node.append(left);
+    const right = (meta || []).filter(Boolean);
+    if (right.length > 0) {
+      const end = el('span', null, 'mg-tl-meta');
+      for (const part of right) end.append(typeof part === 'string' ? el('span', part) : part);
+      node.append(end);
+    }
+    return node;
+  };
+
+  /**
+   * The quiet line under the head: `parts` (strings or nodes; empty ones dropped) joined by a dot on the left, cut with an
+   * ellipsis, and `end` (a node, optional) right-aligned. On a narrow panel `end` drops to its own line. Null when
+   * both are empty. The line has no tooltip of its own.
+   */
+  timeline.sub = function sub(parts, end) {
+    const kept = (parts || []).filter((part) => (typeof part === 'string' ? part !== '' : Boolean(part)));
+    if (kept.length === 0 && !end) return null;
+    const node = el('div', null, 'mg-tl-subline');
+    if (kept.length > 0) {
+      const left = el('span', null, 'mg-tl-sub');
+      kept.forEach((part, index) => {
+        if (index > 0) left.append(el('span', ' · '));
+        left.append(typeof part === 'string' ? el('span', part) : part);
+      });
+      node.append(left);
+    }
+    if (end) {
+      end.classList.add('mg-tl-sub-end');
+      node.append(end);
+    }
+    return node;
+  };
+
+  /**
+   * A cluster of figures: `groups` is a list of lists of strings or nodes. Figures within a group are joined by a dot,
+   * groups by a bar; empty groups are dropped. Null when nothing is left. Pass it to `timeline.sub` or `timeline.totals`.
+   */
+  timeline.figures = function figures(groups) {
+    const node = el('span', null);
+    (groups || []).map((group) => (group || []).filter(Boolean)).filter((group) => group.length > 0)
+      .forEach((group, groupIndex) => {
+        if (groupIndex > 0) node.append(el('span', ' | ', 'mg-tl-sep'));
+        group.forEach((part, index) => {
+          if (index > 0) node.append(el('span', ' · ', 'mg-tl-sep'));
+          node.append(typeof part === 'string' ? el('span', part) : part);
+        });
+      });
+    return node.children.length === 0 ? null : node;
+  };
+
+  /** The right-aligned lines of figures for a section head's actions; `lines` are nodes, nulls are skipped. */
+  timeline.totals = function totals(lines) {
+    const kept = (lines || []).filter(Boolean);
+    if (kept.length === 0) return null;
+    const node = el('span', null, 'mg-tl-totals');
+    for (const line of kept) node.append(line);
+    return node;
+  };
+
+  /** A note under the entry (a blocker or an error); null when there is no text. */
+  timeline.note = function note(message) {
+    return message ? el('p', message, 'mg-tl-note') : null;
+  };
+
   // ---------- sections ----------
 
-  /** A section heading: title, an optional count chip, a note and trailing actions. */
+  /** A section heading: title, an optional count chip, a note (text or a node) and trailing actions. */
   function sectionHead(title, options) {
     const settings = options || {};
     const head = el('div', null, 'mg-section-head');
@@ -759,7 +867,12 @@
     row.append(el(settings.level === 3 ? 'h3' : 'h2', title, 'mg-section-title'));
     if (settings.count) row.append(chip(settings.count));
     body.append(row);
-    if (settings.note) body.append(el('p', settings.note, 'mg-section-note'));
+    if (typeof settings.note === 'string') body.append(el('p', settings.note, 'mg-section-note'));
+    else if (settings.note) {
+      const note = el('p', null, 'mg-section-note');
+      note.append(settings.note);
+      body.append(note);
+    }
     head.append(body);
     const actions = el('div', null, 'mg-section-actions');
     for (const action of settings.actions || []) actions.append(action);
@@ -877,6 +990,7 @@
     keyValues,
     details,
     itemCard,
+    timeline,
     collapsibleCard,
     menuButton,
     pageTabs,

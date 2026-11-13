@@ -2,6 +2,7 @@ import type { AnswerModel } from '../../core/answerModel';
 import { buildAnswerModel } from '../../core/answerModel';
 import { readRecentEvents } from '../../core/eventTail';
 import { listExecutions } from '../../core/executions';
+import { readMetrics } from '../../core/metrics';
 import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
 import { eventsPath, sessionDir } from '../../core/paths';
 import { attemptRecords, type QuestionAttempt, questionAttempts } from '../../core/questionHistory';
@@ -86,6 +87,11 @@ export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): 
   if (context !== undefined && snapshot !== undefined) {
     input.executions = listExecutions(input.sessionDirPath);
     input.plan = readSessionStagePlan(context.root, entry.sessionId);
+    const metrics = readMetrics(input.sessionDirPath);
+    if (metrics.kind === 'ok') {
+      input.metrics = metrics.metrics.executions;
+      input.wallSeconds = metrics.metrics.totals.wallSeconds;
+    }
     if (snapshot.displayState.state === 'running') {
       input.events = readRecentEvents(eventsPath(context.root, entry.sessionId), OVERVIEW_ACTIVITY_LIMIT);
     }

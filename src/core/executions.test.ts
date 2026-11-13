@@ -95,6 +95,78 @@ describe('listExecutions', () => {
     ]);
   });
 
+  it('reads options.effort, and null when absent or not a string', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, record] of [
+      ['0001-a--attempt-01', { options: { effort: 'high' } }],
+      ['0002-b--attempt-01', { options: {} }],
+      ['0003-c--attempt-01', { options: { effort: 3 } }],
+      ['0004-d--attempt-01', { options: 'high' }],
+      ['0005-e--attempt-01', {}],
+    ] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify(record));
+    }
+    expect(listExecutions(dir).map((execution) => execution.effort)).toEqual(['high', null, null, null, null]);
+  });
+
+  it('reads codex model_reasoning_effort when options.effort is absent, and prefers options.effort', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, record] of [
+      ['0001-a--attempt-01', { options: { model_reasoning_effort: 'medium' } }],
+      ['0002-b--attempt-01', { options: { effort: 'high', model_reasoning_effort: 'low' } }],
+      ['0003-c--attempt-01', { options: { model_reasoning_effort: 7 } }],
+    ] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify(record));
+    }
+    expect(listExecutions(dir).map((execution) => execution.effort)).toEqual(['medium', 'high', null]);
+  });
+
+  it('reads turn_kind and outcome.status, and null when absent or not a string', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, record] of [
+      ['0001-a--attempt-01', { turn_kind: 'answers', outcome: { status: 'question' } }],
+      ['0002-b--attempt-01', { turn_kind: 'continue', outcome: { status: 'complete' } }],
+      ['0003-c--attempt-01', { turn_kind: 4, outcome: { status: false } }],
+      ['0004-d--attempt-01', {}],
+    ] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify(record));
+    }
+    expect(listExecutions(dir).map((execution) => [execution.turnKind, execution.outcomeStatus])).toEqual([
+      ['answers', 'question'],
+      ['continue', 'complete'],
+      [null, null],
+      [null, null],
+    ]);
+  });
+
+  it('reads the recorded failure reason and error as one cause, and null when none is recorded', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
+    temps.push(dir);
+    for (const [id, record] of [
+      ['0001-a--attempt-01', { failure_reason: 'verify_failed', error: 'tests  red' }],
+      ['0002-b--attempt-01', { outcome: { message: 'bad handoff' } }],
+      ['0003-c--attempt-01', { outcome: { status: 'error' } }],
+    ] as const) {
+      const executionDir = path.join(dir, 'executions', id);
+      mkdirSync(executionDir, { recursive: true });
+      writeFileSync(path.join(executionDir, 'execution.json'), JSON.stringify(record));
+    }
+    expect(listExecutions(dir).map((execution) => execution.error)).toEqual([
+      'verify failed: tests red',
+      'bad handoff',
+      null,
+    ]);
+  });
+
   it('flags an execution that wrote failure.md, and only that one', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-execs-'));
     temps.push(dir);

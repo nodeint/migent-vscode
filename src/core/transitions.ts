@@ -1,10 +1,9 @@
 import path from 'node:path';
 
 import { type ExecutionFile, listExecutionFiles } from './executionFiles';
-import { readExecution } from './executions';
+import { executionCause, readExecution } from './executions';
 import type { SessionSnapshot } from './model';
 import { EXECUTIONS_DIRNAME } from './paths';
-import { isRecord } from './record';
 import { blockedTargets, blockKind } from './replyFlow';
 
 /** State-transition notifications (plans/03c-reply-notifications.md §3). No `vscode` import. */
@@ -88,27 +87,6 @@ export function failureButtons(details: FailureDetails | undefined): FailureActi
   ];
 }
 
-const CAUSE_MAX = 200;
-
-function clip(value: unknown): string | null {
-  if (typeof value !== 'string' || value.trim() === '') return null;
-  const flat = value.replaceAll(/\s+/g, ' ').trim();
-  return flat.length > CAUSE_MAX ? `${flat.slice(0, CAUSE_MAX - 1)}…` : flat;
-}
-
-/**
- * The CLI records `failure_reason` (such as `verify_failed`) and `error` at the top level of `execution.json`;
- * an `outcome.error` or `outcome.message` is accepted too. The reason code is shown as words.
- */
-function causeOf(record: Record<string, unknown> | null): string | null {
-  const outcome = record !== null && isRecord(record.outcome) ? record.outcome : {};
-  const detail = clip(record?.error) ?? clip(outcome.error) ?? clip(outcome.message);
-  const reason = clip(record?.failure_reason) ?? clip(outcome.failure_reason);
-  const words = reason?.replaceAll('_', ' ') ?? null;
-  if (words !== null && detail !== null) return `${words}: ${detail}`;
-  return words ?? detail;
-}
-
 /** The file a failure points at: verify output, else `handoff.json` for an invalid handoff, else the response. */
 function failureFile(files: readonly ExecutionFile[], reason: string): FailureDetails['file'] {
   const verify = files.filter((file) => file.kind === 'verify').at(-1);
@@ -131,7 +109,7 @@ export function failureDetails(sessionDir: string, executionId: string | null): 
   }
   const dir = path.join(sessionDir, EXECUTIONS_DIRNAME, executionId);
   const record = readExecution(dir);
-  const cause = causeOf(record);
+  const cause = executionCause(record);
   const { files } = listExecutionFiles(dir);
   const failureReport = files.find((file) => file.kind === 'failure')?.absolutePath ?? null;
   const reason = typeof record?.failure_reason === 'string' ? record.failure_reason : '';
