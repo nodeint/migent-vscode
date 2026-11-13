@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../core/model';
-import { sessionDescription, sessionLabel } from '../core/sessionPresentation';
+import { sessionDescription, sessionRowLabel } from '../core/sessionPresentation';
 import { text } from '../text';
 import type { ProjectContext, ProjectRegistry } from './projects';
 
@@ -46,7 +46,7 @@ export async function pickSession(
   const now = Date.now();
   const picked = await vscode.window.showQuickPick(
     snapshots.map((snapshot) => ({
-      label: sessionLabel(snapshot),
+      label: sessionRowLabel(snapshot),
       description: sessionDescription(snapshot, now),
       detail: text('prompts.sessionDetail', { state: snapshot.displayState.state, id: snapshot.sessionId }),
       snapshot,

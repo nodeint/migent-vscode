@@ -16,7 +16,7 @@ import {
   sessionContextValue,
   sessionDescription,
   sessionIcon,
-  sessionLabel,
+  sessionRowLabel,
   sessionTooltip,
 } from '../../core/sessionPresentation';
 import { type WatchTarget, watchTargetKey } from '../../core/watchPlan';
@@ -403,7 +403,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     const snapshot = context?.store.snapshot(node.sessionId);
     if (snapshot === undefined) return new vscode.TreeItem(node.sessionId, vscode.TreeItemCollapsibleState.None);
     const now = this.#now();
-    const item = new vscode.TreeItem(sessionLabel(snapshot), vscode.TreeItemCollapsibleState.Collapsed);
+    const item = new vscode.TreeItem(sessionRowLabel(snapshot), vscode.TreeItemCollapsibleState.Collapsed);
     item.description = sessionDescription(snapshot, now);
     item.tooltip = sessionTooltip(snapshot, now);
     item.iconPath = icon(sessionIcon(snapshot), STATE_COLORS[snapshot.displayState.state]);

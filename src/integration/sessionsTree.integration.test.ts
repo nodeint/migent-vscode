@@ -171,14 +171,13 @@ const scenarios: Scenario[] = [
       await waitForSessions(env, ['running', 'completed', 'failed', 'blocked', 'stopped', 'asking', 'broken', 'future']);
 
       const groups = children(env);
-      assert.deepEqual(labelsOf(env, groups), ['Running', 'Needs attention', 'Recent']);
+      assert.deepEqual(labelsOf(env, groups.slice(0, 2)), ['Running', 'Needs attention']);
+      assert.deepEqual(groups.slice(2).map((node) => node.kind), ['recentPeriod'], 'Recent periods sit beside the groups');
       const idsIn = (group: TreeNode): string[] =>
         children(env, group).flatMap((node) => (node.kind === 'session' ? [node.sessionId] : [])).sort();
       assert.deepEqual(idsIn(groups[0]!), ['running']);
       assert.deepEqual(idsIn(groups[1]!), ['asking', 'blocked', 'broken', 'failed', 'future', 'stopped']);
-      const periods = children(env, groups[2]!);
-      assert.equal(periods.length, 1);
-      assert.deepEqual(idsIn(periods[0]!), ['completed']);
+      assert.deepEqual(idsIn(groups[2]!), ['completed']);
 
       assert.equal(iconId(itemOf(env, sessionNode(env, 'running'))), 'sync~spin');
       assert.equal(iconId(itemOf(env, sessionNode(env, 'failed'))), 'error');
@@ -196,7 +195,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'Recent groups sessions by creation date and preserves session commands',
+    name: 'Recent sessions are grouped by creation date at the top level and keep session commands',
     async run(env) {
       const now = new Date();
       for (const [id, days] of [['today', 0], ['yesterday', 1], ['older', 31]] as const) {
@@ -205,9 +204,8 @@ const scenarios: Scenario[] = [
         write(migentPath(env.root, 'sessions', id, 'status.json'), status('completed'));
       }
       await waitForSessions(env, ['today', 'yesterday', 'older']);
-      const recent = children(env).find((node) => node.kind === 'group' && node.group === 'recent');
-      assert.ok(recent);
-      const periods = children(env, recent);
+      assert.ok(!children(env).some((node) => node.kind === 'group' && node.group === 'recent'), 'no Recent heading');
+      const periods = children(env).filter((node) => node.kind === 'recentPeriod');
       assert.deepEqual(labelsOf(env, periods), ['Today', 'Yesterday', 'Older']);
       assert.deepEqual(periods.map((period) => children(env, period).map((node) => node.kind === 'session' && node.sessionId)), [
         ['today'], ['yesterday'], ['older'],
@@ -239,7 +237,7 @@ const scenarios: Scenario[] = [
 
         assert.equal(project.store.hiddenCount, 1, 'only the older completed session is hidden');
         const groups = children(env).filter((node) => node.kind === 'group');
-        assert.deepEqual(labelsOf(env, groups), ['Needs attention', 'Prepared', 'Recent']);
+        assert.deepEqual(labelsOf(env, groups), ['Needs attention', 'Prepared']);
         const prepared = groups[1]!;
         const rows = children(env, prepared);
         assert.deepEqual(rows.map((node) => node.kind === 'session' && node.sessionId), ['prep-new', 'prep-old']);

@@ -82,11 +82,7 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
         : { label: diagnostic.label, icon: 'info', contextValue: `diag.${diagnostic.code}` };
     nodes.push(leaf(host, { id: nodeIds.diagnostic(key, diagnostic.code), parent: parent, project: key }, view));
   }
-  const snapshots = store.all();
-  for (const group of GROUP_ORDER) {
-    if (!snapshots.some((snapshot) => groupOf(snapshot) === group)) continue;
-    nodes.push(host.intern<GroupNode>({ kind: 'group', id: nodeIds.group(key, group), project: key, group }, parent));
-  }
+  nodes.push(...groupNodes(host, context, parent));
   if (store.hiddenCount > 0) {
     const label = text('views.showMore', { hidden: store.hiddenCount });
     nodes.push(
@@ -102,17 +98,33 @@ export function projectContents(host: ChildHost, context: ProjectContext, parent
   return nodes;
 }
 
+/** The groups that hold a session, in order; Recent has no heading, its periods (Today, …) sit beside the others. */
+function groupNodes(host: ChildHost, context: ProjectContext, parent: TreeNode | undefined): TreeNode[] {
+  const { key } = context;
+  const present = new Set(context.store.all().map(groupOf));
+  return GROUP_ORDER.flatMap((group): TreeNode[] => {
+    if (group === 'recent') return recentPeriods(host, context, parent);
+    if (!present.has(group)) return [];
+    return [host.intern<GroupNode>({ kind: 'group', id: nodeIds.group(key, group), project: key, group }, parent)];
+  });
+}
+
+/** One node per period that holds a Recent session, in period order. */
+function recentPeriods(host: ChildHost, context: ProjectContext, parent: TreeNode | undefined): RecentPeriodNode[] {
+  const { key, store } = context;
+  const now = host.now();
+  const periods = new Set(
+    store.all().filter((snapshot) => groupOf(snapshot) === 'recent').map((snapshot) => recentPeriod(snapshot, now)),
+  );
+  const groupId = nodeIds.group(key, 'recent');
+  return RECENT_PERIODS.filter((period) => periods.has(period)).map((period) =>
+    host.intern<RecentPeriodNode>({ kind: 'recentPeriod', id: `${groupId}/${period}`, project: key, period }, parent),
+  );
+}
+
 export function groupSessions(
   host: ChildHost, context: ProjectContext, node: GroupNode | RecentPeriodNode,
 ): TreeNode[] {
-  if (node.kind === 'group' && node.group === 'recent') {
-    const snapshots = context.store.all().filter((snapshot) => groupOf(snapshot) === 'recent');
-    const now = host.now();
-    const periods = new Set(snapshots.map((snapshot) => recentPeriod(snapshot, now)));
-    return RECENT_PERIODS.filter((period) => periods.has(period)).map((period) =>
-      host.intern<RecentPeriodNode>({ kind: 'recentPeriod', id: `${node.id}/${period}`, project: context.key, period }, node),
-    );
-  }
   const group = node.kind === 'recentPeriod' ? 'recent' : node.group;
   const now = host.now();
   return context.store

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Session rows in the Sessions view now lead with the id and a short workflow tag, the Recent heading is gone (its
+  periods sit beside the other groups), and the description shows only elapsed time and pending questions.
 - The Questions tab now sits after Overview and is always there (disabled until the session asks a question), with a
   badge counting the questions waiting. Pick any attempt to see its questions and answers, and the Sessions view's
   Answer button opens Questions directly. Pending questions are no longer a header fact.
