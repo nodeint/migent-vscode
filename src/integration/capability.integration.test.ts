@@ -110,7 +110,7 @@ const scenarios: Scenario[] = [
       });
       assert.equal(kindOf(env), 'ok');
       assert.equal(diagnostic(env), undefined);
-      assert.ok(children(env).some((node) => node.kind === 'group'), 'sessions are back once the CLI works');
+      assert.ok(children(env).some((node) => node.kind === 'recentPeriod'), 'sessions are back once the CLI works');
     },
   },
   {

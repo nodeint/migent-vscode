@@ -17,9 +17,11 @@ import {
   sessionDescription,
   sessionIcon,
   sessionLabel,
+  sessionRowLabel,
   sessionsDiagnostic,
   sessionTitle,
   sessionTooltip,
+  shortId,
   truncate,
 } from './sessionPresentation';
 import { capturedDir, snapshotFromDir, syntheticDir } from './testHelpers';
@@ -86,16 +88,19 @@ describe('numeric and legacy ids side by side', () => {
 });
 
 describe('session rows', () => {
-  it('uses the title as label (truncated) and workflow, stage and age as description', () => {
+  it('leads the row label with id and workflow tag, and describes the age', () => {
     const snapshot = snapshotFromDir(sessionFixture('completed'));
     expect(sessionLabel(snapshot)).toBe(snapshot.manifest?.title);
-    expect(sessionDescription(snapshot, NOW)).toMatch(/^plan · plan · .+ ago$/);
+    expect(sessionRowLabel(snapshot)).toBe(truncate(`${shortId(snapshot.sessionId)} · plan · ${snapshot.manifest?.title}`));
+    expect(sessionDescription(snapshot, NOW)).toMatch(/^.+ ago$/);
+    const short = { ...snapshot, status: snapshot.status && { ...snapshot.status, workflowId: 'pr' } };
+    expect(sessionRowLabel(short)).toBe(truncate(`${shortId(snapshot.sessionId)} · pr · ${snapshot.manifest?.title}`));
   });
 
   it('shows elapsed time since start for a Running session, with a pending-question indicator', () => {
     const snapshot = snapshotFromDir(syntheticDir('running-questions'), alive);
     expect(snapshot.displayState.state).toBe('running');
-    expect(sessionDescription(snapshot, NOW)).toBe('plan · 5m 0s · 1 question');
+    expect(sessionDescription(snapshot, NOW)).toBe('5m 0s · 1 question');
     expect(sessionContextValue(snapshot)).toBe('session.running;questions');
   });
 

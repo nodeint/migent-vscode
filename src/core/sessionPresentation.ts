@@ -33,6 +33,19 @@ export function sessionLabel(snapshot: SessionSnapshot): string {
   return truncate(sessionTitle(snapshot));
 }
 
+function workflowOf(snapshot: SessionSnapshot): string | null {
+  return snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null;
+}
+
+const WORKFLOW_TAG_LENGTH = 4;
+
+/** Row label `<id> · <first 4 chars of workflow> · <title>`: rows differ in their first words. */
+export function sessionRowLabel(snapshot: SessionSnapshot): string {
+  const tag = workflowOf(snapshot)?.slice(0, WORKFLOW_TAG_LENGTH) ?? null;
+  const parts = [shortId(snapshot.sessionId), tag, sessionTitle(snapshot)];
+  return truncate(parts.filter((part): part is string => part !== null).join(' · '));
+}
+
 /** `just now` or `<duration> ago`, for a time in the past. */
 export function formatAgo(ms: number): string {
   if (ms < JUST_NOW_SECONDS * MS_PER_SECOND) return text('views.justNow');
@@ -102,13 +115,11 @@ function timeText(snapshot: SessionSnapshot, now: number): string | null {
   return updated === null ? null : formatAgo(now - updated);
 }
 
-/** `workflow · stage · elapsed`; Unknown shows its reason instead. */
+/** `elapsed · questions` (workflow leads the row label); Unknown shows its reason instead. */
 export function sessionDescription(snapshot: SessionSnapshot, now: number): string {
   if (snapshot.displayState.state === 'unknown') return unknownReasonText(snapshot);
   const questions = pendingQuestionTotal(snapshot);
   const parts = [
-    snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
-    stageOf(snapshot),
     timeText(snapshot, now),
     questions > 0 ? questionsText(questions) : null,
   ];
@@ -165,7 +176,7 @@ export function sessionTooltip(snapshot: SessionSnapshot, now: number): string {
     sessionTitle(snapshot),
     text('views.tooltipState', { state: stateTitle(snapshot) }),
     snapshot.displayState.unknownReason === undefined ? null : text('views.tooltipReason', { reason: unknownReasonText(snapshot) }),
-    text('views.tooltipWorkflow', { workflow: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? unavailable() }),
+    text('views.tooltipWorkflow', { workflow: workflowOf(snapshot) ?? unavailable() }),
     stageLine(snapshot),
     blockerLine(snapshot),
     quotaLine(snapshot),
