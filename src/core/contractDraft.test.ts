@@ -13,8 +13,8 @@ describe('agent draft against the contract', () => {
   it('rejects a modeled key with a value outside the contract type', () => {
     // @ts-expect-error model is a string in the contract
     const model: AgentDraft = { model: 3 };
-    // @ts-expect-error client.options values are strings in the contract
-    const options: AgentDraft = { client: { options: { key: 1 } } };
+    // @ts-expect-error client.options values are string, number or boolean in the contract
+    const options: AgentDraft = { client: { options: { key: null } } };
     expect([model, options]).toHaveLength(2);
   });
 });

@@ -101,6 +101,28 @@ describe('readConfigTab', () => {
     return root;
   }
 
+  it('loads number and boolean option values (CLI 0.6.0) and saves them as strings', () => {
+    const yaml = [
+      'schema_version: 7',
+      'agents:',
+      '  coding:',
+      '    model: m',
+      '    client:',
+      '      type: codex',
+      '      options: {retries: 3, verbose: true, mode: fast}',
+      '',
+    ].join('\n');
+    const tab = readConfigTab(project({ 'config.yaml': yaml }), 'project');
+    expect(tab.state).toBe('ok');
+    expect(tab.form?.agents[0]?.agent.client?.options).toEqual([
+      { key: 'retries', value: '3' },
+      { key: 'verbose', value: 'true' },
+      { key: 'mode', value: 'fast' },
+    ]);
+    const saved = parse(configDraftFromForm(tab.form!, 'project')) as { agents: { coding: { client: unknown } } };
+    expect(saved.agents.coding.client).toEqual({ type: 'codex', options: { retries: '3', verbose: 'true', mode: 'fast' } });
+  });
+
   it('reports a missing local file as an empty schema 7 draft that a save can create', () => {
     const tab = readConfigTab(project({ 'config.yaml': 'schema_version: 7\n' }), 'local');
     expect(tab).toMatchObject({ state: 'missing', exists: false, canSave: true, schemaVersion: 7 });

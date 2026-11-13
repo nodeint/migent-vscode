@@ -264,30 +264,26 @@ export interface RoleModel {
   model: string;
 }
 
-export interface InitInput {
-  planner: RoleModel;
-  reviewer: RoleModel;
-  developer: RoleModel;
-}
+/**
+ * The agents of the CLI 0.6.0 project template, with the roles each serves. 0.6.0 exposes no listing before a project
+ * exists, so this is the one place to update when the template changes.
+ */
+export const INIT_AGENTS = [
+  { name: 'coding', roles: ['developer', 'operator'] },
+  { name: 'planning', roles: ['architect'] },
+  { name: 'review', roles: ['reviewer'] },
+] as const;
 
-/** `init --no-input` with every role's client and model as separate argv values. */
+export type InitAgentName = (typeof INIT_AGENTS)[number]['name'];
+
+export type InitInput = Record<InitAgentName, RoleModel>;
+
+/** `init --no-input` with one `--agent NAME=CLIENT:MODEL` value per template agent, each a single argv element. */
 export function initArgs(input: InitInput): string[] {
-  return [
-    'init',
-    '--planner-client',
-    input.planner.client,
-    '--planner-model',
-    input.planner.model,
-    '--reviewer-client',
-    input.reviewer.client,
-    '--reviewer-model',
-    input.reviewer.model,
-    '--client',
-    input.developer.client,
-    '--model',
-    input.developer.model,
-    '--no-input',
-  ];
+  const args = ['init'];
+  for (const { name } of INIT_AGENTS) args.push('--agent', `${name}=${input[name].client}:${input[name].model}`);
+  args.push('--no-input');
+  return args;
 }
 
 /** One doctor check as the extension reads it. `items` is not read; `problems` and `warnings` default to empty. */

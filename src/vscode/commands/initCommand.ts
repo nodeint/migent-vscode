@@ -7,6 +7,8 @@ import type { LaunchSpec } from '../../cli/locate';
 import {
   type ClientChoice,
   clientsArgs,
+  INIT_AGENTS,
+  type InitAgentName,
   initArgs,
   type InitInput,
   joinClients,
@@ -25,9 +27,6 @@ const INFO_MESSAGE_MS = 5000;
 const INIT_TIMEOUT_MS = 60_000;
 /** Launch-key id for initialization; not a workflow id a project can declare. */
 const INIT_GATE_ID = '<init>';
-
-const ROLES = ['developer', 'planner', 'reviewer'] as const;
-type Role = (typeof ROLES)[number];
 
 async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file');
@@ -49,19 +48,20 @@ async function pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   return picked?.folder;
 }
 
-/** One pick for each role (developer first), or one pick in total when the first uses "for all roles". */
-async function pickRoles(clients: ClientChoice[]): Promise<InitInput | undefined> {
-  const chosen: Partial<Record<Role, RoleModel>> = {};
-  for (const role of ROLES) {
-    const picked = await pickModel(text('prompts.initRoleModel', { role }), clients, role === ROLES[0]);
+/** One pick for each template agent, or one pick in total when the first uses "for all". */
+async function pickAgents(clients: ClientChoice[]): Promise<InitInput | undefined> {
+  const chosen: Partial<Record<InitAgentName, RoleModel>> = {};
+  for (const [index, agent] of INIT_AGENTS.entries()) {
+    const title = text('prompts.initAgentModel', { agent: agent.name, roles: agent.roles.join(', ') });
+    const picked = await pickModel(title, clients, index === 0);
     if (picked === undefined) return undefined;
-    if (picked.isForAll) return { developer: picked.model, planner: picked.model, reviewer: picked.model };
-    chosen[role] = picked.model;
+    if (picked.isForAll) return { coding: picked.model, planning: picked.model, review: picked.model };
+    chosen[agent.name] = picked.model;
   }
-  const { developer, planner, reviewer } = chosen;
-  return developer === undefined || planner === undefined || reviewer === undefined
+  const { coding, planning, review } = chosen;
+  return coding === undefined || planning === undefined || review === undefined
     ? undefined
-    : { developer, planner, reviewer };
+    : { coding, planning, review };
 }
 
 interface InitTarget {
@@ -137,14 +137,14 @@ async function loadTarget(
 async function initializeFolder(target: InitTarget): Promise<void> {
   const { launch, env } = target;
   const options = { cwd: target.folder.uri.fsPath, env, timeoutMs: INIT_TIMEOUT_MS };
-  const roles = await pickRoles(target.clients);
-  if (roles === undefined) return;
+  const agents = await pickAgents(target.clients);
+  if (agents === undefined) return;
   // The prompts took time: the folder may have been initialized meanwhile, so eligibility is checked again.
   if (existsSync(migentDir(target.folder.uri.fsPath))) {
     vscode.window.setStatusBarMessage(text('prompts.folderInit', { name: target.folder.name }), INFO_MESSAGE_MS);
     return;
   }
-  const result = await progress('init.running', undefined, () => invokeText(launch, initArgs(roles), options));
+  const result = await progress('init.running', undefined, () => invokeText(launch, initArgs(agents), options));
   if (result.kind === 'error') {
     const detail = result.error.stderr.trim() || result.error.detail;
     notify('init.failed', { detail });
@@ -156,7 +156,7 @@ async function initializeFolder(target: InitTarget): Promise<void> {
 }
 
 /**
- * `migent init` driven by Quick Picks (one pick per role, or one pick for every role). The CLI creates `.migent/`.
+ * `migent init` driven by Quick Picks (one pick per template agent, or one pick for all). The CLI creates `.migent/`.
  * It runs under the shared operation gate with a launch key per folder, so two invocations cannot both initialize one
  * folder at once.
  */

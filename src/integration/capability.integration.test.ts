@@ -137,13 +137,13 @@ const scenarios: Scenario[] = [
         const state = project === undefined ? undefined : env.api.capability.state(project.key);
         assert.equal(state?.detected, '0.3.5');
         assert.equal(state?.required, MINIMUM_CLI_VERSION);
-        assert.match(String(diagnostic(env)?.label), /older than 0.5.6/);
-        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.5.6/);
+        assert.match(String(diagnostic(env)?.label), /older than 0.6.0/);
+        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.6.0/);
       });
     },
   },
   {
-    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.5.6 minimum, and Recheck recovers',
+    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.6.0 minimum, and Recheck recovers',
     async run(env) {
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');

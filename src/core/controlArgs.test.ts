@@ -93,14 +93,19 @@ describe('reply, repair, doctor and init argv', () => {
     expect(doctorArgs()).toEqual(['doctor', '--json']);
   });
 
-  it('passes every init role as separate argv values and never prompts', () => {
-    const role = (client: string) => ({ client, model: `${client} model "x"` });
-    const args = initArgs({ developer: role('d'), planner: role('p'), reviewer: role('r') });
-    expect(args).toContain('--no-input');
-    const planner = args.indexOf('--planner-client');
-    expect(args.slice(planner, planner + 4)).toEqual(['--planner-client', 'p', '--planner-model', 'p model "x"']);
-    const developer = args.indexOf('--client');
-    expect(args.slice(developer, developer + 4)).toEqual(['--client', 'd', '--model', 'd model "x"']);
+  it('passes one agent spec per template agent as a single argv element and never prompts', () => {
+    const agent = (client: string) => ({ client, model: `${client} model "x"` });
+    const args = initArgs({ planning: agent('p'), review: agent('r'), coding: agent('c') });
+    expect(args).toEqual([
+      'init',
+      '--agent',
+      'coding=c:c model "x"',
+      '--agent',
+      'planning=p:p model "x"',
+      '--agent',
+      'review=r:r model "x"',
+      '--no-input',
+    ]);
   });
 
   it('joins available clients with their models and drops the rest', () => {
