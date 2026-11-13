@@ -92,6 +92,7 @@
         cacheRead: (count) => count + ' cr',
         cost: (amount) => amount + '$',
         costPartial: (amount) => amount + '$+',
+        noCost: 'no cost record',
         cacheWriteTip: 'Cache write',
         cacheReadTip: 'Cache read',
         outputTip: 'Output',

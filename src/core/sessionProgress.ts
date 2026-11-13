@@ -134,6 +134,11 @@ function stateOf(status: string | null): ProgressState {
   }
 }
 
+/** An attempt whose process completed but whose outcome is `blocked` shows as blocked. */
+function attemptState(execution: ExecutionSnapshot): ProgressState {
+  return stateOf(execution.outcomeStatus === 'blocked' ? 'blocked' : execution.status);
+}
+
 function lastMatching<T>(items: readonly T[], isMatch: (item: T) => boolean): T | null {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
@@ -247,7 +252,7 @@ function stageRow(id: string, context: StageContext): StageProgressRow {
     null;
   return {
     id,
-    state: chosen === null ? 'not-run' : stateOf(chosen.status),
+    state: chosen === null ? 'not-run' : attemptState(chosen),
     attempts: chosen?.attempt ?? null,
     decision: chosen?.decision ?? null,
     history: stageExecutions
@@ -255,7 +260,7 @@ function stageRow(id: string, context: StageContext): StageProgressRow {
       .map((execution) => ({
         order: execution.order,
         attempt: execution.attempt,
-        state: stateOf(execution.status),
+        state: attemptState(execution),
         decision: execution.decision,
         completedAt: execution.completedAt,
         ...context.facts(execution),
@@ -286,7 +291,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
       executionId: execution.id,
       stage: execution.stage,
       attempt: execution.attempt,
-      state: stateOf(execution.status),
+      state: attemptState(execution),
       decision: execution.decision,
       completedAt: execution.completedAt,
       isCurrent: execution.id === running?.id,

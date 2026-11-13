@@ -33,9 +33,6 @@
     return isNumber(seconds) ? utils.formatDuration(seconds * 1000) : null;
   }
 
-  function countText(count) {
-    return tokenFormat.format(count).replace('K', 'k');
-  }
 
   function tipped(label, tip) {
     const node = el('span', label);
@@ -43,43 +40,37 @@
     return node;
   }
 
+  function countText(count) {
+    return tokenFormat.format(count).replace('K', 'k');
+  }
+
+  /** The token breakdown `X in · Y out · Z cw · N cr` of the fields that are known; null when none is. */
+  function tokensText(usage) {
+    const copy = text.progress.usage;
+    const parts = [
+      [usage.inputTokens, copy.input],
+      [usage.outputTokens, copy.output],
+      [usage.cacheWriteTokens, copy.cacheWrite],
+      [usage.cacheReadTokens, copy.cacheRead],
+    ].filter(([count]) => isNumber(count)).map(([count, label]) => label(countText(count)));
+    return parts.length === 0 ? null : parts.join(' · ');
+  }
+
   /**
-   * The usage cluster `M$ | X in · Y out | Z cw · N cr`. Every figure is one field and nothing is added together; a
-   * zero is shown, a null is left out together with a group (and its bar) that ends up empty. `options.cost` is the
-   * cost (null leaves the group out), `options.costMissing` the attempts without one: a positive value makes it
-   * `M$+`. Null when there is nothing to show.
+   * Null without metrics. The cost, `M$`, or "no cost record" when the metrics have none; the tooltip carries the token breakdown.
+   * `options.costMissing` is the attempts without a cost: a positive value makes it `M$+` and adds a line to the tip.
    */
   function usageNode(usage, options) {
     if (!usage) return null;
     const copy = text.progress.usage;
-    const cost = options && options.cost;
+    const cost = usage ? usage.costUsd : null;
     const costMissing = (options && options.costMissing) || 0;
-    const groups = [];
-    if (isNumber(cost)) {
-      const amount = cost.toFixed(2);
-      groups.push([tipped(
-        costMissing > 0 ? copy.costPartial(amount) : copy.cost(amount),
-        costMissing > 0 ? copy.costMissingTip(costMissing) : null,
-      )]);
-    }
-    const tokens = [];
-    if (isNumber(usage.inputTokens)) tokens.push(tipped(copy.input(countText(usage.inputTokens))));
-    if (isNumber(usage.outputTokens)) {
-      const tip = isNumber(usage.reasoningTokens)
-        ? copy.outputTipReasoning(countText(usage.reasoningTokens))
-        : copy.outputTip;
-      tokens.push(tipped(copy.output(countText(usage.outputTokens)), tip));
-    }
-    groups.push(tokens);
-    const cache = [];
-    if (isNumber(usage.cacheWriteTokens)) {
-      cache.push(tipped(copy.cacheWrite(countText(usage.cacheWriteTokens)), copy.cacheWriteTip));
-    }
-    if (isNumber(usage.cacheReadTokens)) {
-      cache.push(tipped(copy.cacheRead(countText(usage.cacheReadTokens)), copy.cacheReadTip));
-    }
-    groups.push(cache);
-    return ui.timeline.figures(groups);
+    const hasCost = isNumber(cost);
+    const label = !hasCost ? copy.noCost
+      : costMissing > 0 ? copy.costPartial(cost.toFixed(2)) : copy.cost(cost.toFixed(2));
+    const tips = [tokensText(usage), hasCost && costMissing > 0 ? copy.costMissingTip(costMissing) : null]
+      .filter(Boolean);
+    return tipped(label, tips.length > 0 ? tips.join('; ') : null);
   }
 
   /** The reason label as plain text, or null when the data does not say why the attempt ran. */
@@ -131,7 +122,7 @@
     const usage = entry.usage || null;
     return ui.timeline.item({ marker: ui.timeline.marker(status, { tip: markerTip(status, entry) }), tone }, [
       ui.timeline.head(main, [durationText(entry.wallSeconds)]),
-      ui.timeline.sub([entry.model, entry.effort], usageNode(usage, { cost: usage && usage.costUsd })),
+      ui.timeline.sub([entry.model, entry.effort, usageNode(usage)]),
       ui.timeline.note(entry.blocker),
       ui.timeline.note(entry.error),
     ]);
@@ -174,19 +165,24 @@
   }
 
   /**
-   * The section head's trailing totals: `active` (the sum of the attempt durations) and `wall` (the session's elapsed
-   * time) above the summed usage cluster. Each part is left out when unknown; null when nothing is known.
+   * The section note: `active` (the sum of the attempt durations), `wall` (the session's elapsed time) and the summed
+   * cost, joined by a dot. Each part is left out when unknown; null when nothing is known.
    */
   function totalsNode(totals) {
-    const times = [];
+    const parts = [];
     const active = durationText(totals.activeSeconds);
     const wall = durationText(totals.wallSeconds);
-    if (active !== null) times.push(text.progress.active(active));
-    if (wall !== null) times.push(text.progress.wall(wall));
-    const usage = totals.usage
-      ? usageNode(totals.usage, { cost: totals.usage.costUsd, costMissing: totals.costMissing })
-      : null;
-    return ui.timeline.totals([times.length > 0 ? el('span', times.join(' · ')) : null, usage]);
+    if (active !== null) parts.push(el('span', text.progress.active(active)));
+    if (wall !== null) parts.push(el('span', text.progress.wall(wall)));
+    const usage = usageNode(totals.usage, { costMissing: totals.costMissing });
+    if (usage) parts.push(usage);
+    if (parts.length === 0) return null;
+    const node = el('span', null, 'mg-progress-totals');
+    parts.forEach((part, index) => {
+      if (index > 0) node.append(el('span', ' · '));
+      node.append(part);
+    });
+    return node;
   }
 
   function renderProgress(model) {
@@ -201,9 +197,8 @@
     const children = built.items.length === 0 ? [ui.empty(text.progress.empty)] : [ui.timeline(built.items)];
     const totals = totalsNode(progress.totals || {});
     return ui.section(text.progress.title, {
-      note: progress.kind === 'stages' ? text.progress.note : text.progress.roleNote,
+      note: totals || (progress.kind === 'stages' ? text.progress.note : text.progress.roleNote),
       count: built.attempts.length >= 1 ? text.progress.attempts(built.attempts.length) : undefined,
-      actions: totals === null ? undefined : [totals],
       children,
     });
   }

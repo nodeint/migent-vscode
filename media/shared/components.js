@@ -802,15 +802,22 @@
   };
 
   /**
-   * The quiet line under the head: `parts` (strings; empty ones dropped) joined by a dot on the left, cut with an
+   * The quiet line under the head: `parts` (strings or nodes; empty ones dropped) joined by a dot on the left, cut with an
    * ellipsis, and `end` (a node, optional) right-aligned. On a narrow panel `end` drops to its own line. Null when
    * both are empty. The line has no tooltip of its own.
    */
   timeline.sub = function sub(parts, end) {
-    const kept = (parts || []).filter((part) => typeof part === 'string' && part !== '');
+    const kept = (parts || []).filter((part) => (typeof part === 'string' ? part !== '' : Boolean(part)));
     if (kept.length === 0 && !end) return null;
     const node = el('div', null, 'mg-tl-subline');
-    if (kept.length > 0) node.append(el('span', kept.join(' · '), 'mg-tl-sub'));
+    if (kept.length > 0) {
+      const left = el('span', null, 'mg-tl-sub');
+      kept.forEach((part, index) => {
+        if (index > 0) left.append(el('span', ' · '));
+        left.append(typeof part === 'string' ? el('span', part) : part);
+      });
+      node.append(left);
+    }
     if (end) {
       end.classList.add('mg-tl-sub-end');
       node.append(end);
@@ -851,7 +858,7 @@
 
   // ---------- sections ----------
 
-  /** A section heading: title, an optional count chip, a note and trailing actions. */
+  /** A section heading: title, an optional count chip, a note (text or a node) and trailing actions. */
   function sectionHead(title, options) {
     const settings = options || {};
     const head = el('div', null, 'mg-section-head');
@@ -860,7 +867,12 @@
     row.append(el(settings.level === 3 ? 'h3' : 'h2', title, 'mg-section-title'));
     if (settings.count) row.append(chip(settings.count));
     body.append(row);
-    if (settings.note) body.append(el('p', settings.note, 'mg-section-note'));
+    if (typeof settings.note === 'string') body.append(el('p', settings.note, 'mg-section-note'));
+    else if (settings.note) {
+      const note = el('p', null, 'mg-section-note');
+      note.append(settings.note);
+      body.append(note);
+    }
     head.append(body);
     const actions = el('div', null, 'mg-section-actions');
     for (const action of settings.actions || []) actions.append(action);

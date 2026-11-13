@@ -218,6 +218,20 @@ describe('buildProgress', () => {
     expect(stagesOf(progress)[0]?.state).toBe('unknown');
   });
 
+  it('shows a completed execution whose outcome is blocked as blocked', () => {
+    const progress = buildProgress({
+      executions: [
+        { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), outcomeStatus: 'blocked' },
+        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), outcomeStatus: 'complete' },
+      ],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+    });
+
+    expect(stagesOf(progress)[0]?.history.map((attempt) => attempt.state)).toEqual(['blocked', 'completed']);
+  });
+
 describe('attempt facts', () => {
   const usage = (inputTokens: number | null, outputTokens: number | null) => ({
     inputTokens, outputTokens, reasoningTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null,

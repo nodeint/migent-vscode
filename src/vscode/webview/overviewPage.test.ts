@@ -568,21 +568,22 @@ describe('Overview page', () => {
     // The head line carries the duration only: no tokens.
     expect(rows[0]?.querySelector('.mg-tl-meta')?.textContent).toBe('1m 2s');
     expect(rows[1]?.querySelector('.mg-tl-meta')?.textContent).toBe('3m 40s');
-    const cluster = (row: FakeElement | undefined) => row?.querySelector('.mg-tl-sub-end');
-    // Cost first, then in/out, then the cache pair; each field is shown on its own, with its own unit.
-    expect(cluster(rows[0])?.textContent).toBe('0.09$ | 8 in · 1.1k out | 16k cw · 3.7M cr');
-    // A zero is data and stays; no cost drops the whole `M$ |` group.
-    expect(cluster(rows[1])?.textContent).toBe('72.1k in · 3.6k out | 0 cw · 706k cr');
-    const tips = (row: FakeElement | undefined) =>
-      cluster(row)?.descendants().map((node) => node.attrs['data-tip']).filter(Boolean);
-    expect(tips(rows[0])).toEqual(['Output · 300 reasoning', 'Cache write', 'Cache read']);
-    expect(tips(rows[1])).toEqual(['Output', 'Cache write', 'Cache read']);
+    const sub = (row: FakeElement | undefined) => row?.querySelector('.mg-tl-sub');
+    const tip = (row: FakeElement | undefined) =>
+      sub(row)?.descendants().find((node) => node.attrs['data-tip'])?.attrs['data-tip'];
+    // The cost follows the effort; the token breakdown is its tooltip. No cost reads "no cost record", still tipped.
+    expect(sub(rows[0])?.textContent).toMatch(/ · 0\.09\$$/);
+    expect(tip(rows[0])).toBe('8 in · 1.1k out · 16k cw · 3.7M cr');
+    expect(sub(rows[1])?.textContent).toMatch(/ · no cost record$/);
+    expect(tip(rows[1])).toBe('72.1k in · 3.6k out · 0 cw · 706k cr');
+    expect(rows[0]?.querySelector('.mg-tl-sub-end')).toBeFalsy();
 
     const progress = page.section('Progress');
     expect(progress?.textContent).toContain('2 attempts');
-    const total = progress?.querySelector('.mg-tl-totals');
-    expect(total?.textContent).toBe('active 4m 42s · wall 24m 18s0.09$+ | 72.1k in · 4.7k out | 16k cw · 4.4M cr');
-    expect(total?.descendants().find((node) => node.textContent === '0.09$+')?.attrs['data-tip']).toBe('1 attempt has no cost');
+    const total = progress?.querySelector('.mg-progress-totals');
+    expect(total?.textContent).toBe('active 4m 42s · wall 24m 18s · 0.09$+');
+    expect(total?.descendants().find((node) => node.textContent === '0.09$+')?.attrs['data-tip'])
+      .toBe('72.1k in · 4.7k out · 16k cw · 4.4M cr; 1 attempt has no cost');
   });
 
   it('drops a null field, an emptied group and an unknown active or wall time', () => {
@@ -594,8 +595,8 @@ describe('Overview page', () => {
         totals: { activeSeconds: null, wallSeconds: 90, usage: usage({ outputTokens: 500 }), costMissing: 0 },
       },
     }));
-    expect(entries(page)[0]?.querySelector('.mg-tl-sub-end')?.textContent).toBe('500 out | 2k cr');
-    expect(page.section('Progress')?.querySelector('.mg-tl-totals')?.textContent).toBe('wall 1m 30s500 out');
+    expect(entries(page)[0]?.querySelector('.mg-tl-sub')?.textContent).toMatch(/no cost record$/);
+    expect(page.section('Progress')?.querySelector('.mg-progress-totals')?.textContent).toBe('wall 1m 30s · no cost record');
   });
 
   it('shows a total cost without the plus when every attempt reported one', () => {
@@ -607,7 +608,7 @@ describe('Overview page', () => {
         totals: { activeSeconds: null, wallSeconds: null, usage: usage({ costUsd: 2.281 }), costMissing: 0 },
       },
     }));
-    const total = page.section('Progress')?.querySelector('.mg-tl-totals');
+    const total = page.section('Progress')?.querySelector('.mg-progress-totals');
     expect(total?.textContent).toBe('2.28$');
     expect(total?.descendants().some((node) => node.attrs['data-tip'] !== undefined)).toBe(false);
   });
@@ -681,7 +682,7 @@ describe('Overview page', () => {
     expect(row?.querySelector('.mg-tl-note')).toBeNull();
     expect(page.section('Progress')?.textContent).not.toMatch(/unknown|—|undefined|null|NaN/i);
     // No attempt reports figures, so the head carries no totals.
-    expect(page.section('Progress')?.querySelector('.mg-section-actions')?.children).toHaveLength(0);
+    expect(page.section('Progress')?.querySelector('.mg-progress-totals')).toBeNull();
     expect(row?.querySelector('.mg-tl-sub-end')).toBeNull();
 
     // A model whose attempts predate every extra field still renders.
@@ -887,7 +888,7 @@ describe('Overview page', () => {
     ...overrides,
   });
 
-  it('renders Status, Progress, Activity, Outputs, Next steps and Child sessions in that order, then the source Details with no section', () => {
+  it('renders Status, Outputs, Next steps, Progress, Activity and Child sessions in that order, then the source Details with no section', () => {
     const page = load();
     page.deliver(pageModel({
       summary: summary({ state: 'running', isRunning: true }),
@@ -900,10 +901,10 @@ describe('Overview page', () => {
 
     expect(page.titles()).toEqual([
       'Status',
-      'Progress',
-      'Latest activity',
       'Outputs',
       'Next steps',
+      'Progress',
+      'Latest activity',
       'Child sessions',
     ]);
     const stack = page.doc.root.descendants().find((node) => node.children.includes(page.sections()[0] as FakeElement));
