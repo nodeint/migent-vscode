@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { listExecutions } from './executions';
-import type { MetricsExecution } from './metrics';
+import type { MetricsExecution, MetricsUsage } from './metrics';
 import type { ExecutionSnapshot } from './model';
 import { buildProgress, type SessionProgress, type StageProgressRow } from './sessionProgress';
 import type { SessionStagePlan } from './workflowStages';
@@ -33,6 +33,8 @@ function execution(
     client: null,
     model: null,
     effort: null,
+    turnKind: null,
+    outcomeStatus: null,
     error: null,
     hasFailureReport: false,
     kind: null,
@@ -259,49 +261,178 @@ describe('attempt facts', () => {
       error: 'verify failed: red',
       createdAt: '2026-11-01T10:00:00Z',
       wallSeconds: null,
-      tokens: null,
+      usage: null,
       resumes: null,
-      routedFrom: null,
+      reason: null,
+      asked: false,
     });
   });
 
-  it('takes duration and input plus output tokens from metrics, and names resumed and routed attempts that exist', () => {
+  const usageOf = (extra: Partial<MetricsUsage>): MetricsUsage => ({ ...usage(null, null), ...extra });
+
+  it('takes duration and each usage field from metrics, uncombined, and names the resumed attempt', () => {
     const executions = [
       execution('0001-plan--attempt-01', 'plan', 1, 'completed'),
-      execution('0002-review--attempt-01', 'review', 1, 'completed', 'revise'),
-      execution('0003-plan--attempt-02', 'plan', 2, 'completed'),
+      execution('0002-plan--attempt-02', 'plan', 2, 'completed'),
     ];
     const metrics = [
-      measured('0001-plan--attempt-01', { wallSeconds: 62, usage: usage(10, 5) }),
-      measured('0003-plan--attempt-02', {
-        wallSeconds: 220,
-        usage: usage(null, 7),
-        resumesExecutionId: '0001-plan--attempt-01',
-        routedFrom: '0002-review--attempt-01',
+      measured('0001-plan--attempt-01', {
+        wallSeconds: 62,
+        usage: usageOf({
+          inputTokens: 10, outputTokens: 5, reasoningTokens: 2, cacheReadTokens: 7, cacheWriteTokens: 0, costUsd: 0.5,
+        }),
       }),
+      measured('0002-plan--attempt-02', { wallSeconds: 220, usage: usage(null, 7), resumesExecutionId: '0001-plan--attempt-01' }),
     ];
     const rows = stagesOf(buildProgress({ executions, plan: plan(['plan', 'review']), runningStageIds: [], latestExecutionId: null, metrics }));
     const [first, second] = rows[0]?.history ?? [];
-    expect(first).toMatchObject({ wallSeconds: 62, tokens: 15, resumes: null, routedFrom: null });
-    expect(second).toMatchObject({
-      wallSeconds: 220,
-      tokens: 7,
-      resumes: { stage: 'plan', attempt: 1 },
-      routedFrom: { stage: 'review', attempt: 1 },
+    expect(first).toMatchObject({
+      wallSeconds: 62,
+      usage: {
+        inputTokens: 10, outputTokens: 5, reasoningTokens: 2, cacheReadTokens: 7, cacheWriteTokens: 0, costUsd: 0.5,
+      },
+      resumes: null,
     });
-    // An execution metrics.json does not list keeps no figures.
-    expect(rows[1]?.history[0]).toMatchObject({ wallSeconds: null, tokens: null });
+    expect(second).toMatchObject({ wallSeconds: 220, usage: usage(null, 7), resumes: { stage: 'plan', attempt: 1 } });
+    // A stage that never ran has no attempts.
+    expect(rows[1]?.history).toEqual([]);
+    expect(first).not.toHaveProperty('tokens');
   });
 
-  it('does not name an attempt that is not in the session, and keeps tokens null when none is reported', () => {
+  it('gives an execution that metrics.json does not list no duration and no usage', () => {
     const progress = buildProgress({
       executions: [execution('0001-plan--attempt-01', 'plan', 1, 'completed')],
       plan: plan(['plan']),
       runningStageIds: [],
       latestExecutionId: null,
+      metrics: [],
+    });
+    expect(stagesOf(progress)[0]?.history[0]).toMatchObject({ wallSeconds: null, usage: null });
+  });
+
+  it('does not name an attempt that is not in the session', () => {
+    const progress = buildProgress({
+      executions: [{ ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), turnKind: 'continue' }],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
       metrics: [measured('0001-plan--attempt-01', { resumesExecutionId: '0009-gone--attempt-01', routedFrom: '0008-gone--attempt-01' })],
     });
-    expect(stagesOf(progress)[0]?.history[0]).toMatchObject({ tokens: null, resumes: null, routedFrom: null });
+    expect(stagesOf(progress)[0]?.history[0]).toMatchObject({ resumes: null, reason: null });
+  });
+
+  describe('why an attempt ran', () => {
+    const reasonOfSecond = (
+      turnKind: string | null,
+      routed: boolean,
+      sourceDecision: string | null = 'revise',
+    ) => {
+      const executions = [
+        execution('0001-review--attempt-01', 'review', 1, 'completed', sourceDecision),
+        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), turnKind },
+      ];
+      const metrics = [measured('0002-plan--attempt-02', routed ? { routedFrom: '0001-review--attempt-01' } : {})];
+      const progress = buildProgress({ executions, plan: plan(['plan', 'review']), runningStageIds: [], latestExecutionId: null, metrics });
+      return stagesOf(progress)[0]?.history[0]?.reason;
+    };
+    const fromReview = { stage: 'review', attempt: 1 };
+
+    it('says nothing for a start, and nothing for a continue without a source', () => {
+      expect(reasonOfSecond('start', false)).toBeNull();
+      expect(reasonOfSecond('start', true)).toBeNull();
+      expect(reasonOfSecond('continue', false)).toBeNull();
+    });
+
+    it('says the human answered for answers, whatever else is recorded', () => {
+      expect(reasonOfSecond('answers', false)).toEqual({ kind: 'answer' });
+      expect(reasonOfSecond('answers', true)).toEqual({ kind: 'answer' });
+    });
+
+    it('says revise only for a continue whose source decided revise, else routed', () => {
+      expect(reasonOfSecond('continue', true)).toEqual({ kind: 'revise', from: fromReview });
+      expect(reasonOfSecond('continue', true, 'rejected')).toEqual({ kind: 'routed', from: fromReview });
+      expect(reasonOfSecond('continue', true, null)).toEqual({ kind: 'routed', from: fromReview });
+    });
+
+    it('keeps only the routed source when turn_kind is missing or unrecognized', () => {
+      expect(reasonOfSecond(null, true)).toEqual({ kind: 'routed', from: fromReview });
+      expect(reasonOfSecond('later', true)).toEqual({ kind: 'routed', from: fromReview });
+      expect(reasonOfSecond(null, false)).toBeNull();
+    });
+  });
+
+  it('marks an attempt that ended by asking a question, and no other', () => {
+    const progress = buildProgress({
+      executions: [
+        { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), outcomeStatus: 'question' },
+        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), outcomeStatus: 'complete' },
+      ],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+    });
+    expect(stagesOf(progress)[0]?.history.map((attempt) => attempt.asked)).toEqual([true, false]);
+  });
+
+  describe('totals', () => {
+    const run = (metrics?: MetricsExecution[], wallSeconds?: number | null) => buildProgress({
+      executions: [
+        execution('0001-plan--attempt-01', 'plan', 1, 'completed'),
+        execution('0002-plan--attempt-02', 'plan', 2, 'completed'),
+      ],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+      metrics,
+      wallSeconds,
+    });
+    const totalsOf = (progress: SessionProgress) => (progress.kind === 'empty' ? null : progress.totals);
+
+    it('adds up each field over the attempts, active time from the attempts and wall time from metrics totals', () => {
+      const progress = run([
+        measured('0001-plan--attempt-01', { wallSeconds: 60, usage: usageOf({ inputTokens: 1, outputTokens: 2, cacheReadTokens: 10, costUsd: 0.25 }) }),
+        measured('0002-plan--attempt-02', { wallSeconds: 40, usage: usageOf({ inputTokens: 3, cacheReadTokens: 5, cacheWriteTokens: 0, costUsd: 0.5 }) }),
+      ], 500);
+      expect(totalsOf(progress)).toEqual({
+        activeSeconds: 100,
+        wallSeconds: 500,
+        usage: usageOf({ inputTokens: 4, outputTokens: 2, cacheReadTokens: 15, cacheWriteTokens: 0, costUsd: 0.75 }),
+        costMissing: 0,
+      });
+    });
+
+    it('counts the attempts without a cost, and leaves a field no attempt reports null', () => {
+      const progress = run([
+        measured('0001-plan--attempt-01', { usage: usageOf({ costUsd: 1 }) }),
+        measured('0002-plan--attempt-02', { usage: usageOf({ inputTokens: 3 }) }),
+      ]);
+      expect(totalsOf(progress)).toEqual({
+        activeSeconds: null,
+        wallSeconds: null,
+        usage: usageOf({ inputTokens: 3, costUsd: 1 }),
+        costMissing: 1,
+      });
+    });
+
+    it('counts an attempt that has no metrics entry as missing its cost', () => {
+      const progress = run([measured('0001-plan--attempt-01', { usage: usageOf({ costUsd: 1 }) })]);
+      expect(totalsOf(progress)).toMatchObject({ usage: usageOf({ costUsd: 1 }), costMissing: 1 });
+    });
+
+    it('has no usage without metrics, and the same totals for role-session rows', () => {
+      expect(totalsOf(run())).toEqual({ activeSeconds: null, wallSeconds: null, usage: null, costMissing: 2 });
+      const roles = buildProgress({
+        executions: [execution('0001-developer--attempt-01', 'developer', 1, 'completed')],
+        plan: { kind: 'missing' },
+        runningStageIds: [],
+        latestExecutionId: null,
+        metrics: [measured('0001-developer--attempt-01', { wallSeconds: 5, usage: usageOf({ costUsd: 2 }) })],
+        wallSeconds: 9,
+      });
+      expect(totalsOf(roles)).toEqual({
+        activeSeconds: 5, wallSeconds: 9, usage: usageOf({ costUsd: 2 }), costMissing: 0,
+      });
+    });
   });
 
   it('gives the same facts to execution rows of a role session', () => {
@@ -312,7 +443,7 @@ describe('attempt facts', () => {
       latestExecutionId: null,
       metrics: [measured('0001-developer--attempt-01', { wallSeconds: 5, usage: usage(1, 2) })],
     });
-    expect(progress.kind === 'executions' ? progress.rows[0] : null).toMatchObject({ model: 'm', effort: 'high', wallSeconds: 5, tokens: 3 });
+    expect(progress.kind === 'executions' ? progress.rows[0] : null).toMatchObject({ model: 'm', effort: 'high', wallSeconds: 5, usage: usage(1, 2) });
   });
 });
 });

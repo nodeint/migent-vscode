@@ -88,7 +88,10 @@ export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): 
     input.executions = listExecutions(input.sessionDirPath);
     input.plan = readSessionStagePlan(context.root, entry.sessionId);
     const metrics = readMetrics(input.sessionDirPath);
-    if (metrics.kind === 'ok') input.metrics = metrics.metrics.executions;
+    if (metrics.kind === 'ok') {
+      input.metrics = metrics.metrics.executions;
+      input.wallSeconds = metrics.metrics.totals.wallSeconds;
+    }
     if (snapshot.displayState.state === 'running') {
       input.events = readRecentEvents(eventsPath(context.root, entry.sessionId), OVERVIEW_ACTIVITY_LIMIT);
     }

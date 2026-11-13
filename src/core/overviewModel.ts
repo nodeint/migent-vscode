@@ -49,6 +49,8 @@ export interface OverviewInput extends ResultsInput {
   plan: SessionStagePlan;
   /** `metrics.json` executions when the file is readable; the host passes none otherwise. */
   metrics?: readonly MetricsExecution[];
+  /** `metrics.json` `totals.wall_seconds`: the elapsed time of the session. */
+  wallSeconds?: number | null;
   /** Already-read recent events; the host passes none unless the session is Running. */
   events: readonly TailEvent[];
 }
@@ -86,6 +88,7 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
       runningStageIds: runningStageIdsOf(snapshot),
       latestExecutionId: snapshot.status?.latestExecutionId ?? null,
       metrics: input.metrics,
+      wallSeconds: input.wallSeconds,
     }),
     activity: summary.isRunning ? buildActivity(input.events) : { visible: false },
     actions: overviewActions(snapshot, summary.latestExecution),

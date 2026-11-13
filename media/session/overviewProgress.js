@@ -33,20 +33,70 @@
     return isNumber(seconds) ? utils.formatDuration(seconds * 1000) : null;
   }
 
-  function tokenText(tokens) {
-    return isNumber(tokens) ? text.progress.tokens(tokenFormat.format(tokens).replace('K', 'k')) : null;
+  function countText(count) {
+    return tokenFormat.format(count).replace('K', 'k');
   }
 
-  /** The time and token figures of one attempt, as the quiet meta on the right; each is left out when unknown. */
-  function figuresOf(entry) {
-    return [durationText(entry.wallSeconds), tokenText(entry.tokens)].filter((part) => part !== null);
+  function tipped(label, tip) {
+    const node = el('span', label);
+    if (tip) node.setAttribute('data-tip', tip);
+    return node;
   }
 
-  function reasonOf(entry) {
-    const reasons = [];
-    if (entry.resumes) reasons.push(text.progress.resumes(entry.resumes.stage, entry.resumes.attempt));
-    if (entry.routedFrom) reasons.push(text.progress.routedFrom(entry.routedFrom.stage, entry.routedFrom.attempt));
-    return reasons;
+  /**
+   * The usage cluster `M$ | X in · Y out | Z cw · N cr`. Every figure is one field and nothing is added together; a
+   * zero is shown, a null is left out together with a group (and its bar) that ends up empty. `options.cost` is the
+   * cost (null leaves the group out), `options.costMissing` the attempts without one: a positive value makes it
+   * `M$+`. Null when there is nothing to show.
+   */
+  function usageNode(usage, options) {
+    if (!usage) return null;
+    const copy = text.progress.usage;
+    const cost = options && options.cost;
+    const costMissing = (options && options.costMissing) || 0;
+    const groups = [];
+    if (isNumber(cost)) {
+      const amount = cost.toFixed(2);
+      groups.push([tipped(
+        costMissing > 0 ? copy.costPartial(amount) : copy.cost(amount),
+        costMissing > 0 ? copy.costMissingTip(costMissing) : null,
+      )]);
+    }
+    const tokens = [];
+    if (isNumber(usage.inputTokens)) tokens.push(tipped(copy.input(countText(usage.inputTokens))));
+    if (isNumber(usage.outputTokens)) {
+      const tip = isNumber(usage.reasoningTokens)
+        ? copy.outputTipReasoning(countText(usage.reasoningTokens))
+        : copy.outputTip;
+      tokens.push(tipped(copy.output(countText(usage.outputTokens)), tip));
+    }
+    groups.push(tokens);
+    const cache = [];
+    if (isNumber(usage.cacheWriteTokens)) {
+      cache.push(tipped(copy.cacheWrite(countText(usage.cacheWriteTokens)), copy.cacheWriteTip));
+    }
+    if (isNumber(usage.cacheReadTokens)) {
+      cache.push(tipped(copy.cacheRead(countText(usage.cacheReadTokens)), copy.cacheReadTip));
+    }
+    groups.push(cache);
+    return ui.timeline.figures(groups);
+  }
+
+  /** The reason label as plain text, or null when the data does not say why the attempt ran. */
+  function reasonText(reason) {
+    if (!reason) return null;
+    if (reason.kind === 'answer') return text.progress.afterAnswer;
+    if (reason.kind === 'revise') return text.progress.reviseFrom(reason.from.stage, reason.from.attempt);
+    return text.progress.routedFrom(reason.from.stage, reason.from.attempt);
+  }
+
+  /** The label of why the attempt ran. `resumes` is only its tooltip, so without a label there is none. */
+  function reasonNode(entry) {
+    const label = reasonText(entry.reason);
+    if (label === null) return null;
+    const node = el('span', label, 'mg-muted');
+    if (entry.resumes) node.setAttribute('data-tip', text.progress.resumes(entry.resumes.stage, entry.resumes.attempt));
+    return node;
   }
 
   /** The marker tooltip: the state name and the absolute times; the state name also reaches assistive technology. */
@@ -59,19 +109,29 @@
     return parts.join(' · ');
   }
 
+  /** An attempt that ended by asking shows the question state instead of its run state. */
+  function markerStatus(entry) {
+    return entry.asked ? statusOf('question') : statusOf(entry.state);
+  }
+
+  function askedBadge() {
+    return ui.statusIndicator({ ...header.sessionStates.question, text: text.progress.asked });
+  }
+
   /**
-   * One ran attempt as a timeline entry: the dot (state), the stage with its number, decision and reason, the
-   * duration and tokens, then the model and effort and a blocker when there is one.
+   * One ran attempt as a timeline entry: the dot (state), the stage with its number, decision, asked badge and
+   * reason, the duration, then the model and effort with the usage, and a blocker when there is one.
    */
   function attemptItem(entry, name, tone) {
-    const status = statusOf(entry.state);
+    const status = markerStatus(entry);
     const main = [name, text.progress.attemptNumber(entry.attempt)];
     if (entry.decision !== null && entry.decision !== undefined) main.push(decisionBadge(entry.decision));
-    const reasons = reasonOf(entry);
-    if (reasons.length > 0) main.push(reasons.join(' '));
+    if (entry.asked) main.push(askedBadge());
+    main.push(reasonNode(entry));
+    const usage = entry.usage || null;
     return ui.timeline.item({ marker: ui.timeline.marker(status, { tip: markerTip(status, entry) }), tone }, [
-      ui.timeline.head(main, figuresOf(entry)),
-      ui.timeline.sub([entry.model, entry.effort]),
+      ui.timeline.head(main, [durationText(entry.wallSeconds)]),
+      ui.timeline.sub([entry.model, entry.effort], usageNode(usage, { cost: usage && usage.costUsd })),
       ui.timeline.note(entry.blocker),
       ui.timeline.note(entry.error),
     ]);
@@ -113,15 +173,20 @@
     };
   }
 
-  function sumOf(attempts, field) {
-    const known = attempts.map((entry) => entry[field]).filter(isNumber);
-    return known.length === 0 ? null : known.reduce((total, value) => total + value, 0);
-  }
-
-  /** The section head's trailing totals, left out when no attempt reports them. */
-  function totalsNode(attempts) {
-    const parts = figuresOf({ wallSeconds: sumOf(attempts, 'wallSeconds'), tokens: sumOf(attempts, 'tokens') });
-    return parts.length === 0 ? null : el('span', parts.join(' · '), 'mg-muted');
+  /**
+   * The section head's trailing totals: `active` (the sum of the attempt durations) and `wall` (the session's elapsed
+   * time) above the summed usage cluster. Each part is left out when unknown; null when nothing is known.
+   */
+  function totalsNode(totals) {
+    const times = [];
+    const active = durationText(totals.activeSeconds);
+    const wall = durationText(totals.wallSeconds);
+    if (active !== null) times.push(text.progress.active(active));
+    if (wall !== null) times.push(text.progress.wall(wall));
+    const usage = totals.usage
+      ? usageNode(totals.usage, { cost: totals.usage.costUsd, costMissing: totals.costMissing })
+      : null;
+    return ui.timeline.totals([times.length > 0 ? el('span', times.join(' · ')) : null, usage]);
   }
 
   function renderProgress(model) {
@@ -134,7 +199,7 @@
     }
     const built = progress.kind === 'stages' ? stageItems(progress.rows) : executionItems(progress.rows);
     const children = built.items.length === 0 ? [ui.empty(text.progress.empty)] : [ui.timeline(built.items)];
-    const totals = totalsNode(built.attempts);
+    const totals = totalsNode(progress.totals || {});
     return ui.section(text.progress.title, {
       note: progress.kind === 'stages' ? text.progress.note : text.progress.roleNote,
       count: built.attempts.length >= 1 ? text.progress.attempts(built.attempts.length) : undefined,

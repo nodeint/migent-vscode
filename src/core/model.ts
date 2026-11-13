@@ -160,8 +160,12 @@ export interface ExecutionSnapshot {
   error: string | null;
   client: string | null;
   model: string | null;
-  /** `execution.json` `options.effort`; null when absent. */
+  /** `execution.json` `options.effort`, else `options.model_reasoning_effort` (codex); null when absent. */
   effort: string | null;
+  /** `execution.json` `turn_kind` (`start`, `continue`, `answers`); null when absent. */
+  turnKind: string | null;
+  /** `execution.json` `outcome.status` (`question` when the attempt ended by asking); null when absent. */
+  outcomeStatus: string | null;
   /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
   hasFailureReport: boolean;
   /** `execution.json` `kind`; `verify` marks a verify-only run, which has no agent to reply to. */

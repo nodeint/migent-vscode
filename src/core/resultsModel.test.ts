@@ -156,7 +156,8 @@ describe('buildResultsModel', () => {
     const executions = [
       {
         id: 'e1', order: 1, stage: 'draft', attempt: 2, status: 'completed', decision: null, blocker: null,
-        client: null, model: null, effort: null, error: null, hasFailureReport: false, kind: null, createdAt: null,
+        client: null, model: null, effort: null, turnKind: null, outcomeStatus: null, error: null,
+        hasFailureReport: false, kind: null, createdAt: null,
         completedAt: '2026-11-01T11:00:00Z',
       },
     ];

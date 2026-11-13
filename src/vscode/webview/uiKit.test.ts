@@ -304,6 +304,12 @@ describe('UI kit builders', () => {
     expect(find(item, 'mg-tl-sub')?.textContent).toBe('claude-opus-5-5 · high');
     expect(find(item, 'mg-tl-note')).toBeUndefined();
     expect(timeline.sub([])).toBeNull();
+    // The trailing cluster is right-aligned on the same line, and the line has no tooltip.
+    const withEnd = timeline.sub(['m'], timeline.figures([['1 in', '2 out'], [], ['3 cw']])) as FakeElement;
+    expect(find(withEnd, 'mg-tl-sub-end')?.textContent).toBe('1 in · 2 out | 3 cw');
+    expect(find(withEnd, 'mg-tl-sub')?.attrs['data-tip']).toBeUndefined();
+    expect(timeline.figures([[], [null]])).toBeNull();
+    expect(timeline.totals([null])).toBeNull();
     expect(timeline.note('')).toBeNull();
   });
 

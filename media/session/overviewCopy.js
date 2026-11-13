@@ -76,10 +76,31 @@
       attemptNumber: (count) => '#' + count,
       /** The count in the section head. */
       attempts: (count) => count + (count === 1 ? ' attempt' : ' attempts'),
-      /** Why an attempt ran, only when `metrics.json` names the attempt it came from. */
-      resumes: (stage, attempt) => '← resumes ' + stage + ' #' + attempt,
+      /** Why an attempt ran; the labels follow the data (`turn_kind`, `routed_from`), never a guess. */
+      afterAnswer: '← after your answer',
+      reviseFrom: (stage, attempt) => '← revise from ' + stage + ' #' + attempt,
       routedFrom: (stage, attempt) => '← routed from ' + stage + ' #' + attempt,
-      tokens: (count) => count + ' tok',
+      /** The tooltip of the reason label, when `metrics.json` names the attempt this one resumed. */
+      resumes: (stage, attempt) => 'resumes ' + stage + ' #' + attempt,
+      /** The badge of an attempt that ended by asking a question. */
+      asked: 'asked',
+      /** The usage cluster: units, and the tooltips that explain the abbreviations. */
+      usage: {
+        input: (count) => count + ' in',
+        output: (count) => count + ' out',
+        cacheWrite: (count) => count + ' cw',
+        cacheRead: (count) => count + ' cr',
+        cost: (amount) => amount + '$',
+        costPartial: (amount) => amount + '$+',
+        cacheWriteTip: 'Cache write',
+        cacheReadTip: 'Cache read',
+        outputTip: 'Output',
+        outputTipReasoning: (count) => 'Output · ' + count + ' reasoning',
+        costMissingTip: (count) => count + (count === 1 ? ' attempt has' : ' attempts have') + ' no cost',
+      },
+      /** The section head: the time agents ran, and the elapsed time of the session. */
+      active: (time) => 'active ' + time,
+      wall: (time) => 'wall ' + time,
       /** The marker's tooltip: the state, then the absolute times that are known. */
       started: (time) => 'started ' + time,
       finished: (time) => 'finished ' + time,
@@ -87,6 +108,7 @@
       decision: (decision) => 'decision ' + decision,
       /** The state of a stage or execution row. */
       state: {
+        question: 'Asked a question',
         'not-run': 'Not run',
         running: 'Running',
         blocked: 'Blocked',

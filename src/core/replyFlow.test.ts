@@ -290,6 +290,8 @@ describe('replyTargets', () => {
       client: null,
       model: null,
       effort: null,
+      turnKind: null,
+      outcomeStatus: null,
       error: null,
       hasFailureReport: false,
       blocker: null,

@@ -402,9 +402,10 @@ describe('Overview page', () => {
     blocker: null,
     createdAt: null,
     wallSeconds: null,
-    tokens: null,
+    usage: null,
     resumes: null,
-    routedFrom: null,
+    reason: null,
+    asked: false,
     ...overrides,
   });
   const entries = (page: ReturnType<typeof load>) =>
@@ -466,7 +467,7 @@ describe('Overview page', () => {
             { order: 1, attempt: 1, state: 'completed', decision: 'revise', completedAt: null, ...attemptFacts() },
             {
               order: 2, attempt: 2, state: 'completed', decision: 'approved', completedAt: null,
-              ...attemptFacts({ resumes: { stage: 'plan', attempt: 1 } }),
+              ...attemptFacts({ reason: { kind: 'revise', from: { stage: 'plan', attempt: 1 } } }),
             },
           ],
         })],
@@ -480,7 +481,7 @@ describe('Overview page', () => {
     expect(decisions.map((node) => node?.textContent)).toEqual(['revise', 'approved']);
     expect(decisions.map((node) => node?.className)).toEqual(['mg-status mg-status--warn', 'mg-status mg-status--ok']);
     expect(rows[0]?.textContent).not.toContain('←');
-    expect(rows[1]?.textContent).toContain('← resumes plan #1');
+    expect(rows[1]?.textContent).toContain('← revise from plan #1');
   });
 
   it('names a routed attempt only from the routing the model reports', () => {
@@ -491,7 +492,7 @@ describe('Overview page', () => {
         rows: [stageRow({
           history: [{
             order: 3, attempt: 3, state: 'completed', decision: null, completedAt: null,
-            ...attemptFacts({ routedFrom: { stage: 'review_plan', attempt: 1 } }),
+            ...attemptFacts({ reason: { kind: 'routed', from: { stage: 'review_plan', attempt: 1 } } }),
           }],
         })],
       },
@@ -499,7 +500,7 @@ describe('Overview page', () => {
     expect(entries(page)[0]?.textContent).toContain('← routed from review_plan #1');
   });
 
-  it('shows the full model and effort under the attempt, cut by CSS with the full value in the tooltip', () => {
+  it('shows the full model and effort under the attempt, cut by CSS and without a tooltip', () => {
     const page = load();
     page.deliver(pageModel({
       progress: {
@@ -514,10 +515,25 @@ describe('Overview page', () => {
     }));
     const sub = entries(page)[0]?.querySelector('.mg-tl-sub');
     expect(sub?.textContent).toBe('claude-sonnet-5-5-20260101 · medium');
-    expect(sub?.attrs['data-tip']).toBe('claude-sonnet-5-5-20260101 · medium');
+    // The model line carries no tooltip, even when it is cut.
+    expect(sub?.attrs['data-tip']).toBeUndefined();
+    expect(entries(page)[0]?.querySelector('.mg-tl-subline')?.attrs['data-tip']).toBeUndefined();
   });
 
-  it('shows the duration and tokens of an attempt and their totals in the section head', () => {
+  const usage = (overrides: Record<string, unknown> = {}) => ({
+    inputTokens: null,
+    outputTokens: null,
+    reasoningTokens: null,
+    cacheReadTokens: null,
+    cacheWriteTokens: null,
+    costUsd: null,
+    ...overrides,
+  });
+  const done = (order: number, extra: Record<string, unknown>) => ({
+    order, attempt: order, state: 'completed', decision: null, completedAt: null, ...attemptFacts(extra),
+  });
+
+  it('shows the duration on the head line and the usage cluster, one field each, on the model line', () => {
     const page = load();
     page.deliver(pageModel({
       progress: {
@@ -525,18 +541,128 @@ describe('Overview page', () => {
         rows: [stageRow({
           attempts: 2,
           history: [
-            { order: 1, attempt: 1, state: 'completed', decision: null, completedAt: null, ...attemptFacts({ wallSeconds: 62, tokens: 18000 }) },
-            { order: 2, attempt: 2, state: 'completed', decision: null, completedAt: null, ...attemptFacts({ wallSeconds: 220, tokens: 52000 }) },
+            done(1, {
+              model: 'sonnet', effort: 'medium', wallSeconds: 62,
+              usage: usage({
+                costUsd: 0.094, inputTokens: 8, outputTokens: 1100, reasoningTokens: 300,
+                cacheWriteTokens: 16000, cacheReadTokens: 3730000,
+              }),
+            }),
+            done(2, {
+              wallSeconds: 220,
+              usage: usage({ inputTokens: 72100, outputTokens: 3600, cacheWriteTokens: 0, cacheReadTokens: 706000 }),
+            }),
+          ],
+        })],
+        totals: {
+          activeSeconds: 282,
+          wallSeconds: 1458,
+          usage: usage({
+            costUsd: 0.094, inputTokens: 72108, outputTokens: 4700, cacheWriteTokens: 16000, cacheReadTokens: 4436000,
+          }),
+          costMissing: 1,
+        },
+      },
+    }));
+    const rows = entries(page);
+    // The head line carries the duration only: no tokens.
+    expect(rows[0]?.querySelector('.mg-tl-meta')?.textContent).toBe('1m 2s');
+    expect(rows[1]?.querySelector('.mg-tl-meta')?.textContent).toBe('3m 40s');
+    const cluster = (row: FakeElement | undefined) => row?.querySelector('.mg-tl-sub-end');
+    // Cost first, then in/out, then the cache pair; each field is shown on its own, with its own unit.
+    expect(cluster(rows[0])?.textContent).toBe('0.09$ | 8 in · 1.1k out | 16k cw · 3.7M cr');
+    // A zero is data and stays; no cost drops the whole `M$ |` group.
+    expect(cluster(rows[1])?.textContent).toBe('72.1k in · 3.6k out | 0 cw · 706k cr');
+    const tips = (row: FakeElement | undefined) =>
+      cluster(row)?.descendants().map((node) => node.attrs['data-tip']).filter(Boolean);
+    expect(tips(rows[0])).toEqual(['Output · 300 reasoning', 'Cache write', 'Cache read']);
+    expect(tips(rows[1])).toEqual(['Output', 'Cache write', 'Cache read']);
+
+    const progress = page.section('Progress');
+    expect(progress?.textContent).toContain('2 attempts');
+    const total = progress?.querySelector('.mg-tl-totals');
+    expect(total?.textContent).toBe('active 4m 42s · wall 24m 18s0.09$+ | 72.1k in · 4.7k out | 16k cw · 4.4M cr');
+    expect(total?.descendants().find((node) => node.textContent === '0.09$+')?.attrs['data-tip']).toBe('1 attempt has no cost');
+  });
+
+  it('drops a null field, an emptied group and an unknown active or wall time', () => {
+    const page = load();
+    page.deliver(pageModel({
+      progress: {
+        kind: 'stages',
+        rows: [stageRow({ history: [done(1, { usage: usage({ outputTokens: 500, cacheReadTokens: 2000 }) })] })],
+        totals: { activeSeconds: null, wallSeconds: 90, usage: usage({ outputTokens: 500 }), costMissing: 0 },
+      },
+    }));
+    expect(entries(page)[0]?.querySelector('.mg-tl-sub-end')?.textContent).toBe('500 out | 2k cr');
+    expect(page.section('Progress')?.querySelector('.mg-tl-totals')?.textContent).toBe('wall 1m 30s500 out');
+  });
+
+  it('shows a total cost without the plus when every attempt reported one', () => {
+    const page = load();
+    page.deliver(pageModel({
+      progress: {
+        kind: 'executions',
+        rows: [],
+        totals: { activeSeconds: null, wallSeconds: null, usage: usage({ costUsd: 2.281 }), costMissing: 0 },
+      },
+    }));
+    const total = page.section('Progress')?.querySelector('.mg-tl-totals');
+    expect(total?.textContent).toBe('2.28$');
+    expect(total?.descendants().some((node) => node.attrs['data-tip'] !== undefined)).toBe(false);
+  });
+
+  it('marks an attempt that ended with a question, with an asked badge instead of the completed tick', () => {
+    const page = load();
+    page.deliver(pageModel({
+      progress: {
+        kind: 'stages',
+        rows: [stageRow({
+          history: [{
+            ...done(1, { asked: true, createdAt: '2026-11-01T10:00:00.000Z' }),
+            completedAt: '2026-11-01T10:05:00.000Z',
+          }],
+        })],
+      },
+    }));
+    const [row] = entries(page);
+    const marker = row?.querySelector('.mg-tl-marker')?.querySelector('.mg-status');
+    expect(marker?.className).toContain('mg-status--warn');
+    expect(marker?.attrs['data-tip']).toMatch(/^Asked a question · started /);
+    expect(marker?.querySelector('.mg-visually-hidden')?.textContent).toBe('Asked a question');
+    const main = row?.querySelector('.mg-tl-main');
+    expect(main?.textContent).toContain('asked');
+    expect(main?.textContent).not.toContain('Completed');
+  });
+
+  it('words why an attempt ran from its reason, and keeps resumes only in that label tooltip', () => {
+    const page = load();
+    page.deliver(pageModel({
+      progress: {
+        kind: 'stages',
+        rows: [stageRow({
+          history: [
+            done(1, {}),
+            done(2, { reason: { kind: 'answer' }, resumes: { stage: 'plan', attempt: 1 } }),
+            done(3, { reason: { kind: 'revise', from: { stage: 'review_work', attempt: 1 } } }),
+            done(4, { reason: { kind: 'routed', from: { stage: 'review_work', attempt: 2 } } }),
+            done(5, { resumes: { stage: 'plan', attempt: 1 } }),
           ],
         })],
       },
     }));
     const rows = entries(page);
-    expect(rows[0]?.querySelector('.mg-tl-meta')?.textContent).toBe('1m 2s18k tok');
-    expect(rows[1]?.querySelector('.mg-tl-meta')?.textContent).toBe('3m 40s52k tok');
-    const progress = page.section('Progress');
-    expect(progress?.textContent).toContain('2 attempts');
-    expect(progress?.textContent).toContain('4m 42s · 70k tok');
+    const label = (row: FakeElement | undefined) =>
+      row?.querySelector('.mg-tl-main')?.descendants().find((node) => node.classList.contains('mg-muted'));
+    expect(label(rows[0])).toBeUndefined();
+    expect(label(rows[1])?.textContent).toBe('← after your answer');
+    expect(label(rows[1])?.attrs['data-tip']).toBe('resumes plan #1');
+    expect(label(rows[2])?.textContent).toBe('← revise from review_work #1');
+    expect(label(rows[2])?.attrs['data-tip']).toBeUndefined();
+    expect(label(rows[3])?.textContent).toBe('← routed from review_work #2');
+    // Resumes without a label has nowhere to show.
+    expect(label(rows[4])).toBeUndefined();
+    expect(rows[4]?.textContent).not.toContain('resumes');
   });
 
   it('leaves out what the data does not say: no metrics, model, effort or times, and no placeholder', () => {
@@ -556,6 +682,7 @@ describe('Overview page', () => {
     expect(page.section('Progress')?.textContent).not.toMatch(/unknown|—|undefined|null|NaN/i);
     // No attempt reports figures, so the head carries no totals.
     expect(page.section('Progress')?.querySelector('.mg-section-actions')?.children).toHaveLength(0);
+    expect(row?.querySelector('.mg-tl-sub-end')).toBeNull();
 
     // A model whose attempts predate every extra field still renders.
     page.deliver(pageModel({ progress: { kind: 'stages', rows: [stageRow({})] } }));
@@ -664,7 +791,7 @@ describe('Overview page', () => {
       progress: {
         kind: 'executions',
         rows: [
-          { executionId: '0001-review--attempt-01', stage: 'review', attempt: 1, state: 'completed', decision: 'approved', completedAt: null, isCurrent: false, ...attemptFacts({ model: 'claude-opus-5-5', effort: 'high', wallSeconds: 75, tokens: 21000 }) },
+          { executionId: '0001-review--attempt-01', stage: 'review', attempt: 1, state: 'completed', decision: 'approved', completedAt: null, isCurrent: false, ...attemptFacts({ model: 'claude-opus-5-5', effort: 'high', wallSeconds: 75, usage: usage({ inputTokens: 21000 }) }) },
           { executionId: '0002-review--attempt-02', stage: 'review', attempt: 2, state: 'failed', decision: null, completedAt: null, isCurrent: true, ...attemptFacts() },
         ],
       },
@@ -675,7 +802,7 @@ describe('Overview page', () => {
     expect(rows[0]?.textContent).toContain('#1');
     expect(rows[0]?.textContent).toContain('approved');
     expect(rows[0]?.textContent).toContain('claude-opus-5-5 · high');
-    expect(rows[0]?.querySelector('.mg-tl-meta')?.textContent).toBe('1m 15s21k tok');
+    expect(rows[0]?.querySelector('.mg-tl-meta')?.textContent).toBe('1m 15s');
     expect(rows[0]?.querySelector('.mg-status')?.className).toContain('mg-status--compact');
     expect(rows[1]?.querySelector('.mg-status')?.className).toContain('mg-status--error');
     expect(rows[1]?.className).toContain('mg-tl-item--info');

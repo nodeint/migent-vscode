@@ -1,4 +1,4 @@
-import type { MetricsExecution } from './metrics';
+import type { MetricsExecution, MetricsUsage } from './metrics';
 import type { ExecutionSnapshot } from './model';
 import type { SessionStagePlan } from './workflowStages';
 
@@ -24,8 +24,17 @@ export interface AttemptRef {
 }
 
 /**
- * What an attempt shows beyond its state: the model and effort it ran with, its blocker, its times, and the
- * duration and tokens from `metrics.json`. Every field is null when the source does not say.
+ * Why an attempt ran, when the data says so: it followed the human's answer, or a review's decision routed to it
+ * (`revise` when that decision was `revise`, `routed` for any other decision).
+ */
+export type RunReason =
+  | { kind: 'answer' }
+  | { kind: 'revise'; from: AttemptRef }
+  | { kind: 'routed'; from: AttemptRef };
+
+/**
+ * What an attempt shows beyond its state: the model and effort it ran with, its blocker, its times, why it ran,
+ * and the duration and usage from `metrics.json`. Every field is null when the source does not say.
  */
 export interface AttemptFacts {
   model: string | null;
@@ -35,12 +44,26 @@ export interface AttemptFacts {
   error: string | null;
   createdAt: string | null;
   wallSeconds: number | null;
-  /** Input plus output tokens; null unless metrics report at least one of them. */
-  tokens: number | null;
+  /** Each token count and the cost as `metrics.json` reports them, never combined; null without a metrics entry. */
+  usage: MetricsUsage | null;
   /** The earlier attempt this one resumed, when `metrics.json` names one that is in the session. */
   resumes: AttemptRef | null;
-  /** The attempt whose decision routed to this one, when `metrics.json` names one that is in the session. */
-  routedFrom: AttemptRef | null;
+  /** Why the attempt ran (`turn_kind` with `routed_from`); null when it started the stage or the data is not enough. */
+  reason: RunReason | null;
+  /** True when the attempt ended by asking a question (`outcome.status: question`). */
+  asked: boolean;
+}
+
+/** The attempts of one Progress block added up, for its header. */
+export interface ProgressTotals {
+  /** Sum of the attempts' durations: the time agents ran. Null when no attempt reports one. */
+  activeSeconds: number | null;
+  /** `metrics.json` `totals.wall_seconds`: the elapsed time of the session. Null when not reported. */
+  wallSeconds: number | null;
+  /** Per field, the sum over attempts that report it; null when none does, or without any metrics entry. */
+  usage: MetricsUsage | null;
+  /** Attempts without a cost (no metrics entry, or none reported), so a summed cost understates the spend. */
+  costMissing: number;
 }
 
 /** One attempt of a stage, for the attempt history. */
@@ -79,8 +102,8 @@ export interface ExecutionProgressRow extends AttemptFacts {
 
 /** `empty` is reserved for a session that is not available to the page. */
 export type SessionProgress =
-  | { kind: 'stages'; rows: StageProgressRow[] }
-  | { kind: 'executions'; rows: ExecutionProgressRow[] }
+  | { kind: 'stages'; rows: StageProgressRow[]; totals: ProgressTotals }
+  | { kind: 'executions'; rows: ExecutionProgressRow[]; totals: ProgressTotals }
   | { kind: 'empty' };
 
 export interface ProgressInput {
@@ -92,6 +115,8 @@ export interface ProgressInput {
   latestExecutionId: string | null;
   /** `metrics.json` executions; absent for an old or running session, which then shows no duration or tokens. */
   metrics?: readonly MetricsExecution[];
+  /** `metrics.json` `totals.wall_seconds`; absent when the file is. */
+  wallSeconds?: number | null;
 }
 
 function stateOf(status: string | null): ProgressState {
@@ -132,6 +157,53 @@ function sum(values: readonly (number | null)[]): number | null {
   return present.length === 0 ? null : present.reduce((total, value) => total + value, 0);
 }
 
+/**
+ * Why an attempt ran. `answers` is the human's answer; `continue` is a revision only when the attempt that routed
+ * here decided `revise`, and says nothing without a source. An unknown or missing `turn_kind` keeps the source, if any.
+ */
+function reasonOf(
+  turnKind: string | null,
+  from: AttemptRef | null,
+  source: ExecutionSnapshot | undefined,
+): RunReason | null {
+  if (turnKind === 'answers') return { kind: 'answer' };
+  if (turnKind === 'start' || from === null) return null;
+  if (turnKind === 'continue' && source?.decision === 'revise') return { kind: 'revise', from };
+  return { kind: 'routed', from };
+}
+
+const USAGE_FIELDS = [
+  'inputTokens',
+  'outputTokens',
+  'reasoningTokens',
+  'cacheReadTokens',
+  'cacheWriteTokens',
+  'costUsd',
+] as const;
+
+function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null): ProgressTotals {
+  const measured = attempts.flatMap((attempt) => (attempt.usage === null ? [] : [attempt.usage]));
+  const usage: MetricsUsage | null = measured.length === 0
+    ? null
+    : {
+      inputTokens: null,
+      outputTokens: null,
+      reasoningTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      costUsd: null,
+    };
+  if (usage !== null) {
+    for (const field of USAGE_FIELDS) usage[field] = sum(measured.map((one) => one[field]));
+  }
+  return {
+    activeSeconds: sum(attempts.map((attempt) => attempt.wallSeconds)),
+    wallSeconds,
+    usage,
+    costMissing: attempts.filter((attempt) => (attempt.usage?.costUsd ?? null) === null).length,
+  };
+}
+
 /** The facts of every execution by id, resolving `resumes` and `routed from` to named attempts. */
 function factsOf(
   executions: readonly ExecutionSnapshot[],
@@ -152,9 +224,10 @@ function factsOf(
       error: execution.error,
       createdAt: execution.createdAt,
       wallSeconds: measured?.wallSeconds ?? null,
-      tokens: measured === undefined ? null : sum([measured.usage.inputTokens, measured.usage.outputTokens]),
+      usage: measured?.usage ?? null,
       resumes: refOf(measured?.resumesExecutionId),
-      routedFrom: refOf(measured?.routedFrom),
+      reason: reasonOf(execution.turnKind, refOf(measured?.routedFrom), byId.get(measured?.routedFrom ?? '')),
+      asked: execution.outcomeStatus === 'question',
     };
   };
 }
@@ -206,21 +279,20 @@ export function buildProgress(input: ProgressInput): SessionProgress {
   );
   const running = latestRunning(executions, input.latestExecutionId);
   const facts = factsOf(executions, input.metrics ?? []);
+  const wallSeconds = input.wallSeconds ?? null;
 
   if (input.plan.kind !== 'ok' || input.plan.stages.length === 0) {
-    return {
-      kind: 'executions',
-      rows: executions.map((execution) => ({
-        executionId: execution.id,
-        stage: execution.stage,
-        attempt: execution.attempt,
-        state: stateOf(execution.status),
-        decision: execution.decision,
-        completedAt: execution.completedAt,
-        isCurrent: execution.id === running?.id,
-        ...facts(execution),
-      })),
-    };
+    const rows: ExecutionProgressRow[] = executions.map((execution) => ({
+      executionId: execution.id,
+      stage: execution.stage,
+      attempt: execution.attempt,
+      state: stateOf(execution.status),
+      decision: execution.decision,
+      completedAt: execution.completedAt,
+      isCurrent: execution.id === running?.id,
+      ...facts(execution),
+    }));
+    return { kind: 'executions', rows, totals: totalsOf(rows, wallSeconds) };
   }
 
   const runningStageIds = new Set(input.runningStageIds);
@@ -231,9 +303,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
     if (stage === '' || planned.has(stage) || extraStages.includes(stage)) continue;
     extraStages.push(stage);
   }
-  return {
-    kind: 'stages',
-    rows: [...input.plan.stages, ...extraStages].map((id) =>
-      stageRow(id, { facts, executions, runningStageIds, running })),
-  };
+  const rows = [...input.plan.stages, ...extraStages].map((id) =>
+    stageRow(id, { facts, executions, runningStageIds, running }));
+  return { kind: 'stages', rows, totals: totalsOf(rows.flatMap((row) => row.history), wallSeconds) };
 }

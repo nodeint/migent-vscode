@@ -164,6 +164,8 @@ describe('execution rows', () => {
     client: 'claude',
     model: 'sonnet',
     effort: null,
+    turnKind: null,
+    outcomeStatus: null,
     error: null,
     hasFailureReport: false,
     blocker: null,

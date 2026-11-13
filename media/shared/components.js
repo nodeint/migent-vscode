@@ -801,12 +801,46 @@
     return node;
   };
 
-  /** The quiet mono line under the head: `parts` (strings; empty ones dropped) joined by a dot, cut with an ellipsis. */
-  timeline.sub = function sub(parts) {
+  /**
+   * The quiet line under the head: `parts` (strings; empty ones dropped) joined by a dot on the left, cut with an
+   * ellipsis, and `end` (a node, optional) right-aligned. On a narrow panel `end` drops to its own line. Null when
+   * both are empty. The line has no tooltip of its own.
+   */
+  timeline.sub = function sub(parts, end) {
     const kept = (parts || []).filter((part) => typeof part === 'string' && part !== '');
+    if (kept.length === 0 && !end) return null;
+    const node = el('div', null, 'mg-tl-subline');
+    if (kept.length > 0) node.append(el('span', kept.join(' · '), 'mg-tl-sub'));
+    if (end) {
+      end.classList.add('mg-tl-sub-end');
+      node.append(end);
+    }
+    return node;
+  };
+
+  /**
+   * A cluster of figures: `groups` is a list of lists of strings or nodes. Figures within a group are joined by a dot,
+   * groups by a bar; empty groups are dropped. Null when nothing is left. Pass it to `timeline.sub` or `timeline.totals`.
+   */
+  timeline.figures = function figures(groups) {
+    const node = el('span', null);
+    (groups || []).map((group) => (group || []).filter(Boolean)).filter((group) => group.length > 0)
+      .forEach((group, groupIndex) => {
+        if (groupIndex > 0) node.append(el('span', ' | ', 'mg-tl-sep'));
+        group.forEach((part, index) => {
+          if (index > 0) node.append(el('span', ' · ', 'mg-tl-sep'));
+          node.append(typeof part === 'string' ? el('span', part) : part);
+        });
+      });
+    return node.children.length === 0 ? null : node;
+  };
+
+  /** The right-aligned lines of figures for a section head's actions; `lines` are nodes, nulls are skipped. */
+  timeline.totals = function totals(lines) {
+    const kept = (lines || []).filter(Boolean);
     if (kept.length === 0) return null;
-    const node = el('div', kept.join(' · '), 'mg-tl-sub');
-    node.setAttribute('data-tip', node.textContent);
+    const node = el('span', null, 'mg-tl-totals');
+    for (const line of kept) node.append(line);
     return node;
   };
 

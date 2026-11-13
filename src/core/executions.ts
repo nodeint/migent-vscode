@@ -44,7 +44,9 @@ function outcomeFrom(record: Record<string, unknown> | null): Record<string, unk
 }
 
 function effortFrom(record: Record<string, unknown> | null): string | null {
-  return isRecord(record?.options) ? str(record.options.effort) : null;
+  if (!isRecord(record?.options)) return null;
+  const { effort, model_reasoning_effort: reasoningEffort } = record.options;
+  return str(effort) ?? str(reasoningEffort);
 }
 
 const CAUSE_MAX = 200;
@@ -79,23 +81,26 @@ function summaryFrom(
   const dirName = path.basename(executionDirPath);
   const parsed = parseExecutionId(dirName);
   const outcome = outcomeFrom(record);
+  const field = (key: string): string | null => str(record?.[key]);
 
   return {
     id: str(record?.execution_id) ?? dirName,
     order: parsed?.order ?? numberOr(record?.execution_order, 0),
     stage: stageFrom(record, parsed),
     attempt: parsed?.attempt ?? numberOr(record?.stage_attempt, 1),
-    status: str(record?.status),
+    status: field('status'),
     decision: str(outcome.decision),
     blocker: str(outcome.blocker),
     error: executionCause(record),
-    client: str(record?.client),
-    model: str(record?.model),
+    client: field('client'),
+    model: field('model'),
     effort: effortFrom(record),
+    turnKind: field('turn_kind'),
+    outcomeStatus: str(outcome.status),
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
-    kind: str(record?.kind),
-    createdAt: str(record?.created_at),
-    completedAt: str(record?.completed_at),
+    kind: field('kind'),
+    createdAt: field('created_at'),
+    completedAt: field('completed_at'),
   };
 }
 
