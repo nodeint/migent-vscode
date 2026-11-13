@@ -7,14 +7,14 @@
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.5.6: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.6.0: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
 //                        A failed execution writes `failure.md`; `workflow validate` and `get` are implemented.
 //   MIGENT_FAKE_COMPLETE_WARN  1 makes `session complete` warn on stderr about a missing required artifact (exit 0)
 //   MIGENT_FAKE_IDS      numeric makes new sessions get short numeric ids (1, 2, ...) written as unquoted integers in
-//                        the manifest, like CLI 0.5.6; otherwise ids are UUIDs.
+//                        the manifest, like CLI 0.5.6 and later; otherwise ids are UUIDs.
 //   MIGENT_FAKE_PREFLIGHT  fail makes `session run` fail the preflight (exit 2, nothing created or frozen) unless
 //                        `--skip-preflight` is passed. Ignored in legacy mode.
 //   MIGENT_FAKE_REPLY    how `session continue --stage --reply-file` treats a reply to an ordinary blocker (a session
@@ -548,7 +548,7 @@ function doctor() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.5.6');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.6.0');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
 } else if ((args[0] === 'workflow' || args[0] === 'config') && args[1] === 'save' && !IS_LEGACY) {

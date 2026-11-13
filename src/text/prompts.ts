@@ -25,7 +25,7 @@ export const PROMPTS = {
 
   // Models
   'prompts.modelDefault': () => 'default',
-  'prompts.modelForAll': () => 'Use this model for all roles',
+  'prompts.modelForAll': () => 'Use this model for all agents',
   'prompts.modelFilter': () => 'Type to filter by client or model',
   'prompts.inlineAgentModel': () => 'Inline agent model',
 
@@ -127,7 +127,7 @@ export const PROMPTS = {
   'prompts.duplicateNeedsCli': () => 'Duplicating needs a usable Migent CLI.',
   'prompts.fileUnreadable': () => 'The file cannot be read.',
   'prompts.notMapping': () => 'The file is not a workflow mapping.',
-  'prompts.initRoleModel': ({ role }: { role: string }) => `Initialize Migent: ${role} model`,
+  'prompts.initAgentModel': ({ agent, roles }: { agent: string; roles: string }) => `Initialize Migent: ${agent} agent model (${roles})`,
   'prompts.openWhichSession': () => 'Open which session?',
   'prompts.timelineWhich': () => 'Show the timeline of which session?',
   'prompts.logWhich': () => 'Show the log of which session?',

@@ -11,6 +11,16 @@ describe('agent codec', () => {
     expect(agentBody(agent)).toEqual({ ...source, model: 'n' });
   });
 
+  it('reads number and boolean option values (CLI 0.6.0) as strings and saves them as strings', () => {
+    const agent = parseAgent({ client: { type: 'codex', options: { retries: 3, verbose: true, mode: 'fast' } } });
+    expect(agent.client?.options).toEqual([
+      { key: 'retries', value: '3' },
+      { key: 'verbose', value: 'true' },
+      { key: 'mode', value: 'fast' },
+    ]);
+    expect(agentBody(agent)).toEqual({ client: { type: 'codex', options: { retries: '3', verbose: 'true', mode: 'fast' } } });
+  });
+
   it('keeps an empty present value present and an absent one absent', () => {
     expect(agentBody(parseAgent({ effort: '', client: { options: {} } }))).toEqual({ effort: '', client: { options: {} } });
     expect(agentBody(parseAgent({ model: 'm' }))).toEqual({ model: 'm' });

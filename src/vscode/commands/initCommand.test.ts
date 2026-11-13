@@ -120,7 +120,7 @@ describe('initializeProject', () => {
       });
     }
 
-    /** A Quick Pick whose first accept takes the highlighted item with the "for all roles" button. */
+    /** A Quick Pick whose first accept takes the highlighted item with the "for all agents" button. */
     function pickAllWithFirstModel(): { shown: { label: string; model?: unknown }[][] } {
       const shown: { label: string; model?: unknown }[][] = [];
       vscodeMock.window.createQuickPick.mockImplementation(() => {
@@ -167,7 +167,61 @@ describe('initializeProject', () => {
         'claude-code · sonnet',
       ]);
       const args = invoke.text.mock.calls[0][1] as string[];
-      expect(args).toEqual(expect.arrayContaining(['init', '--no-input', '--client', 'claude-code', '--model', 'opus']));
+      expect(args).toEqual(['init', '--agent', 'coding=claude-code:opus', '--agent', 'planning=claude-code:opus', '--agent', 'review=claude-code:opus', '--no-input']);
+    });
+
+    it('asks once per template agent and passes each pick to its own --agent', async () => {
+      discovery(clientRows, [
+        { name: 'sonnet', client: 'claude-code', default: false },
+        { name: 'opus', client: 'claude-code', default: true },
+        { name: 'gpt', client: 'codex', default: true },
+      ]);
+      invoke.text.mockResolvedValue({ kind: 'ok', value: '' });
+      const titles: string[] = [];
+      const labelsPerPick = ['codex · gpt', 'claude-code · opus', 'claude-code · sonnet'];
+      let pick = 0;
+      vscodeMock.window.createQuickPick.mockImplementation(() => {
+        let accept: () => void = () => {};
+        const input = {
+          title: '',
+          items: [] as { label: string; model?: unknown }[],
+          selectedItems: [] as { model?: unknown }[],
+          activeItems: [] as { model?: unknown }[],
+          buttons: [] as unknown[],
+          onDidAccept: (listener: () => void) => {
+            accept = listener;
+            return { dispose: () => {} };
+          },
+          onDidHide: () => ({ dispose: () => {} }),
+          onDidTriggerButton: () => ({ dispose: () => {} }),
+          show: () => {
+            titles.push(input.title);
+            const label = labelsPerPick[pick++];
+            input.selectedItems = [input.items.find((item) => item.label === label) ?? {}];
+            accept();
+          },
+          hide: () => {},
+          dispose: () => {},
+        };
+        return input;
+      });
+      await run();
+      // Agent order is coding, planning, review: every agent is asked, naming the roles it serves.
+      expect(titles).toEqual([
+        'Initialize Migent: coding agent model (developer, operator)',
+        'Initialize Migent: planning agent model (architect)',
+        'Initialize Migent: review agent model (reviewer)',
+      ]);
+      expect(invoke.text.mock.calls[0][1]).toEqual([
+        'init',
+        '--agent',
+        'coding=codex:gpt',
+        '--agent',
+        'planning=claude-code:opus',
+        '--agent',
+        'review=claude-code:sonnet',
+        '--no-input',
+      ]);
     });
 
     it('uses a partial catalog as is', async () => {

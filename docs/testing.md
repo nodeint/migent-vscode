@@ -176,9 +176,9 @@ time.
 The fixture CLI implements `session rename` (it writes only `title.json`, takes no lock) and, with
 `MIGENT_FAKE_IDS=numeric`, gives new sessions numeric ids.
 
-### Session drafts and CLI 0.5.6 behavior
+### Session drafts and CLI 0.6.0 behavior
 
-The fixture CLI models 0.5.6 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+The fixture CLI models 0.6.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`

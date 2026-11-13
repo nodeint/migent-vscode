@@ -362,6 +362,31 @@ describe('the page draft', () => {
   });
 });
 
+describe('inline agent options (CLI 0.6.0)', () => {
+  it('loads number and boolean option values and saves them as strings', () => {
+    const yaml = [
+      'schema_version: 7',
+      'id: w',
+      'stages:',
+      '  - id: s',
+      '    agent:',
+      '      model: m',
+      '      client:',
+      '        type: codex',
+      '        options: {retries: 3, verbose: true}',
+      '',
+    ].join('\n');
+    const result = model(project({ 'w.yaml': yaml }, CONFIG), 'w.yaml');
+    expect(result.state).toBe('ok');
+    expect(result.form.stages[0].agent?.clientOptions).toEqual([
+      { key: 'retries', value: '3' },
+      { key: 'verbose', value: 'true' },
+    ]);
+    const body = workflowBodyFromForm(result.form, 7) as { stages: { agent: { client: unknown } }[] };
+    expect(body.stages[0].agent.client).toEqual({ type: 'codex', options: { retries: '3', verbose: 'true' } });
+  });
+});
+
 describe('duplicateArtifactProblem', () => {
   it('is null for distinct ids, including the same id in different decisions', () => {
     const form = workflowFormFromClient({
