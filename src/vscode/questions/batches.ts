@@ -4,7 +4,7 @@ import { type AnswerModel, buildAnswerModel, parseAnswerMessage } from '../../co
 import { refreshBatchState } from '../../core/answerState';
 import { listExecutions } from '../../core/executions';
 import type { PendingQuestion, SessionSnapshot } from '../../core/model';
-import { questionsPath, sessionDir } from '../../core/paths';
+import { sessionDir } from '../../core/paths';
 import {
   type AnswerDraft,
   batchFingerprint,
@@ -13,7 +13,7 @@ import {
   serializeAnswers,
   verifyBatch,
 } from '../../core/questionAnswers';
-import { type QuestionRecord, type QuestionsRead,readQuestions } from '../../core/questions';
+import { type QuestionRecord, questionsFileToOpen, type QuestionsRead, readQuestions } from '../../core/questions';
 import { titleCase } from '../../core/resultsModel';
 import { buildSessionMeta } from '../../core/sessionMeta';
 import { sessionTitle } from '../../core/sessionPresentation';
@@ -264,7 +264,12 @@ export class QuestionBatches implements vscode.Disposable {
   async #openQuestions(entry: Entry): Promise<void> {
     const resolved = this.#resolve(entry.identity);
     if (resolved === undefined) return;
-    await openFile(questionsPath(resolved.context.root, entry.identity.sessionId), 'questions.json');
+    const { sessionId } = entry.identity;
+    const file = questionsFileToOpen(
+      sessionDir(resolved.context.root, sessionId),
+      resolved.context.store.snapshot(sessionId)?.status?.questions,
+    );
+    await openFile(file, 'questions.json');
   }
 
   #edit(entry: Entry, message: EditMessage): void {
@@ -348,7 +353,10 @@ export class QuestionBatches implements vscode.Disposable {
 
   #readHistory(entry: Entry): QuestionsRead | null {
     const resolved = this.#resolve(entry.identity);
-    return resolved === undefined ? null : readQuestions(sessionDir(resolved.context.root, entry.identity.sessionId));
+    return resolved === undefined ? null : readQuestions(
+          sessionDir(resolved.context.root, entry.identity.sessionId),
+          resolved.context.store.snapshot(entry.identity.sessionId)?.status?.questions,
+        );
   }
 
   /**

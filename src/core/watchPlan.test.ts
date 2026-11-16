@@ -99,6 +99,8 @@ describe('desiredWatches', () => {
     // conversation.json holds the reply turn that confirms a reply, so a change to it must reach the consumer.
     const execution = desiredWatches(plan).find((watch) => watch.folder.endsWith(path.join('executions', 'e1')));
     expect(execution?.pattern).toContain('conversation.json');
+    // input.json is the persisted answer of a Migent 0.8 batch.
+    expect(execution?.pattern).toContain('input.json');
     expect(execution?.pattern).toContain('failure.md');
     expect(execution?.pattern).toContain('diagnostics.json');
     const turn = desiredWatches(plan).find((watch) => watch.folder.endsWith(path.join('turns', 'turn-1')));

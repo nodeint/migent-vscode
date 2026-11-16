@@ -56,6 +56,11 @@ describe('questionAttempts', () => {
     ]);
   });
 
+  it('shows an attempt with a persisted answer as answered even while status.json still lists it', () => {
+    const attempts = questionAttempts([answered('1', '0001-plan--attempt-01')], [pending('1', '0001-plan--attempt-01')]);
+    expect(attempts.map((attempt) => attempt.status)).toEqual(['answered']);
+  });
+
   it('adds a pending batch that questions.json does not hold yet, and skips questions with no execution', () => {
     const attempts = questionAttempts([record('9', null)], [pending('1', '0004-review--attempt-01', 'review'), pending('2', null)]);
     expect(attempts).toEqual([

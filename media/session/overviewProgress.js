@@ -90,6 +90,15 @@
     return node;
   }
 
+  /** The human input the attempt opened with as a note, or null when none is recorded. */
+  function inputText(input) {
+    if (!input) return null;
+    const copy = text.progress.input;
+    const value = input.text ? input.text.replace(/\s+/g, ' ').trim() : '';
+    if (input.kind === 'answers') return copy.answers(value);
+    return input.origin === 'cut_off' ? copy.cutOff(value) : copy.reply(value);
+  }
+
   /** The marker tooltip: the state name and the absolute times; the state name also reaches assistive technology. */
   function markerTip(status, entry) {
     const parts = [status.text];
@@ -123,6 +132,7 @@
     return ui.timeline.item({ marker: ui.timeline.marker(status, { tip: markerTip(status, entry) }), tone }, [
       ui.timeline.head(main, [durationText(entry.wallSeconds)]),
       ui.timeline.sub([entry.model, entry.effort, usageNode(usage)]),
+      ui.timeline.note(inputText(entry.input)),
       ui.timeline.note(entry.blocker),
       ui.timeline.note(entry.error),
     ]);

@@ -11,6 +11,7 @@ export type ExecutionFileKind =
   | 'failure'
   | 'diagnostics'
   | 'questions'
+  | 'input'
   | 'handoff'
   | 'stream'
   | 'verify'
@@ -42,6 +43,7 @@ const FIXED_FILES: readonly { name: string; kind: ExecutionFileKind }[] = [
   { name: FAILURE_REPORT_FILENAME, kind: 'failure' },
   { name: DIAGNOSTICS_FILENAME, kind: 'diagnostics' },
   { name: 'questions.json', kind: 'questions' },
+  { name: 'input.json', kind: 'input' },
   { name: 'handoff.json', kind: 'handoff' },
   { name: 'stream.jsonl', kind: 'stream' },
 ];

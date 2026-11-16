@@ -1,4 +1,5 @@
 import type { TailEvent } from './eventTail';
+import type { HumanInputFact } from './humanInput';
 import type { MetricsExecution } from './metrics';
 import type { ExecutionSnapshot, SessionSnapshot } from './model';
 import { type OverviewActions,overviewActions } from './overviewActions';
@@ -51,6 +52,8 @@ export interface OverviewInput extends ResultsInput {
   metrics?: readonly MetricsExecution[];
   /** `metrics.json` `totals.wall_seconds`: the elapsed time of the session. */
   wallSeconds?: number | null;
+  /** The human input each execution opened with; the host reads it for any session state. */
+  inputs?: ReadonlyMap<string, HumanInputFact>;
   /** Already-read recent events; the host passes none unless the session is Running. */
   events: readonly TailEvent[];
 }
@@ -89,6 +92,7 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
       latestExecutionId: snapshot.status?.latestExecutionId ?? null,
       metrics: input.metrics,
       wallSeconds: input.wallSeconds,
+      inputs: input.inputs,
     }),
     activity: summary.isRunning ? buildActivity(input.events) : { visible: false },
     actions: overviewActions(snapshot, summary.latestExecution),

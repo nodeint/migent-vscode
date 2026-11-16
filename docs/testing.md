@@ -157,7 +157,10 @@ a real notification button stays a manual check.
 
 `questions.integration.test.ts` drives the Session panel's Questions tab through its message handler against the
 fixture CLI's `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
-`questions.json`), followup (exit 9 with a new batch) or fail-after-record. It covers recorded and rejected
+`questions.json`), followup (exit 9 with a new batch) or fail-after-record. For a session whose status lists
+`executions/<id>/questions.json` batches and that has no session `questions.json` (Migent 0.8.0), the fixture CLI
+instead writes the `session.active` answer event and the next execution's `input.json` (record), or only the event
+(fail-after-record). It covers recorded and rejected
 replies, an unconfirmed submission restored after closing the panel, stale batches and the archived draft,
 generation-checked edits, lock/recipient/schema blocks, a standalone role session and switching between the batches of
 one session inside the same panel. The page script is not run.

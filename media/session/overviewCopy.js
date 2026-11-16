@@ -80,6 +80,12 @@
       afterAnswer: '← after your answer',
       reviseFrom: (stage, attempt) => '← revise from ' + stage + ' #' + attempt,
       routedFrom: (stage, attempt) => '← routed from ' + stage + ' #' + attempt,
+      /** The human input an attempt opened with; a cut-off reply was written by Migent, not by a person. */
+      input: {
+        answers: (value) => (value ? 'Your answers: ' + value : 'Your answers'),
+        reply: (value) => (value ? 'Your reply: ' + value : 'Your reply'),
+        cutOff: (value) => (value ? 'Cut-off reply written by Migent: ' + value : 'Cut-off reply written by Migent'),
+      },
       /** The tooltip of the reason label, when `metrics.json` names the attempt this one resumed. */
       resumes: (stage, attempt) => 'resumes ' + stage + ' #' + attempt,
       /** The badge of an attempt that ended by asking a question. */
