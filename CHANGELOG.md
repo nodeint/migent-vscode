@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
+
 ## 0.1.12
 
 - Session rows in the Sessions view now lead with the id and a short workflow tag, the Recent heading is gone (its
