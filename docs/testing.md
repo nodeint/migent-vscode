@@ -46,6 +46,15 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
   (see its [README](../src/core/fixtures/synthetic/README.md)). Name them as
   synthetic in test titles, and replace them when a captured sample appears.
 
+`src/core/fixtureConformance.test.ts` checks every session file under the `sessions`, `captured` and `synthetic`
+fixture sets against its `@nodeint/migent-contracts` schema (`status.json`, `manifest.yaml`, `session.lock`,
+`execution.json`, `questions.json`, `next.json`, `events.jsonl` and `metrics.json`). The contract's `SESSION_FILES`
+registry maps each path to its schema. Files the contract does not describe (`title.json`, the workflow files) and files
+that are not session data (`task.md`, `reply.txt`, probe files) are skipped by name. A fixture file that is none of
+these fails the test, so a new kind of file needs a schema mapping or an explicit skip. A fixture that is meant not to
+conform goes in the test's `NON_CONFORMING` list with a reason. The test fails when a listed file does conform, so the
+list cannot go stale. Keep corrections to captured files minimal and keep their redaction.
+
 ### Extension-host integration tests
 
 `pnpm test:integration` builds the extension and `src/integration/` with esbuild, downloads VS Code

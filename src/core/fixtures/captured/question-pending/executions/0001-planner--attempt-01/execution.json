@@ -19,7 +19,7 @@
   "hostname": "host",
   "owner_pid": 1111,
   "provider_pid": 2222,
-  "provider_endpoint": "\\.\pipe\migent-redacted",
+  "provider_endpoint": "\\\\.\\pipe\\migent-redacted",
   "outcome": {
     "status": "question",
     "question": "Which editor theme should be the default?",
