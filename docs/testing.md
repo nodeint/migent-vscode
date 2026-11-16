@@ -1,8 +1,8 @@
 ﻿# Testing
 
 Use this guide when selecting and writing tests. Run the checks appropriate to
-the change before and after implementation; the
-[contribution guide](../CONTRIBUTING.md#verification) lists the commands.
+the change after implementation; the
+[contribution guide](../CONTRIBUTING.md#test) lists the commands.
 
 ## Select test cases
 

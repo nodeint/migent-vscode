@@ -1,0 +1,63 @@
+schema_version: 7
+id: release
+
+artifacts:
+  release_notes:
+    file: release_notes.md
+    description: Version, SemVer reason, source commit, previous tag, and draft release notes.
+  release_pr:
+    file: release_pr.md
+    description: Reviewed version and notes, PR URL, head commit, and CI results.
+  release:
+    file: release.md
+    description: Version, tag, run and GitHub Release URLs, Marketplace and Open VSX installation results, and main verification.
+
+constraints:
+  - Follow .agents/skills/release/SKILL.md for release rules and step requirements.
+
+stages:
+  - id: prepare
+    role: operator
+    max_revisions: 3
+    ask: human
+    instructions:
+      - Follow Prepare and review; draft the changelog locally without bumping versions, committing, pushing, or opening a PR.
+      - Confirm a proposed version with the human when none was named. Record the source commit and previous tag.
+      - On revisions, apply review findings locally and preserve only expected release edits.
+    artifacts: [release_notes]
+
+  - id: review_notes
+    role: reviewer
+    depends_on: [prepare]
+    instructions:
+      - Review release_notes.md and the local changelog diff against the source history and skill; check version, completeness, PR links, and migration guidance.
+      - Review content only; no release commit, PR, or CI is required yet.
+    decision:
+      - approved:
+          navigate: open_pr
+      - revise:
+          when: Version or notes need correction; list all findings.
+          navigate: prepare
+
+  - id: open_pr
+    role: operator
+    ask: human
+    depends_on: [prepare, review_notes]
+    session:
+      resume_from: prepare
+    instructions:
+      - Follow Open PR and pass CI using the approved version and notes; verify the final diff and record the PR head and CI results.
+      - If source history or reviewed content changes, stop and request a return to notes preparation and review before proceeding.
+      - Stop and report check failures. Complete only when all required CI passes on the current head; do not merge.
+    artifacts: [release_pr]
+
+  - id: publish
+    role: operator
+    ask: human
+    depends_on: [open_pr]
+    session:
+      resume_from: open_pr
+    instructions:
+      - Follow Merge and verify. Show the version, notes, and PR URL; obtain merge authorization unless already given.
+      - Recheck current-head CI and publishing prerequisites before merging. Report release failures and stop.
+    artifacts: [release]

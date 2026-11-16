@@ -5,7 +5,8 @@
   "ignores": [
     ".agents/skills/**",
     ".claude/**",
-    "plans/**",
+    ".github/**",
+    ".migent/**",
     // Preserve captured CLI task text verbatim.
     "src/core/fixtures/captured/handoff-source/task.md",
     "src/core/fixtures/captured/handoff-target/task.md",
@@ -18,6 +19,20 @@
       "line_length": 120,
       "tables": false,
       "code_blocks": false
+    },
+    // README branding block and generated reference anchors.
+    "MD033": {
+      "allowed_elements": [
+        "a",
+        "br",
+        "img",
+        "p",
+        "strong"
+      ]
+    },
+    // Changelog versions repeat the same section headings.
+    "MD024": {
+      "siblings_only": true
     }
   }
 }

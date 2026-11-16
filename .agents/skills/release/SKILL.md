@@ -1,91 +1,125 @@
 ---
 name: release
-description: >
-  Release the Migent VS Code extension through a PR into next, then let the
-  merge workflow tag the merged commit, fast-forward main, and publish to
-  Marketplace, Open VSX, and GitHub. Use for release, tag a version, push a
-  release tag, or /release requests.
-metadata:
-  short-description: "Release the Migent VS Code extension"
+description: Prepare extension release notes and PRs; merge and publish VSIX with authorization.
 ---
 
-# Release the extension
+# Release
 
-Read `CONTRIBUTING.md` from `## Releasing` onward. Follow its prerequisites,
-verification, and recovery procedure. Work from the repository root and reply in
-the user's language.
+## Steps
 
-## Prepare
+1. Read [repository policy](../../../CONTRIBUTING.md#release-policy),
+   [release workflow](../../../.github/workflows/release.yml), and
+   [release validation](../../../scripts/release.mjs). Ask about missing required inputs.
+2. Follow [Prepare and review](#prepare-and-review). Get notes and version approval
+   before version edits, commits, pushes, or PR creation; preserve unrelated work.
+3. Follow [Open PR and pass CI](#open-pr-and-pass-ci) and
+   [create-pr](../create-pr/SKILL.md) for commit, push, and PR mechanics.
+   Stop on failed checks; changed notes or version need approval again.
+4. Check [Prerequisites](#prerequisites), then [Merge and verify](#merge-and-verify)
+   with explicit merge authorization; reuse existing authorization within scope.
+5. On publishing failure, report the job and step, then stop. For authorized
+   retries, follow [Recovery](#recovery).
+6. Report version, commit, tag, run and GitHub Release URLs, CI, Marketplace and
+   Open VSX installation results, `main` synchronization, and anything unverified.
+   A tag alone does not prove completion.
 
-Use the user's version. Otherwise propose the next patch above the root
-package version and existing stable tags; confirm before continuing.
-A request to release a named version authorizes preparing and pushing its
-release PR. Merge only when explicitly authorized; merging publishes.
+## Preparation
 
-Require a clean working tree. Do not stash, discard, or include unrelated work.
-Fetch origin and tags; require origin/next, never substitute main.
-Run `pnpm setup:git`. Create `release/X.Y.Z` from origin/next without tracking,
-or inspect and resume an existing release PR. Its upstream must be absent or
-origin/release/X.Y.Z. Never reuse a published version or move an existing tag.
-Confirm the release environment, the GitHub Actions push access to main, and
-both registry OIDC policies described in CONTRIBUTING are configured.
+### Prepare and review
 
-## Release PR
+- Fetch `origin` and tags. Require a clean entry tree and resume existing release
+  branches or PRs. Preserve unrelated work; revisions keep only expected release edits.
+- Compare `git log <previous-tag>..HEAD` with Unreleased for missing user-visible
+  changes. Confirm release scope and version with the maintainer when not supplied.
+- Check the root `package.json`, existing release tags, Marketplace, and Open VSX
+  to avoid reusing a published version. A new release must be newer than the latest
+  stable release tag. Existing tags belong to recovery, not new release preparation.
+- Create `release/X.Y.Z` from `origin/next` under CONTRIBUTING.md branch rules.
+- Draft only `CHANGELOG.md` before notes approval. Move Unreleased notes into
+  `## X.Y.Z`, leaving Unreleased empty; never rewrite released notes.
+- Compare notes with the actual changes and describe observable extension behavior,
+  compatibility requirements, and migration steps when relevant. Review the version,
+  notes, and diff locally; approval needs neither CI nor an existing release commit.
 
-Change only root package.json, CHANGELOG.md, and pnpm-lock.yaml if needed.
-Compare commits since the previous release with the user-facing notes.
-Move Unreleased notes under `## X.Y.Z`, leaving Unreleased empty.
-Preserve released notes. Stop if there is no user-facing change to record.
+### Open PR and pass CI
 
-Run typecheck, build, test, and package as documented in CONTRIBUTING.
-Inspect the VSIX and perform relevant manual VS Code checks. Stop on failure.
-Stage release files by name, commit `Release X.Y.Z`, and push explicitly:
-
-```bash
-git push -u origin refs/heads/release/X.Y.Z:refs/heads/release/X.Y.Z
-gh pr create --draft --base next --head release/X.Y.Z --title "Release X.Y.Z" --body-file <notes-file>
-```
-
-Wait for both CI matrix jobs to pass, then mark ready. Without merge
-authorization, report the PR URL and stop. Otherwise squash-merge without
-bypassing checks. Never commit/push feature work directly to main or next.
-
-## Merge and watch
-
-Squash-merging the release PR starts `release.yml`, which validates the merged
-commit, creates and pushes `vX.Y.Z`, fast-forwards `main` to it, then builds and
-publishes to both registries and GitHub Releases. Do not create the tag or push
-main by hand; that is only the recovery path.
+After notes approval, update only the root `package.json` version to `X.Y.Z`.
+Run the full repository verification sequence:
 
 ```bash
-gh run list --workflow release.yml --event pull_request --json databaseId,status,conclusion,url
-gh run watch <databaseId> --exit-status
-gh release view vX.Y.Z
+pnpm typecheck
+pnpm build
+pnpm test
+pnpm test:integration
+pnpm package
+pnpm exec vsce ls --no-dependencies
 ```
 
-If no run is listed, wait 30 seconds and retry, at most five times. The workflow
-validates next ancestry, version ordering, and nonempty release notes; it does
-not rerun tests because the release PR's CI is the gate.
+- Inspect VSIX contents against `.vscodeignore`; check required runtime assets and
+  excluded development files and secrets. Do not commit generated bundles or VSIX files.
+- Install the VSIX through **Extensions: Install from VSIX...**, reload, open a
+  workspace with `.migent/config.yaml`, and verify release behavior and host logs.
+  Record Linux and remote workspace-host checks separately.
+- Confirm the diff matches approved notes, version, and release scope. Follow the
+  create-pr skill to commit, push, and open a draft PR into `next`.
+- Wait for both CI matrix jobs on the current head and base, including integration
+  tests on both documented VS Code versions. Mark ready only when green. If `next`
+  advances, update and repeat affected review and checks.
 
-Report success only when the workflow concludes success. The final "Verify main
-advanced" step can fail after a successful publication: report it as a main
-synchronization problem, not a publication failure. Follow CONTRIBUTING's
-recovery procedure; never delete or move a tag, and never blindly rerun a
-partially published release. To retry a tag that published nothing, run
-`gh workflow run release.yml -f tag=vX.Y.Z --ref next`.
+## Publishing
 
-## Verify
+### Prerequisites
 
-The workflow verifies both registries itself, retrying while propagation lags.
-Install the exact version from Marketplace and the Open VSX VSIX in a suitable
-client and verify the affected behavior; metadata checks alone do not establish
-successful installation. Confirm remote main equals the tagged SHA:
+- Verify repository protections, required checks, the `release` environment,
+  trusted publishing for Marketplace and Open VSX, and Actions permissions against
+  CONTRIBUTING.md. Confirm publication is not paused by `RELEASE_PAUSED=true`.
+- Stop on missing prerequisites. Changing protections or publisher settings needs
+  explicit authorization. Use the configured VSIX publishing workflow.
 
-```bash
-git ls-remote origin refs/heads/main refs/tags/vX.Y.Z
-```
+### Merge and verify
 
-Never force-push, advance main to the latest next HEAD, or create a separate
-merge/squash commit. If hooks or branch protection block synchronization, report
-the blocker and ask; do not bypass it. Report version, tag, workflow/release
-URLs, registry checks, manual checks, and the main synchronization result.
+- Obtain explicit merge authorization unless already given. Recheck current-head
+  CI and publishing prerequisites, then squash-merge with subject `Release X.Y.Z`.
+- Watch the release run triggered by the merged PR:
+
+  ```bash
+  gh run list --workflow release.yml --event pull_request --json databaseId,status,conclusion,url
+  gh run watch <id> --exit-status
+  gh release view vX.Y.Z
+  ```
+
+  Match the run to the release PR and merged commit. If no run appears, inspect
+  the trigger and pause variable; report the blocker before creating a tag.
+- Fetch and verify that the tag points to the merged release commit and `origin/main`
+  equals that commit. Confirm the GitHub Release contains the expected VSIX.
+- Confirm the exact version appears on Marketplace and Open VSX, allowing for
+  propagation delay. Install from Marketplace and install the Open VSX VSIX in a
+  suitable client; verify affected behavior. Metadata alone does not prove installation.
+- Report any installation or platform checks that could not be performed.
+
+### Recovery
+
+Inspect the failed run, tag, `main`, GitHub Release assets, and both registries
+first. Retry only authorized steps; ask before undocumented recovery or new
+external mutations. Tags are immutable: never delete, move, or reuse a release tag.
+
+- If the version reached either registry, prepare the next patch through a new
+  release PR. Never overwrite a published version.
+- If neither registry received the version, fix the external cause, then dispatch
+  the existing tag and watch the new run:
+
+  ```bash
+  gh workflow run release.yml -f tag=vX.Y.Z --ref next
+  ```
+
+  Dispatch runs validation and registry publication only; the `github` job is skipped.
+  Require the existing GitHub Release VSIX and matching `main` before dispatching.
+  If either is missing, report the failed job and recovery blocker; do not delete
+  release assets or create replacement assets independently. For a failed `publish`
+  job, rerunning only failed jobs also preserves the completed GitHub Release.
+- If `RELEASE_PAUSED` skipped a merged release, follow CONTRIBUTING.md to tag the
+  exact merged release commit and push the same-name tag after publication is enabled
+  and the recovery actions are authorized. The tag push runs all three jobs.
+- If `main` did not advance, follow CONTRIBUTING.md's guarded manual synchronization
+  procedure after resolving protection settings. Never advance it to a newer `next`
+  HEAD or force-push. Recheck both registries before choosing retry or next patch.

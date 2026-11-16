@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [next]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
@@ -12,6 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pr-title:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Validate PR title and branch
+        run: node scripts/git-flow.mjs pr
+
+  lint:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm lint:md
+      - run: pnpm lint:md:links
+
   test:
     timeout-minutes: 15
     strategy:

@@ -1,0 +1,41 @@
+name: Refactor
+description: Restructure code while preserving behavior and contracts.
+labels: [refactor]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What makes the current structure hard to change, test, or understand.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Code to restructure
+      description: Modules, files, or symbols to move, split, rename, or simplify, and their consumers.
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Target structure
+      description: How the code should be organized when this is done.
+    validations:
+      required: true
+  - type: textarea
+    id: preserved
+    attributes:
+      label: Behavior to preserve
+      description: Observable behavior, contracts, and tests that must stay unchanged.
+      placeholder: |
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Related work this refactor does not cover.
+    validations:
+      required: false

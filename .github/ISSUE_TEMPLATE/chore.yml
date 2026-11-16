@@ -1,0 +1,36 @@
+name: Chore
+description: Tooling, dependencies, or CI with no product behavior change.
+labels: [chore]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Tooling
+        - Dependencies
+        - CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What needs to change and why.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Scripts, packages, workflows, or configuration to add, update, or remove.
+    validations:
+      required: true
+  - type: checkboxes
+    id: no-behavior-change
+    attributes:
+      label: Product behavior
+      options:
+        - label: This change does not alter extension behavior for users.
+          required: true

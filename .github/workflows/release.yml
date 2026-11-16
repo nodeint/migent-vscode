@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  plan:
     if: >-
       vars.RELEASE_PAUSED != 'true' &&
       (github.event_name != 'pull_request' ||
@@ -28,11 +28,11 @@ jobs:
          startsWith(github.event.pull_request.head.ref, 'release/') &&
          github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: release
-    permissions:
-      contents: write
-      id-token: write
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
     env:
       GITHUB_REF_TYPE: tag
       GITHUB_REF_NAME: ${{ inputs.tag || github.ref_name }}
@@ -44,11 +44,42 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - run: git fetch origin "+refs/heads/next:refs/remotes/origin/next"
       - name: Plan release
         id: plan
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          git fetch origin "+refs/heads/next:refs/remotes/origin/next"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            node scripts/release.mjs --from-merge
+          else
+            node scripts/release.mjs
+          fi
+
+  # Own source refs and the VSIX attached to the GitHub Release.
+  github:
+    needs: plan
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+      RELEASE_SHA: ${{ needs.plan.outputs.sha }}
+      GITHUB_REF_TYPE: tag
+      GITHUB_REF_NAME: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Validate release and extract notes
+        run: |
+          git fetch origin "+refs/heads/next:refs/remotes/origin/next"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             node scripts/release.mjs --from-merge
           else
             node scripts/release.mjs
@@ -56,29 +87,25 @@ jobs:
       - name: Create release tag
         if: github.event_name == 'pull_request'
         run: |
-          tag="${{ steps.plan.outputs.tag }}"
-          sha="${{ steps.plan.outputs.sha }}"
-          if [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
-            echo "::error::Tag $tag already exists on origin."
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")" ]; then
+            echo "::error::Tag $RELEASE_TAG already exists on origin."
             exit 1
           fi
-          git tag "$tag" "$sha"
-          git push origin "refs/tags/$tag:refs/tags/$tag"
+          git tag "$RELEASE_TAG" "$RELEASE_SHA"
+          git push origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
       - name: Advance main
-        continue-on-error: true
         run: |
-          sha="${{ steps.plan.outputs.sha }}"
           git fetch origin "+refs/heads/main:refs/remotes/origin/main"
           current="$(git rev-parse origin/main)"
-          if [ "$current" = "$sha" ]; then
-            echo "main already points at $sha."
+          if [ "$current" = "$RELEASE_SHA" ]; then
+            echo "main already points at $RELEASE_SHA."
             exit 0
           fi
-          if ! git merge-base --is-ancestor "$current" "$sha"; then
-            echo "::error::main is not an ancestor of $sha; refusing a non-fast-forward."
+          if ! git merge-base --is-ancestor "$current" "$RELEASE_SHA"; then
+            echo "::error::main is not an ancestor of $RELEASE_SHA; refusing a non-fast-forward."
             exit 1
           fi
-          git push origin "$sha:refs/heads/main"
+          git push origin "$RELEASE_SHA:refs/heads/main"
       - uses: pnpm/action-setup@v4
         with:
           version: 12.6.0
@@ -89,22 +116,57 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm package
-      - name: Collect VSIX
-        run: |
-          mkdir release-artifact
-          mv ./*.vsix release-artifact/
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.plan.outputs.tag }}" release-artifact/*.vsix --verify-tag --title "${{ steps.plan.outputs.tag }}" --notes-file release-notes.md
-      - name: Verify main advanced
+        run: gh release create "$RELEASE_TAG" ./*.vsix --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md
+
+  # Trusted publishing stays bound to release.yml and the release environment.
+  publish:
+    needs: [plan, github]
+    if: >-
+      !cancelled() && needs.plan.result == 'success' &&
+      (needs.github.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && needs.github.result == 'skipped'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+      RELEASE_SHA: ${{ needs.plan.outputs.sha }}
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Download release VSIX
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          main="$(git ls-remote origin refs/heads/main | cut -f1)"
-          if [ "$main" != "${{ steps.plan.outputs.sha }}" ]; then
-            echo "::error::Released ${{ steps.plan.outputs.tag }} but main did not advance (main=$main); registry publishing was skipped. Allow the GitHub Actions app to push main, then re-run this workflow."
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "migent-vscode-$RELEASE_VERSION.vsix" --dir release-artifact
+      - name: Verify main advanced
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if [ "$main" != "$RELEASE_SHA" ]; then
+            echo "::error::main does not point at $RELEASE_SHA; registry publishing was skipped."
             exit 1
           fi
       - name: Publish to VS Code Marketplace
-        run: pnpm exec vsce publish --oidc --packagePath release-artifact/*.vsix
+        run: pnpm exec vsce publish --oidc --packagePath "release-artifact/migent-vscode-$RELEASE_VERSION.vsix"
       - name: Publish to Open VSX
-        run: pnpm exec ovsx publish release-artifact/*.vsix --trusted-publishing
+        run: pnpm exec ovsx publish "release-artifact/migent-vscode-$RELEASE_VERSION.vsix" --trusted-publishing
