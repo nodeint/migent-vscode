@@ -396,10 +396,7 @@ export class ControlService implements vscode.Disposable {
       );
       context.store.refreshSession(id);
       if (result.kind === 'ok') {
-        await reportCompleted(snapshot, result.value.stderr.trim(), {
-          log: (line) => { this.#output.warn(line); },
-          showLog: () => { this.showLog(); },
-        });
+        reportCompleted(snapshot, result.value.stderr.trim(), { log: (line) => { this.#output.warn(line); } });
         return;
       }
       const detail = result.error.stderr.trim() || result.error.detail;

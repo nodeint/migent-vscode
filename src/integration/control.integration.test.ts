@@ -643,7 +643,6 @@ async function withMessages(
 
 /** The text of a catalog entry before its first value, so a test matches wording that comes from the catalog. */
 const COMPLETE_CONFIRM = NOTICES['reply.completeConfirm'].text({ label: '\u0000' }).split('\u0000')[0] ?? '';
-const COMPLETE_WARNINGS = NOTICES['control.completedWithWarnings'].text({ label: '\u0000', warnings: '' }).split('\u0000')[0] ?? '';
 const COMPLETE_FAILED = NOTICES['control.completeFailed'].text({ detail: '' });
 
 const confirmComplete = (message: string): string | undefined =>
@@ -722,7 +721,7 @@ scenarios.push(
     },
   },
   {
-    name: 'Complete: the CLI warning about a missing artifact is shown with the success',
+    name: 'Complete: the CLI warning about a missing artifact opens no notification',
     async run(env) {
       const project = await createProject(env);
       const stopped = await stoppedSession(env, project);
@@ -731,8 +730,8 @@ scenarios.push(
           await env.api.control.complete(project, stopped);
           await waitFor('session completed', () => project.store.snapshot(stopped.sessionId)?.displayState.state === 'completed');
           assert.ok(
-            shown.some((line) => line.startsWith(`warning:${COMPLETE_WARNINGS}`) && line.includes('required artifact "plan"')),
-            'warning shown',
+            shown.every((line) => line.startsWith(`warning:${COMPLETE_CONFIRM}`)),
+            'only the confirmation was shown',
           );
         });
       });
