@@ -402,6 +402,41 @@ const scenarios: Scenario[] = [
       assert.equal(argvLog(env).filter((argv) => argv.includes('--reply-file')).length, 1, 'sent once');
     },
   },
+  {
+    name: 'Answer questions returns to the pending attempt after an older answered attempt was selected',
+    async run(env) {
+      const project = await createProject(env);
+      const sessionId = 'q16';
+      const first = '0001-plan--attempt-01';
+      const second = '0002-review--attempt-01';
+      const answered = { ...record('1', 'single', {}), status: 'answered', answer: { selected: ['B'] } };
+      const pending = { ...record('1', 'single', {}, 'review'), execution_id: second };
+      write(migentPath(env.root, 'sessions', sessionId, 'manifest.yaml'), manifest(sessionId, 'workflow_id: plan\n'));
+      write(migentPath(env.root, 'sessions', sessionId, 'status.json'), status('question', { questions: [summaryOf(pending)], latest_execution_id: second }));
+      write(migentPath(env.root, 'sessions', sessionId, 'questions.json'), JSON.stringify({ schema_version: 1, questions: [answered, pending] }));
+      write(migentPath(env.root, 'sessions', sessionId, 'executions', first, 'execution.json'), JSON.stringify({ execution_id: first, stage_id: 'plan', status: 'completed' }));
+      write(migentPath(env.root, 'sessions', sessionId, 'executions', second, 'execution.json'), JSON.stringify({ execution_id: second, stage_id: 'review', status: 'completed' }));
+      await waitFor('session loaded', () => (project.store.snapshot(sessionId)?.status?.questions.length ?? 0) >= 1);
+      const id = { project: project.key, sessionId };
+      const selected = (): string | undefined => {
+        const page = env.api.session.lastModel(id);
+        return page?.tab === 'questions' ? page.questions.selected?.executionId : undefined;
+      };
+      const selectFirst = async (): Promise<void> => {
+        await env.api.session.handle(id, { type: 'intent', intent: 'selectBatch', batch: { stageId: 'plan', executionId: first } });
+        await waitFor('answered attempt shown', () => selected() === first);
+      };
+
+      env.api.session.open(id, { tab: 'questions' });
+      await waitFor('pending attempt shown first', () => selected() === second);
+      await selectFirst();
+      await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'answerQuestions' });
+      await waitFor('overview action selects pending attempt', () => selected() === second);
+      await selectFirst();
+      await vscode.commands.executeCommand('migent.session.answer', id);
+      await waitFor('tree action selects pending attempt', () => selected() === second);
+    },
+  },
 ];
 
 export function runQuestionScenarios(): Promise<number> {

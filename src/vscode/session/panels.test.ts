@@ -290,6 +290,16 @@ describe('SessionPanels tabs', () => {
     expect(record?.state).toBe('recorded');
     expect(record?.editable).toBe(false);
     expect(record?.recorded).toEqual({ '1': 'B. Large' });
+    // Answer questions returns to the attempt awaiting answers, from the page action and from the tree command.
+    await panels.handle(identity, { type: 'intent', intent: 'sessionAction', action: 'answerQuestions' });
+    expect(last()?.model.questions?.selected?.executionId).toBe('0002-review--attempt-01');
+    await panels.handle(identity, {
+      type: 'intent',
+      intent: 'selectBatch',
+      batch: { stageId: 'plan', executionId: '0001-plan--attempt-01' },
+    });
+    panels.open(identity, { tab: 'questions' });
+    expect(last()?.model.questions?.selected?.executionId).toBe('0002-review--attempt-01');
   });
 
   it('keeps one panel per session when opened twice', () => {

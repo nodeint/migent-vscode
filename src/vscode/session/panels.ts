@@ -93,7 +93,6 @@ export interface SessionOpenOptions {
 const TAB_ACTIONS: Partial<Record<SessionAction, SessionTab>> = {
   openResult: 'overview',
   openMetrics: 'metrics',
-  answerQuestions: 'questions',
   openQuestions: 'questions',
   openWorkflow: 'workflow',
 };
@@ -201,7 +200,10 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
     if (existing !== undefined) {
       const tab = options.tab ?? (options.batch === undefined ? undefined : 'questions');
       if (tab === undefined) existing.panel.reveal(existing.panel.viewColumn ?? vscode.ViewColumn.Active);
-      else this.#reveal(existing, tab, options.batch);
+      else if (tab === 'questions' && options.batch === undefined) {
+        this.#answerPending(existing);
+        existing.panel.reveal(existing.panel.viewColumn ?? vscode.ViewColumn.Active);
+      } else this.#reveal(existing, tab, options.batch);
       return;
     }
     const tab = options.tab ?? (options.batch === undefined ? 'overview' : 'questions');
@@ -308,6 +310,13 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
   #reveal(entry: Entry, tab: SessionTab, ref: SessionBatchRef | undefined): void {
     this.#selectTab(entry, tab, ref);
     entry.panel.reveal(entry.panel.viewColumn ?? vscode.ViewColumn.Active);
+  }
+
+  /** Open Questions on the latest attempt still waiting for answers; without one the current selection stays. */
+  #answerPending(entry: Entry): void {
+    const attempt = defaultAttempt(attemptsOf(entry, this.#registry, questionRecords(entry, this.#registry)));
+    const ref = attempt?.status === 'pending' ? { stageId: attempt.stageId, executionId: attempt.executionId } : undefined;
+    this.#selectTab(entry, 'questions', ref);
   }
 
   /** Move to a tab, detaching the answer batch when Questions stops being shown. */
@@ -448,6 +457,10 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
   }
 
   async #sessionAction(entry: Entry, action: SessionAction): Promise<void> {
+    if (action === 'answerQuestions') {
+      this.#answerPending(entry);
+      return;
+    }
     const tab = TAB_ACTIONS[action];
     if (tab !== undefined) {
       this.#selectTab(entry, tab, undefined);
