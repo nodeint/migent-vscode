@@ -8,8 +8,9 @@ import type { QuestionRecord } from './questions';
  */
 
 /**
- * `pending` while `status.json` lists a question of the attempt as waiting; `answered` once one was answered;
- * otherwise `superseded` (the session moved on without an answer).
+ * `answered` once a question has a persisted answer, even while `status.json` still lists it; `pending` while
+ * `status.json` lists a question of the attempt as waiting; otherwise `superseded` (the session moved on without
+ * an answer).
  */
 export type AttemptQuestionStatus = 'pending' | 'answered' | 'superseded';
 
@@ -35,8 +36,9 @@ interface Group {
 const keyOf = (stageId: string | null, executionId: string): string => `${stageId ?? ''}\u0000${executionId}`;
 
 function statusOf(group: Group): AttemptQuestionStatus {
-  if (group.isPending) return 'pending';
-  return group.isAnswered ? 'answered' : 'superseded';
+  // A persisted answer outranks a pending row that is stale.
+  if (group.isAnswered) return 'answered';
+  return group.isPending ? 'pending' : 'superseded';
 }
 
 /** Execution order, then attempt; an id of another shape keeps its first-seen place after the parsed ones. */

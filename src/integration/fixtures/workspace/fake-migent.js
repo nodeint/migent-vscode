@@ -6,6 +6,9 @@
 //   MIGENT_FAKE_ANSWER   how `session continue --reply-file` treats the reply: record (default), reject (exit 1,
 //                        nothing recorded), garble (exit 0, questions.json left unreadable), followup (record, then
 //                        ask a new batch in the next execution and exit 9), fail-after-record (record, exit 1)
+//                        A session with no questions.json whose status lists executions/<id>/questions.json batches is a
+//                        Migent 0.8.0 one: record writes the answer event and the next execution's input.json,
+//                        fail-after-record writes only the event.
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
 //                        Otherwise it models 0.6.0: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
@@ -186,6 +189,65 @@ function replyBlocker(id) {
   fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
 }
 
+// Migent 0.8.0 keeps no session questions.json: the questions live in executions/<id>/questions.json (no status, no
+// answer) and the answer is a session.active event on the asking execution, then input.json on the next execution.
+//   record               event, then 0002 input.json, status cleared (the CLI continues)
+//   fail-after-record    event only, status left listing the batch as pending, exit 1 (dispatch failed)
+function answerPerExecution(id, mode) {
+  const status = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8'));
+  const stage = option('--stage');
+  const target = (status.questions ?? []).filter((record) => stage === undefined || record.stage_id === stage);
+  if (target.length === 0) {
+    console.error('no single pending question batch to answer; pass --stage');
+    process.exit(2);
+  }
+  if (mode === 'reject') {
+    console.error('reply rejected: invalid answer');
+    process.exit(1);
+  }
+  const reply = JSON.parse(fs.readFileSync(option('--reply-file'), 'utf8'));
+  if (Object.keys(reply).sort().join(',') !== target.map((record) => record.id).sort().join(',')) {
+    console.error('reply must answer every pending question of the batch');
+    process.exit(2);
+  }
+  const asking = target[0].execution_id;
+  const answers = target.map((record) => {
+    const value = reply[record.id];
+    const ids = record.options.map((entry) => entry.id);
+    const selected = Array.isArray(value) ? value : ids.includes(value) ? [value] : [];
+    return { question_id: record.id, selected, ...(typeof value === 'string' && selected.length === 0 ? { text: value } : {}) };
+  });
+  const input = JSON.stringify(reply);
+  fs.appendFileSync(
+    path.join(dirOf(id), 'events.jsonl'),
+    JSON.stringify({
+      v: 2,
+      seq: 1,
+      event: 'session.active',
+      timestamp: new Date().toISOString(),
+      execution_id: asking,
+      stage_id: target[0].stage_id,
+      data: { answers, input, reply: input },
+    }) + '\n',
+  );
+  if (mode === 'fail-after-record') process.exit(1);
+  const next = `0002-${target[0].stage_id}--attempt-02`;
+  const dir = path.join(dirOf(id), 'executions', next);
+  fs.mkdirSync(dir, { recursive: true });
+  writeJson(path.join(dir, 'input.json'), {
+    schema_version: 1,
+    execution_id: next,
+    stage_id: target[0].stage_id,
+    kind: 'answers',
+    responds_to_execution_id: asking,
+    recorded_at: new Date().toISOString(),
+    sent: input,
+    input,
+    answers,
+  });
+  writeStatus(id, 'active', { questions: [] });
+}
+
 // `session continue --reply-file`: normalize the reply map into the question records, as the real CLI does.
 function answer(id) {
   // Every call is logged so tests can assert the exact argv the extension used.
@@ -200,6 +262,10 @@ function answer(id) {
   }
   if (process.env.MIGENT_FAKE_ANSWER_DELAY_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.MIGENT_FAKE_ANSWER_DELAY_MS));
   const file = path.join(dirOf(id), 'questions.json');
+  const hasExecutionQuestions = (JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8')).questions ?? []).some(
+    (record) => fs.existsSync(path.join(dirOf(id), record.file ?? '')),
+  );
+  if (!fs.existsSync(file) && hasExecutionQuestions) return answerPerExecution(id, mode);
   if (!fs.existsSync(file)) return replyBlocker(id);
   if (mode === 'reject') {
     console.error('reply rejected: invalid answer');

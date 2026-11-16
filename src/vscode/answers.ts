@@ -256,7 +256,7 @@ export class AnswerSubmitter {
     if (snapshot === undefined) return text('prompts.sessionUnavailable');
     const blocked = this.#control.answerBlock(context, snapshot, true);
     if (blocked !== null) return blocked;
-    const history = readQuestions(sessionDir(context.root, sessionId));
+    const history = readQuestions(sessionDir(context.root, sessionId), snapshot.status?.questions);
     const verified = verifyBatch({
       summary: snapshot.status?.questions ?? [],
       history,
@@ -371,7 +371,10 @@ export class AnswerSubmitter {
   #reconcile(request: AnswerRequest): Reconciliation {
     const { context, sessionId, target, reply } = request;
     context.store.refreshSession(sessionId);
-    const read = readQuestions(sessionDir(context.root, sessionId));
+    const read = readQuestions(
+      sessionDir(context.root, sessionId),
+      context.store.snapshot(sessionId)?.status?.questions,
+    );
     return read.kind === 'ok' ? reconcileSubmission(read.questions, target, reply) : { kind: 'unconfirmed' };
   }
 

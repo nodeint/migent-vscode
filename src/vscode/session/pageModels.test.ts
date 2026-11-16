@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -112,5 +112,26 @@ describe('buildOverviewPage', () => {
     expect(readRecentEvents).not.toHaveBeenCalled();
     expect(model.activity).toEqual({ visible: false });
     expect(model.progress).toMatchObject({ kind: 'stages', rows: [{ id: 'draft' }] });
+  });
+
+  it('carries the human input an attempt opened with for a completed session', () => {
+    const executions = path.join(root, '.migent', 'sessions', SESSION, 'executions');
+    const first = '0001-draft--attempt-01';
+    const second = '0002-draft--attempt-02';
+    for (const id of [first, second]) {
+      mkdirSync(path.join(executions, id), { recursive: true });
+      writeFileSync(path.join(executions, id, 'execution.json'), JSON.stringify({ execution_id: id, stage_id: 'draft', status: 'completed' }));
+    }
+    writeFileSync(
+      path.join(executions, second, 'input.json'),
+      JSON.stringify({ schema_version: 1, execution_id: second, stage_id: 'draft', kind: 'reply', responds_to_execution_id: first, recorded_at: '2026-11-01T11:00:00.000Z', sent: 's', input: 'keep going' }),
+    );
+
+    const model = overviewOf([snapshot('completed')]);
+
+    expect(model.progress).toMatchObject({
+      kind: 'stages',
+      rows: [{ id: 'draft', history: [{ input: null }, { input: { kind: 'reply', text: 'keep going', origin: 'human' } }] }],
+    });
   });
 });

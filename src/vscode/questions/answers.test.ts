@@ -102,7 +102,7 @@ function pendingFixture(extra: object): Fixture {
   const batchKey = 'proj#s1#batch';
   writeRecord(dir, batchKey, 's1', extra);
   const control = fakeControl();
-  const context = { key: 'proj', root, store: { refreshSession: () => undefined } } as unknown as ProjectContext;
+  const context = { key: 'proj', root, store: { refreshSession: () => undefined, snapshot: () => undefined } } as unknown as ProjectContext;
   const request = { context, sessionId: 's1', target, reply: { 1: 'B' }, cliStage: null, fingerprint: 'f', batchKey };
   return { submitter: new AnswerSubmitter(control, dir), request, dir, control };
 }

@@ -146,6 +146,8 @@ async function runVersion(version, executable, downloadError, pass) {
   console.log(`\n=== VS Code ${version} (scratch ${scratch}) ===`);
   try {
     if (downloadError) throw downloadError;
+    // An inherited ELECTRON_RUN_AS_NODE (set by VS Code terminals and some agent sandboxes) makes Code.exe run as plain Node.
+    delete process.env.ELECTRON_RUN_AS_NODE;
     await runTests({
       vscodeExecutablePath: executable,
       extensionDevelopmentPath: root,

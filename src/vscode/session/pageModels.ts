@@ -2,6 +2,7 @@ import type { AnswerModel } from '../../core/answerModel';
 import { buildAnswerModel } from '../../core/answerModel';
 import { readRecentEvents } from '../../core/eventTail';
 import { listExecutions } from '../../core/executions';
+import { readInputIndex } from '../../core/humanInput';
 import { readMetrics } from '../../core/metrics';
 import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
 import { eventsPath, sessionDir } from '../../core/paths';
@@ -39,7 +40,10 @@ export function batchOf(identity: Identity, ref: SessionBatchRef): BatchIdentity
 export function questionRecords(entry: PageEntry, registry: ProjectRegistry): QuestionRecord[] {
   const context = registry.project(entry.project);
   if (context === undefined) return [];
-  const read = readQuestions(sessionDir(context.root, entry.sessionId));
+  const read = readQuestions(
+    sessionDir(context.root, entry.sessionId),
+    context.store.snapshot(entry.sessionId)?.status?.questions,
+  );
   return read.kind === 'ok' ? read.questions : [];
 }
 
@@ -87,6 +91,7 @@ export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): 
   if (context !== undefined && snapshot !== undefined) {
     input.executions = listExecutions(input.sessionDirPath);
     input.plan = readSessionStagePlan(context.root, entry.sessionId);
+    input.inputs = readInputIndex(input.sessionDirPath);
     const metrics = readMetrics(input.sessionDirPath);
     if (metrics.kind === 'ok') {
       input.metrics = metrics.metrics.executions;

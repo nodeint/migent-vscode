@@ -41,6 +41,7 @@ describe('listExecutionFiles', () => {
       'response.md': 'r',
       'failure.md': 'f',
       'diagnostics.json': '{}',
+      'input.json': '{}',
       'turns/turn-10/verify.md': 'v',
       'turns/turn-2/verify.md': 'v',
       'turns/turn-3/notes.md': 'no verify here',
@@ -54,13 +55,14 @@ describe('listExecutionFiles', () => {
       ['response', 'response.md', null],
       ['failure', 'failure.md', null],
       ['diagnostics', 'diagnostics.json', null],
+      ['input', 'input.json', null],
       ['verify', 'turns/turn-2/verify.md', 2],
       ['verify', 'turns/turn-10/verify.md', 10],
       ['artifact', 'artifacts/a.txt', null],
       ['artifact', 'artifacts/b.txt', null],
     ]);
     expect(listing.files[2]?.absolutePath).toBe(path.join(dir, 'failure.md'));
-    expect(listing.files[4]?.absolutePath).toBe(path.join(dir, 'turns', 'turn-2', 'verify.md'));
+    expect(listing.files[5]?.absolutePath).toBe(path.join(dir, 'turns', 'turn-2', 'verify.md'));
   });
 
   it('distinguishes a missing execution directory; an absent artifacts directory is normal', () => {
