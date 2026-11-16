@@ -7,6 +7,19 @@ test("commits require a working branch", () => {
   for (const branch of ["fix/status", "docs/contributing", "release/0.1.0"]) assert.equal(commitProblem(branch), null);
 });
 
+test("commits require no upstream or the same-name origin upstream", () => {
+  assert.equal(commitProblem("fix/status", "origin/fix/status"), null);
+  assert.match(commitProblem("fix/status", "origin/next"), /Upstream origin\/next/);
+  assert.ok(commitProblem("fix/status", "fork/fix/status"));
+});
+
+test("force-pushes to existing branches are blocked", () => {
+  const ref = "refs/heads/fix/status";
+  assert.match(pushProblems(`${ref} abc ${ref} def`, ref, undefined, () => false)[0], /Force-push/);
+  assert.deepEqual(pushProblems(`${ref} abc ${ref} def`, ref, undefined, () => true), []);
+  assert.deepEqual(pushProblems(`${ref} abc ${ref} ${"0".repeat(40)}`, ref, undefined, () => false), []);
+});
+
 test("all pushes and deletions into protected branches are blocked", () => {
   for (const target of ["main", "next"]) {
     for (const source of ["refs/heads/fix/status", "refs/tags/v0.1.0", "(delete)"]) {
@@ -49,11 +62,17 @@ test("branch names follow the work types or release/X.Y.Z", () => {
   assert.equal(pushProblems("refs/heads/tmp abc refs/heads/tmp def", "refs/heads/tmp").length, 1);
 });
 
-test("commit subjects are trimmed, unpunctuated, and release subjects match the branch", () => {
-  assert.equal(subjectProblem("Update Overview progress UI", "feat/overview"), null);
+test("commit subjects use <type>: <summary>, and release subjects match the branch", () => {
+  for (const subject of ["feat: update overview progress UI", "fix: restore status", "refactor: simplify tree", "docs: explain setup", "chore: update CI"]) {
+    assert.equal(subjectProblem(subject, "feat/overview"), null, subject);
+  }
   assert.equal(subjectProblem("Release 0.1.12", "release/0.1.12"), null);
-  assert.equal(subjectProblem("Update changelog", "release/0.1.12"), null);
-  for (const [subject, branch] of [["", "fix/a"], [" Fix status", "fix/a"], ["Fix status.", "fix/a"], ["Release 0.1.13", "release/0.1.12"], ["Release 0.1.12", "fix/a"]]) {
+  assert.equal(subjectProblem("docs: update changelog", "release/0.1.12"), null);
+  for (const [subject, branch] of [
+    ["", "fix/a"], ["Fix status", "fix/a"], ["fix: ", "fix/a"], ["fix: restore status.", "fix/a"],
+    ["fix: restore status ", "fix/a"], ["fix(ui): restore status", "fix/a"], ["test: cover status", "fix/a"],
+    ["Update changelog", "release/0.1.12"], ["Release 0.1.13", "release/0.1.12"], ["Release 0.1.12", "fix/a"],
+  ]) {
     assert.ok(subjectProblem(subject, branch), subject);
   }
 });

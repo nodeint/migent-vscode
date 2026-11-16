@@ -6,6 +6,7 @@ import { releaseNotes } from "./release.mjs";
 
 const workBranch = /^(feat|fix|refactor|docs|chore)\/[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const releaseBranch = /^release\/(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const workSubject = /^(feat|fix|refactor|docs|chore): [^\s.](?:[^\r\n]*[^\s.])?$/;
 
 export function branchProblem(branch) {
   return workBranch.test(branch) || releaseBranch.test(branch)
@@ -14,23 +15,23 @@ export function branchProblem(branch) {
 }
 
 export function subjectProblem(subject, branch) {
-  if (!/^\S(?:.*\S)?$/.test(subject) || subject.endsWith(".")) {
-    return "Use a short imperative subject without surrounding spaces or a final period; see CONTRIBUTING.md.";
-  }
-  const version = releaseBranch.test(branch) ? branch.slice("release/".length) : null;
-  if (/^Release \d/.test(subject) && subject !== `Release ${version}`) {
-    return "Release subjects must be Release X.Y.Z on the matching release/X.Y.Z branch.";
-  }
-  return null;
+  if (releaseBranch.test(branch) && subject === `Release ${branch.slice("release/".length)}`) return null;
+  return workSubject.test(subject)
+    ? null
+    : "Use <type>: <imperative summary> without a final period; release subjects must match release/X.Y.Z. See CONTRIBUTING.md.";
 }
 
-export function commitProblem(branch) {
-  return !branch || branch === "main" || branch === "next"
-    ? "Commit on a working branch and open a pull request into next."
-    : branchProblem(branch);
+export function commitProblem(branch, upstream = "") {
+  if (!branch || branch === "main" || branch === "next") return "Commit on a working branch and open a pull request into next.";
+  if (upstream && upstream !== `origin/${branch}`) {
+    return `Upstream ${upstream} must be origin/${branch} or unset. Run git branch --unset-upstream or pnpm setup:git.`;
+  }
+  return branchProblem(branch);
 }
 
-export function pushProblems(input, currentRef, verifyRelease) {
+const zeroSha = /^0+$/;
+
+export function pushProblems(input, currentRef, verifyRelease, isAncestor = () => true) {
   const problems = [];
   for (const line of input.trim().split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -46,6 +47,9 @@ export function pushProblems(input, currentRef, verifyRelease) {
       if (resolved !== target) problems.push(`Branch destination mismatch: ${source} -> ${target}. Push to the same branch name.`);
       const problem = branchProblem(target.slice("refs/heads/".length));
       if (problem) problems.push(problem);
+      if (remoteSha && !zeroSha.test(remoteSha) && !isAncestor(remoteSha, localSha)) {
+        problems.push(`Force-push to ${target.slice("refs/heads/".length)} is blocked. Fetch and integrate the remote branch first.`);
+      }
     }
   }
   return problems;
@@ -78,11 +82,16 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const head = spawnSync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], { encoding: "utf8" });
   if (head.error || (head.status !== 0 && head.status !== 1)) throw new Error(head.stderr || "Cannot read HEAD.");
   const branch = head.stdout.trim();
+  const isAncestor = (ancestor, descendant) =>
+    spawnSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" }).status === 0;
+  const upstream = branch && process.argv[2] !== "pre-push"
+    ? spawnSync("git", ["for-each-ref", "--format=%(upstream:short)", `refs/heads/${branch}`], { encoding: "utf8" }).stdout.trim()
+    : "";
   const problems = process.argv[2] === "pre-push"
-    ? pushProblems(readFileSync(0, "utf8"), `refs/heads/${branch}`, (tag, localSha, remoteSha) => verifyReleaseSync(tag, localSha, remoteSha, process.argv[3], process.argv[4]))
+    ? pushProblems(readFileSync(0, "utf8"), `refs/heads/${branch}`, (tag, localSha, remoteSha) => verifyReleaseSync(tag, localSha, remoteSha, process.argv[3], process.argv[4]), isAncestor)
     : process.argv[2] === "commit-msg"
-      ? [commitProblem(branch), subjectProblem(readFileSync(process.argv[3], "utf8").split(/\r?\n/)[0], branch)].filter(Boolean)
-      : [commitProblem(branch)].filter(Boolean);
+      ? [commitProblem(branch, upstream), subjectProblem(readFileSync(process.argv[3], "utf8").split(/\r?\n/)[0], branch)].filter(Boolean)
+      : [commitProblem(branch, upstream)].filter(Boolean);
   for (const problem of problems) process.stderr.write(`migent-vscode: ${problem}\n`);
   process.exitCode = problems.length ? 1 : 0;
 }

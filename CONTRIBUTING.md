@@ -86,69 +86,36 @@ Blank issues are disabled; write issues in English.
 
 ## Branch and pull request rules
 
-- `next` is the integration/default branch; `main` mirrors the latest release tag,
+- `next` is the integration/default branch; `main` holds the latest release,
   advanced by `release.yml`. Never commit/push directly to either, force-push,
-  use `--no-verify`, or bypass protections; resolve hook blocks with the maintainer.
-- Require `origin/next` (if missing, ask the maintainer; never substitute `main`);
-  branch from it with no upstream: `git switch --no-track -c <branch> origin/next`.
-  Later upstreams must be `origin/<same-branch-name>`; pushes use an explicit same-name
-  refspec: `git push -u origin refs/heads/<branch>:refs/heads/<branch>`.
-- Check existing changes before switching branches; never discard, stash, or include
-  unrelated work without agreement. Stage files by name; avoid `git add -A` and `git commit -am`.
-- `pnpm setup:git` installs `.githooks/` and branch/push defaults, refuses to replace a
-  different hooks path, and removes incorrect main/next upstreams. Hooks block protected
-  branch commits/pushes, push destinations with another name, invalid branch names, and
-  invalid commit subjects (Naming conventions); they complement server-side protection.
-- All changes enter `next` via draft PRs (`gh pr create --draft --base next`), one coherent
-  change each, squash-merged after both CI jobs pass and maintainer approval.
-  Include supplied attribution in commits and PRs.
-- Describe problem, resulting behavior, validation (including manual checks), and known
-  limitations; link closing issues with `Fixes #<n>`.
-- User-visible changes add a bullet under `## Unreleased` in `CHANGELOG.md`, in the same PR.
+  use `--no-verify`, or bypass protections.
+- Require `origin/next`; branch from it with no upstream. Use the work-type prefix
+  above or `release/X.Y.Z`. Later upstreams must be `origin/<same-branch-name>`;
+  pushes use an explicit same-name refspec.
+- All changes enter `next` via draft PRs, squash-merged; delete working branches
+  afterward. Require resolved conversations, linear history, and no bypass actors.
+  Follow the naming conventions below. Include supplied attribution in commits and PRs.
+- Fill `.github/pull_request_template.md`; link closing issues with `Fixes #<n>`.
+- User-visible changes add a bullet ending with its PR link under the appropriate
+  `## Unreleased` category in `CHANGELOG.md`, in the same PR.
 
 ### Naming conventions
 
-- Branch: `<type>/<slug>` with type `feat`, `fix`, `refactor`, `docs`, or `chore`, or
-  `release/X.Y.Z`. Slug: `[a-z0-9]+([.-][a-z0-9]+)*`; versions have no leading zeros.
-- Commit/PR: short imperative English subject consistent with recent history; no leading
-  or trailing spaces and no final period. Review English/imperative wording manually.
-- Release: `release/X.Y.Z` → `Release X.Y.Z`; a `Release <version>` subject is allowed only
-  on the matching branch. Squash: `<PR title> (#N)`.
-- Hooks check branch names on commit/push and new commit subjects; rerun `pnpm setup:git`
-  after hook changes.
+- Branch: `<type>/<issue-number>-<slug>` (omit the number without an issue); slug is
+  lowercase kebab-case.
+- Commit/PR title: `<type>: <imperative summary>`; short English, no scope or final period.
+- Release: branch `release/X.Y.Z`, title `Release X.Y.Z`.
 
 ## Release policy
 
 - Only releases change the root `package.json` version. Merging a `release/X.Y.Z` PR into
   `next` publishes; the PR is the human gate (version, changelog notes, green CI).
-- `.github/workflows/release.yml` separates validation (`plan`), source refs and the
-  GitHub Release (`github`), and registry publication (`publish`). `plan` checks the
-  version, notes, and ancestry; a merged release must be newer and untagged. `github`
-  creates `vX.Y.Z`, fast-forwards `main`, builds the VSIX, and attaches it to the GitHub
-  Release. Only then does `publish` download that VSIX and publish to Marketplace,
-  then Open VSX. It does not rerun tests or verify registries.
+  [`release.yml`](.github/workflows/release.yml) defines the validation, tagging, `main`
+  sync, and registry publication steps.
 - Release PRs: move Unreleased notes to `## X.Y.Z`, leaving Unreleased empty; never rewrite
-  released notes. Inspect VSIX contents with `pnpm exec vsce ls --no-dependencies` against
-  `.vscodeignore`. `extensionKind: ["workspace"]`: check remote behavior in the workspace
-  extension host; record Linux and remote checks separately.
-- Tags are immutable; never delete, move, or reuse a released version. Retry registry
-  publication with `gh workflow run release.yml -f tag=vX.Y.Z --ref next`: `plan` validates
-  the existing tag and `publish` uses its existing GitHub Release VSIX; `github` is skipped.
-  The release asset and matching `main` must already exist. Report missing prerequisites
-  before recovery; dispatch does not create releases or repair `main`. If a version
-  reached a registry, release the next patch.
-- `RELEASE_PAUSED=true` (repository variable) stops the release jobs; for a skipped merged
-  release, enable publication, tag the exact merged commit, and push the same-name tag.
-  The tag-push flow runs all three jobs; dispatch is only for an existing release asset.
-- Manual `main` sync is recovery only: from a clean checkout with hooks installed, verify
-  `origin/main` and `origin/next` ancestry, then
-  `git push origin refs/tags/vX.Y.Z:refs/heads/main`; never advance to a newer `next` HEAD.
-- Prerequisites: `next` protected with review, both CI checks, and up-to-date branches;
-  `main` blocks force-push/deletion and allows the **GitHub Actions** app to push;
-  environment **release** with an open deployment branch policy; Marketplace publisher and
-  Open VSX namespace **nodeint** with trusted publishing for `nodeint/migent-vscode`,
-  workflow `release.yml`, environment `release`; Actions OIDC (`id-token: write`,
-  `contents: write`), no PAT secrets. See the
-  [Marketplace](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)
-  and [Open VSX](https://github.com/eclipse-openvsx/openvsx/blob/master/cli/README.md#trusted-publishing)
-  trusted publishing guides.
+  released notes. Check VSIX contents with `pnpm exec vsce ls --no-dependencies`.
+- Tags are immutable; never delete, move, or reuse a released version. If a version reached
+  a registry, release the next patch.
+- Retry registry publication for an existing release with
+  `gh workflow run release.yml -f tag=vX.Y.Z --ref next`. `RELEASE_PAUSED=true` (repository
+  variable) stops release jobs.
