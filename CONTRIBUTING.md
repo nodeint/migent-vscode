@@ -52,9 +52,8 @@ pnpm package
 ## Lint
 
 ```bash
-pnpm lint          # inspect
-pnpm lint:fix      # automatic fixes
-pnpm lint:strict   # zero warnings
+pnpm lint:fix      # automatic fixes, then zero warnings
+pnpm lint          # zero warnings
 pnpm lint:md       # Markdown style; lint:md:fix to fix
 pnpm lint:md:links # Markdown links
 ```
