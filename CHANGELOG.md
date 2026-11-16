@@ -4,7 +4,7 @@
 
 - Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
 - Answer questions (Overview and Sessions view) now opens the Questions tab on the attempt awaiting answers instead of
-  keeping a previously selected answered attempt.
+  keeping a previously selected answered attempt. ([#77](https://github.com/nodeint/migent-vscode/pull/77))
 
 ## 0.1.12
 
