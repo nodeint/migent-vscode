@@ -4,10 +4,30 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { releaseNotes } from "./release.mjs";
 
+const workBranch = /^(feat|fix|refactor|docs|chore)\/[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const releaseBranch = /^release\/(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+export function branchProblem(branch) {
+  return workBranch.test(branch) || releaseBranch.test(branch)
+    ? null
+    : `Branch ${branch} must be <type>/<slug> (feat, fix, refactor, docs, chore) or release/X.Y.Z; see CONTRIBUTING.md.`;
+}
+
+export function subjectProblem(subject, branch) {
+  if (!/^\S(?:.*\S)?$/.test(subject) || subject.endsWith(".")) {
+    return "Use a short imperative subject without surrounding spaces or a final period; see CONTRIBUTING.md.";
+  }
+  const version = releaseBranch.test(branch) ? branch.slice("release/".length) : null;
+  if (/^Release \d/.test(subject) && subject !== `Release ${version}`) {
+    return "Release subjects must be Release X.Y.Z on the matching release/X.Y.Z branch.";
+  }
+  return null;
+}
+
 export function commitProblem(branch) {
   return !branch || branch === "main" || branch === "next"
     ? "Commit on a working branch and open a pull request into next."
-    : null;
+    : branchProblem(branch);
 }
 
 export function pushProblems(input, currentRef, verifyRelease) {
@@ -24,6 +44,8 @@ export function pushProblems(input, currentRef, verifyRelease) {
     } else if (target?.startsWith("refs/heads/") && source !== "(delete)") {
       const resolved = source === "HEAD" ? currentRef : source;
       if (resolved !== target) problems.push(`Branch destination mismatch: ${source} -> ${target}. Push to the same branch name.`);
+      const problem = branchProblem(target.slice("refs/heads/".length));
+      if (problem) problems.push(problem);
     }
   }
   return problems;
@@ -58,7 +80,9 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const branch = head.stdout.trim();
   const problems = process.argv[2] === "pre-push"
     ? pushProblems(readFileSync(0, "utf8"), `refs/heads/${branch}`, (tag, localSha, remoteSha) => verifyReleaseSync(tag, localSha, remoteSha, process.argv[3], process.argv[4]))
-    : [commitProblem(branch)].filter(Boolean);
+    : process.argv[2] === "commit-msg"
+      ? [commitProblem(branch), subjectProblem(readFileSync(process.argv[3], "utf8").split(/\r?\n/)[0], branch)].filter(Boolean)
+      : [commitProblem(branch)].filter(Boolean);
   for (const problem of problems) process.stderr.write(`migent-vscode: ${problem}\n`);
   process.exitCode = problems.length ? 1 : 0;
 }

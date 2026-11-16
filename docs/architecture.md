@@ -81,7 +81,7 @@ of truth. Core imports no `vscode` API and does not modify session files.
 
 Tests are colocated as `src/core/<module>.test.ts` and `src/cli/<module>.test.ts`. Shared sample data lives in
 [fixtures](../src/core/fixtures); testing guidance belongs to [testing.md](testing.md); verification commands and
-setup belong to [CONTRIBUTING.md](../CONTRIBUTING.md#verification).
+setup belong to [CONTRIBUTING.md](../CONTRIBUTING.md#test).
 
 ## File-format contract
 

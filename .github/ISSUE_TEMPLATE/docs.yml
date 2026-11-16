@@ -1,0 +1,25 @@
+name: Documentation
+description: Fix or add documentation only.
+labels: [documentation]
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Documents
+      description: Files, sections, or links that need the change.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing, wrong, outdated, or unclear.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What the documentation should say or cover.
+    validations:
+      required: true

@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in the Migent VS Code extension does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What went wrong, in a few sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Actions in VS Code, commands, workflow or config snippets, and the session id if relevant.
+      placeholder: |
+        1. Open the Migent view and ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Notifications, error messages, or relevant lines from the Migent output channel or session logs.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: VS Code version, Migent extension version, `migent --version`, and your OS.
+      render: text
+    validations:
+      required: true

@@ -1,0 +1,48 @@
+name: Migration
+description: Staged compatibility, data transformation, or cutover.
+labels: [migration]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Why the current data, contract, or runtime state must change.
+    validations:
+      required: true
+  - type: textarea
+    id: states
+    attributes:
+      label: Current and target state
+      description: What changes, from what to what, such as settings, stored state, or protocol versions.
+    validations:
+      required: true
+  - type: textarea
+    id: consumers
+    attributes:
+      label: Affected consumers
+      description: Every component, user setting, or external tool that reads or writes what changes.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and stages
+      description: Which old states must keep working, for how long, and the planned stages to cutover.
+      placeholder: |
+        1. ...
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback
+      description: How users or maintainers recover if a stage fails.
+    validations:
+      required: false
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Related work this migration does not cover.
+    validations:
+      required: false

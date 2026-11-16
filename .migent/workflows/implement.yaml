@@ -4,7 +4,7 @@ id: implement
 artifacts:
   implement_summary:
     file: implement_summary.md
-    description: Changes made, files touched, checks run with results, deviations from the plan, and anything unverified.
+    description: Changes made, files touched, checks run with results, deviations from the plan, anything unverified, and References to inputs needed for the pull request.
 
 stages:
   - id: implement
@@ -12,30 +12,25 @@ stages:
     max_revisions: 3
     ask: human
     instructions:
-      - Before starting, check that the workspace is on the default branch at its latest remote commit; otherwise ask the human how to proceed.
-      - Implement within scope, following repository conventions and any agreed architecture.
-      - Follow the plan when provided, and address its non-blocking comments or explain why not.
-      - Work directly from the task when no architectural decisions are needed.
-      - Resolve implementation details and edge cases. Add or update relevant tests.
-      - Report architectural blockers with evidence. Seek a decision before changing the agreed design.
-      - Run relevant checks and tests, and report results and anything unverified.
-      - When revising, address all required review findings and rerun the affected checks.
+      - Follow .agents/skills/implement/SKILL.md; write implement_summary.md.
+      - If the prior handoff rules out direct implementation, ask the human how to proceed.
+      - With a plan, implement its phases in order and report each outcome.
     artifacts: [implement_summary]
+    verify:
+      - pnpm lint:strict
+      - pnpm test
+      - pnpm build
+      - pnpm test:integration
 
   - id: review_work
     role: reviewer
     depends_on:
       - implement
     instructions:
-      - Review the actual code and diff against the task, repository conventions, and the agreed architecture when provided.
-      - Check correctness, edge cases, regressions, maintainability, test coverage, and verification evidence.
-      - Respect agreed architectural decisions. Report concrete design problems with implementation evidence, not personal preference.
-      - Flag unrelated or out-of-scope changes.
-      - Report all required fixes together with file locations, impact, and required corrections.
-      - Choose approved when the task is complete and verified; otherwise choose revise.
+      - Follow .agents/skills/review-implementation/SKILL.md against the task and implement_summary.md.
     decision:
       - approved:
-          when: The change meets the task and the plan when provided, has no required fixes, and verification evidence passes.
+          when: The change meets the task, and the design and plan when provided, has no required fixes, and verification evidence passes.
           navigate: complete
       - revise:
           when: Required fixes remain, or verification evidence is missing or failing.
