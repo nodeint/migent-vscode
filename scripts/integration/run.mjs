@@ -18,6 +18,9 @@ import { finished } from 'node:stream/promises';
 
 import { downloadAndUnzipVSCode, runTests } from '@vscode/test-electron';
 
+// An inherited ELECTRON_RUN_AS_NODE (set by some Electron-based hosts) makes VS Code start as plain Node and fail on launch.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 // Locally, keep successful runs quiet and replay runner output if anything fails.
 // CI prints the runner output and each version's VS Code log for diagnosis.
 if (!process.env.MIGENT_IT_CAPTURED && !process.env.CI) {

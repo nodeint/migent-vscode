@@ -75,20 +75,15 @@ export function isRejectedStart(
 
 /**
  * Report a finished `session complete`. The CLI warns on stderr about each missing required artifact and
- * completes anyway, so those warnings are shown instead of an unconditional success.
+ * completes anyway; the warnings go to the log only, and the status bar message is the same either way.
  */
-export async function reportCompleted(
+export function reportCompleted(
   snapshot: SessionSnapshot,
   warnings: string,
-  sinks: { log: (line: string) => void; showLog: () => void },
-): Promise<void> {
-  if (warnings === '') {
-    vscode.window.setStatusBarMessage(text('prompts.completedStatus', { label: sessionLabel(snapshot) }), COMPLETED_MESSAGE_MS);
-    return;
-  }
-  sinks.log(text('documents.logCompleteWarnings', { warnings }));
-  const picked = await show('control.completedWithWarnings', { label: sessionLabel(snapshot), warnings });
-  if (picked === 'viewLog') sinks.showLog();
+  sinks: { log: (line: string) => void },
+): void {
+  if (warnings !== '') sinks.log(text('documents.logCompleteWarnings', { warnings }));
+  vscode.window.setStatusBarMessage(text('prompts.completedStatus', { label: sessionLabel(snapshot) }), COMPLETED_MESSAGE_MS);
 }
 
 /**

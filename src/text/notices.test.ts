@@ -67,12 +67,6 @@ const PINS: Record<NoticeId, Pin> = {
     buttons: ['Refresh', FIX_LOG],
   },
   'control.statusNotConfirmed': { text: 'Status not confirmed.', severity: 'warning', buttons: ['Refresh', FIX_LOG] },
-  'control.completedWithWarnings': {
-    params: { label: 'S', warnings: 'w' },
-    text: 'Completed S with warnings: w',
-    severity: 'warning',
-    buttons: [FIX_LOG],
-  },
   'control.prepareFailed': { params: D, text: 'Could not prepare the session: d', severity: 'error' },
   'control.prepareUnexpected': {
     text: 'Could not prepare the session: unexpected CLI output.',

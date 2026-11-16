@@ -20,6 +20,11 @@ export function subjectProblem(subject, branch) {
     : "Use <type>: <imperative summary> without a final period; release subjects must match release/X.Y.Z. See CONTRIBUTING.md.";
 }
 
+export function commitSubjectProblem(subject, branch) {
+  if (subject === `Merge branch 'next' into ${branch}`) return null;
+  return subjectProblem(subject, branch);
+}
+
 export function pullRequestProblems(branch, title) {
   const problems = [branchProblem(branch), subjectProblem(title, branch)].filter(Boolean);
   if (releaseBranch.test(branch) && title !== `Release ${branch.slice("release/".length)}`) {
@@ -82,7 +87,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
         : "";
       if (mode === "commit-msg") {
         const subject = readFileSync(process.argv[3], "utf8").split(/\r?\n/)[0];
-        problems = [commitProblem(branch, upstream), subjectProblem(subject, branch)].filter(Boolean);
+        problems = [commitProblem(branch, upstream), commitSubjectProblem(subject, branch)].filter(Boolean);
       } else {
         problems = [commitProblem(branch, upstream)].filter(Boolean);
       }

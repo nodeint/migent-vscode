@@ -4,6 +4,8 @@
 
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))
 
+- Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
+
 ## 0.1.12
 
 - Session rows in the Sessions view now lead with the id and a short workflow tag, the Recent heading is gone (its

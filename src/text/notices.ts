@@ -117,11 +117,6 @@ export const NOTICES = {
     keys('refresh', 'viewLog'),
   ),
   'control.statusNotConfirmed': toast('warning', () => 'Status not confirmed.', keys('refresh', 'viewLog')),
-  'control.completedWithWarnings': toast(
-    'warning',
-    ({ label, warnings }: Label & { warnings: string }) => `Completed ${label} with warnings: ${warnings}`,
-    keys('viewLog'),
-  ),
   'control.prepareFailed': toast('error', ({ detail }: Detail) => `Could not prepare the session: ${detail}`),
   'control.prepareUnexpected': toast('error', () => 'Could not prepare the session: unexpected CLI output.'),
   'control.taskNotWritten': toast('error', ({ detail }: Detail) => `The session was prepared but task.md was not written: ${detail}`),
