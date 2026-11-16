@@ -26,6 +26,8 @@ interface Seed {
   lock?: boolean;
   /** A second stage waiting at the same time, also using question numbers 1 and 2. */
   twoStages?: boolean;
+  /** Migent 0.8.0 layout: `executions/<id>/questions.json` per batch and no session `questions.json`. */
+  perExecution?: boolean;
 }
 
 function record(id: string, selection: string, seed: Seed, stage = 'plan'): Record<string, unknown> {
@@ -51,13 +53,33 @@ const summaryOf = (item: Record<string, unknown>): Record<string, unknown> =>
 function seedSession(env: Env, sessionId: string, seed: Seed = {}): BatchIdentity {
   const records = [record('1', 'single', seed), record('2', 'multiple', seed)];
   if (seed.twoStages === true) records.push(record('1', 'single', seed, 'test'), record('2', 'multiple', seed, 'test'));
-  const summary = records.map(({ status: _status, answer: _answer, ...rest }) => rest);
+  const summary = records.map(({ status: _status, answer: _answer, ...rest }) =>
+    seed.perExecution === true ? { ...rest, file: `executions/${String(rest.execution_id)}/questions.json` } : rest,
+  );
   write(migentPath(env.root, 'sessions', sessionId, 'manifest.yaml'), manifest(sessionId, `workflow_id: plan\n${seed.role === true ? 'role: planner\n' : ''}`));
   write(migentPath(env.root, 'sessions', sessionId, 'status.json'), status('question', { questions: summary, latest_execution_id: EXECUTION }));
-  write(
-    migentPath(env.root, 'sessions', sessionId, 'questions.json'),
-    JSON.stringify({ schema_version: seed.schemaVersion ?? 1, questions: records }),
-  );
+  if (seed.perExecution === true) {
+    for (const stage of new Set(records.map((item) => String(item.stage_id)))) {
+      const own = records.filter((item) => item.stage_id === stage);
+      write(
+        migentPath(env.root, 'sessions', sessionId, 'executions', `0001-${stage}--attempt-01`, 'questions.json'),
+        JSON.stringify({
+          schema_version: 1,
+          stage_id: stage,
+          execution_id: `0001-${stage}--attempt-01`,
+          recipient: seed.recipient ?? 'human',
+          questions: own
+            .map((item) => summaryOf(item))
+            .map(({ execution_id: _e, stage_id: _s, recipient: _r, ...rest }) => rest),
+        }),
+      );
+    }
+  } else {
+    write(
+      migentPath(env.root, 'sessions', sessionId, 'questions.json'),
+      JSON.stringify({ schema_version: seed.schemaVersion ?? 1, questions: records }),
+    );
+  }
   write(migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'execution.json'), JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'completed' }));
   if (seed.twoStages === true) {
     write(migentPath(env.root, 'sessions', sessionId, 'executions', '0001-test--attempt-01', 'execution.json'), JSON.stringify({ execution_id: '0001-test--attempt-01', stage_id: 'test', status: 'completed' }));
@@ -348,6 +370,36 @@ const scenarios: Scenario[] = [
       const stored = storedAnswers(env, 'q13');
       assert.equal(stored.filter((item) => item.status === 'answered').length, 2);
       assert.equal(stored.filter((item) => item.status === 'pending').length, 2, 'a new pending batch exists');
+    },
+  },
+  {
+    name: 'a Migent 0.8.0 batch is sent and settles as recorded from the answer event and input.json',
+    async run(env) {
+      const panel = await openPanel(env, 'q16', { perExecution: true });
+      assert.equal(panel.model().questions.length, 2, 'the pending batch reads from the execution file');
+      await panel.answerAll();
+      assert.equal(panel.model().canSubmit, true);
+      await withAnswerMode('record', async () => {
+        await panel.submit();
+      });
+      assert.ok(['recorded', 'recorded-waiting', 'continuing'].includes(panel.model().state), panel.model().state);
+      const input = JSON.parse(
+        fs.readFileSync(migentPath(env.root, 'sessions', 'q16', 'executions', '0002-plan--attempt-02', 'input.json'), 'utf8'),
+      ) as { answers: { question_id: string; selected: string[] }[] };
+      assert.deepEqual(input.answers.map((item) => [item.question_id, item.selected]), [['1', ['B']], ['2', ['A', 'C']]]);
+    },
+  },
+  {
+    name: 'a Migent 0.8.0 answer recorded before a failed dispatch settles as recorded and is never resent',
+    async run(env) {
+      const panel = await openPanel(env, 'q17', { perExecution: true });
+      await panel.answerAll();
+      await withAnswerMode('fail-after-record', async () => {
+        await panel.submit();
+      });
+      await waitFor('recorded-waiting', () => panel.model().state === 'recorded-waiting');
+      assert.equal(panel.model().canSubmit, false, 'the persisted answer outranks the stale pending row');
+      assert.equal(argvLog(env).filter((argv) => argv.includes('--reply-file')).length, 1, 'sent once');
     },
   },
 ];

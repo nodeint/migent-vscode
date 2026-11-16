@@ -388,6 +388,24 @@ describe('attempt facts', () => {
     expect(stagesOf(progress)[0]?.history.map((attempt) => attempt.asked)).toEqual([true, false]);
   });
 
+  it('gives each attempt the human input it opened with, and none to the others', () => {
+    const inputs = new Map([['0002-plan--attempt-02', { kind: 'reply' as const, text: 'go on', origin: 'cut_off' as const }]]);
+    const progress = buildProgress({
+      executions: [
+        execution('0001-plan--attempt-01', 'plan', 1, 'cancelled'),
+        execution('0002-plan--attempt-02', 'plan', 2, 'completed'),
+      ],
+      plan: plan(['plan']),
+      runningStageIds: [],
+      latestExecutionId: null,
+      inputs,
+    });
+    expect(stagesOf(progress)[0]?.history.map((attempt) => attempt.input)).toEqual([
+      null,
+      { kind: 'reply', text: 'go on', origin: 'cut_off' },
+    ]);
+  });
+
   describe('totals', () => {
     const run = (metrics?: MetricsExecution[], wallSeconds?: number | null) => buildProgress({
       executions: [

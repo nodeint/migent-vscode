@@ -6,6 +6,7 @@ import type { SessionSnapshot } from '../../core/model';
 import type { OperationGate } from '../../core/operationGate';
 import { listOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
+import { questionsFileToOpen } from '../../core/questions';
 import { sessionLabel } from '../../core/sessionPresentation';
 import { DEFAULT_SESSION_LIMIT } from '../../core/store';
 import { text } from '../../text';
@@ -144,6 +145,14 @@ async function openSessionFile(host: CommandHost, arg: unknown, file: string): P
   await openFile(path.join(sessionDir(resolved.context.root, resolved.snapshot.sessionId), file), file);
 }
 
+/** The session questions file (Migent up to 0.7), else the pending batch's own file. */
+async function openQuestionsFile(host: CommandHost, arg: unknown): Promise<void> {
+  const resolved = await resolve(host, arg, text('prompts.openFileWhich', { file: QUESTIONS_FILENAME }));
+  if (resolved === undefined) return;
+  const dir = sessionDir(resolved.context.root, resolved.snapshot.sessionId);
+  await openFile(questionsFileToOpen(dir, resolved.snapshot.status?.questions), QUESTIONS_FILENAME);
+}
+
 function showMore(registry: ProjectRegistry, arg: unknown): void {
   const project = typeof arg === 'object' && arg !== null && 'project' in arg ? String(arg.project) : undefined;
   const context = project === undefined ? undefined : registry.project(project);
@@ -169,7 +178,7 @@ export function registerSessionCommands(host: CommandHost, gate: OperationGate):
       if (target !== undefined) await openReadOnly(target, FAILURE_REPORT_FILENAME);
     }),
     register('migent.session.openOutput', (arg) => openOutput(host, arg)),
-    register('migent.session.openQuestions', (arg) => openSessionFile(host, arg, QUESTIONS_FILENAME)),
+    register('migent.session.openQuestions', (arg) => openQuestionsFile(host, arg)),
     register('migent.session.copyId', async (arg) => {
       const resolved = await resolve(host, arg, text('prompts.copyIdWhich'));
       if (resolved === undefined) return;

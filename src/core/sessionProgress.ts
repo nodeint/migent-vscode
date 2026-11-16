@@ -1,3 +1,4 @@
+import type { HumanInputFact } from './humanInput';
 import type { MetricsExecution, MetricsUsage } from './metrics';
 import type { ExecutionSnapshot } from './model';
 import type { SessionStagePlan } from './workflowStages';
@@ -52,6 +53,8 @@ export interface AttemptFacts {
   reason: RunReason | null;
   /** True when the attempt ended by asking a question (`outcome.status: question`). */
   asked: boolean;
+  /** The human input this attempt opened with (a reply or answers); null when none is recorded. */
+  input: HumanInputFact | null;
 }
 
 /** The attempts of one Progress block added up, for its header. */
@@ -117,6 +120,8 @@ export interface ProgressInput {
   metrics?: readonly MetricsExecution[];
   /** `metrics.json` `totals.wall_seconds`; absent when the file is. */
   wallSeconds?: number | null;
+  /** The human input each execution opened with, by execution id (`readInputIndex`); absent when none was read. */
+  inputs?: ReadonlyMap<string, HumanInputFact>;
 }
 
 function stateOf(status: string | null): ProgressState {
@@ -213,6 +218,7 @@ function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null)
 function factsOf(
   executions: readonly ExecutionSnapshot[],
   metrics: readonly MetricsExecution[],
+  inputs: ReadonlyMap<string, HumanInputFact>,
 ): (execution: ExecutionSnapshot) => AttemptFacts {
   const byId = new Map(executions.map((execution) => [execution.id, execution]));
   const metricsById = new Map(metrics.map((entry) => [entry.id, entry]));
@@ -233,6 +239,7 @@ function factsOf(
       resumes: refOf(measured?.resumesExecutionId),
       reason: reasonOf(execution.turnKind, refOf(measured?.routedFrom), byId.get(measured?.routedFrom ?? '')),
       asked: execution.outcomeStatus === 'question',
+      input: inputs.get(execution.id) ?? null,
     };
   };
 }
@@ -283,7 +290,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
     (left, right) => left.order - right.order || (left.id < right.id ? -1 : 1),
   );
   const running = latestRunning(executions, input.latestExecutionId);
-  const facts = factsOf(executions, input.metrics ?? []);
+  const facts = factsOf(executions, input.metrics ?? [], input.inputs ?? new Map());
   const wallSeconds = input.wallSeconds ?? null;
 
   if (input.plan.kind !== 'ok' || input.plan.stages.length === 0) {
