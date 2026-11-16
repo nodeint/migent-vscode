@@ -8,7 +8,7 @@ constraints:
 artifacts:
   phase_report:
     file: phase_report.md
-    description: Phase ID, plan snapshot reference, branch and base HEAD, scope and changed paths, verification commands and results, deviations, and required References. The phase is not complete until committed.
+    description: Phase ID, plan snapshot reference, branch and base HEAD, scope and changed paths, verification commands and results, deviations, and required References.
   phase_commit:
     file: phase_commit.md
     description: Phase ID, branch, base HEAD and commit SHA; a table of every phase with pending or complete status, commit SHA and report reference; next action; References to the original plan snapshot, phase reports, and earlier inputs needed downstream.
@@ -26,6 +26,7 @@ stages:
       - Select the first pending phase in plan order and require its dependencies to be complete; stop if all phases are complete and direct the human to pr. Keep this selection and base HEAD throughout the session.
       - On revision or resume, read this session's previous phase_report and review findings. Continue only its phase diff with the recorded branch and HEAD unchanged; stop on unrelated changes. Do not require a clean tree for this case.
       - Include the phase's rules and enforcement, run its Verify commands, and record the fields in the phase_report artifact description.
+      - Leave the phase diff uncommitted; do not stage, commit, or record a commit SHA.
     artifacts: [phase_report]
     verify:
       - pnpm lint

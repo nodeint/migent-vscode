@@ -28,11 +28,24 @@ describe('mapExitCode', () => {
   });
 });
 
+/** Exit names deliberately left as `Unknown`, with the reason. Mapping one needs its own scoped change. */
+const UNMAPPED_BY_DESIGN: Record<string, string> = {
+  resume_expired: 'a resume decision the extension does not drive yet; Unknown keeps reply and command failure handling',
+};
+
 describe('exit table against the contract catalog', () => {
   it('knows the code of every upstream exit name and maps none of them to Unknown', () => {
     for (const entry of EXIT_CATALOG) {
       expect(exitCodeOf(entry.name)).toBe(entry.code);
-      expect(mapExitCode(entry.code)).not.toBe('Unknown');
+      if (!(entry.name in UNMAPPED_BY_DESIGN)) expect(mapExitCode(entry.code)).not.toBe('Unknown');
+    }
+  });
+
+  it('lists only exit names that are still unmapped (no stale entry)', () => {
+    for (const name of Object.keys(UNMAPPED_BY_DESIGN)) {
+      expect(EXIT_CATALOG.map((entry) => entry.name as string)).toContain(name);
+      const entry = EXIT_CATALOG.find((candidate) => candidate.name === name);
+      expect(mapExitCode(entry?.code ?? -1)).toBe('Unknown');
     }
   });
 

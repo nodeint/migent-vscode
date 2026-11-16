@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade.
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions
   and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or
   answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))

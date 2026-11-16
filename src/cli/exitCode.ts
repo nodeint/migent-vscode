@@ -38,6 +38,9 @@ const EXIT_TABLE = [
   { code: 7, name: 'verify_failed', outcome: 'VerifyFailed' },
   { code: 8, name: 'quota', outcome: 'Quota' },
   { code: 9, name: 'question', outcome: 'AwaitingAnswer' },
+  // Exit 10 is a resume decision the extension does not drive yet. It stays `Unknown`, as any unmapped code did, so
+  // the reply gate and command failure handling are unchanged. Distinct handling needs its own scoped change.
+  { code: 10, name: 'resume_expired', outcome: 'Unknown' },
   { code: 130, name: 'cancelled', outcome: 'Cancelled' },
 ] as const satisfies readonly (CatalogPair & { outcome: RunOutcome })[];
 

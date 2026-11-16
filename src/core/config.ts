@@ -106,11 +106,13 @@ export const MERGE_UNITS = {
 
 const ROLE_KEYS = ['description', 'responsibilities', 'agent'] as const satisfies readonly (keyof ContractRoleEntry)[];
 const ROOT_KEYS = ['schema_version', 'agents', 'roles'] as const satisfies readonly (keyof ConfigLayer)[];
+/** Contract layer keys the form does not model. They stay in `extra`, so they survive an edit unchanged. */
+type RootPassthroughKey = Extract<keyof ConfigLayer, 'resume_policies'>;
 
 // A key added to or removed from the contract's role or config layer fails typecheck here.
 export type ConfigKeysMatchContract = [
   Expect<SameKeys<(typeof ROLE_KEYS)[number], keyof ContractRoleEntry>>,
-  Expect<SameKeys<(typeof ROOT_KEYS)[number], keyof ConfigLayer>>,
+  Expect<SameKeys<(typeof ROOT_KEYS)[number] | RootPassthroughKey, keyof ConfigLayer>>,
 ];
 
 /** The contract's role `agent`: a named-agent reference (string) or an inline agent. */
