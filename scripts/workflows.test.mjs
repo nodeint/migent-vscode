@@ -31,5 +31,7 @@ test("CI workflow parses", () => {
   const ci = workflow("ci.yml");
   assert.deepEqual(Object.keys(ci.on), ["pull_request"]);
   assert.deepEqual(ci.on.pull_request.branches, ["next"]);
+  assert.deepEqual(Object.keys(ci.jobs).sort(), ["lint", "pr-title", "test"]);
+  assert.deepEqual(ci.on.pull_request.types, ["opened", "edited", "synchronize", "reopened"]);
   assert.deepEqual(ci.jobs.test.strategy.matrix.os, ["macos-latest", "windows-latest"]);
 });
