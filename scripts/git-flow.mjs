@@ -21,7 +21,8 @@ export function subjectProblem(subject, branch) {
 }
 
 export function commitSubjectProblem(subject, branch) {
-  if (subject === `Merge branch 'next' into ${branch}`) return null;
+  const merge = /^Merge (?:remote-tracking )?branch '[^'\s]+' into (.+)$/.exec(subject);
+  if (merge && merge[1] === branch) return null;
   return subjectProblem(subject, branch);
 }
 

@@ -2,12 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { branchProblem, commitProblem, commitSubjectProblem, pullRequestProblems, pushProblems, subjectProblem } from "./git-flow.mjs";
 
-test("commit subjects accept the default merge of next into the current branch", () => {
+test("commit subjects accept the default merge of any branch into the current branch", () => {
   const branch = "feat/72-migrate-questions-per-execution";
-  assert.equal(commitSubjectProblem(`Merge branch 'next' into ${branch}`, branch), null);
+  for (const source of ["branch 'next'", "branch 'main'", "branch 'fix/other'", "remote-tracking branch 'origin/next'"]) {
+    assert.equal(commitSubjectProblem(`Merge ${source} into ${branch}`, branch), null, source);
+  }
   assert.equal(commitSubjectProblem("feat: add status", branch), null);
   assert.ok(commitSubjectProblem("Merge branch 'next' into fix/other", branch));
-  assert.ok(commitSubjectProblem(`Merge branch 'main' into ${branch}`, branch));
+  assert.ok(commitSubjectProblem(`Merge branch 'next' into ${branch} extra`, branch));
+  assert.ok(commitSubjectProblem(`Merge next into ${branch}`, branch));
   assert.ok(pullRequestProblems(branch, `Merge branch 'next' into ${branch}`).length);
 });
 
