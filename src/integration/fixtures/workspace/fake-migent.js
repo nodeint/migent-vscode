@@ -353,7 +353,7 @@ function run() {
   const lockFile = path.join(dirOf(id), 'session.lock');
   const cancelFile = path.join(dirOf(id), 'cancel.requested');
   const beat = () =>
-    writeJson(lockFile, { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
+    writeJson(lockFile, { pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' });
   beat();
   const replyStage = option('--reply-file') === undefined ? 'plan' : replyContext(id).stage;
   const executionId = option('--reply-file') === undefined ? '0001-plan--attempt-01' : `0002-${replyStage}--attempt-02`;

@@ -138,7 +138,7 @@ describe('SessionStore.load', () => {
     expect(s.snapshot('asking')?.displayState).toMatchObject({ state: 'question', icon: 'comment-discussion' });
     writeFileSync(
       path.join(sessionDir('asking'), 'session.lock'),
-      JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() }),
+      JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' }),
     );
     s.refreshSession('asking');
     expect(s.snapshot('asking')?.displayState.state).toBe('running');

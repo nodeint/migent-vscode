@@ -360,7 +360,7 @@ const scenarios: Scenario[] = [
       write(migentPath(env.root, 'sessions', 'held', 'status.json'), status('active'));
       write(
         migentPath(env.root, 'sessions', 'held', 'session.lock'),
-        JSON.stringify({ pid: 4242, host: 'some-other-host', heartbeat_at: new Date().toISOString() }),
+        JSON.stringify({ pid: 4242, host: 'some-other-host', started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' }),
       );
       write(migentPath(env.root, 'sessions', 'free', 'manifest.yaml'), manifest('free', 'workflow_id: plan\n'));
       write(migentPath(env.root, 'sessions', 'free', 'status.json'), status('active'));

@@ -73,7 +73,7 @@ export function removeMigent(root: string): void {
 }
 
 export function freshLock(): string {
-  return JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
+  return JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' });
 }
 
 export async function createProject(env: Env): Promise<ProjectContext> {

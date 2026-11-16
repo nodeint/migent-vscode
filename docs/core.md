@@ -46,6 +46,8 @@ Evidence: [displayState.test.ts](../src/core/displayState.test.ts).
   count as dead.
 - A parsed foreign-host lock skips the PID probe but still requires a fresh
   heartbeat. An invalid heartbeat is stale.
+- A lock is parsed only when `pid`, `host`, `started_at`, `heartbeat_at` and `nonce` are all present with the
+  contract's types (`SessionLockFile`). A lock missing or mistyping any of them is unparsable.
 - An unparsable lock uses file mtime. A fresh file counts as alive with unknown
   identity and `foreignHost: true`; an old file is stale.
 

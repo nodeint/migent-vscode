@@ -40,7 +40,7 @@ function project(): { store: SessionStore; lock: string } {
   // The committed lock is stale; give it a fresh heartbeat from this host so it probes as alive.
   writeFileSync(
     lock,
-    JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() }),
+    JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' }),
   );
   const store = new SessionStore(root);
   store.load();
