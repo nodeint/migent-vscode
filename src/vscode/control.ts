@@ -533,14 +533,10 @@ export class ControlService implements vscode.Disposable {
         this.#onLine(context, state, line);
       },
     });
-    const result = await this.#showProgress(state, run.result);
+    const result = await run.result;
     stopWatching();
     await this.#finish(context, state, result);
     return state.sessionId;
-  }
-
-  async #showProgress(state: RunState, done: Promise<RunResult>): Promise<RunResult> {
-    return progress('control.running', { title: state.title }, () => done);
   }
 
   async #finish(context: ProjectContext, state: RunState, result: RunResult): Promise<void> {

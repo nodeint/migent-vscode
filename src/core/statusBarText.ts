@@ -11,6 +11,10 @@ export interface StatusBarModel {
   tooltip: string;
 }
 
+/** Spinning while any session is running; static when only attention remains. */
+const RUNNING_ICON = '$(sync~spin)';
+const ATTENTION_ICON = '$(bell)';
+
 function projectLine(summary: AttentionSummary): string {
   return [
     summary.running > 0 ? text('status.detailRunning', { count: summary.running }) : '',
@@ -35,12 +39,14 @@ export function statusBarModel(projects: readonly ProjectSummary[]): StatusBarMo
     running > 0 ? text('status.running', { count: running }) : '',
     needsAttention > 0 ? text('status.needsAttention', { count: needsAttention }) : '',
   ];
-  const label = text('status.text', { parts: parts.filter(Boolean).join(' · ') });
+  const icon = running > 0 ? RUNNING_ICON : ATTENTION_ICON;
+  const label = text('status.text', { icon, parts: parts.filter(Boolean).join(' · ') });
   const isMultiRoot = projects.length > 1;
   const lines = projects.flatMap(({ name, summary }) => {
     const line = projectLine(summary);
     if (line === '') return [];
     return [isMultiRoot ? text('status.projectLine', { name, line }) : line];
   });
+  if (running > 0) lines.push(text('status.continuesAfterClose'));
   return { text: label, tooltip: lines.join('\n') };
 }
