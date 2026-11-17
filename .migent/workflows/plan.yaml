@@ -19,22 +19,17 @@ stages:
     ask: human
     instructions:
       - Require a working branch created from origin/next and an approved prior design; ask the human if either is missing or unsuitable.
-      - Read prior artifacts and required References, including earlier inputs needed downstream. Report missing or inconsistent inputs and seek decisions on design gaps.
       - Write plan.md using .agents/skills/planning/SKILL.md and its template. Address prior review comments or explain why not.
-      - Resolve substantive review findings when revising. Retain usable snapshot paths for prior artifacts and repository-relative paths for repository references.
+      - Resolve substantive review findings when revising.
     artifacts: [plan]
 
   - id: review_plan
     role: reviewer
     depends_on: [plan]
     instructions:
-      - Review against the approved design, acceptance criteria, repository evidence, and the planning skill and template.
-      - Check that each phase is one complete review unit, aims for one commit, and explains its boundary. Flag independently shippable parts grouped without justification.
-      - Check dependency and risk ordering, confirmation of assumptions before use, and a coherent codebase after each phase. No phase may depend on later work to complete or verify its promised outcome.
-      - Check that each phase includes its rules, enforcement, needed documentation, implementer inputs, runnable verification, and measurable completion criteria.
+      - Follow .agents/skills/review/SKILL.md, reviewing plan.md against the approved design, acceptance criteria, and .agents/skills/planning/SKILL.md and its template.
       - Check acceptance coverage against the actual phase scope and verification, including final integration. Flag missing or invented coverage and out-of-scope work.
-      - Require no open decisions affecting scope, behavior, contracts, architecture, or phase boundaries, and usable References to all required inputs.
-      - Report substantive findings together with impact and required corrections. Do not block on style or routine implementation choices.
+      - Do not block on routine implementation choices.
     decision:
       - approved:
           when: No substantive gaps or comments remain.

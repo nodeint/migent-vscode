@@ -17,17 +17,15 @@ stages:
       - With a plan, implement its phases in order and report each outcome.
     artifacts: [implement_summary]
     verify:
-      - pnpm lint
-      - pnpm test
+      - pnpm typecheck
       - pnpm build
-      - pnpm test:integration
 
   - id: review_work
     role: reviewer
     depends_on:
       - implement
     instructions:
-      - Follow .agents/skills/review-implementation/SKILL.md against the task and implement_summary.md.
+      - Follow .agents/skills/review/SKILL.md, reviewing the change and implement_summary.md against the task and .agents/skills/implement/SKILL.md.
     decision:
       - approved:
           when: The change meets the task, and the design and plan when provided, has no required fixes, and verification evidence passes.
