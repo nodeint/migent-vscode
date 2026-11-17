@@ -3,29 +3,28 @@
 ## Unreleased
 
 - A `session.lock` missing `started_at` or `nonce` (or with a wrong-typed field) is now treated as unparsable, so
-  its liveness follows the file's age instead of its heartbeat.
-- Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade.
+  its liveness follows the file's age instead of its heartbeat. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
+- Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - A session whose `status.json` lacks a string `session_id` or `status` is now shown as Unknown (invalid status)
-  instead of being read with defaults.
+  instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - A session whose `manifest.yaml` matches neither the schema 2 nor the legacy contract shape is now shown as Unknown
-  (invalid manifest) instead of being read with defaults.
+  (invalid manifest) instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Pending questions, running stages and blocker reply targets are no longer read from `status.json`, because the
   Migent 0.8.0 contract does not declare them. Until the CLI provides them another way, the Sessions view and the
   question notification show no pending questions, no running stage is marked in Progress, and a blocked session
-  offers no blocker reply target.
+  offers no blocker reply target. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions
   and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or
   answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))
 - An execution whose `execution.json` lacks a required field of the Migent 0.8.0 contract (or has a wrong-typed one) is
-  now omitted from the session instead of being shown with defaults.
+  now omitted from the session instead of being shown with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - A question missing a required field of the Migent 0.8.0 contract is now skipped and reported as a malformed record
-  instead of being read with defaults; an unrecognized question status no longer shows as its own state.
+  instead of being read with defaults; an unrecognized question status no longer shows as its own state. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Lines of `events.jsonl` that do not match the Migent 0.8.0 event shape are now shown as unrecognized lines in the
-  timeline instead of being read with defaults.
+  timeline instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - A `next.json` suggestion missing a required field of the Migent 0.8.0 contract is now skipped, and a `next.json`
-  without `source_session_id` is shown as invalid, instead of being read with defaults.
-
-- Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
+  without `source_session_id` is shown as invalid, instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
+- Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Answer questions (Overview and Sessions view) now opens the Questions tab on the attempt awaiting answers instead of
   keeping a previously selected answered attempt. ([#77](https://github.com/nodeint/migent-vscode/pull/77))
 
