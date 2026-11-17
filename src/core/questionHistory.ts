@@ -1,6 +1,5 @@
 import { parseExecutionId } from './executions';
-import type { PendingQuestion } from './model';
-import type { QuestionRecord } from './questions';
+import type { QuestionEntry, QuestionItem } from './questions';
 
 /**
  * The Questions tab's history: every attempt (execution) that asked questions, from the session `questions.json`
@@ -53,8 +52,8 @@ function compare(left: Group, right: Group): number {
 
 /** Group the history and the pending questions by attempt. A question without an execution id has no attempt. */
 export function questionAttempts(
-  records: readonly QuestionRecord[],
-  pending: readonly PendingQuestion[],
+  records: readonly QuestionEntry[],
+  pending: readonly QuestionItem[],
 ): QuestionAttempt[] {
   const groups = new Map<string, Group>();
   const groupOf = (stageId: string | null, executionId: string): Group => {
@@ -66,15 +65,13 @@ export function questionAttempts(
     }
     return group;
   };
-  for (const record of records) {
-    if (record.executionId === null) continue;
-    const group = groupOf(record.stageId, record.executionId);
-    group.ids.add(record.id);
-    if (record.answer !== null || record.status === 'answered') group.isAnswered = true;
+  for (const { item, answer, status } of records) {
+    const group = groupOf(item.stage_id, item.execution_id);
+    group.ids.add(item.id);
+    if (answer !== null || status === 'answered') group.isAnswered = true;
   }
   for (const question of pending) {
-    if (question.executionId === null) continue;
-    const group = groupOf(question.stageId, question.executionId);
+    const group = groupOf(question.stage_id, question.execution_id);
     group.ids.add(question.id);
     group.isPending = true;
   }
@@ -95,10 +92,10 @@ export function defaultAttempt(attempts: readonly QuestionAttempt[]): QuestionAt
 
 /** The records of one attempt, in stored order. */
 export function attemptRecords(
-  records: readonly QuestionRecord[],
+  records: readonly QuestionEntry[],
   ref: { stageId: string | null; executionId: string },
-): QuestionRecord[] {
-  return records.filter((record) => record.executionId === ref.executionId && record.stageId === ref.stageId);
+): QuestionEntry[] {
+  return records.filter(({ item }) => item.execution_id === ref.executionId && item.stage_id === ref.stageId);
 }
 
 /** The attempt a selection names, if the session still lists it. */

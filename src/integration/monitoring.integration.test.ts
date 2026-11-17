@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 
 import {
   createProject,
+  executionRecord,
   freshLock,
   manifest,
   migentPath,
@@ -138,7 +139,7 @@ const scenarios: Scenario[] = [
       write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), manifest('s1'));
       write(migentPath(env.root, 'sessions', 's1', 'status.json'), status('active'));
       const execution = migentPath(env.root, 'sessions', 's1', 'executions', 'e1');
-      write(path.join(execution, 'execution.json'), '{}');
+      write(path.join(execution, 'execution.json'), executionRecord('e1', 'plan', { status: 'completed' }));
       await waitFor('session loaded', () => project.store.snapshot('s1') !== undefined);
       await sleep(SETTLE_MS);
       const base = project.watcher.watchCount;

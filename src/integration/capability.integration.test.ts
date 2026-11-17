@@ -63,8 +63,8 @@ const scenarios: Scenario[] = [
   {
     name: 'AC8: Rename is refused at dispatch while the CLI is old (launch retained), and runs again after Recheck',
     async run(env) {
-      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
-      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
+      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nworkflow_id: w\ncreated_at: 2026-11-01T10:00:00.000+00:00\nschema_version: 2\n');
+      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ session_id: 's1', status: 'completed' }));
       const project = await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');
       const snapshot = project.store.snapshot('s1');
@@ -98,8 +98,8 @@ const scenarios: Scenario[] = [
   {
     name: 'AC13: a missing CLI empties the Sessions view so onboarding shows, and Recheck recovers',
     async run(env) {
-      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nschema_version: 2\n');
-      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ status: 'completed' }));
+      write(migentPath(env.root, 'sessions', 's1', 'manifest.yaml'), 'session_id: s1\nworkflow_id: w\ncreated_at: 2026-11-01T10:00:00.000+00:00\nschema_version: 2\n');
+      write(migentPath(env.root, 'sessions', 's1', 'status.json'), JSON.stringify({ session_id: 's1', status: 'completed' }));
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');
       const empty = path.join(env.root, 'empty-path');
@@ -137,13 +137,13 @@ const scenarios: Scenario[] = [
         const state = project === undefined ? undefined : env.api.capability.state(project.key);
         assert.equal(state?.detected, '0.3.5');
         assert.equal(state?.required, MINIMUM_CLI_VERSION);
-        assert.match(String(diagnostic(env)?.label), /older than 0.6.0/);
-        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.6.0/);
+        assert.match(String(diagnostic(env)?.label), /older than 0.8.0/);
+        assert.match(String(diagnostic(env)?.tooltip), /Required version: 0.8.0/);
       });
     },
   },
   {
-    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.6.0 minimum, and Recheck recovers',
+    name: 'AC13: the legacy fixture CLI (0.3.1) is old against the 0.8.0 minimum, and Recheck recovers',
     async run(env) {
       await createProject(env);
       await waitFor('capability ok', () => kindOf(env) === 'ok');

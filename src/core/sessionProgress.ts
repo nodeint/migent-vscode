@@ -1,6 +1,13 @@
+import {
+  executionBlocker,
+  executionCause,
+  executionDecision,
+  executionEffort,
+  type ExecutionEntry,
+  executionOutcomeStatus,
+} from './executions';
 import type { HumanInputFact } from './humanInput';
-import type { MetricsExecution, MetricsUsage } from './metrics';
-import type { ExecutionSnapshot } from './model';
+import type { ExecutionView, UsageView } from './sessionMetricsModel';
 import type { SessionStagePlan } from './workflowStages';
 
 /**
@@ -46,7 +53,7 @@ export interface AttemptFacts {
   createdAt: string | null;
   wallSeconds: number | null;
   /** Each token count and the cost as `metrics.json` reports them, never combined; null without a metrics entry. */
-  usage: MetricsUsage | null;
+  usage: UsageView | null;
   /** The earlier attempt this one resumed, when `metrics.json` names one that is in the session. */
   resumes: AttemptRef | null;
   /** Why the attempt ran (`turn_kind` with `routed_from`); null when it started the stage or the data is not enough. */
@@ -64,7 +71,7 @@ export interface ProgressTotals {
   /** `metrics.json` `totals.wall_seconds`: the elapsed time of the session. Null when not reported. */
   wallSeconds: number | null;
   /** Per field, the sum over attempts that report it; null when none does, or without any metrics entry. */
-  usage: MetricsUsage | null;
+  usage: UsageView | null;
   /** Attempts without a cost (no metrics entry, or none reported), so a summed cost understates the spend. */
   costMissing: number;
 }
@@ -110,14 +117,14 @@ export type SessionProgress =
   | { kind: 'empty' };
 
 export interface ProgressInput {
-  executions: readonly ExecutionSnapshot[];
+  executions: readonly ExecutionEntry[];
   plan: SessionStagePlan;
   /** Stage ids the session status reports as running now. */
   runningStageIds: readonly string[];
   /** `status.json` `latest_execution_id`, used to find the latest running execution. */
   latestExecutionId: string | null;
   /** `metrics.json` executions; absent for an old or running session, which then shows no duration or tokens. */
-  metrics?: readonly MetricsExecution[];
+  metrics?: readonly ExecutionView[];
   /** `metrics.json` `totals.wall_seconds`; absent when the file is. */
   wallSeconds?: number | null;
   /** The human input each execution opened with, by execution id (`readInputIndex`); absent when none was read. */
@@ -140,8 +147,8 @@ function stateOf(status: string | null): ProgressState {
 }
 
 /** An attempt whose process completed but whose outcome is `blocked` shows as blocked. */
-function attemptState(execution: ExecutionSnapshot): ProgressState {
-  return stateOf(execution.outcomeStatus === 'blocked' ? 'blocked' : execution.status);
+function attemptState(execution: ExecutionEntry): ProgressState {
+  return stateOf(executionOutcomeStatus(execution.execution) === 'blocked' ? 'blocked' : execution.execution.status);
 }
 
 function lastMatching<T>(items: readonly T[], isMatch: (item: T) => boolean): T | null {
@@ -154,12 +161,12 @@ function lastMatching<T>(items: readonly T[], isMatch: (item: T) => boolean): T 
 
 /** The latest execution that is running: the status's latest one when it says so, else the last one. */
 function latestRunning(
-  executions: readonly ExecutionSnapshot[],
+  executions: readonly ExecutionEntry[],
   latestExecutionId: string | null,
-): ExecutionSnapshot | null {
+): ExecutionEntry | null {
   const latest = executions.find((execution) => execution.id === latestExecutionId);
-  if (latest?.status === 'running') return latest;
-  return lastMatching(executions, (execution) => execution.status === 'running');
+  if (latest?.execution.status === 'running') return latest;
+  return lastMatching(executions, (execution) => execution.execution.status === 'running');
 }
 
 function sum(values: readonly (number | null)[]): number | null {
@@ -174,11 +181,11 @@ function sum(values: readonly (number | null)[]): number | null {
 function reasonOf(
   turnKind: string | null,
   from: AttemptRef | null,
-  source: ExecutionSnapshot | undefined,
+  source: ExecutionEntry | undefined,
 ): RunReason | null {
   if (turnKind === 'answers') return { kind: 'answer' };
   if (turnKind === 'start' || from === null) return null;
-  if (turnKind === 'continue' && source?.decision === 'revise') return { kind: 'revise', from };
+  if (turnKind === 'continue' && source !== undefined && executionDecision(source.execution) === 'revise') return { kind: 'revise', from };
   return { kind: 'routed', from };
 }
 
@@ -193,7 +200,7 @@ const USAGE_FIELDS = [
 
 function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null): ProgressTotals {
   const measured = attempts.flatMap((attempt) => (attempt.usage === null ? [] : [attempt.usage]));
-  const usage: MetricsUsage | null = measured.length === 0
+  const usage: UsageView | null = measured.length === 0
     ? null
     : {
       inputTokens: null,
@@ -216,66 +223,66 @@ function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null)
 
 /** The facts of every execution by id, resolving `resumes` and `routed from` to named attempts. */
 function factsOf(
-  executions: readonly ExecutionSnapshot[],
-  metrics: readonly MetricsExecution[],
+  executions: readonly ExecutionEntry[],
+  metrics: readonly ExecutionView[],
   inputs: ReadonlyMap<string, HumanInputFact>,
-): (execution: ExecutionSnapshot) => AttemptFacts {
+): (execution: ExecutionEntry) => AttemptFacts {
   const byId = new Map(executions.map((execution) => [execution.id, execution]));
   const metricsById = new Map(metrics.map((entry) => [entry.id, entry]));
   const refOf = (id: string | null | undefined): AttemptRef | null => {
     const target = id === null || id === undefined ? undefined : byId.get(id);
-    return target === undefined ? null : { stage: target.stage, attempt: target.attempt };
+    return target === undefined ? null : { stage: target.execution.stage_id, attempt: target.attempt };
   };
   return (execution) => {
     const measured = metricsById.get(execution.id);
     return {
-      model: execution.model,
-      effort: execution.effort,
-      blocker: execution.blocker,
-      error: execution.error,
-      createdAt: execution.createdAt,
+      model: execution.execution.model ?? null,
+      effort: executionEffort(execution.execution),
+      blocker: executionBlocker(execution.execution),
+      error: executionCause(execution.execution),
+      createdAt: execution.execution.created_at,
       wallSeconds: measured?.wallSeconds ?? null,
       usage: measured?.usage ?? null,
       resumes: refOf(measured?.resumesExecutionId),
-      reason: reasonOf(execution.turnKind, refOf(measured?.routedFrom), byId.get(measured?.routedFrom ?? '')),
-      asked: execution.outcomeStatus === 'question',
+      reason: reasonOf(execution.execution.turn_kind ?? null, refOf(measured?.routedFrom), byId.get(measured?.routedFrom ?? '')),
+      asked: executionOutcomeStatus(execution.execution) === 'question',
       input: inputs.get(execution.id) ?? null,
     };
   };
 }
 
 interface StageContext {
-  facts: (execution: ExecutionSnapshot) => AttemptFacts;
-  executions: readonly ExecutionSnapshot[];
+  facts: (execution: ExecutionEntry) => AttemptFacts;
+  executions: readonly ExecutionEntry[];
   runningStageIds: ReadonlySet<string>;
-  running: ExecutionSnapshot | null;
+  running: ExecutionEntry | null;
 }
 
 function stageRow(id: string, context: StageContext): StageProgressRow {
-  const stageExecutions = context.executions.filter((execution) => execution.stage === id);
+  const stageExecutions = context.executions.filter((execution) => execution.execution.stage_id === id);
   const chosen =
-    lastMatching(stageExecutions, (execution) => execution.status !== 'skipped') ??
+    lastMatching(stageExecutions, (execution) => execution.execution.status !== 'skipped') ??
     stageExecutions.at(-1) ??
     null;
   return {
     id,
     state: chosen === null ? 'not-run' : attemptState(chosen),
     attempts: chosen?.attempt ?? null,
-    decision: chosen?.decision ?? null,
+    decision: chosen === null ? null : executionDecision(chosen.execution),
     history: stageExecutions
-      .filter((execution) => execution.status !== 'skipped')
+      .filter((execution) => execution.execution.status !== 'skipped')
       .map((execution) => ({
         order: execution.order,
         attempt: execution.attempt,
         state: attemptState(execution),
-        decision: execution.decision,
-        completedAt: execution.completedAt,
+        decision: executionDecision(execution.execution),
+        completedAt: execution.execution.completed_at ?? null,
         ...context.facts(execution),
       })),
-    completedAt: chosen?.completedAt ?? null,
+    completedAt: chosen?.execution.completed_at ?? null,
     isCurrent:
       context.runningStageIds.has(id) ||
-      (context.runningStageIds.size === 0 && context.running?.stage === id),
+      (context.runningStageIds.size === 0 && context.running?.execution.stage_id === id),
   };
 }
 
@@ -296,11 +303,11 @@ export function buildProgress(input: ProgressInput): SessionProgress {
   if (input.plan.kind !== 'ok' || input.plan.stages.length === 0) {
     const rows: ExecutionProgressRow[] = executions.map((execution) => ({
       executionId: execution.id,
-      stage: execution.stage,
+      stage: execution.execution.stage_id,
       attempt: execution.attempt,
       state: attemptState(execution),
-      decision: execution.decision,
-      completedAt: execution.completedAt,
+      decision: executionDecision(execution.execution),
+      completedAt: execution.execution.completed_at ?? null,
       isCurrent: execution.id === running?.id,
       ...facts(execution),
     }));
@@ -311,7 +318,7 @@ export function buildProgress(input: ProgressInput): SessionProgress {
   const planned = new Set(input.plan.stages);
   const extraStages: string[] = [];
   for (const execution of executions) {
-    const { stage } = execution;
+    const stage = execution.execution.stage_id;
     if (stage === '' || planned.has(stage) || extraStages.includes(stage)) continue;
     extraStages.push(stage);
   }

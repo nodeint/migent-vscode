@@ -4,12 +4,12 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TailEvent } from '../../core/eventTail';
+import type { EventEntry } from '../../core/eventTail';
 import type { SessionSnapshot } from '../../core/model';
 import type { OverviewModel } from '../../core/overviewModel';
 import { eventsPath } from '../../core/paths';
 import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
-import { capturedDir, snapshotFromDir } from '../../core/testHelpers';
+import { capturedDir, eventEntry, executionJson, snapshotFromDir } from '../../core/testHelpers';
 import type { ProjectRegistry } from '../projects';
 import { buildOverviewPage } from './pageModels';
 
@@ -37,23 +37,10 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 function snapshot(state: 'running' | 'completed'): SessionSnapshot {
   const base = snapshotFromDir(path.join(root, '.migent', 'sessions', SESSION));
-  const {status} = base;
   return {
     ...base,
     sessionId: SESSION,
     displayState: { ...base.displayState, state, icon: 'x', writable: true },
-    ...(status === null
-      ? {}
-      : {
-          status: state === 'running'
-            ? {
-                ...status,
-                runningStages: [
-                  { executionId: null, stageId: 'draft', client: null, event: null, summary: null, updatedAt: null },
-                ],
-              }
-            : status,
-        }),
   };
 }
 
@@ -77,19 +64,14 @@ function overviewOf(snapshots: readonly SessionSnapshot[]): OverviewModel {
   return page.overview as OverviewModel;
 }
 
-function event(seq: number): TailEvent {
-  return {
+function event(seq: number): EventEntry {
+  return eventEntry({
     seq,
-    v: 2,
     event: 'execution.started',
     timestamp: '2026-11-01T11:00:00.000Z',
-    executionId: null,
     stageId: 'draft',
     summary: `line-${seq}`,
-    data: {},
-    raw: {},
-    rawLine: null,
-  };
+  });
 }
 
 describe('buildOverviewPage', () => {
@@ -102,7 +84,8 @@ describe('buildOverviewPage', () => {
     expect(model.activity.visible).toBe(true);
     expect(model.progress).toMatchObject({
       kind: 'stages',
-      rows: [{ id: 'draft', state: 'not-run', isCurrent: true }],
+      // B6: running_stages is not read, so no stage is marked current.
+      rows: [{ id: 'draft', state: 'not-run', isCurrent: false }],
     });
   });
 
@@ -120,7 +103,7 @@ describe('buildOverviewPage', () => {
     const second = '0002-draft--attempt-02';
     for (const id of [first, second]) {
       mkdirSync(path.join(executions, id), { recursive: true });
-      writeFileSync(path.join(executions, id, 'execution.json'), JSON.stringify({ execution_id: id, stage_id: 'draft', status: 'completed' }));
+      writeFileSync(path.join(executions, id, 'execution.json'), JSON.stringify(executionJson(id)));
     }
     writeFileSync(
       path.join(executions, second, 'input.json'),

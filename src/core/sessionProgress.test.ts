@@ -2,10 +2,10 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { listExecutions } from './executions';
-import type { MetricsExecution, MetricsUsage } from './metrics';
-import type { ExecutionSnapshot } from './model';
+import { type ExecutionEntry, listExecutions } from './executions';
+import type { ExecutionView, UsageView } from './sessionMetricsModel';
 import { buildProgress, type SessionProgress, type StageProgressRow } from './sessionProgress';
+import { executionEntry, type ExecutionFixture } from './testHelpers';
 import type { SessionStagePlan } from './workflowStages';
 
 const fixture = (name: string): string =>
@@ -21,26 +21,9 @@ function execution(
   attempt: number,
   status: string | null,
   decision: string | null = null,
-): ExecutionSnapshot {
-  return {
-    id,
-    order: Number(id.slice(0, 4)),
-    stage,
-    attempt,
-    status,
-    decision,
-    blocker: null,
-    client: null,
-    model: null,
-    effort: null,
-    turnKind: null,
-    outcomeStatus: null,
-    error: null,
-    hasFailureReport: false,
-    kind: null,
-    createdAt: null,
-    completedAt: null,
-  };
+  extra: Partial<ExecutionFixture> = {},
+): ExecutionEntry {
+  return executionEntry({ id, stage, attempt, status, decision, ...extra });
 }
 
 function stagesOf(progress: SessionProgress): StageProgressRow[] {
@@ -114,8 +97,8 @@ describe('buildProgress', () => {
   });
 
   it('lists every non-skipped attempt of a stage, oldest first, with its decision and time', () => {
-    const first = { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed', 'revise'), completedAt: '2026-11-01T10:00:00.000Z' };
-    const second = { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed', 'approved'), completedAt: '2026-11-01T11:00:00.000Z' };
+    const first = execution('0001-plan--attempt-01', 'plan', 1, 'completed', 'revise', { completedAt: '2026-11-01T10:00:00.000Z' });
+    const second = execution('0002-plan--attempt-02', 'plan', 2, 'completed', 'approved', { completedAt: '2026-11-01T11:00:00.000Z' });
     const progress = buildProgress({
       executions: [second, first, execution('0003-plan--attempt-03', 'plan', 3, 'skipped')],
       plan: plan(['plan']),
@@ -221,8 +204,8 @@ describe('buildProgress', () => {
   it('shows a completed execution whose outcome is blocked as blocked', () => {
     const progress = buildProgress({
       executions: [
-        { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), outcomeStatus: 'blocked' },
-        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), outcomeStatus: 'complete' },
+        execution('0001-plan--attempt-01', 'plan', 1, 'completed', null, { outcomeStatus: 'blocked' }),
+        execution('0002-plan--attempt-02', 'plan', 2, 'completed', null, { outcomeStatus: 'complete' }),
       ],
       plan: plan(['plan']),
       runningStageIds: [],
@@ -236,7 +219,7 @@ describe('attempt facts', () => {
   const usage = (inputTokens: number | null, outputTokens: number | null) => ({
     inputTokens, outputTokens, reasoningTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null,
   });
-  const measured = (id: string, extra: Partial<MetricsExecution>): MetricsExecution => ({
+  const measured = (id: string, extra: Partial<ExecutionView>): ExecutionView => ({
     id,
     order: Number(id.slice(0, 4)),
     stageId: 'plan',
@@ -261,9 +244,10 @@ describe('attempt facts', () => {
   });
 
   it('carries model, effort, blocker and start time from the execution, and no figures without metrics.json', () => {
-    const plain = execution('0001-plan--attempt-01', 'plan', 1, 'blocked');
+    const plain = (extra: Partial<ExecutionFixture>): ExecutionEntry =>
+      execution('0001-plan--attempt-01', 'plan', 1, 'blocked', null, extra);
     const progress = buildProgress({
-      executions: [{ ...plain, model: 'claude-sonnet-5-5', effort: 'medium', blocker: 'needs a token', error: 'verify failed: red', createdAt: '2026-11-01T10:00:00Z' }],
+      executions: [plain({ model: 'claude-sonnet-5-5', effort: 'medium', blocker: 'needs a token', error: 'verify failed: red', createdAt: '2026-11-01T10:00:00Z' })],
       plan: plan(['plan']),
       runningStageIds: [],
       latestExecutionId: null,
@@ -282,7 +266,7 @@ describe('attempt facts', () => {
     });
   });
 
-  const usageOf = (extra: Partial<MetricsUsage>): MetricsUsage => ({ ...usage(null, null), ...extra });
+  const usageOf = (extra: Partial<UsageView>): UsageView => ({ ...usage(null, null), ...extra });
 
   it('takes duration and each usage field from metrics, uncombined, and names the resumed attempt', () => {
     const executions = [
@@ -326,7 +310,7 @@ describe('attempt facts', () => {
 
   it('does not name an attempt that is not in the session', () => {
     const progress = buildProgress({
-      executions: [{ ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), turnKind: 'continue' }],
+      executions: [execution('0001-plan--attempt-01', 'plan', 1, 'completed', null, { turnKind: 'continue' })],
       plan: plan(['plan']),
       runningStageIds: [],
       latestExecutionId: null,
@@ -343,7 +327,7 @@ describe('attempt facts', () => {
     ) => {
       const executions = [
         execution('0001-review--attempt-01', 'review', 1, 'completed', sourceDecision),
-        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), turnKind },
+        execution('0002-plan--attempt-02', 'plan', 2, 'completed', null, { turnKind }),
       ];
       const metrics = [measured('0002-plan--attempt-02', routed ? { routedFrom: '0001-review--attempt-01' } : {})];
       const progress = buildProgress({ executions, plan: plan(['plan', 'review']), runningStageIds: [], latestExecutionId: null, metrics });
@@ -378,8 +362,8 @@ describe('attempt facts', () => {
   it('marks an attempt that ended by asking a question, and no other', () => {
     const progress = buildProgress({
       executions: [
-        { ...execution('0001-plan--attempt-01', 'plan', 1, 'completed'), outcomeStatus: 'question' },
-        { ...execution('0002-plan--attempt-02', 'plan', 2, 'completed'), outcomeStatus: 'complete' },
+        execution('0001-plan--attempt-01', 'plan', 1, 'completed', null, { outcomeStatus: 'question' }),
+        execution('0002-plan--attempt-02', 'plan', 2, 'completed', null, { outcomeStatus: 'complete' }),
       ],
       plan: plan(['plan']),
       runningStageIds: [],
@@ -407,7 +391,7 @@ describe('attempt facts', () => {
   });
 
   describe('totals', () => {
-    const run = (metrics?: MetricsExecution[], wallSeconds?: number | null) => buildProgress({
+    const run = (metrics?: ExecutionView[], wallSeconds?: number | null) => buildProgress({
       executions: [
         execution('0001-plan--attempt-01', 'plan', 1, 'completed'),
         execution('0002-plan--attempt-02', 'plan', 2, 'completed'),
@@ -469,7 +453,7 @@ describe('attempt facts', () => {
 
   it('gives the same facts to execution rows of a role session', () => {
     const progress = buildProgress({
-      executions: [{ ...execution('0001-developer--attempt-01', 'developer', 1, 'completed'), model: 'm', effort: 'high' }],
+      executions: [execution('0001-developer--attempt-01', 'developer', 1, 'completed', null, { model: 'm', effort: 'high' })],
       plan: { kind: 'missing' },
       runningStageIds: [],
       latestExecutionId: null,

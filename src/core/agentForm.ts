@@ -61,11 +61,13 @@ function optionPairs(value: unknown): OptionPair[] | undefined {
 
 const CLIENT_KEYS = ['type', 'options'] as const satisfies readonly (keyof ContractClientSelection)[];
 const AGENT_KEYS = ['model', 'effort', 'client'] as const satisfies readonly (keyof InlineAgent)[];
+/** Contract agent keys the form does not model. They stay in `extra`, so they survive an edit unchanged. */
+type AgentPassthroughKey = Extract<keyof InlineAgent, 'resume_policy'>;
 
 // A key added to or removed from the contract's client or agent fails typecheck here.
 export type ModeledKeysMatchContract = [
   Expect<SameKeys<(typeof CLIENT_KEYS)[number], keyof ContractClientSelection>>,
-  Expect<SameKeys<(typeof AGENT_KEYS)[number], keyof InlineAgent>>,
+  Expect<SameKeys<(typeof AGENT_KEYS)[number] | AgentPassthroughKey, keyof InlineAgent>>,
   Expect<SameKeys<keyof NonNullable<InlineAgent['client']>, keyof ContractClientSelection>>,
 ];
 

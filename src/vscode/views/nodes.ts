@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
 
 import type { SessionGroup } from '../../core/attention';
-import type { ExecutionSnapshot } from '../../core/model';
+import type { ExecutionEntry } from '../../core/executions';
 import type { RecentPeriod } from '../../core/recentPeriod';
 import type { ProjectKey } from '../changes';
 
@@ -56,7 +56,7 @@ export interface ExecutionNode extends Base {
   sessionId: string;
   executionId: string;
   /** The summary read when the session's children were listed. */
-  execution: ExecutionSnapshot;
+  execution: ExecutionEntry;
 }
 
 export interface DirectoryNode extends Base {

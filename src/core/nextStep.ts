@@ -2,7 +2,14 @@ import { text } from '../text';
 import { childrenForWorkflow } from './handoff';
 import type { SessionSnapshot } from './model';
 import { classifyLaunch, targetState, type TargetWorkflowState } from './nextStepEligibility';
-import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext } from './nextWorkflows';
+import {
+  type ArtifactAvailability,
+  markDeclared,
+  type NextEntry,
+  readFrozenDownstream,
+  readNext,
+} from './nextWorkflows';
+import { publishedOutputs } from './outputs';
 import { sessionTitle } from './sessionPresentation';
 import type { WorkflowEntry } from './workflows';
 
@@ -28,14 +35,23 @@ export interface NextStepInput {
   targetWorkflow: string;
 }
 
+/** The contract entry with the two facts derived from it, kept as separate fields. */
+export interface SuggestionFound {
+  entry: NextEntry;
+  availability: Record<string, ArtifactAvailability>;
+  /** True when the frozen workflow declares it; null when that could not be read. */
+  declared: boolean | null;
+}
+
 /** A suggestion that the frozen declaration confirms, or the reason it cannot be launched. */
 export type SuggestionLookup =
-  | { kind: 'ok'; suggestion: NextSuggestion }
-  | { kind: 'blocked'; reason: string; suggestion: NextSuggestion | null };
+  | ({ kind: 'ok' } & SuggestionFound)
+  | { kind: 'blocked'; reason: string; found: SuggestionFound | null };
 
 /** Published output names of a session; null when the session is not loaded. */
 function publishedNames(source: SessionSnapshot | undefined): string[] | null {
-  return source?.status?.outputs.map((output) => output.name) ?? null;
+  const status = source?.status ?? null;
+  return status === null ? null : publishedOutputs(status).map(([name]) => name);
 }
 
 export function lookupSuggestion(
@@ -44,24 +60,30 @@ export function lookupSuggestion(
   published: readonly string[] | null,
 ): SuggestionLookup {
   const read = readNext(sessionDirPath);
-  if (read.kind === 'missing') return { kind: 'blocked', reason: text('states.nextMissing'), suggestion: null };
+  if (read.kind === 'missing') return { kind: 'blocked', reason: text('states.nextMissing'), found: null };
   if (read.kind !== 'ok') {
-    return { kind: 'blocked', reason: text('states.nextUnusable'), suggestion: null };
+    return { kind: 'blocked', reason: text('states.nextUnusable'), found: null };
   }
   const frozen = readFrozenDownstream(sessionDirPath);
-  const marked = markDeclared(read.suggestions, frozen, published);
-  const suggestion = marked.find((candidate) => candidate.workflow === targetWorkflow) ?? null;
-  if (suggestion === null) {
-    return { kind: 'blocked', reason: text('states.notSuggested', { workflow: targetWorkflow }), suggestion: null };
+  const declared = markDeclared(read, frozen, published);
+  const index = read.next.next.findIndex((candidate) => candidate.workflow === targetWorkflow);
+  const entry = read.next.next.at(index);
+  if (index === -1 || entry === undefined) {
+    return { kind: 'blocked', reason: text('states.notSuggested', { workflow: targetWorkflow }), found: null };
   }
-  if (suggestion.declared !== true) {
+  const found: SuggestionFound = {
+    entry,
+    availability: read.availability[index] ?? {},
+    declared: declared[index] ?? null,
+  };
+  if (found.declared !== true) {
     const reason =
-      suggestion.declared === null
+      found.declared === null
         ? text('states.downstreamUnreadable')
         : text('states.notDeclared', { workflow: targetWorkflow });
-    return { kind: 'blocked', reason, suggestion };
+    return { kind: 'blocked', reason, found };
   }
-  return { kind: 'ok', suggestion };
+  return { kind: 'ok', ...found };
 }
 
 export function targetOf(workflows: readonly WorkflowEntry[], workflow: string): NextStepTarget {
@@ -88,7 +110,7 @@ export function launchBlockOf(
   const verdict = classifyLaunch({ sourceState, declared: true, target: 'available' });
   if (verdict.state === 'blocked') return text('states.sourceNotCompleted');
   if (lookup.kind === 'blocked') return lookup.reason;
-  const full = classifyLaunch({ sourceState, declared: lookup.suggestion.declared, target: target.state });
+  const full = classifyLaunch({ sourceState, declared: lookup.declared, target: target.state });
   return full.state === 'ready' ? null : (target.error ?? text('states.targetInvalid'));
 }
 
@@ -120,7 +142,7 @@ export function previewNextStep(input: NextStepInput): NextStepPreview {
       .filter((child) => child.displayState.state === 'prepared' || child.displayState.state === 'running')
       .map((child) => ({ sessionId: child.sessionId, title: sessionTitle(child), state: child.displayState.state })),
     sourceTitle: source === undefined ? input.sourceId : sessionTitle(source),
-    suggestedTask: lookup.suggestion?.task ?? null,
+    suggestedTask: (lookup.kind === 'ok' ? lookup : lookup.found)?.entry.task ?? null,
     target,
     launchBlock: launchBlockOf(source, lookup, target),
   };
@@ -160,7 +182,7 @@ export function resolveLaunch(
     launch: {
       workflowId: input.targetWorkflow,
       priorSessionId: input.sourceId,
-      task: taskText === lookup.suggestion.task ? null : taskText,
+      task: taskText === lookup.entry.task ? null : taskText,
       taskText,
       workflowFile: target.file,
     },

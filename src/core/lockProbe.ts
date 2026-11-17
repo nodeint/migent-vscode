@@ -1,34 +1,42 @@
 import { readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 
+import type { SessionLockFile } from '@nodeint/migent-contracts';
+
+import { declaredOf } from './contractRead';
 import type { LockProbe } from './model';
 import { isRecord } from './record';
 
 export const LOCK_STALE_MS = 30_000;
 
-interface LockInfo {
-  pid: number;
-  host: string;
-  heartbeat_at: string;
-}
-
-function readLock(lockPath: string): LockInfo | null {
+/**
+ * `session.lock` as the contract declares it. A lock missing any of the five required fields (or with a wrong-typed
+ * one) is unparsable, so the mtime fallback in `probeLock` decides its liveness.
+ */
+export function readLock(lockPath: string): SessionLockFile | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(lockPath, 'utf8'));
   } catch {
     return null;
   }
-  if (!isRecord(parsed)) return null;
-  const raw = parsed;
+  const raw = declaredOf<SessionLockFile>(parsed);
+  if (raw === null) return null;
+  const { pid, host, started_at: startedAt, heartbeat_at: heartbeatAt, nonce } = raw;
   if (
-    typeof raw.pid !== 'number' ||
-    typeof raw.host !== 'string' ||
-    typeof raw.heartbeat_at !== 'string'
+    typeof pid !== 'number' ||
+    typeof host !== 'string' ||
+    host === '' ||
+    typeof startedAt !== 'string' ||
+    startedAt === '' ||
+    typeof heartbeatAt !== 'string' ||
+    heartbeatAt === '' ||
+    typeof nonce !== 'string' ||
+    nonce === ''
   ) {
     return null;
   }
-  return { pid: raw.pid, host: raw.host, heartbeat_at: raw.heartbeat_at };
+  return { pid, host, started_at: startedAt, heartbeat_at: heartbeatAt, nonce };
 }
 
 function pidAlive(pid: number): boolean {
@@ -53,7 +61,7 @@ function heartbeatAge(heartbeatAt: string, now: number): number {
  * does not parse falls back to the file's mtime, as session-lock.ts does.
  */
 export function probeLock(lockPath: string, now: number = Date.now(), staleMs: number = LOCK_STALE_MS): LockProbe {
-  let info: LockInfo | null;
+  let info: SessionLockFile | null;
   try {
     info = readLock(lockPath);
   } catch {

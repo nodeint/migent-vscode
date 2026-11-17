@@ -4,8 +4,8 @@ import { recentPeriod } from './recentPeriod';
 
 function snapshot(createdAt: string | null, statusDate: string | null = null): Parameters<typeof recentPeriod>[0] {
   return {
-    manifest: createdAt === null ? null : { createdAt },
-    status: statusDate === null ? null : { createdAt: statusDate },
+    manifest: createdAt === null ? null : { created_at: createdAt },
+    status: statusDate === null ? null : { created_at: statusDate },
   };
 }
 

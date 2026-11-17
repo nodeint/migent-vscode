@@ -337,7 +337,7 @@ const scenarios: Scenario[] = [
       assert.equal(env.api.session.activeTarget(), undefined, 'the panel was not focused');
 
       // A write the watcher did not report (simulated by a refresh) is picked up by Refresh.
-      write(migentPath(env.root, 'sessions', SOURCE, 'next.json'), JSON.stringify({ schema_version: 1, next: [] }));
+      write(migentPath(env.root, 'sessions', SOURCE, 'next.json'), JSON.stringify({ schema_version: 1, source_session_id: SOURCE, next: [] }));
       await vscode.commands.executeCommand('migent.refresh');
       await waitFor('refresh re-read next.json', () => overviewOf(env, source)?.next.state === 'ok');
 

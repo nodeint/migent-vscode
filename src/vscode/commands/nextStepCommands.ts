@@ -17,7 +17,7 @@ async function pickIdentity(host: CommandHost, arg: unknown): Promise<NextStepId
   if (resolved === undefined) return undefined;
   const { context, snapshot } = resolved;
   const next = readNext(sessionDir(context.root, snapshot.sessionId));
-  const workflows = next.kind === 'ok' ? [...new Set(next.suggestions.map((suggestion) => suggestion.workflow))] : [];
+  const workflows = next.kind === 'ok' ? [...new Set(next.next.next.map((entry) => entry.workflow))] : [];
   if (workflows.length === 0) {
     vscode.window.setStatusBarMessage(text('prompts.noNextSteps'), INFO_MESSAGE_MS);
     return undefined;

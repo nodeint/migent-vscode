@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import type { ExecutionSnapshot } from './model';
+import type { SessionExecution } from '@nodeint/migent-contracts';
+
+import { asSessionId } from './manifest';
 import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME } from './paths';
 import { isRecord } from './record';
 
@@ -20,32 +22,157 @@ export function parseExecutionId(executionId: string): ParsedExecutionId | null 
   return { order: Number(match[1]), stageId: match[2], attempt: Number(match[3]) };
 }
 
-function readExecutionRecord(executionJsonPath: string): Record<string, unknown> | null {
+const REQUIRED_STRING_FIELDS = [
+  'execution_id',
+  'stage_id',
+  'status',
+  'created_at',
+] as const satisfies readonly (keyof SessionExecution)[];
+const NULLABLE_STRING_FIELDS = [
+  'completed_at',
+  'client',
+  'model',
+  'agent_id',
+  'resumes_execution_id',
+  'failure_reason',
+  'provider_endpoint',
+] as const satisfies readonly (keyof SessionExecution)[];
+const OPTIONAL_STRING_FIELDS = [
+  'artifact_directory',
+  'kind',
+  'error',
+  'turn_kind',
+  'hostname',
+] as const satisfies readonly (keyof SessionExecution)[];
+const OPTIONAL_RECORD_FIELDS = [
+  'options',
+  'skip',
+  'outcome',
+  'corrections',
+] as const satisfies readonly (keyof SessionExecution)[];
+const OPTIONAL_NUMBER_FIELDS = [
+  'final_turn',
+  'response_protocol',
+  'owner_pid',
+] as const satisfies readonly (keyof SessionExecution)[];
+
+const SCHEMA_V1 = 1;
+const SCHEMA_V2 = 2;
+
+function nonEmpty(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/** Copy the optional contract fields that have the right type; a wrong-typed one is dropped. */
+function copyOptionalFields(value: Record<string, unknown>): Partial<SessionExecution> {
+  const result: Record<string, unknown> = {};
+  for (const name of OPTIONAL_STRING_FIELDS) {
+    const field = nonEmpty(value[name]);
+    if (field !== undefined) result[name] = field;
+  }
+  for (const name of NULLABLE_STRING_FIELDS) {
+    const field = value[name];
+    if (field === null || nonEmpty(field) !== undefined) result[name] = field;
+  }
+  for (const name of OPTIONAL_RECORD_FIELDS) {
+    const field = value[name];
+    if (isRecord(field)) result[name] = field;
+  }
+  for (const name of OPTIONAL_NUMBER_FIELDS) {
+    const field = value[name];
+    if (typeof field === 'number') result[name] = field;
+  }
+  const providerPid = value.provider_pid;
+  if (providerPid === null || typeof providerPid === 'number') result.provider_pid = providerPid;
+  const version = value.schema_version;
+  if (version === SCHEMA_V1 || version === SCHEMA_V2) result.schema_version = version;
+  return result;
+}
+
+/**
+ * Parse `execution.json` as the contract's `SessionExecution`. A missing or wrong-typed required field
+ * (`session_id`, `execution_id`, `execution_order`, `stage_id`, `stage_attempt`, `status`, `created_at`) rejects
+ * the record (null); an optional field of the wrong type is dropped. The large `turns` and `verify` values are
+ * not kept: nothing here reads them.
+ */
+export function parseExecution(value: unknown): SessionExecution | null {
+  if (!isRecord(value)) return null;
+  const sessionId = asSessionId(value.session_id);
+  const [executionId, stageId, status, createdAt] = REQUIRED_STRING_FIELDS.map((name) => nonEmpty(value[name]));
+  const { execution_order: order, stage_attempt: attempt } = value;
+  if (
+    sessionId === null ||
+    executionId === undefined ||
+    stageId === undefined ||
+    status === undefined ||
+    createdAt === undefined ||
+    typeof order !== 'number' ||
+    typeof attempt !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    execution_id: executionId,
+    execution_order: order,
+    stage_id: stageId,
+    stage_attempt: attempt,
+    status,
+    created_at: createdAt,
+    ...copyOptionalFields(value),
+  };
+}
+
+/**
+ * One execution as listed: the contract record plus the facts of its directory (D3d). `order` and `attempt` come
+ * from the directory name when it follows the pattern, else from the record.
+ */
+export interface ExecutionEntry {
+  execution: SessionExecution;
+  id: string;
+  order: number;
+  attempt: number;
+  /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
+  hasFailureReport: boolean;
+}
+
+function readExecutionRecord(executionJsonPath: string): SessionExecution | null {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(executionJsonPath, 'utf8'));
   } catch {
     return null;
   }
-  if (!isRecord(value)) return null;
-  return value;
+  return parseExecution(value);
 }
 
-function numberOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' ? value : fallback;
+function outcomeOf(execution: SessionExecution): Record<string, unknown> {
+  return isRecord(execution.outcome) ? execution.outcome : {};
 }
 
 function str(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function outcomeFrom(record: Record<string, unknown> | null): Record<string, unknown> {
-  return isRecord(record?.outcome) ? record.outcome : {};
+/** `outcome.decision`; null when absent. */
+export function executionDecision(execution: SessionExecution): string | null {
+  return str(outcomeOf(execution).decision);
 }
 
-function effortFrom(record: Record<string, unknown> | null): string | null {
-  if (!isRecord(record?.options)) return null;
-  const { effort, model_reasoning_effort: reasoningEffort } = record.options;
+/** `outcome.blocker` recorded when the execution blocked; null otherwise. */
+export function executionBlocker(execution: SessionExecution): string | null {
+  return str(outcomeOf(execution).blocker);
+}
+
+/** `outcome.status` (`question` when the attempt ended by asking); null when absent. */
+export function executionOutcomeStatus(execution: SessionExecution): string | null {
+  return str(outcomeOf(execution).status);
+}
+
+/** `options.effort`, else `options.model_reasoning_effort` (codex); null when absent. */
+export function executionEffort(execution: SessionExecution): string | null {
+  if (!isRecord(execution.options)) return null;
+  const { effort, model_reasoning_effort: reasoningEffort } = execution.options;
   return str(effort) ?? str(reasoningEffort);
 }
 
@@ -61,79 +188,59 @@ function clip(value: unknown): string | null {
  * The CLI records `failure_reason` (such as `verify_failed`) and `error` at the top level of `execution.json`;
  * an `outcome.error` or `outcome.message` is accepted too. The reason code is shown as words.
  */
-export function executionCause(record: Record<string, unknown> | null): string | null {
-  const outcome = record !== null && isRecord(record.outcome) ? record.outcome : {};
-  const detail = clip(record?.error) ?? clip(outcome.error) ?? clip(outcome.message);
-  const reason = clip(record?.failure_reason) ?? clip(outcome.failure_reason);
+export function executionCause(execution: SessionExecution | null): string | null {
+  if (execution === null) return null;
+  const outcome = outcomeOf(execution);
+  const detail = clip(execution.error) ?? clip(outcome.error) ?? clip(outcome.message);
+  const reason = clip(execution.failure_reason) ?? clip(outcome.failure_reason);
   const words = reason?.replaceAll('_', ' ') ?? null;
   if (words !== null && detail !== null) return `${words}: ${detail}`;
   return words ?? detail;
 }
 
-function stageFrom(record: Record<string, unknown> | null, parsed: ParsedExecutionId | null): string {
-  return str(record?.stage_id) ?? parsed?.stageId ?? '';
-}
-
-function summaryFrom(
-  executionDirPath: string,
-  record: Record<string, unknown> | null,
-): ExecutionSnapshot {
-  const dirName = path.basename(executionDirPath);
-  const parsed = parseExecutionId(dirName);
-  const outcome = outcomeFrom(record);
-  const field = (key: string): string | null => str(record?.[key]);
-
+function entryFrom(executionDirPath: string): ExecutionEntry | null {
+  const execution = readExecutionRecord(path.join(executionDirPath, 'execution.json'));
+  if (execution === null) return null;
+  const parsed = parseExecutionId(path.basename(executionDirPath));
   return {
-    id: str(record?.execution_id) ?? dirName,
-    order: parsed?.order ?? numberOr(record?.execution_order, 0),
-    stage: stageFrom(record, parsed),
-    attempt: parsed?.attempt ?? numberOr(record?.stage_attempt, 1),
-    status: field('status'),
-    decision: str(outcome.decision),
-    blocker: str(outcome.blocker),
-    error: executionCause(record),
-    client: field('client'),
-    model: field('model'),
-    effort: effortFrom(record),
-    turnKind: field('turn_kind'),
-    outcomeStatus: str(outcome.status),
+    execution,
+    id: execution.execution_id,
+    order: parsed?.order ?? execution.execution_order,
+    attempt: parsed?.attempt ?? execution.stage_attempt,
     hasFailureReport: isFile(path.join(executionDirPath, FAILURE_REPORT_FILENAME)),
-    kind: field('kind'),
-    createdAt: field('created_at'),
-    completedAt: field('completed_at'),
   };
 }
 
 /**
  * List the executions of one session, oldest first. Reads each execution.json;
- * callers load this lazily (node expanded, or the session is running). A record
- * that fails to parse still yields a summary from the directory name.
+ * callers load this lazily (node expanded, or the session is running). An execution whose record is missing,
+ * unparsable or lacks a required contract field is omitted (B4).
  */
-export function listExecutions(sessionDirPath: string): ExecutionSnapshot[] {
+export function listExecutions(sessionDirPath: string): ExecutionEntry[] {
   let entries;
   try {
     entries = readdirSync(path.join(sessionDirPath, EXECUTIONS_DIRNAME), { withFileTypes: true });
   } catch {
     return [];
   }
-  const rows: ExecutionSnapshot[] = [];
+  const rows: ExecutionEntry[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const dir = path.join(sessionDirPath, EXECUTIONS_DIRNAME, entry.name);
-    rows.push(summaryFrom(dir, readExecutionRecord(path.join(dir, 'execution.json'))));
+    const row = entryFrom(path.join(sessionDirPath, EXECUTIONS_DIRNAME, entry.name));
+    if (row !== null) rows.push(row);
   }
   rows.sort((left, right) => left.order - right.order || (left.id < right.id ? -1 : 1));
   return rows;
 }
 
-/** One execution summary from its directory, for a targeted refresh. Null when the directory is absent. */
-export function readExecutionSummary(executionDirPath: string): ExecutionSnapshot | null {
+/** One execution from its directory, for a targeted refresh. Null when the directory or a valid record is absent. */
+export function readExecutionSummary(executionDirPath: string): ExecutionEntry | null {
   if (!statSyncSafe(executionDirPath)) return null;
-  return summaryFrom(executionDirPath, readExecutionRecord(path.join(executionDirPath, 'execution.json')));
+  return entryFrom(executionDirPath);
 }
 
-/** Full execution.json for one execution, for views that show details. */
-export function readExecution(executionDirPath: string): Record<string, unknown> | null {
+/** The contract record of one execution, for views that show details. Null when absent or invalid. */
+export function readExecution(executionDirPath: string): SessionExecution | null {
   if (!statSyncSafe(executionDirPath)) return null;
   return readExecutionRecord(path.join(executionDirPath, 'execution.json'));
 }

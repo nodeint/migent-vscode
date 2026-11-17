@@ -88,9 +88,11 @@ setup belong to [CONTRIBUTING.md](../CONTRIBUTING.md#test).
 Migent owns the persisted file formats. The upstream
 [session contract](https://github.com/nodeint/migent/blob/HEAD/docs/sessions.md)
 is maintained in the Migent repository. Consult the matching upstream revision
-when changing a reader. Local supported-version constants and
-parsed types for session files live in [model.ts](../src/core/model.ts), pending upstream schemas for them
-([nodeint/migent#114](https://github.com/nodeint/migent/issues/114)).
+when changing a reader. The types of the persisted session files and events come from the contracts package below. Local
+supported-version constants live in [model.ts](../src/core/model.ts). A reader keeps values the extension derives
+(such as artifact availability) in separate fields next to the contract value. `metrics.json` is reduced to a sanitized
+projection of the contract (`totals`, `stages` and `executions`), and `argv`, `agent_id`, `cli_version`, `git_head`
+and `git_dirty` never leave the reader.
 
 The types of CLI stdout payloads, exit codes and editable drafts are bound to
 `@nodeint/migent-contracts`, a type-only dev dependency pinned to the same

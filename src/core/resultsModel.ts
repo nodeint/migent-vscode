@@ -2,11 +2,13 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { text } from '../text';
+import type { ExecutionEntry } from './executions';
 import { childrenForWorkflow, childrenOf, type HandoffArtifact, readHandoff } from './handoff';
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import { manifestPriorSessionId } from './manifest';
+import type { SessionSnapshot } from './model';
 import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
-import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
-import { listOutputs, type OutputFileState, type OutputRow } from './outputs';
+import { type ArtifactAvailability, markDeclared, type NextEntry, readFrozenDownstream, readNext } from './nextWorkflows';
+import { listOutputs, type OutputFileState, type OutputRow, publishedOutputs } from './outputs';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
 import { sessionTitle, stageOf } from './sessionPresentation';
 import { readSessionTask } from './sessionTask';
@@ -41,7 +43,18 @@ export interface ResultsSuggestion {
   launch: LaunchEligibility;
   /** Sessions started from this one that run the suggestion's workflow, newest first. */
   children: ResultsSuggestionChild[];
-  artifacts: SuggestionArtifact[];
+  artifacts: ResultsSuggestionArtifact[];
+}
+
+/** One artifact of a suggestion, as the page shows it. */
+export interface ResultsSuggestionArtifact {
+  /** Input name in the target workflow. */
+  name: string;
+  /** Name of the source session's output that feeds it. */
+  output: string;
+  /** Session-relative path as written in `next.json`. */
+  path: string;
+  availability: ArtifactAvailability;
 }
 
 export interface ResultsSuggestionChild {
@@ -120,12 +133,24 @@ export interface ResultsInput {
   eligibleIds: readonly string[];
   workflows: readonly WorkflowEntry[];
   /** The session's executions, oldest first; they resolve who published an output. Empty when not read. */
-  executions?: readonly ExecutionSnapshot[];
+  executions?: readonly ExecutionEntry[];
 }
 
 /** Published names and unnamed paths live in separate namespaces, so one can never select the other's file. */
 function outputKey(row: { name: string | null; path: string }): string {
   return row.name === null ? `path:${row.path}` : `name:${row.name}`;
+}
+
+function suggestionArtifacts(
+  entry: NextEntry,
+  availability: Record<string, ArtifactAvailability> = {},
+): ResultsSuggestionArtifact[] {
+  return Object.entries(entry.artifacts).map(([name, artifact]) => ({
+    name,
+    output: artifact.output,
+    path: artifact.path,
+    availability: availability[name] ?? 'missing',
+  }));
 }
 
 export function titleCase(value: string): string {
@@ -149,7 +174,7 @@ function newestFirst<T extends { createdAt: string | null }>(items: T[]): T[] {
 }
 
 function childCreatedAt(child: SessionSnapshot): string | null {
-  return child.manifest?.createdAt ?? child.status?.createdAt ?? null;
+  return child.manifest?.created_at ?? child.status?.created_at ?? null;
 }
 
 function suggestionChild(child: SessionSnapshot): ResultsSuggestionChild {
@@ -161,7 +186,7 @@ function suggestionChild(child: SessionSnapshot): ResultsSuggestionChild {
   };
 }
 
-function outputRow(row: OutputRow, executions: readonly ExecutionSnapshot[]): ResultsOutput {
+function outputRow(row: OutputRow, executions: readonly ExecutionEntry[]): ResultsOutput {
   const publisherId = row.publishedByExecutionId ?? row.sourceExecutionId;
   const publisher = executions.find((execution) => execution.id === publisherId);
   return {
@@ -169,9 +194,9 @@ function outputRow(row: OutputRow, executions: readonly ExecutionSnapshot[]): Re
     label: row.name ?? path.posix.basename(row.path),
     path: row.path,
     state: row.state,
-    stage: publisher?.stage ?? null,
+    stage: publisher?.execution.stage_id ?? null,
     attempt: publisher?.attempt ?? null,
-    publishedAt: publisher?.completedAt ?? null,
+    publishedAt: publisher?.execution.completed_at ?? null,
   };
 }
 
@@ -181,7 +206,7 @@ function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
     title: sessionTitle(child),
     state: titleCase(child.displayState.state),
     task: readSessionTask(path.join(path.dirname(input.sessionDirPath), child.sessionId)),
-    workflowId: child.manifest?.workflowId ?? child.status?.workflowId ?? null,
+    workflowId: child.manifest?.workflow_id ?? child.status?.workflow_id ?? null,
     stageId: stageOf(child),
     createdAt: childCreatedAt(child),
   };
@@ -189,7 +214,7 @@ function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
 
 function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
   const status = input.snapshots.find((snapshot) => snapshot.sessionId === input.sessionId)?.status;
-  const published = status === undefined || status === null ? null : status.outputs.map((output) => output.name);
+  const published = status === undefined || status === null ? null : publishedOutputs(status).map(([name]) => name);
   const read = readNext(input.sessionDirPath);
   const frozen = readFrozenDownstream(input.sessionDirPath);
   const base = { suggestions: [] };
@@ -206,27 +231,30 @@ function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
         state: 'unsupported',
         detail: read.schemaVersion === null ? text('states.schemaMissing') : text('states.schemaVersion', { version: String(read.schemaVersion) }),
       };
-    case 'ok':
+    case 'ok': {
+      const declaredFlags = markDeclared(read, frozen, published);
       return {
         ...base,
         state: 'ok',
         detail: null,
-        suggestions: markDeclared(read.suggestions, frozen, published).map((suggestion) => {
-          const target = targetState(suggestion.workflow, input.workflows);
+        suggestions: read.next.next.map((entry, index) => {
+          const target = targetState(entry.workflow, input.workflows);
+          const declared = declaredFlags[index] ?? null;
           return {
-            workflow: suggestion.workflow,
-            task: suggestion.task,
-            declared: suggestion.declared,
+            workflow: entry.workflow,
+            task: entry.task,
+            declared,
             target,
-            launch: classifyLaunch({ sourceState, declared: suggestion.declared, target }),
+            launch: classifyLaunch({ sourceState, declared, target }),
             children: newestFirst(
-              childrenForWorkflow(input.snapshots, input.sessionId, suggestion.workflow).map(suggestionChild),
+              childrenForWorkflow(input.snapshots, input.sessionId, entry.workflow).map(suggestionChild),
             ),
-            // `argv` is dropped on purpose: it is never shown or run.
-            artifacts: suggestion.artifacts,
+            // `argv` and `command` are dropped on purpose: they are never shown or run.
+            artifacts: suggestionArtifacts(entry, read.availability[index]),
           };
         }),
       };
+    }
   }
 }
 
@@ -245,7 +273,7 @@ function provenanceArtifact(artifact: HandoffArtifact): ResultsProvenanceArtifac
 
 function sourceModel(input: ResultsInput, snapshot: SessionSnapshot): ResultsSource | null {
   const handoff = readHandoff(snapshot.manifest, input.sessionDirPath);
-  const sourceId = snapshot.manifest?.priorSessionId ?? (handoff.kind === 'ok' ? handoff.sourceSessionId : null);
+  const sourceId = manifestPriorSessionId(snapshot.manifest) ?? (handoff.kind === 'ok' ? handoff.sourceSessionId : null);
   if (sourceId === null) return null;
   const retained = input.snapshots.find((candidate) => candidate.sessionId === sourceId);
   let availability: SourceAvailability = 'missing';
@@ -281,14 +309,14 @@ function unavailable(sessionId: string): ResultsModel {
 export function buildResultsModel(input: ResultsInput): ResultsModel {
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
   if (snapshot === undefined) return unavailable(input.sessionId);
-  const listing = listOutputs(input.sessionDirPath, snapshot.status?.outputs ?? []);
+  const listing = listOutputs(input.sessionDirPath, publishedOutputs(snapshot.status));
   const executions = input.executions ?? [];
   return {
     availability: 'ok',
     sessionId: snapshot.sessionId,
     title: sessionTitle(snapshot),
     state: titleCase(snapshot.displayState.state),
-    workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
+    workflowId: snapshot.status?.workflow_id ?? snapshot.manifest?.workflow_id ?? null,
     meta: buildSessionMeta(snapshot),
     outputs: {
       rows: listing.rows.map((row) => outputRow(row, executions)),
@@ -303,7 +331,7 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
 /** The output row an intent key names, resolved against a fresh listing. Null when it no longer exists. */
 export function resolveOutputPath(input: ResultsInput, key: string): string | null {
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
-  const listing = listOutputs(input.sessionDirPath, snapshot?.status?.outputs ?? []);
+  const listing = listOutputs(input.sessionDirPath, publishedOutputs(snapshot?.status));
   const row = listing.rows.find((candidate) => outputKey(candidate) === key);
   return row?.state === 'ok' ? row.absolutePath : null;
 }

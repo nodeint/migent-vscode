@@ -4,13 +4,15 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { TailEvent } from './eventTail';
+import type { EventEntry } from './eventTail';
 import { readRecentEvents } from './eventTail';
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import type { ExecutionEntry } from './executions';
+import type { SessionSnapshot } from './model';
 import { buildOverviewModel, nextStepAction, type OverviewInput } from './overviewModel';
 import type { ResultsNext, ResultsSuggestion } from './resultsModel';
 import { buildResultsModel } from './resultsModel';
 import { NO_SESSION_SUMMARY } from './sessionSummary';
+import { executionEntry } from './testHelpers';
 import { capturedDir, snapshotFromDir } from './testHelpers';
 
 const SOURCE = '00000000-0000-4000-8000-0000000000b1';
@@ -39,7 +41,7 @@ function sourceInput(overrides: Partial<OverviewInput> = {}): OverviewInput {
   };
 }
 
-function recentEvents(count: number): TailEvent[] {
+function recentEvents(count: number): EventEntry[] {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-overview-events-'));
   temps.push(dir);
   const file = path.join(dir, 'events.jsonl');
@@ -67,18 +69,9 @@ function runningSnapshot(): SessionSnapshot {
     displayState: { state: 'running', icon: 'sync~spin', writable: true },
     status: {
       ...status,
-      runningStages: [
-        { executionId: null, stageId: 'draft', client: null, event: null, summary: null, updatedAt: null },
-      ],
-      latestProviderEvent: {
-        event: 'provider.turn_started',
-        summary: 'drafting',
-        stageId: 'draft',
-        executionId: null,
-        client: null,
-        timestamp: null,
-        retryAt: null,
-      },
+      // B6: `running_stages` is not read, so the running stage comes from `latest_stage_id` and the provider event.
+      latest_stage_id: 'draft',
+      latest_provider_event: { event: 'provider.turn_started', summary: 'drafting', stage_id: 'draft' },
     },
   };
 }
@@ -89,33 +82,15 @@ function roleSnapshot(): SessionSnapshot {
   return {
     ...base,
     displayState: { state: 'completed', icon: 'pass', writable: true },
-    manifest: { ...base.manifest, role: 'reviewer' },
+    manifest: { ...base.manifest, schema_version: 2, workflow_id: 'plan', role: 'reviewer' },
     replyTargets: [
       { executionId: '0001-review--attempt-01', stageId: null, attempt: 1, kind: 'roleTurn' },
     ],
   };
 }
 
-function execution(id: string, stage: string, status: string): ExecutionSnapshot {
-  return {
-    id,
-    order: Number(id.slice(0, 4)),
-    stage,
-    attempt: 1,
-    status,
-    decision: null,
-    blocker: null,
-    client: null,
-    model: null,
-    effort: null,
-    turnKind: null,
-    outcomeStatus: null,
-    error: null,
-    hasFailureReport: false,
-    kind: null,
-    createdAt: null,
-    completedAt: null,
-  };
+function execution(id: string, stage: string, status: string): ExecutionEntry {
+  return executionEntry({ id, stage, status });
 }
 
 describe('buildOverviewModel', () => {

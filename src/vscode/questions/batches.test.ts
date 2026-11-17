@@ -5,7 +5,16 @@ vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
 }));
 
+// B6: the status file no longer carries questions, so the real `pendingQuestions()` is always empty. These tests cover
+// the batch and draft handling, so they supply pending questions through the module's one source seam.
+const pending = vi.hoisted(() => ({ questions: [] as unknown[] }));
+vi.mock('../../core/questions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/questions')>();
+  return { ...actual, pendingQuestions: () => pending.questions };
+});
+
 import type { SessionSnapshot } from '../../core/model';
+import { questionItem } from '../../core/testHelpers';
 import type { AnswerSubmitter } from '../answers';
 import type { ControlService } from '../control';
 import type { BatchIdentity } from './entry';
@@ -15,27 +24,23 @@ const { QuestionBatches } = await import('./batches');
 const identity: BatchIdentity = { project: 'k', sessionId: 's1', stageId: 'plan', executionId: 'e1' };
 
 function question(id: string, executionId: string, stageId: string) {
-  return {
-    id,
+  return questionItem(id, {
     question: `Question ${id}`,
-    context: null,
-    selection: 'single',
-    options: [{ id: 'A', label: 'A', description: null }],
+    options: [{ id: 'A', label: 'A' }],
     recommended: [],
-    executionId,
-    stageId,
-    recipient: 'human',
-    file: null,
-  };
+    execution_id: executionId,
+    stage_id: stageId,
+  });
 }
 
 const QUESTIONS = [question('1', 'e1', 'plan'), question('2', 'e2', 'review')];
 
 function setup() {
+  pending.questions = QUESTIONS;
   const snapshot = {
     sessionId: 's1',
-    manifest: { title: 'Session', workflowId: 'wf' },
-    status: { workflowId: 'wf', questions: QUESTIONS, runningStages: [], outputs: [] },
+    manifest: { session_id: 's1', created_at: 't', schema_version: 2, workflow_id: 'wf', title: 'Session' },
+    status: { session_id: 's1', status: 'question', workflow_id: 'wf' },
     displayState: { state: 'question', icon: '', writable: true },
     titleOverride: null,
     replyTargets: [],

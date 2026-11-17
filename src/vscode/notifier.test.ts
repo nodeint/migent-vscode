@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveDisplayState } from '../core/displayState';
 import type { SessionSnapshot } from '../core/model';
 import { parseStatus } from '../core/statusReader';
+import { executionJson } from '../core/testHelpers';
 import { LABELS, NOTICES } from '../text/notices';
 
 const hoisted = vi.hoisted(() => ({
@@ -31,10 +32,11 @@ const { window, commands } = hoisted;
 type Listener = (change: unknown) => void;
 
 function snapshot(raw: Record<string, unknown>, id = 's1'): SessionSnapshot {
-  const status = parseStatus(JSON.stringify(raw));
+  const status = parseStatus(JSON.stringify({ session_id: id, ...raw }));
   return {
     sessionId: id,
     manifest: null,
+    unsupportedManifestVersion: null,
     status,
     statusError: false,
     lock: { kind: 'none' },
@@ -188,7 +190,7 @@ describe('StateNotifier', () => {
   function writeExecution(id: string, record: Record<string, unknown>): void {
     const dir = join(root, '.migent', 'sessions', 's1', 'executions', id);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'execution.json'), JSON.stringify(record));
+    writeFileSync(join(dir, 'execution.json'), JSON.stringify(executionJson(id, record)));
   }
 
   it('queues while one is open, shows only the latest rebuilt from fresh state, and skips the superseded one', async () => {

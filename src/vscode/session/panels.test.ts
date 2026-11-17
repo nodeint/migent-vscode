@@ -4,8 +4,17 @@ import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// B6: the status file no longer carries questions, so the real `pendingQuestions()` is always empty. These tests cover
+// the Questions tab, so they supply pending questions through the module's one source seam.
+const pending = vi.hoisted(() => ({ questions: [] as unknown[] }));
+vi.mock('../../core/questions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/questions')>();
+  return { ...actual, pendingQuestions: () => pending.questions };
+});
+
 import type { SessionSnapshot } from '../../core/model';
 import { sessionDir } from '../../core/paths';
+import { executionJson, questionItem } from '../../core/testHelpers';
 
 const invoke = vi.hoisted(() => ({ json: vi.fn() }));
 vi.mock('../../cli/invoke', () => ({ invokeJson: invoke.json, invokeText: vi.fn() }));
@@ -73,29 +82,26 @@ function makeRoot(withExecution: boolean, schema = 7): string {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'workflow.yaml'), `schema_version: ${schema}\nid: a\nstages:\n  - id: plan\n    role: dev\n`);
   if (withExecution) mkdirSync(path.join(dir, 'executions', '0001-plan--attempt-01'), { recursive: true });
+  if (withExecution) writeFileSync(path.join(dir, 'executions', '0001-plan--attempt-01', 'execution.json'), JSON.stringify(executionJson('0001-plan--attempt-01')));
   return root;
 }
 
 function question(id: string, executionId: string, stageId: string) {
-  return {
-    id,
+  return questionItem(id, {
     question: `Question ${id}`,
-    context: null,
-    selection: 'single',
-    options: [{ id: 'A', label: 'A', description: null }],
+    options: [{ id: 'A', label: 'A' }],
     recommended: [],
-    executionId,
-    stageId,
-    recipient: 'human',
-    file: null,
-  };
+    execution_id: executionId,
+    stage_id: stageId,
+  });
 }
 
 function snapshot(questions: ReturnType<typeof question>[] = []): SessionSnapshot {
+  pending.questions = questions;
   return {
     sessionId: 's1',
-    manifest: { title: 'Session', workflowId: 'wf', raw: {} },
-    status: { workflowId: 'wf', questions, runningStages: [], outputs: [] },
+    manifest: { session_id: 's1', created_at: 't', schema_version: 2, workflow_id: 'wf', title: 'Session' },
+    status: { session_id: 's1', status: 'question', workflow_id: 'wf' },
     displayState: { state: 'question', icon: '', writable: true },
     titleOverride: null,
     replyTargets: [],
@@ -267,6 +273,7 @@ describe('SessionPanels tabs', () => {
       recommended: [],
       execution_id: '0001-plan--attempt-01',
       stage_id: 'plan',
+      recipient: 'human',
       status: 'answered',
       answer: { selected: ['B'] },
       answered_at: '2026-11-01T11:00:00Z',

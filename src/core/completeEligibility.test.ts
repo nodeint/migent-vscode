@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { isCompletable } from './completeEligibility';
+import { manifestRole } from './manifest';
 import type { DisplayStateName, SessionSnapshot } from './model';
 import { capturedDir, snapshotFromDir, syntheticDir } from './testHelpers';
 
@@ -25,7 +26,7 @@ describe('isCompletable', () => {
 
   it('rejects a role session, which the CLI refuses', () => {
     const role = snapshotFromDir(capturedDir('question-answered'));
-    expect(role.manifest?.role).toBe('planner');
+    expect(manifestRole(role.manifest)).toBe('planner');
     expect(isCompletable(withState(role, 'stopped'))).toBe(false);
   });
 

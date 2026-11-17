@@ -57,7 +57,7 @@ function actOnFailure(picked: FailureActionKey, action: FailureAction): void {
 
 function failureWhere(details: FailureDetails | undefined, snapshot: SessionSnapshot): string {
   const attempt = details?.attempt ?? null;
-  const parts = [details?.stageId ?? snapshot.status?.latestStageId, attempt === null ? null : `attempt ${attempt}`];
+  const parts = [details?.stageId ?? snapshot.status?.latest_stage_id, attempt === null ? null : `attempt ${attempt}`];
   return parts.filter((part): part is string => typeof part === 'string').join(' ');
 }
 
@@ -174,7 +174,7 @@ export class StateNotifier implements vscode.Disposable {
   }
 
   #blocked(transition: Transition, snapshot: SessionSnapshot, target: SessionTarget): Spec {
-    const stage = snapshot.status?.latestStageId ?? text('states.aStage');
+    const stage = snapshot.status?.latest_stage_id ?? text('states.aStage');
     return async () => {
       const picked = await show('notify.blocked', { label: sessionLabel(snapshot), stage });
       if (picked === 'reply') {

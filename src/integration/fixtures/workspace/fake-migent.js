@@ -10,7 +10,7 @@
 //                        Migent 0.8.0 one: record writes the answer event and the next execution's input.json,
 //                        fail-after-record writes only the event.
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.6.0: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.8.0: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
@@ -172,6 +172,20 @@ function replyTurn(context, text) {
 }
 
 // An ordinary blocker has no questions: the reply becomes the prompt of the stage's next attempt.
+/** An `execution.json` with the contract's required fields; the order and attempt come from the id. */
+function executionBody(sessionId, executionId, stage, extra = {}) {
+  return {
+    session_id: sessionId,
+    execution_id: executionId,
+    execution_order: Number(/^(\d+)-/.exec(executionId)?.[1] ?? 1),
+    stage_id: stage,
+    stage_attempt: Number(/--attempt-(\d+)$/.exec(executionId)?.[1] ?? 1),
+    status: 'running',
+    created_at: new Date().toISOString(),
+    ...extra,
+  };
+}
+
 function replyBlocker(id) {
   const mode = process.env.MIGENT_FAKE_REPLY ?? 'consume';
   if (mode === 'reject') {
@@ -183,7 +197,10 @@ function replyBlocker(id) {
   const stage = context.stage;
   const dir = path.join(dirOf(id), 'executions', `0002-${stage}--attempt-02`);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: context.resumes }));
+  fs.writeFileSync(
+    path.join(dir, 'execution.json'),
+    JSON.stringify(executionBody(id, `0002-${stage}--attempt-02`, stage, { resumes_execution_id: context.resumes })),
+  );
   // The real CLI records the reply as its own user turn (`## Human reply`) in the execution's conversation.json history.
   const turn = mode === 'ignore' ? 'Continue.' : replyTurn(context, text);
   fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
@@ -353,7 +370,7 @@ function run() {
   const lockFile = path.join(dirOf(id), 'session.lock');
   const cancelFile = path.join(dirOf(id), 'cancel.requested');
   const beat = () =>
-    writeJson(lockFile, { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
+    writeJson(lockFile, { pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' });
   beat();
   const replyStage = option('--reply-file') === undefined ? 'plan' : replyContext(id).stage;
   const executionId = option('--reply-file') === undefined ? '0001-plan--attempt-01' : `0002-${replyStage}--attempt-02`;
@@ -363,7 +380,7 @@ function run() {
     // Keep what `replyBlocker` recorded (the execution it resumes) instead of overwriting it.
     const recordFile = path.join(dir, 'execution.json');
     const kept = fs.existsSync(recordFile) ? JSON.parse(fs.readFileSync(recordFile, 'utf8')) : {};
-    writeJson(recordFile, { execution_id: executionId, stage_id: replyStage, status: 'running', ...kept });
+    writeJson(recordFile, { ...executionBody(id, executionId, replyStage), ...kept });
   }
   writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: executionId });
   console.error(`[migent] session_id: ${id}`);
@@ -614,7 +631,7 @@ function doctor() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.6.0');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.8.0');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
 } else if ((args[0] === 'workflow' || args[0] === 'config') && args[1] === 'save' && !IS_LEGACY) {

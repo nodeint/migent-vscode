@@ -1,5 +1,5 @@
 import { text } from '../text';
-import type { TailEvent } from './eventTail';
+import type { EventEntry } from './eventTail';
 import { parseExecutionId } from './executions';
 
 export interface TimelineFormatOptions {
@@ -25,7 +25,7 @@ function clock(timestamp: string, isUtc: boolean): string {
 }
 
 /** `stage#attempt` from the execution id, else the stage id, else nothing. */
-function subject(event: TailEvent): string {
+function subject(event: EventEntry): string {
   if (event.executionId !== null) {
     const parsed = parseExecutionId(event.executionId);
     if (parsed !== null) return `${parsed.stageId}#${parsed.attempt}`;
@@ -38,9 +38,9 @@ function subject(event: TailEvent): string {
  * that did not parse, has no event name or carries an unknown version is passed
  * through unchanged and marked unrecognized.
  */
-export function formatTimelineLine(event: TailEvent, options: TimelineFormatOptions = {}): string {
+export function formatTimelineLine(event: EventEntry, options: TimelineFormatOptions = {}): string {
   if (event.rawLine !== null) return text('documents.unrecognized', { line: event.rawLine });
-  const label = (event.event ?? '').replace(/^execution\./, '');
+  const label = (event.event?.event ?? '').replace(/^execution\./, '');
   const head = [clock(event.timestamp, options.isUtc === true), subject(event), label].filter((part) => part !== '');
   const line = head.join(' ');
   return event.summary === null ? line : `${line} · ${event.summary}`;
@@ -48,7 +48,7 @@ export function formatTimelineLine(event: TailEvent, options: TimelineFormatOpti
 
 /** All lines, with a first marker line when older events were dropped from the bounded history. */
 export function formatTimeline(
-  events: readonly TailEvent[],
+  events: readonly EventEntry[],
   droppedCount: number,
   options: TimelineFormatOptions = {},
 ): string[] {

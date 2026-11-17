@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
 
-import type { PendingQuestion } from '../../core/model';
 import type { BatchDraft } from '../../core/questionAnswers';
+import type { QuestionItem } from '../../core/questions';
 import { type BatchIdentity, batchKeyOf } from './entry';
 
 const DRAFT_PREFIX = 'migent.answerDraft:';
@@ -10,7 +10,7 @@ const ARCHIVE_PREFIX = 'migent.answerArchive:';
 /** A batch with its draft. `fingerprint` is the content identity of `questions`. */
 export interface StoredDraft {
   fingerprint: string;
-  questions: PendingQuestion[];
+  questions: QuestionItem[];
   draft: BatchDraft;
 }
 

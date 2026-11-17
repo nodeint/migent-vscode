@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
 import type { OperationGate } from '../../core/operationGate';
-import { listOutputs } from '../../core/outputs';
+import { listOutputs, publishedOutputs } from '../../core/outputs';
 import { EXECUTIONS_DIRNAME, FAILURE_REPORT_FILENAME, QUESTIONS_FILENAME, sessionDir, TASK_FILENAME } from '../../core/paths';
 import { questionsFileToOpen } from '../../core/questions';
 import { sessionLabel } from '../../core/sessionPresentation';
@@ -102,7 +102,7 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
     return;
   }
   const { context, snapshot } = resolved;
-  const rows = listOutputs(sessionDir(context.root, snapshot.sessionId), snapshot.status?.outputs ?? []).rows.filter(
+  const rows = listOutputs(sessionDir(context.root, snapshot.sessionId), publishedOutputs(snapshot.status)).rows.filter(
     (row) => row.state === 'ok' && row.absolutePath !== null,
   );
   if (rows.length === 0) {
@@ -125,7 +125,7 @@ async function openOutput(host: CommandHost, arg: unknown): Promise<void> {
 async function executionFilePath(host: CommandHost, arg: unknown, file: string): Promise<string | undefined> {
   const resolved = await resolve(host, arg, text('prompts.openFileWhich', { file }));
   if (resolved === undefined) return undefined;
-  const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latestExecutionId ?? null;
+  const executionId = resolved.target?.executionId ?? resolved.snapshot.status?.latest_execution_id ?? null;
   if (executionId === null) {
     vscode.window.setStatusBarMessage(text('prompts.noExecutionYet', { label: sessionLabel(resolved.snapshot) }), INFO_MESSAGE_MS);
     return undefined;
@@ -150,7 +150,7 @@ async function openQuestionsFile(host: CommandHost, arg: unknown): Promise<void>
   const resolved = await resolve(host, arg, text('prompts.openFileWhich', { file: QUESTIONS_FILENAME }));
   if (resolved === undefined) return;
   const dir = sessionDir(resolved.context.root, resolved.snapshot.sessionId);
-  await openFile(questionsFileToOpen(dir, resolved.snapshot.status?.questions), QUESTIONS_FILENAME);
+  await openFile(questionsFileToOpen(dir), QUESTIONS_FILENAME);
 }
 
 function showMore(registry: ProjectRegistry, arg: unknown): void {

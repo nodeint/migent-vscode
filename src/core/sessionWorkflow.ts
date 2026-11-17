@@ -45,7 +45,8 @@ export function readSessionWorkflow(input: SessionWorkflowInput): SessionWorkflo
     config: input.config,
     clients: input.clients,
   });
-  const ranStages = [...new Set(listExecutions(sessionDir(input.projectRoot, input.sessionId)).map((e) => e.stage))];
+  const executions = listExecutions(sessionDir(input.projectRoot, input.sessionId));
+  const ranStages = [...new Set(executions.map((e) => e.execution.stage_id))];
   const { snapshot } = input;
   return {
     ...base,
@@ -55,7 +56,7 @@ export function readSessionWorkflow(input: SessionWorkflowInput): SessionWorkflo
     ranStages,
     title: snapshot === undefined ? input.sessionId : sessionTitle(snapshot),
     sessionState: snapshot === undefined ? 'Unavailable' : titleCase(snapshot.displayState.state),
-    workflowId: snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null,
+    workflowId: snapshot?.status?.workflow_id ?? snapshot?.manifest?.workflow_id ?? null,
     meta: snapshot === undefined ? NO_SESSION_META : buildSessionMeta(snapshot),
   };
 }

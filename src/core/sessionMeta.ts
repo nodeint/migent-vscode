@@ -1,5 +1,6 @@
 import { isCompletable } from './completeEligibility';
 import type { SessionSnapshot } from './model';
+import { pendingQuestions } from './questions';
 import { stageOf } from './sessionPresentation';
 
 /**
@@ -34,10 +35,10 @@ export function buildSessionMeta(snapshot: SessionSnapshot | undefined): Session
   if (snapshot === undefined) return NO_SESSION_META;
   return {
     stageId: stageOf(snapshot),
-    createdAt: snapshot.status?.createdAt ?? snapshot.manifest?.createdAt ?? null,
-    updatedAt: snapshot.status?.updatedAt ?? null,
+    createdAt: snapshot.status?.created_at ?? snapshot.manifest?.created_at ?? null,
+    updatedAt: snapshot.status?.updated_at ?? null,
     isRunning: snapshot.displayState.state === 'running',
-    pendingQuestions: snapshot.status?.questions.length ?? 0,
+    pendingQuestions: pendingQuestions().length,
     canComplete: isCompletable(snapshot),
     canReply: snapshot.replyTargets.length > 0,
   };

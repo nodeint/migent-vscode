@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveDisplayState } from './displayState';
 import type { SessionSnapshot } from './model';
 import { parseStatus } from './statusReader';
+import { executionJson } from './testHelpers';
 import {
   failureButtons,
   type FailureDetails,
@@ -15,10 +16,11 @@ import {
 } from './transitions';
 
 function snapshot(raw: Record<string, unknown>, id = 's1'): SessionSnapshot {
-  const status = parseStatus(JSON.stringify(raw));
+  const status = parseStatus(JSON.stringify({ session_id: id, ...raw }));
   return {
     sessionId: id,
     manifest: null,
+    unsupportedManifestVersion: null,
     status,
     statusError: false,
     lock: { kind: 'none' },
@@ -110,7 +112,7 @@ describe('failureDetails', () => {
     const id = '0002-plan--attempt-02';
     const root = path.join(dir, 'executions', id);
     mkdirSync(path.join(root, 'turns', 'turn-01'), { recursive: true });
-    writeFileSync(path.join(root, 'execution.json'), JSON.stringify({ stage_id: 'plan', stage_attempt: 2, ...record }));
+    writeFileSync(path.join(root, 'execution.json'), JSON.stringify(executionJson(id, record)));
     for (const [name, text] of Object.entries(files)) writeFileSync(path.join(root, name), text);
     return { dir, id };
   }

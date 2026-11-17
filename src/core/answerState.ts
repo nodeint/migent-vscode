@@ -1,9 +1,8 @@
 import { text } from '../text';
 import type { AnswerState } from './answerModel';
 import { parseExecutionId } from './executions';
-import type { PendingQuestion } from './model';
 import { batchFingerprint } from './questionAnswers';
-import type { QuestionRecord } from './questions';
+import type { QuestionEntry, QuestionItem } from './questions';
 
 /** Pure transitions an open answer panel makes when persisted state changes (plans/03a §6, §8). */
 
@@ -12,8 +11,8 @@ export interface BatchStateInput {
   /** Fingerprint of the batch the panel shows. */
   fingerprint: string;
   /** Pending records now stored for the panel's `(stage, execution)`. */
-  current: readonly PendingQuestion[];
-  history: readonly QuestionRecord[] | null;
+  current: readonly QuestionItem[];
+  history: readonly QuestionEntry[] | null;
   target: { executionId: string; stageId: string | null };
   /** Executions of the whole session, including running ones: only this stage's later ones count. */
   executions: readonly { id: string; stage: string }[];
@@ -46,7 +45,7 @@ function continuation(input: BatchStateInput): StateUpdate {
 function noLongerPending(input: BatchStateInput): StateUpdate {
   const { executionId, stageId } = input.target;
   const isAnswered = (input.history ?? []).some(
-    (record) => record.executionId === executionId && record.stageId === stageId && record.status === 'answered',
+    ({ item, status }) => item.execution_id === executionId && item.stage_id === stageId && status === 'answered',
   );
   return isAnswered
     ? { state: 'answered-elsewhere', message: text('states.answeredElsewhere') }

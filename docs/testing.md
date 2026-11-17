@@ -46,6 +46,15 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
   (see its [README](../src/core/fixtures/synthetic/README.md)). Name them as
   synthetic in test titles, and replace them when a captured sample appears.
 
+`src/core/fixtureConformance.test.ts` checks every session file under the `sessions`, `captured` and `synthetic`
+fixture sets against its `@nodeint/migent-contracts` schema (`status.json`, `manifest.yaml`, `session.lock`,
+`execution.json`, `questions.json`, `next.json`, `events.jsonl` and `metrics.json`). The contract's `SESSION_FILES`
+registry maps each path to its schema. Files the contract does not describe (`title.json`, the workflow files) and files
+that are not session data (`task.md`, `reply.txt`, probe files) are skipped by name. A fixture file that is none of
+these fails the test, so a new kind of file needs a schema mapping or an explicit skip. A fixture that is meant not to
+conform goes in the test's `NON_CONFORMING` list with a reason. The test fails when a listed file does conform, so the
+list cannot go stale. Keep corrections to captured files minimal and keep their redaction.
+
 ### Extension-host integration tests
 
 `pnpm test:integration` builds the extension and `src/integration/` with esbuild, downloads VS Code
@@ -139,14 +148,15 @@ whitespace-only Run task reaching no CLI call, the entered Prepare title, cancel
 and Open existing session creating no new session. One scenario also drives the real quick pick and input boxes through
 VS Code's quick-open commands: Escape on each prompt, then Prepare with the prefilled title.
 
-`reply.integration.test.ts` drives `ReplyService` against the fixture CLI's ordinary-blocker reply
-(`MIGENT_FAKE_REPLY`: consume, ignore or reject): the draft keeps the blocker and is found again by a new service,
-the exact argv of a send, a rejected send keeping the draft, a superseding execution without the reply being
-unconfirmed, edits made while sending (on disk or unsaved in the editor) being kept, a no longer blocked session and
-an empty reply. The fixture CLI also answers a reply to a cancelled workflow stage (interrupted wording) and to a role
-session (no `--stage`, `## Role` prefix), so the suite covers their argv, draft settlement, a stale target being refused,
-a completed role session reopening as Running and returning to Recent with the counts following, and quick text
-becoming the draft body without overwriting an existing draft. Quick Picks and the input box are not driven, and
+`reply.integration.test.ts` drives `ReplyService` against the fixture CLI. A blocked session has no blocker reply target,
+because the contract's status declares none (B6), so one scenario asserts that and the integration scenarios for the
+ordinary-blocker reply flow (draft keeping the blocker, the exact argv of a send, rejected sends, superseding
+executions, edits made while sending, an empty reply) were removed with it. No test drives `ReplyService` for that path
+now; `replyFlow.test.ts` covers only the pure parts (block classification, reply text, resume and consumption evidence
+and reply targets). The fixture CLI still answers a reply to a cancelled workflow stage (interrupted wording) and to a
+role session (no `--stage`, `## Role` prefix), so the suite covers their argv, draft settlement, a stale target being
+refused, a completed role session reopening as Running and returning to Recent with the counts following, and quick
+text becoming the draft body without overwriting an existing draft. Quick Picks and the input box are not driven, and
 neither are notification buttons in the test host. Notifications are covered at the boundary with a mocked `vscode`:
 `notices.test.ts` (the facade: severity, buttons, picked key, modal confirmations, progress) and `notifier.test.ts` and
 `questionNotifier.test.ts` (when a notification fires, queueing, which command a button runs, the settings), plus
@@ -155,20 +165,20 @@ neither are notification buttons in the test host. Notifications are covered at 
 asserts notification text reads it from the catalog (`NOTICES`), as webview text is read from `MigentCopy`. Clicking
 a real notification button stays a manual check.
 
-`questions.integration.test.ts` drives the Session panel's Questions tab through its message handler against the
-fixture CLI's `session continue --reply-file`, whose `MIGENT_FAKE_ANSWER` mode selects record, reject, garble (unreadable
-`questions.json`), followup (exit 9 with a new batch) or fail-after-record. For a session whose status lists
-`executions/<id>/questions.json` batches and that has no session `questions.json` (Migent 0.8.0), the fixture CLI
-instead writes the `session.active` answer event and the next execution's `input.json` (record), or only the event
-(fail-after-record). It covers recorded and rejected
-replies, an unconfirmed submission restored after closing the panel, stale batches and the archived draft,
-generation-checked edits, lock/recipient/schema blocks, a standalone role session and switching between the batches of
-one session inside the same panel. The page script is not run.
+`questions.integration.test.ts` checks the empty source (B6): a status file that lists `questions` yields no pending batch,
+and a session whose status is `question` still displays as Question but has no reply targets. The integration
+scenarios that drove answer submission through the Questions tab (recorded and rejected replies, stale batches,
+generation-checked edits, the lock, recipient and schema blocks) were removed with the source, and no test drives
+submission end to end now. What remains is narrower: `batches.test.ts` (with the `pendingQuestions` seam mocked) covers
+a batch's header action, posting and editing the selected batch, detaching and flushing a draft;
+`src/vscode/questions/answers.test.ts` covers `AnswerSubmitter` restoring and rechecking unfinished submissions;
+`questionAnswers.test.ts` and `answerState.test.ts` cover serializing, checking and reconciling answers and refreshing
+batch state; `answerModel.test.ts` covers the form model and messages. The page script is not run.
 
 The fixture CLI enforces `--stage` targeting (only that stage's pending batch, answered whole) and logs each
 `session continue --reply-file` argv to `fake-argv.log` in the project, so tests assert the exact arguments (a role
-session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply so a test can observe the recovery
-record while the CLI runs.
+session passes no `--stage`). `MIGENT_FAKE_ANSWER_DELAY_MS` delays the reply; no scenario uses it since the question
+scenarios were removed.
 
 `src/integration/fixtureConformance.test.ts` runs the fixture CLI's JSON paths the extension uses (`session prepare`,
 `get clients`, `get models`, `get options --native`, `doctor --json`, `workflow validate --json` and the
@@ -184,9 +194,9 @@ time.
 The fixture CLI implements `session rename` (it writes only `title.json`, takes no lock) and, with
 `MIGENT_FAKE_IDS=numeric`, gives new sessions numeric ids.
 
-### Session drafts and CLI 0.6.0 behavior
+### Session drafts and CLI 0.8.0 behavior
 
-The fixture CLI models 0.6.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+The fixture CLI models 0.8.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`

@@ -13,7 +13,7 @@ import { groupOf, summarize } from '../core/attention';
 import type { SessionSnapshot } from '../core/model';
 import { blockedTargets } from '../core/replyFlow';
 import { ReplyService } from '../vscode/reply';
-import { createProject, type Env, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
+import { createProject, type Env, executionRecord, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
 
 const EXECUTION = '0001-plan--attempt-01';
 const ROLE_EXECUTION = '0001-reviewer--attempt-01';
@@ -26,7 +26,7 @@ function seedBlocked(env: Env, sessionId: string): void {
   );
   write(
     migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'execution.json'),
-    JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'blocked', outcome: { blocker: 'needs a decision' } }),
+    executionRecord(EXECUTION, 'plan', { status: 'blocked', outcome: { blocker: 'needs a decision' } }),
   );
   write(migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'response.md'), 'Which database?');
   // The baseline the CLI keeps for the blocked execution; without readable history nothing is confirmed.
@@ -52,7 +52,7 @@ function seedOther(env: Env, sessionId: string, kind: Seed): string {
   write(migentPath(env.root, 'sessions', sessionId, 'manifest.yaml'), manifest(sessionId, isRole ? 'role: reviewer\n' : 'workflow_id: plan\n'));
   write(migentPath(env.root, 'sessions', sessionId, 'status.json'), status(SESSION_STATUS[kind], { latest_execution_id: executionId }));
   const dir = ['sessions', sessionId, 'executions', executionId] as const;
-  write(migentPath(env.root, ...dir, 'execution.json'), JSON.stringify({ execution_id: executionId, stage_id: stage, status: executionStatus }));
+  write(migentPath(env.root, ...dir, 'execution.json'), executionRecord(executionId, stage, { status: executionStatus }));
   write(migentPath(env.root, ...dir, 'response.md'), 'Working on it.');
   write(migentPath(env.root, ...dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: 'Read the task.' }] }));
   return executionId;
@@ -74,32 +74,6 @@ async function openOther(env: Env, sessionId: string, kind: Seed): Promise<{ fil
   return { file, meta };
 }
 
-async function withReplyMode(mode: string, body: () => Promise<void>): Promise<void> {
-  const previous = process.env.MIGENT_FAKE_REPLY;
-  process.env.MIGENT_FAKE_REPLY = mode;
-  try {
-    await body();
-  } finally {
-    if (previous === undefined) delete process.env.MIGENT_FAKE_REPLY;
-    else process.env.MIGENT_FAKE_REPLY = previous;
-  }
-}
-
-async function openDraft(env: Env, sessionId: string): Promise<{ file: string; meta: NonNullable<ReturnType<ReplyService['identityOf']>> }> {
-  fs.rmSync(path.join(env.root, 'fake-argv.log'), { force: true });
-  const project = await createProject(env);
-  seedBlocked(env, sessionId);
-  await waitFor('blocked session', () => project.store.snapshot(sessionId)?.displayState.state === 'blocked');
-  const snapshot = project.store.snapshot(sessionId);
-  assert.ok(snapshot);
-  const [target] = blockedTargets(snapshot);
-  await env.api.replies.open({ context: project, snapshot, target });
-  const file = env.api.replies.draftPath({ project: project.key, sessionId, executionId: EXECUTION });
-  const meta = env.api.replies.identityOf(vscode.Uri.file(file));
-  assert.ok(meta, 'the draft names its blocked execution');
-  return { file, meta };
-}
-
 const argvLog = (env: Env): string[][] =>
   fs
     .readFileSync(path.join(env.root, 'fake-argv.log'), 'utf8')
@@ -107,131 +81,17 @@ const argvLog = (env: Env): string[][] =>
     .filter(Boolean)
     .map((line) => JSON.parse(line) as string[]);
 
-/** Make the fake CLI wait before answering until the returned file is deleted (it creates the file when it waits). */
-function holdAnswer(env: Env): string {
-  const hold = path.join(env.root, 'answer.hold');
-  process.env.MIGENT_FAKE_ANSWER_HOLD = hold;
-  return hold;
-}
-
-function releaseAnswer(hold: string): void {
-  delete process.env.MIGENT_FAKE_ANSWER_HOLD;
-  fs.rmSync(hold, { force: true });
-}
-
 const scenarios: Scenario[] = [
   {
-    name: 'Reply: the draft keeps the blocker, survives a new service (reload), and sends with the exact argv',
+    name: 'Reply: a blocked session has no blocker reply target, because the status declares none (B6)',
     async run(env) {
-      const { file, meta } = await openDraft(env, 'r1');
-      assert.match(fs.readFileSync(file, 'utf8'), /needs a decision/);
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      const reloaded = new ReplyService(env.api.registry, env.api.control, path.dirname(path.dirname(file)));
-      assert.ok(reloaded.hasDraft(meta), 'a fresh service finds the draft');
-      const result = await env.api.replies.send(meta);
-      assert.equal(result.kind, 'sent');
-      assert.equal(fs.existsSync(file), false, 'the submitted draft is deleted only after the reply is consumed');
-      const [call] = argvLog(env);
-      assert.deepEqual(call.slice(0, 5), ['session', 'continue', 'r1', '--stage', 'plan']);
-      assert.equal(call[5], '--reply-file');
-      assert.equal(call.length, 7, 'no run flags are added to a reply');
-    },
-  },
-  {
-    name: 'Reply: a rejected submission keeps the draft and releases the session',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r2');
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      await withReplyMode('reject', async () => {
-        const result = await env.api.replies.send(meta);
-        assert.equal(result.kind, 'failed');
-      });
-      assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/);
-      assert.equal(env.api.control.gate.current(meta.project, 'r2'), undefined, 'gate released');
-    },
-  },
-  {
-    name: 'Reply: a resuming execution without the reply releases the gate but keeps the draft',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r3');
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      await withReplyMode('ignore', async () => {
-        const result = await env.api.replies.send(meta);
-        assert.equal(result.kind, 'sent');
-      });
-      assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/, 'the draft is kept');
-      assert.equal(env.api.control.gate.current(meta.project, 'r3'), undefined, 'the blocked execution moved on, so the gate is released');
-    },
-  },
-  {
-    name: 'Reply: a resume seen after the timeout releases the gate, and the reply turn settles the draft',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r8');
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      await withReplyMode('ignore', async () => {
-        assert.equal((await env.api.replies.send(meta)).kind, 'sent');
-      });
-      // The ignoring CLI resumed the blocked execution (0002) with a turn that is not this reply.
-      assert.equal(env.api.control.gate.current(meta.project, 'r8'), undefined, 'released: the blocked execution moved on');
-      assert.match(fs.readFileSync(file, 'utf8'), /Use Postgres/, 'the draft is kept without the reply turn');
-      const history = [{ role: 'user', content: '## Human reply\n\nUse Postgres.' }];
-      // The reply turn then shows up in that execution's conversation.json.
-      write(migentPath(env.root, 'sessions', 'r8', 'executions', '0002-plan--attempt-02', 'conversation.json'), JSON.stringify({ history }));
-      await waitFor('draft settled', () => !fs.existsSync(file));
-    },
-  },
-  {
-    name: 'Reply: edits made while sending are preserved',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r4');
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      const hold = holdAnswer(env);
-      try {
-        const sending = env.api.replies.send(meta);
-        await waitFor('the CLI holds the answer', () => fs.existsSync(hold));
-        fs.appendFileSync(file, 'One more thing.\n');
-        fs.rmSync(hold);
-        const result = await sending;
-        assert.deepEqual(result, { kind: 'sent', hasKeptEdits: true });
-      } finally {
-        releaseAnswer(hold);
-      }
-      assert.match(fs.readFileSync(file, 'utf8'), /One more thing/);
-    },
-  },
-  {
-    name: 'Reply: unsaved edits in the open editor are preserved, with the draft identity',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r7');
-      fs.appendFileSync(file, 'Use Postgres.'+String.fromCharCode(10));
-      const hold = holdAnswer(env);
-      try {
-        const sending = env.api.replies.send(meta);
-        await waitFor('the CLI holds the answer', () => fs.existsSync(hold));
-        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-        const edit = new vscode.WorkspaceEdit();
-        edit.insert(document.uri, document.positionAt(document.getText().length), 'Unsaved thought.'+String.fromCharCode(10));
-        await vscode.workspace.applyEdit(edit);
-        assert.equal(document.isDirty, true);
-        fs.rmSync(hold);
-        assert.deepEqual(await sending, { kind: 'sent', hasKeptEdits: true });
-      } finally {
-        releaseAnswer(hold);
-      }
-      assert.ok(fs.existsSync(file), 'the draft file is kept');
-      assert.ok(env.api.replies.identityOf(vscode.Uri.file(file)), 'and so is its identity');
-    },
-  },
-  {
-    name: 'Reply: a session that is no longer blocked on the stage is not sent, and the draft stays',
-    async run(env) {
-      const { file, meta } = await openDraft(env, 'r5');
-      fs.appendFileSync(file, 'Use Postgres.\n');
-      write(migentPath(env.root, 'sessions', 'r5', 'status.json'), status('completed', { latest_execution_id: EXECUTION }));
-      await waitFor('session completed', () => env.project()?.store.snapshot('r5')?.displayState.state === 'completed');
-      const result = await env.api.replies.send(meta);
-      assert.equal(result.kind, 'blocked');
-      assert.equal(fs.existsSync(file), true);
+      const project = await createProject(env);
+      seedBlocked(env, 'r1');
+      await waitFor('blocked session', () => project.store.snapshot('r1')?.displayState.state === 'blocked');
+      const snapshot = project.store.snapshot('r1');
+      assert.ok(snapshot);
+      assert.deepEqual(blockedTargets(snapshot), []);
+      assert.deepEqual(snapshot.replyTargets, []);
     },
   },
   {
@@ -247,6 +107,11 @@ const scenarios: Scenario[] = [
       const [call] = argvLog(env);
       assert.deepEqual(call.slice(0, 5), ['session', 'continue', 'c1', '--stage', 'plan']);
       assert.equal(call.length, 7, 'no run flags are added to a reply');
+      const persisted = JSON.parse(
+        fs.readFileSync(migentPath(env.root, 'sessions', 'c1', 'executions', '0002-plan--attempt-02', 'execution.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      assert.equal(persisted.execution_order, 2, 'the continued execution records its order');
+      assert.equal(persisted.stage_attempt, 2, 'the continued execution records its attempt');
     },
   },
   {
@@ -308,7 +173,7 @@ const scenarios: Scenario[] = [
       assert.equal(fs.existsSync(role.file), true);
       const cancelled = await openOther(env, 'st2', 'cancelled');
       fs.appendFileSync(cancelled.file, 'Late.\n');
-      write(migentPath(env.root, 'sessions', 'st2', 'executions', EXECUTION, 'execution.json'), JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'completed' }));
+      write(migentPath(env.root, 'sessions', 'st2', 'executions', EXECUTION, 'execution.json'), executionRecord(EXECUTION, 'plan', { status: 'completed' }));
       write(migentPath(env.root, 'sessions', 'st2', 'status.json'), status('completed', { latest_execution_id: EXECUTION }));
       await waitFor('stage no longer replyable', () => env.project()?.store.snapshot('st2')?.replyTargets.length === 0);
       assert.equal((await env.api.replies.send(cancelled.meta)).kind, 'blocked');
@@ -335,15 +200,6 @@ const scenarios: Scenario[] = [
       assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /Different text/, 'an existing draft keeps the user text');
       assert.equal((await env.api.replies.send(meta)).kind, 'sent');
       assert.equal(fs.existsSync(file), false);
-    },
-  },
-  {
-    name: 'Reply: an empty reply is not sent',
-    async run(env) {
-      const { meta } = await openDraft(env, 'r6');
-      const result = await env.api.replies.send(meta);
-      assert.equal(result.kind, 'blocked');
-      assert.equal(fs.existsSync(path.join(env.root, 'fake-argv.log')), false, 'the CLI was not started');
     },
   },
 ];

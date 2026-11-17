@@ -1,6 +1,6 @@
 import { text as describe } from '../text';
-import { asSessionId } from './manifest';
-import type { SessionManifest, SessionSnapshot } from './model';
+import { asSessionId, manifestHandoff, manifestPriorSessionId } from './manifest';
+import type { SessionSnapshot } from './model';
 import { resolveWithin } from './paths';
 import { isRecord } from './record';
 
@@ -31,9 +31,9 @@ function str(value: unknown): string | null {
  * already a record after parsing). Anything outside the observed shape is `invalid`;
  * the caller still has `prior_session_id` for the source link.
  */
-export function readHandoff(manifest: SessionManifest | null, sessionDirPath: string): HandoffRead {
-  const value = manifest?.raw.handoff;
-  if (value === undefined || value === null) return { kind: 'absent' };
+export function readHandoff(manifest: SessionSnapshot['manifest'], sessionDirPath: string): HandoffRead {
+  const value = manifestHandoff(manifest);
+  if (value === null) return { kind: 'absent' };
   if (!isRecord(value)) return { kind: 'invalid', reason: describe('states.handoffNotMapping') };
   const sourceSessionId = asSessionId(value.source_session_id);
   if (sourceSessionId === null) return { kind: 'invalid', reason: describe('states.handoffSourceMissing') };
@@ -63,7 +63,7 @@ export function readHandoff(manifest: SessionManifest | null, sessionDirPath: st
  * given. Pure: relations to sessions outside the retained set are not resolved here.
  */
 export function childrenOf(snapshots: readonly SessionSnapshot[], sessionId: string): SessionSnapshot[] {
-  return snapshots.filter((snapshot) => snapshot.manifest?.priorSessionId === sessionId);
+  return snapshots.filter((snapshot) => manifestPriorSessionId(snapshot.manifest) === sessionId);
 }
 
 /**
@@ -75,5 +75,5 @@ export function childrenForWorkflow(
   sessionId: string,
   workflowId: string,
 ): SessionSnapshot[] {
-  return childrenOf(snapshots, sessionId).filter((child) => child.manifest?.workflowId === workflowId);
+  return childrenOf(snapshots, sessionId).filter((child) => child.manifest?.workflow_id === workflowId);
 }

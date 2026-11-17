@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { sessionDir } from './paths';
 import { readSessionWorkflow } from './sessionWorkflow';
+import { executionJson } from './testHelpers';
 
 function project(withExecution: boolean, schema = 7): string {
   const root = mkdtempSync(path.join(tmpdir(), 'sw-'));
@@ -13,6 +14,7 @@ function project(withExecution: boolean, schema = 7): string {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'workflow.yaml'), `schema_version: ${schema}\nid: a\nstages:\n  - id: plan\n    role: dev\n`);
   if (withExecution) mkdirSync(path.join(dir, 'executions', '0001-plan--attempt-01'), { recursive: true });
+  if (withExecution) writeFileSync(path.join(dir, 'executions', '0001-plan--attempt-01', 'execution.json'), JSON.stringify(executionJson('0001-plan--attempt-01')));
   return root;
 }
 

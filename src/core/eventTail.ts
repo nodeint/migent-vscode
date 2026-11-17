@@ -1,47 +1,37 @@
-import { closeSync, fstatSync,openSync, readSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 
-import type { LegacyLifecycleEvent, LifecycleEventV2, Static } from '@nodeint/migent-contracts';
+import type { SessionEvent } from '@nodeint/migent-contracts';
 
-import { declaredOf } from './contractRead';
 import { KNOWN_EVENT_VERSION } from './model';
 import { isRecord } from './record';
 
 /**
- * Envelope keys read below. All but the three extension-only ones come from the opt-in known shapes (current
- * `LifecycleEventV2`, plus `LegacyLifecycleEvent` whose `v` is optional), so an upstream rename fails typecheck.
- * `execution_id`, `stage_id` and `summary` are in neither shape; they are read leniently and stay null when absent.
- */
-/** The envelope as read: the current shape, with `v` also allowed to be absent or 1 as in the legacy shape. */
-export type EnvelopeFields = Omit<LifecycleEventV2, 'v'> & {
-  v: LifecycleEventV2['v'] | Static<typeof LegacyLifecycleEvent>['v'];
-};
-type ExtensionKey = 'execution_id' | 'stage_id' | 'summary';
-
-/**
- * Tail events.jsonl by byte offset. Each call reads from `offset` to end of file
- * and processes only lines terminated by `\n`; the trailing partial line (the log
- * may be mid-write) stays in the file and is picked up on the next call.
+ * One `events.jsonl` line. `event` is the contract's `SessionEvent` when the line matches it (the v2 record, or an
+ * older line with an optional `v: 1`); otherwise it is null and `rawLine` holds the line. `isUnknownVersion` marks a
+ * line whose `v` is newer than this extension reads. The other fields are read from the line beside the contract
+ * value (D3d): the envelope fields every shape may carry, and the three the contract types only in its per-event
+ * shapes. They are best effort and never make a line unrecognized.
  *
- * Envelope: `{v, seq, event, timestamp, execution_id, stage_id, summary, data}`.
- * Lines from older migent have no `v` and read as version 1. An unknown `v`
- * yields the raw line instead of being dropped.
+ * Tail events.jsonl by byte offset. Each call reads from `offset` to end of file and processes only lines
+ * terminated by `
+`; the trailing partial line (the log may be mid-write) stays in the file and is picked up on the
+ * next call.
  */
-export interface TailEvent {
+export interface EventEntry {
+  event: SessionEvent | null;
+  /** Set when the line did not parse, did not match `SessionEvent`, or carries an unknown `v`. */
+  rawLine: string | null;
+  isUnknownVersion: boolean;
   seq: number | null;
-  v: number;
-  event: string | null;
   timestamp: string;
   executionId: string | null;
   stageId: string | null;
   summary: string | null;
   data: Record<string, unknown>;
-  raw: Record<string, unknown> | null;
-  /** Set when the line did not parse or carries an unknown `v`. */
-  rawLine: string | null;
 }
 
 export interface TailRead {
-  events: TailEvent[];
+  events: EventEntry[];
   /** Byte offset to pass to the next call: just past the last complete line. */
   offset: number;
   /**
@@ -80,58 +70,86 @@ function readFrom(offset: number, filePath: string): { text: string; size: numbe
   }
 }
 
-function parseLine(line: string): TailEvent {
+const isString = (value: unknown): value is string => typeof value === 'string';
+
+/** The contract's v2 record: `v`, `seq`, `event`, `timestamp` and `data` all present and typed. */
+function asV2(record: Record<string, unknown>): SessionEvent | null {
+  const { v, seq, event, timestamp, data } = record;
+  if (v !== KNOWN_EVENT_VERSION || typeof seq !== 'number') return null;
+  if (!isString(event) || !isString(timestamp) || !isRecord(data)) return null;
+  return { v, seq, event, timestamp, data };
+}
+
+/** The legacy record: `event`, and `v` absent or 1. */
+function asLegacy(record: Record<string, unknown>): SessionEvent | null {
+  const { v, event } = record;
+  if (!isString(event)) return null;
+  if (v === undefined) return { event };
+  return v === 1 ? { v, event } : null;
+}
+
+const isStringOrNull = (value: unknown): boolean => value === null || isString(value);
+
+/** The `data` members of a status event that the contract types, each optional. */
+const STATUS_DATA_CHECKS: ReadonlyMap<string, (value: unknown) => boolean> = new Map([
+  ['outcome', (value: unknown) => value === null || isRecord(value)],
+  ['from', isStringOrNull],
+  ['reason', isString],
+  ['manual', (value: unknown) => typeof value === 'boolean'],
+  ['reply', isString],
+  ['origin', isString],
+  ['answers', (value: unknown) => Array.isArray(value) && value.every((answer) => isRecord(answer))],
+]);
+
+/**
+ * A `session.active` record, the one known event whose data the extension reads (human-input evidence). The contract
+ * requires a string `timestamp` and an object `data`; without them the result is null, so the line takes the raw-line
+ * path with no fallback to the permissive legacy shape. Wrong-typed optional `data` members are dropped from a copy,
+ * so a discarded value never reaches the event or the entry's data.
+ */
+function sanitizedActiveEvent(record: Record<string, unknown>): Record<string, unknown> | null {
+  const { timestamp, data } = record;
+  if (!isString(timestamp) || !isRecord(data)) return null;
+  const kept = Object.entries(data).filter(([key, value]) => STATUS_DATA_CHECKS.get(key)?.(value) ?? true);
+  return { ...record, data: Object.fromEntries(kept) };
+}
+
+const isNewerVersion = (record: Record<string, unknown>): boolean =>
+  isString(record.event) &&
+  typeof record.v === 'number' &&
+  Number.isInteger(record.v) &&
+  record.v > KNOWN_EVENT_VERSION;
+
+const ownString = (record: Record<string, unknown>, key: string): string | null => {
+  const value = record[key];
+  return isString(value) ? value : null;
+};
+
+function entryOf(parsed: Record<string, unknown> | null, line: string): EventEntry {
+  const record = parsed !== null && parsed.event === 'session.active' ? sanitizedActiveEvent(parsed) : parsed;
+  const fields = parsed ?? {};
+  const seq = typeof fields.seq === 'number' && Number.isInteger(fields.seq) ? fields.seq : null;
+  const base = {
+    seq,
+    timestamp: ownString(fields, 'timestamp') ?? '',
+    executionId: ownString(fields, 'execution_id'),
+    stageId: ownString(fields, 'stage_id'),
+    summary: ownString(fields, 'summary'),
+    data: isRecord(record?.data) ? record.data : {},
+  };
+  const event = record === null ? null : (asV2(record) ?? asLegacy(record));
+  if (event !== null) return { ...base, event, rawLine: null, isUnknownVersion: false };
+  return { ...base, event: null, rawLine: line, isUnknownVersion: parsed !== null && isNewerVersion(parsed) };
+}
+
+function parseLine(line: string): EventEntry {
   let value: unknown = null;
   try {
     value = JSON.parse(line);
   } catch {
     // Fall through: returned as a raw line below.
   }
-  const record = isRecord(value) ? value : null;
-  const wire = declaredOf<EnvelopeFields>(record);
-  if (record === null || wire === null || typeof wire.event !== 'string') {
-    return emptyEvent({ raw: null, rawLine: line, seq: null, v: 1, event: null });
-  }
-  const version = wire.v;
-  const v = typeof version === 'number' && Number.isInteger(version) && version >= 1 ? version : 1;
-  const isUnknownVersion = v > KNOWN_EVENT_VERSION;
-  const ext = (key: ExtensionKey): string | null => (typeof record[key] === 'string' ? record[key] : null);
-  const seq = typeof wire.seq === 'number' && Number.isInteger(wire.seq) ? wire.seq : null;
-  const parsed: TailEvent = {
-    seq,
-    v,
-    event: wire.event,
-    timestamp: typeof wire.timestamp === 'string' ? wire.timestamp : '',
-    executionId: ext('execution_id'),
-    stageId: ext('stage_id'),
-    summary: ext('summary'),
-    data: isData(wire.data),
-    raw: record,
-    rawLine: isUnknownVersion ? line : null,
-  };
-  return parsed;
-}
-
-function isData(value: unknown): Record<string, unknown> {
-  return isRecord(value)
-    ? value
-    : {};
-}
-
-function emptyEvent(overrides: Partial<TailEvent>): TailEvent {
-  return {
-    seq: null,
-    v: 1,
-    event: null,
-    timestamp: '',
-    executionId: null,
-    stageId: null,
-    summary: null,
-    data: {},
-    raw: null,
-    rawLine: null,
-    ...overrides,
-  };
+  return entryOf(isRecord(value) ? value : null, line);
 }
 
 /**
@@ -164,7 +182,7 @@ export function tailEvents(filePath: string, offset: number): TailRead {
  * missing or unreadable file, a non-positive `limit`, or a file with no complete
  * line; never throws.
  */
-export function readRecentEvents(filePath: string, limit: number): TailEvent[] {
+export function readRecentEvents(filePath: string, limit: number): EventEntry[] {
   if (!Number.isInteger(limit) || limit <= 0) return [];
   let fd: number;
   try {
@@ -211,7 +229,7 @@ function readTailText(fd: number, size: number, wanted: number): { text: string;
   return { text: Buffer.concat(chunks).toString('utf8'), start: position };
 }
 
-function recentLines(text: string, start: number, limit: number): TailEvent[] {
+function recentLines(text: string, start: number, limit: number): EventEntry[] {
   const lastNewline = text.lastIndexOf('\n');
   if (lastNewline === -1) return [];
   const lines = text.slice(0, lastNewline).split('\n');
@@ -232,7 +250,7 @@ export interface EventTailOptions {
 
 export interface TailUpdate {
   /** Events newly read by this poll (after the `seq` watermark filter). */
-  events: TailEvent[];
+  events: EventEntry[];
   /** True when the file shrank: history was cleared and `events` is the whole new content. */
   truncated: boolean;
 }
@@ -248,7 +266,7 @@ export class EventTail {
   readonly #maxHistory: number;
   #offset = 0;
   #lastSeq = 0;
-  #history: TailEvent[] = [];
+  #history: EventEntry[] = [];
   #dropped = 0;
 
   constructor(filePath: string, options: EventTailOptions = {}) {
@@ -262,7 +280,7 @@ export class EventTail {
   }
 
   /** The most recent events, oldest first, at most `maxHistory`. */
-  public get history(): readonly TailEvent[] {
+  public get history(): readonly EventEntry[] {
     return this.#history;
   }
 
@@ -297,11 +315,11 @@ export class EventTail {
   }
 
   /** Same as `poll()` when only the new events matter. */
-  public read(): TailEvent[] {
+  public read(): EventEntry[] {
     return this.poll().events;
   }
 
-  #append(events: readonly TailEvent[]): void {
+  #append(events: readonly EventEntry[]): void {
     this.#history.push(...events);
     const excess = this.#history.length - this.#maxHistory;
     if (excess > 0) {

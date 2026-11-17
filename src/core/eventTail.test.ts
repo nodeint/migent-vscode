@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -70,24 +70,27 @@ describe('tailEvents', () => {
     const read = tailEvents(file, 0);
     expect(read.events).toHaveLength(2);
     expect(read.events[1]?.rawLine).toBe('not json at all');
-    expect(read.events[1]?.raw).toBeNull();
     expect(read.events[1]?.event).toBeNull();
   });
 
-  it('returns the raw line for an unknown envelope version, best-effort parsed', () => {
+  it('returns the raw line for an unknown envelope version and marks it', () => {
     const future = JSON.stringify({ v: 99, seq: 3, event: 'session.created', timestamp: 't3', data: {} });
     const file = tmpFile('events.jsonl', `${future}\n`);
     const read = tailEvents(file, 0);
     expect(read.events).toHaveLength(1);
-    expect(read.events[0]?.v).toBe(99);
-    expect(read.events[0]?.event).toBe('session.created');
+    expect(read.events[0]?.isUnknownVersion).toBe(true);
+    expect(read.events[0]?.event).toBeNull();
+    expect(read.events[0]?.seq).toBe(3);
     expect(read.events[0]?.rawLine).toBe(future);
   });
 
-  it('reads a missing v as version 1', () => {
+  it('reads a missing v as a legacy line', () => {
     const legacy = JSON.stringify({ seq: 4, event: 'legacy.event', timestamp: 't4', data: {} });
     const file = tmpFile('events.jsonl', `${legacy}\n`);
-    expect(tailEvents(file, 0).events[0]?.v).toBe(1);
+    const [entry] = tailEvents(file, 0).events;
+    expect(entry?.event?.event).toBe('legacy.event');
+    expect(entry?.rawLine).toBeNull();
+    expect(entry?.isUnknownVersion).toBe(false);
   });
 
   it('treats a non-object or eventless line as raw', () => {
@@ -159,7 +162,7 @@ describe('readRecentEvents', () => {
     const file = tmpFile('events.jsonl', `${lines.join('\n')}\n`);
     const events = readRecentEvents(file, 5);
     expect(events.map((event) => event.seq)).toEqual([1996, 1997, 1998, 1999, 2000]);
-    expect(events.every((event) => event.rawLine === null && event.event === 'execution.started')).toBe(true);
+    expect(events.every((event) => event.rawLine === null && event.event?.event === 'execution.started')).toBe(true);
   });
 
   it('decodes a multi-byte summary read across chunks', () => {
@@ -208,7 +211,7 @@ ${next}
   });
 
   it('drops a replayed seq at or below the watermark but keeps events without a seq', () => {
-    const noSeq = JSON.stringify({ v: 2, event: 'note', timestamp: 't', data: {} });
+    const noSeq = JSON.stringify({ event: 'note', timestamp: 't', data: {} });
     const file = tmpFile('events.jsonl', `${line1}
 ${line2}
 `);
@@ -219,7 +222,7 @@ ${line2}
 ${line2}
 ${noSeq}
 `);
-    expect(tail.read().map((event) => event.event)).toEqual(['note']);
+    expect(tail.read().map((event) => event.event?.event)).toEqual(['note']);
   });
 
   it('reads nothing for a missing file', () => {
@@ -272,5 +275,157 @@ describe('captured events.jsonl against the contract', () => {
     }
     const read = tailEvents(file, 0);
     expect(read.events.every((event) => event.rawLine === null && event.event !== null)).toBe(true);
+  });
+});
+
+// RC1: each required envelope field, missing or wrong-typed on an otherwise valid line, never throws and sends the line
+// down the raw-line path. A v2 line missing `v` is a legacy line, which is accepted.
+describe('envelope required fields', () => {
+  const valid: Record<string, unknown> = { v: 2, seq: 1, event: 'session.created', timestamp: 't1', data: {} };
+  const read = (record: Record<string, unknown>) => tailEvents(tmpFile('events.jsonl', `${JSON.stringify(record)}\n`), 0).events[0];
+  const without = (key: string) => Object.fromEntries(Object.entries(valid).filter(([name]) => name !== key));
+
+  it.each(['seq', 'event', 'timestamp', 'data'])('reads a v2 line without %s as a raw line', (field) => {
+    const entry = read(without(field));
+    expect(entry?.event).toBeNull();
+    expect(entry?.rawLine).toBe(JSON.stringify(without(field)));
+    expect(entry?.isUnknownVersion).toBe(false);
+  });
+
+  it.each([
+    ['seq', '1'],
+    ['event', 7],
+    ['timestamp', 5],
+    ['data', 'x'],
+    ['v', '2'],
+  ])('reads a line with a wrong-typed %s as a raw line', (field, value) => {
+    const entry = read({ ...valid, [field]: value });
+    expect(entry?.event).toBeNull();
+    expect(entry?.rawLine).not.toBeNull();
+  });
+
+  it('accepts a legacy line with only event, and with v 1', () => {
+    expect(read({ event: 'old' })?.event).toEqual({ event: 'old' });
+    expect(read({ v: 1, event: 'old' })?.rawLine).toBeNull();
+    expect(read({ v: 1 })?.event).toBeNull();
+  });
+
+  it('drops a wrong-typed extension field and keeps the event', () => {
+    const entry = read({ ...valid, execution_id: 4, stage_id: ['x'], summary: {} });
+    expect(entry?.event).not.toBeNull();
+    expect([entry?.executionId, entry?.stageId, entry?.summary]).toEqual([null, null, null]);
+  });
+});
+
+// RC1: the known event the extension reads as human-input evidence, session.active, keeps the contract's required
+// fields in both shapes; a failure is a raw line and never falls back to the permissive legacy shape.
+describe('session.active required fields', () => {
+  const v2: Record<string, unknown> = { v: 2, seq: 1, event: 'session.active', timestamp: 't1', data: { reply: 'x' } };
+  const legacy: Record<string, unknown> = { event: 'session.active', timestamp: 't1', data: { reply: 'x' } };
+  const read = (record: Record<string, unknown>) => tailEvents(tmpFile('events.jsonl', `${JSON.stringify(record)}
+`), 0).events[0];
+  const without = (record: Record<string, unknown>, key: string) =>
+    Object.fromEntries(Object.entries(record).filter(([name]) => name !== key));
+
+  it('accepts a valid line of each shape', () => {
+    expect(read(v2)?.event?.event).toBe('session.active');
+    expect(read(legacy)?.event?.event).toBe('session.active');
+  });
+
+  it.each([
+    ['v2', v2],
+    ['legacy', legacy],
+  ])('reads a %s line without timestamp or data as a raw line', (_name, record) => {
+    for (const field of ['timestamp', 'data']) {
+      const entry = read(without(record, field));
+      expect(entry?.event).toBeNull();
+      expect(entry?.rawLine).toBe(JSON.stringify(without(record, field)));
+    }
+  });
+
+  it.each([
+    ['timestamp', 5],
+    ['data', 'x'],
+    ['data', ['x']],
+  ])('reads a legacy line with a wrong-typed required %s as a raw line', (field, value) => {
+    const entry = read({ ...legacy, [field]: value });
+    expect(entry?.event).toBeNull();
+    expect(entry?.rawLine).not.toBeNull();
+  });
+
+  it('reads a v2 line with a wrong-typed seq as a raw line', () => {
+    expect(read({ ...v2, seq: '1' })?.rawLine).not.toBeNull();
+  });
+
+  it.each([
+    ['execution_id', 4],
+    ['stage_id', 4],
+    ['summary', 4],
+    ['seq', '1'],
+  ])('drops a wrong-typed optional legacy %s and keeps the event', (field, value) => {
+    const entry = read({ ...legacy, execution_id: 'e1', stage_id: 'plan', summary: 's', [field]: value });
+    expect(entry?.rawLine).toBeNull();
+    expect(entry?.event?.event).toBe('session.active');
+    expect(entry?.data).toEqual({ reply: 'x' });
+    const dropped = {
+      execution_id: entry?.executionId,
+      stage_id: entry?.stageId,
+      summary: entry?.summary,
+      seq: entry?.seq,
+    };
+    expect(dropped[field as keyof typeof dropped]).toBeNull();
+  });
+
+  it.each([
+    ['outcome', 'x'],
+    ['from', 3],
+    ['reason', 3],
+    ['manual', 'yes'],
+    ['reply', 3],
+    ['origin', 3],
+    ['answers', 'x'],
+    ['answers', ['x']],
+  ])('drops a wrong-typed data.%s, keeps the event and its valid members', (field, value) => {
+    const keeper = field === 'reason' ? 'origin' : 'reason';
+    const entry = read({ ...v2, data: { [keeper]: 'k', [field]: value } });
+    expect(entry?.rawLine).toBeNull();
+    expect(entry?.event?.event).toBe('session.active');
+    expect(entry?.data).toEqual({ [keeper]: 'k' });
+    const eventData = entry?.event !== null && entry?.event !== undefined && 'data' in entry.event ? entry.event.data : null;
+    expect(eventData).toEqual({ [keeper]: 'k' });
+  });
+
+  it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'extra'])(
+    'keeps an unknown data key named %s without throwing',
+    (key) => {
+      const data = Object.defineProperty({ reply: 'x' }, key, { value: 'v', enumerable: true, configurable: true });
+      const file = tmpFile('events.jsonl', `${JSON.stringify({ ...v2, data })}
+`);
+      const [entry] = tailEvents(file, 0).events;
+      expect(entry?.rawLine).toBeNull();
+      expect(entry?.event?.event).toBe('session.active');
+      expect(Object.keys(entry?.data ?? {}).sort()).toEqual([key, 'reply'].sort());
+      expect(Object.getOwnPropertyDescriptor(entry?.data ?? {}, key)?.value).toBe('v');
+      expect(readRecentEvents(file, 10).map((recent) => recent.event?.event)).toEqual(['session.active']);
+    },
+  );
+
+  it('accepts null outcome and from, and an answers list of records', () => {
+    expect(read({ ...v2, data: { outcome: null, from: null, answers: [{ id: '1' }] } })?.rawLine).toBeNull();
+  });
+});
+
+// RC2: every events.jsonl line of every conforming fixture reads as a contract event, not a raw line.
+describe('conforming fixture events', () => {
+  const root = path.join(__dirname, 'fixtures');
+  const files = ['sessions', 'captured', 'synthetic'].flatMap((group) =>
+    readdirSync(path.join(root, group), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(root, group, entry.name, 'events.jsonl'))
+      .filter((file) => existsSync(file)));
+
+  it.each(files)('reads every line of %s', (file) => {
+    const read = tailEvents(file, 0);
+    expect(read.events.filter((entry) => entry.rawLine !== null)).toEqual([]);
   });
 });

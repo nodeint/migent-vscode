@@ -1,5 +1,5 @@
 import type { SessionSnapshot } from './model';
-import { groupPendingQuestions } from './questions';
+import { groupPendingQuestions, pendingQuestions } from './questions';
 
 /** A pending question batch newly observed for a session. */
 export interface ObservedBatch {
@@ -19,7 +19,7 @@ export class BatchWatch {
 
   public observe(project: string, snapshot: SessionSnapshot | undefined, isSeed: boolean): ObservedBatch[] {
     const fresh: ObservedBatch[] = [];
-    const groups = groupPendingQuestions(snapshot?.status?.questions ?? []);
+    const groups = groupPendingQuestions(pendingQuestions());
     for (const group of groups) {
       if (group.executionId === null) continue;
       const key = `${project}#${snapshot?.sessionId ?? ''}#${group.executionId}`;

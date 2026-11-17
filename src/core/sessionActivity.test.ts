@@ -1,23 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TailEvent } from './eventTail';
 import { buildActivity, OVERVIEW_ACTIVITY_LIMIT } from './sessionActivity';
+import { eventEntry,type EventFixture } from './testHelpers';
 
-function event(overrides: Partial<TailEvent> = {}): TailEvent {
-  return {
-    seq: null,
-    v: 2,
-    event: 'execution.started',
-    timestamp: '2026-10-26T09:10:00.000+00:00',
-    executionId: null,
-    stageId: null,
-    summary: null,
-    data: {},
-    raw: null,
-    rawLine: null,
-    ...overrides,
-  };
-}
+const event = (overrides: EventFixture = {}) =>
+  eventEntry({ event: 'execution.started', timestamp: '2026-10-26T09:10:00.000+00:00', ...overrides });
 
 function linesOf(activity: ReturnType<typeof buildActivity>): string[] {
   if (!activity.visible) throw new Error('expected visible activity');
@@ -50,7 +37,7 @@ describe('buildActivity', () => {
   });
 
   it('marks an unparsed line as unrecognized', () => {
-    const lines = linesOf(buildActivity([event({ rawLine: 'not json at all', raw: null })]));
+    const lines = linesOf(buildActivity([event({ rawLine: 'not json at all' })]));
     expect(lines[0]).toBe('--:--:-- [unrecognized] not json at all');
   });
 

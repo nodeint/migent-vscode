@@ -9,6 +9,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { manifestPriorSessionId } from '../core/manifest';
 import type { TaskInput } from '../vscode/launchPrompts';
 import type { NextStepUi } from '../vscode/nextStep/flow';
 import { createProject, type Env, migentPath, repoRoot, runScenarios, type Scenario, sleep, waitFor, write } from './harness';
@@ -44,7 +45,7 @@ const argvLog = (env: Env): string[][] =>
 
 const childrenOfSource = (env: Env): string[] =>
   (env.project()?.store.all() ?? [])
-    .filter((snapshot) => snapshot.manifest?.priorSessionId === SOURCE)
+    .filter((snapshot) => manifestPriorSessionId(snapshot.manifest) === SOURCE)
     .map((snapshot) => snapshot.sessionId);
 
 interface Shown {

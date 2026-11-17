@@ -17,6 +17,7 @@ function fromFixture(dir: string, lock: LockProbe = { kind: 'none' }): SessionSn
   return {
     sessionId: path.basename(dir),
     manifest: null,
+    unsupportedManifestVersion: null,
     status: read.status,
     statusError: false,
     lock,
@@ -29,7 +30,7 @@ function fromFixture(dir: string, lock: LockProbe = { kind: 'none' }): SessionSn
 function bare(state: 'unknown' | 'stopped' | 'failed' | 'completed' | 'prepared'): SessionSnapshot {
   const statusByState = { unknown: 'weird', stopped: 'active', failed: 'active', completed: 'completed', prepared: 'prepared' } as const;
   const base = fromFixture(capturedDir('question-answered'));
-  const status = { ...base.status!, status: statusByState[state], latestExecutionStatus: state === 'failed' ? 'failed' : 'completed' };
+  const status = { ...base.status!, status: statusByState[state], latest_execution_status: state === 'failed' ? 'failed' : 'completed' };
   return {
     ...base,
     status,
@@ -47,15 +48,15 @@ describe('isCounted and summarize', () => {
     expect(isCounted(bare('stopped'))).toBe(false);
     expect(isCounted(bare('unknown'))).toBe(false);
     expect(isCounted(bare('completed'))).toBe(false);
-    // A stopped session that still lists pending questions is counted through them.
+    // B6: status.json no longer lists pending questions, so a stopped session is not counted through them.
     const stoppedAsking = fromFixture(syntheticDir('running-questions'));
     expect(stoppedAsking.displayState.state).toBe('stopped');
-    expect(isCounted(stoppedAsking)).toBe(true);
+    expect(isCounted(stoppedAsking)).toBe(false);
   });
 
-  it('counts a session once even with a blocker and questions, and totals pending questions', () => {
+  it('counts each session once and totals no pending questions while the source is empty (B6)', () => {
     const blocked = fromFixture(syntheticDir('blocked-questions'));
-    expect(blocked.status?.blockedByExecutionIds).toHaveLength(1);
+    expect(blocked.displayState.state).toBe('blocked');
     const summary = summarize([
       blocked,
       fromFixture(capturedDir('question-pending')),
@@ -67,13 +68,13 @@ describe('isCounted and summarize', () => {
     ]);
     expect(summary).toEqual({
       running: 1,
-      // blocked + question + running-with-questions + failed
-      needsAttention: 4,
+      // blocked + question + failed
+      needsAttention: 3,
       blocked: 1,
       failed: 1,
       asking: 1,
-      // 2 (blocked) + 3 (question) + 1 (running)
-      pendingQuestions: 6,
+      // B6: no pending-question source
+      pendingQuestions: 0,
     });
   });
 });
@@ -93,11 +94,12 @@ describe('groupOf', () => {
 });
 
 describe('isRetentionExempt', () => {
-  it('exempts running, prepared, question, blocked and pending-question sessions only', () => {
+  it('exempts running, prepared, question and blocked sessions only (B6: no pending-question source)', () => {
     expect(isRetentionExempt(fromFixture(syntheticDir('running-questions'), alive))).toBe(true);
     expect(isRetentionExempt(fromFixture(capturedDir('question-pending')))).toBe(true);
     expect(isRetentionExempt(fromFixture(syntheticDir('blocked-questions')))).toBe(true);
-    expect(isRetentionExempt(fromFixture(syntheticDir('running-questions')))).toBe(true);
+    // B6: a stopped session is no longer kept through pending questions.
+    expect(isRetentionExempt(fromFixture(syntheticDir('running-questions')))).toBe(false);
     expect(isRetentionExempt(bare('prepared'))).toBe(true);
     expect(isRetentionExempt(bare('failed'))).toBe(false);
     expect(isRetentionExempt(bare('stopped'))).toBe(false);

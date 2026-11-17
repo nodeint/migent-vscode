@@ -167,6 +167,7 @@ export const STATES = {
   'states.unrecognizedStatus': () => 'unrecognized status',
   'states.notObject': () => 'not an object',
   'states.missingIdOrQuestion': () => 'missing id or question',
+  'states.missingRequiredField': ({ field }: { field: string }) => `missing or invalid ${field}`,
 
   // Diagnostics for unreadable or malformed files
   'states.handoffNotMapping': () => 'handoff is not a mapping',

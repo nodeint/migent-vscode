@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { listOutputs } from './outputs';
+import { listOutputs, publishedOutputs } from './outputs';
 import { readStatus } from './statusReader';
 import { capturedDir } from './testHelpers';
 
@@ -25,7 +25,7 @@ describe('listOutputs', () => {
     const dir = capturedDir('handoff-source');
     const read = readStatus(path.join(dir, 'status.json'));
     if (read.kind !== 'ok') throw new Error('status did not read');
-    const listing = listOutputs(dir, read.status.outputs);
+    const listing = listOutputs(dir, publishedOutputs(read.status));
     // The captured sample does not include outputs/note.md.
     expect(listing.rows).toEqual([
       expect.objectContaining({ name: 'note', path: 'outputs/note.md', state: 'missing' }),
@@ -40,7 +40,7 @@ describe('listOutputs', () => {
     writeFileSync(path.join(dir, 'outputs', 'extra.md'), 'e');
     mkdirSync(path.join(dir, 'outputs', 'nested'));
     const listing = listOutputs(dir, [
-      { name: 'note', path: 'outputs/note.md', sourceExecutionId: 'e1', publishedByExecutionId: 'e1' },
+      ['note', { path: 'outputs/note.md', source_execution_id: 'e1', published_by_execution_id: 'e1' }],
     ]);
     expect(listing.rows.map((row) => [row.name, row.path, row.state])).toEqual([
       ['note', 'outputs/note.md', 'ok'],
@@ -53,9 +53,9 @@ describe('listOutputs', () => {
     const dir = tempSession();
     const absolute = path.join(os.tmpdir(), 'secret.txt');
     const listing = listOutputs(dir, [
-      { name: 'up', path: '../secret.txt', sourceExecutionId: null, publishedByExecutionId: null },
-      { name: 'abs', path: absolute, sourceExecutionId: null, publishedByExecutionId: null },
-      { name: 'win', path: 'C:\\secret.txt', sourceExecutionId: null, publishedByExecutionId: null },
+      ['up', { path: '../secret.txt' }],
+      ['abs', { path: absolute }],
+      ['win', { path: 'C:\\secret.txt' }],
     ]);
     expect(listing.rows.map((row) => [row.state, row.absolutePath])).toEqual([
       ['rejected', null],
@@ -69,5 +69,14 @@ describe('listOutputs', () => {
     expect(listOutputs(dir, [])).toEqual({ rows: [], directoryError: null });
     writeFileSync(path.join(dir, 'outputs'), 'x');
     expect(listOutputs(dir, [])).toEqual({ rows: [], directoryError: null });
+  });
+});
+
+describe('publishedOutputs', () => {
+  it('lists entries in file order and skips those without a string path', () => {
+    const status = { session_id: 's1', status: 'active', outputs: { a: { path: 'outputs/a.md' }, b: {}, c: { path: 3 }, d: { path: 'outputs/d.md' } } };
+    expect(publishedOutputs(status).map(([name]) => name)).toEqual(['a', 'd']);
+    expect(publishedOutputs(null)).toEqual([]);
+    expect(publishedOutputs({ session_id: 's1', status: 'active' })).toEqual([]);
   });
 });

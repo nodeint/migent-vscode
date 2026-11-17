@@ -10,7 +10,7 @@ file-format contract.
 
 | Priority | Condition | State |
 | :--- | :--- | :--- |
-| 1 | Manifest missing/unparsable, manifest schema unsupported, status read failed, or status absent | Unknown |
+| 1 | Manifest missing, unparsable or matching neither contract member, manifest schema unsupported, status read failed, status failing the contract (no `session_id` or `status`), or status absent | Unknown |
 | 2 | Status is `prepared` | Prepared |
 | 3 | Lock is alive | Running |
 | 4 | Status is `blocked` | Blocked |
@@ -26,7 +26,7 @@ Prepared or invalid input. `active` alone does not imply Running.
 
 Unknown carries an `unknownReason`, chosen in rule order: `invalid-manifest`,
 `unsupported-schema`, `unreadable-status` (the file could not be read),
-`invalid-status` (it did not parse after retries), `missing-status`, or
+`invalid-status` (it did not parse after retries, or lacks a string `session_id` or `status`), `missing-status`, or
 `unrecognized-status` (rule 10). Known states carry none.
 
 `DisplayState.writable` is false only for an alive lock marked `foreignHost`.
@@ -46,6 +46,8 @@ Evidence: [displayState.test.ts](../src/core/displayState.test.ts).
   count as dead.
 - A parsed foreign-host lock skips the PID probe but still requires a fresh
   heartbeat. An invalid heartbeat is stale.
+- A lock is parsed only when `pid`, `host`, `started_at`, `heartbeat_at` and `nonce` are all present with the
+  contract's types (`SessionLockFile`). A lock missing or mistyping any of them is unparsable.
 - An unparsable lock uses file mtime. A fresh file counts as alive with unknown
   identity and `foreignHost: true`; an old file is stale.
 
@@ -61,28 +63,28 @@ background work; its caller chooses when to scan, refresh, and load details.
 
 | Source | Read trigger | Missing or invalid input |
 | :--- | :--- | :--- |
-| `manifest.yaml` | Snapshot construction | Returns null; an unavailable manifest makes display state Unknown. `session_id`, `prior_session_id` and the handoff `source_session_id` may be quoted strings or unquoted non-negative integers (CLI 0.5.6 ids such as `3`); both read as the decimal string |
-| `status.json` | Snapshot construction | Missing is distinct from error; both result in Unknown display state |
+| `manifest.yaml` | Snapshot construction | Read as the contract's `SessionManifest`, a union: the schema 2 member needs `session_id`, `created_at`, `schema_version: 2` and `workflow_id`; the legacy member needs `session_id`, `created_at` and `status`, with `schema_version` absent or 1. A record matching neither is invalid and gives Unknown `invalid-manifest`; an unknown `schema_version` is unsupported (`unsupported-schema`). A wrong-typed optional field is dropped. `session_id`, `prior_session_id` and the handoff `source_session_id` may be quoted strings or unquoted non-negative integers (CLI 0.5.6 ids such as `3`); both read as the decimal string |
+| `status.json` | Snapshot construction | Read as the contract's `SessionStatusFile`: a record without a string `session_id` and `status` is invalid (Unknown `invalid-status`), and a wrong-typed optional field is dropped. Missing is distinct from error; both result in Unknown display state |
 | `session.lock` | Snapshot construction | Uses the lock rules above |
 | `title.json` | Snapshot construction (`titleOverride`); changes refresh the snapshot through the session watcher | The CLI's rename overlay. Missing, unreadable, invalid, empty or multi-line input gives no override; `history` is not read. Only the CLI writes it |
-| `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list; invalid records retain a summary derived from directory identity |
+| `executions/*/execution.json` | Explicit `listExecutions` call by the consumer; the store does not hold it | Missing directory yields an empty list. A record missing a required contract field (`session_id`, `execution_id`, `execution_order`, `stage_id`, `stage_attempt`, `status`, `created_at`) or with a wrong-typed one is omitted (B4); a wrong-typed optional field is dropped. The entry holds the contract record beside the id, order and attempt the extension derives from the directory name |
 | `events.jsonl` | Explicit `EventTail.poll()` by the consumer; the store does not hold it | Open failure yields no events and preserves the offset; a file smaller than the offset resets the tail (see below) |
 | `events.jsonl` (bounded recent read) | `readRecentEvents(file, limit)` on demand by the Overview tab, only while the session is Running | Missing, empty or unreadable input yields no lines; it reads the newest newline-terminated lines and keeps at most `limit` |
 | `workflow.frozen.yaml`, `workflow.yaml` | `readSessionStagePlan(projectRoot, sessionId)` on demand by the Overview tab | The frozen copy first, else the draft; `missing` when neither exists, `unreadable` and `invalid` keep the first error. Only `stages[].id` is parsed, so no full workflow is built |
 | `.migent/workflows/*.{yaml,yml}` | Explicit `scanWorkflows`, or `readWorkflowFile` for one file | Missing, empty and unreadable directories are distinct outcomes; an unparsable or unreadable file stays listed as `invalid` or `unreadable` with its error |
 | `.migent/config.yaml` | `readProjectConfig` | `missing`, `ok`, `invalid` (unparsable or not a mapping) or `unreadable`; raw integer `schema_version` or null; no defaults |
-| `status.json` `questions`, `outputs` | Snapshot construction (they come with the status read) | Records without `id` and `question` (questions) or `path` (outputs) are skipped; absent keys give empty lists |
-| Question history: `questions.json` (session, Migent up to 0.7), `executions/<id>/questions.json` (0.7 and later), `executions/<id>/input.json` and the answer events (0.8) | `readQuestions(sessionDir, pending)` on demand, `pending` being `status.json.questions` | `missing` (no source), `unreadable`, `invalid`, `unsupported` (a legacy file with schema other than 1) or `ok`. Definitions come from the session file for the executions it lists, otherwise from the execution's own file; a bad execution file is a malformed record of that execution only, so only its batch is refused for sending. Per record, first match wins: a legacy answer; a persisted answer (`answered`); membership in `pending` (`pending`); a legacy record's own status; otherwise `superseded`. A persisted answer always outranks a stale pending row. The source is chosen from the files on disk, never from the CLI version |
+| `status.json` `outputs` | Snapshot construction (it comes with the status read) | Entries without a string `path` are skipped; an absent key gives no outputs. The contract's status declares no `questions`, `running_stages` or `blocked_by_execution_ids`, so they are not read: no pending questions, running stages or blocker reply targets come from the status (B6) |
+| Question history: `questions.json` (session, Migent up to 0.7), `executions/<id>/questions.json` (0.7 and later), `executions/<id>/input.json` and the answer events (0.8) | `readQuestions(sessionDir)` on demand; no source of pending questions exists (B6), so `pending` is always empty | `missing` (no source), `unreadable`, `invalid`, `unsupported` (a legacy file with schema other than 1) or `ok`. Each entry holds the contract question item beside the extension's state (`pending`, `answered`, `superseded`) and parsed answer. An item missing or mistyping a required contract field (`id`, `execution_id`, `stage_id`, `recipient`, `status`; `answer` must be `null` or an object) is skipped and listed in `malformed` (B5); an execution file needs `execution_id`, `stage_id` and `recipient` in its header, else the whole file is malformed. Question text is optional in the contract but the answer flow needs it, so an item without it is skipped and listed too. Definitions come from the session file for the executions it lists, otherwise from the execution's own file; a bad execution file is a malformed record of that execution only, so only its batch is refused for sending. Per record, first match wins: a legacy answer; a persisted answer (`answered`); membership in the (empty) `pending` set; a legacy record's own status; otherwise `superseded`. A persisted answer always outranks a stale pending row. The source is chosen from the files on disk, never from the CLI version |
 | Persisted human input (`humanInput.ts`) | `readAnswerIndex(sessionDir, undecided)` for the history and `readInputIndex(sessionDir)` for Overview Progress, on demand | Answer per asking execution: a `kind: answers` `input.json` that responds to it, then the latest `session.active` event with `data.answers`. Input per opened execution: `input.json` (kind, text) with the origin (`human` or `cut_off`) joined from the `cancelled_reply` event it responds to (the latest at or before `recorded_at`; `human` without such an event); an attempt without `input.json` is joined from the event to the first later attempt of its stage created at or after it, with no origin before Migent 0.8. `events.jsonl` is read once, in full, and only when `input.json` and the legacy file cannot decide: an asking execution without an answer, an input that responds to a cancelled execution, or an attempt after a cancelled or asking one without `input.json`. An invalid `input.json`, other schema version or torn event line is ignored, never acceptance |
 | `outputs/` | `listOutputs(sessionDir, published)` on demand | Published rows are `ok`, `missing` or `rejected` (path leaves the session directory); unnamed files in `outputs/` get path-only rows; a missing directory is normal and an unlistable one sets `directoryError` |
-| `next.json`, `workflow.frozen.yaml` | `readNext`, `readFrozenDownstream` on demand | Independent outcomes (`missing`, `unreadable`, `invalid`, `unsupported` or `ok`; `absent` for the frozen declaration). Artifact paths are checked against the session directory. `declared` is true only when workflow and artifact mapping match the frozen declaration, null when it was not read. `argv` is data, never an action |
+| `next.json`, `workflow.frozen.yaml` | `readNext`, `readFrozenDownstream` on demand | Independent outcomes (`missing`, `unreadable`, `invalid`, `unsupported` or `ok`; `absent` for the frozen declaration). Artifact paths are checked against the session directory. `declared` is true only when workflow and artifact mapping match the frozen declaration, null when it was not read. `argv` is data, never an action. `readNext` returns the contract's `SessionNext` plus `availability` by entry index and `markDeclared` returns the `declared` flags by index. The envelope needs `schema_version`, `source_session_id` and a `next` list, otherwise the file is `invalid`; an entry missing a required field (`workflow`, `task`, `artifacts`, `argv`) is skipped. `metrics.json` is read the same way into a sanitized projection of `totals`, `stages` and `executions` with the contract's field names, without `argv`, `agent_id`, `cli_version`, `git_head` or `git_dirty` |
 | Manifest `handoff` | `readHandoff(manifest, sessionDir)` | `absent`, `invalid` (outside the observed shape) or `ok`; `path` is confined to the target session, `source_path` is text only |
 | `executions/<id>/` contents | `listExecutionFiles(executionDir)` on demand | Lists only files that exist: `task.md`, `prompt.md`, `response.md`, `failure.md`, `diagnostics.json`, `questions.json`, `input.json` (0.8), `stream.jsonl`, `turns/*/verify.md`, `artifacts/*`. `failure.md` (CLI 0.3.6+) is offered as a failure report; older executions have none and show no extra action |
 | Session Files and attempt trees | `listSessionDirectory` on expansion | Lists each directory level; symbolic links are shown as files and are not traversed |
 
 The status reader keeps only the small scalar fields of `latest_provider_event`
-(`event`, `summary`, `stage_id`, `execution_id`, `client`, `timestamp`) and
-removes the object from `raw`: its `details` and `usage` can be very large.
+(`event`, `summary`, `stage_id`, `execution_id`, `client`, `timestamp`) and drops
+the rest of the object: its `details` and `usage` can be very large.
 
 [readStatus](../src/core/statusReader.ts) makes at most three attempts with 100 ms
 between attempts after errors. Missing files return immediately. The wait is
@@ -205,9 +207,15 @@ plus the next offset. It consumes only newline-terminated lines. A partial final
 line remains in the file and is read again from its beginning on the next call;
 there is no separate in-memory remainder buffer.
 
-Malformed records are returned through `rawLine`. Missing/invalid envelope
-versions fall back to version 1; versions above the supported maximum retain the
-raw line alongside extracted fields. Unknown versions are not silently dropped.
+Each entry holds the contract's `SessionEvent` (the v2 record with `v`, `seq`, `event`,
+`timestamp` and `data`, or an older line with `event` and an optional `v: 1`) beside
+the fields the extension reads from the line. A line that is not JSON, or lacks or
+mistypes a required field, has no event and is returned through `rawLine`; a line
+whose `v` is above the supported maximum also sets `isUnknownVersion`. Such lines
+are not silently dropped. A `session.active` line, whose `data` the extension reads as
+human-input evidence, also needs a string `timestamp` and an object `data`, in the legacy shape as well;
+otherwise it is a raw line. Its wrong-typed optional envelope fields and `data` members are
+dropped and the rest of the event is kept.
 
 [EventTail](../src/core/eventTail.ts) wraps it for one `events.jsonl`. It owns the
 byte offset and the sequence watermark, independent of any session snapshot. Each

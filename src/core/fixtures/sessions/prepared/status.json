@@ -19,8 +19,5 @@
     "client": "claude",
     "details": {},
     "data": {}
-  },
-  "latest_execution_id": null,
-  "latest_execution_status": null,
-  "latest_stage_id": null
+  }
 }

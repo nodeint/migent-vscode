@@ -1,4 +1,5 @@
 import type { ScanOutcome, SessionSnapshot } from './model';
+import { pendingQuestions } from './questions';
 
 export type SessionGroup = 'running' | 'attention' | 'prepared' | 'recent';
 
@@ -22,8 +23,8 @@ export function groupOf(snapshot: SessionSnapshot): SessionGroup {
   }
 }
 
-export function pendingQuestionCount(snapshot: SessionSnapshot): number {
-  return snapshot.status?.questions.length ?? 0;
+export function pendingQuestionCount(_snapshot: SessionSnapshot): number {
+  return pendingQuestions().length;
 }
 
 /**

@@ -73,7 +73,7 @@ export function removeMigent(root: string): void {
 }
 
 export function freshLock(): string {
-  return JSON.stringify({ pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() });
+  return JSON.stringify({ pid: process.pid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), nonce: 'n' });
 }
 
 export async function createProject(env: Env): Promise<ProjectContext> {
@@ -86,8 +86,11 @@ export async function createProject(env: Env): Promise<ProjectContext> {
   return project;
 }
 
-export const manifest = (id: string, extra = ''): string =>
-  `session_id: ${id}\nschema_version: 2\ncreated_at: 2026-11-01T10:00:00.000+00:00\n${extra}`;
+/** A schema 2 manifest with the contract's required fields; `extra` may set its own `workflow_id`. */
+export const manifest = (id: string, extra = ''): string => {
+  const workflow = /^workflow_id:/mu.test(extra) ? '' : 'workflow_id: plan\n';
+  return `session_id: ${id}\nschema_version: 2\ncreated_at: 2026-11-01T10:00:00.000+00:00\n${workflow}${extra}`;
+};
 
 export const status = (value: string, extra: Record<string, unknown> = {}): string =>
   JSON.stringify({ session_id: 's', status: value, updated_at: new Date().toISOString(), ...extra });
@@ -317,4 +320,26 @@ async function runScenario(scenario: Scenario): Promise<number> {
   failed += await attempt('scenario', scenario.name, () => withTimeout(scenario.run(env), SCENARIO_TIMEOUT_MS));
   if (failed === 0) console.log(`PASS ${scenario.name} (${Date.now() - started} ms)`);
   return failed + (await attempt('scenario cleanup', scenario.name, () => opened.dispose()));
+}
+
+/**
+ * An `execution.json` with the contract's required fields. The order and attempt come from an id of the form
+ * `<order>-<stage>--attempt-<n>`; `fields` adds or overrides fields.
+ */
+export function executionRecord(
+  executionId: string,
+  stageId: string,
+  fields: { status: string } & Record<string, unknown>,
+): string {
+  const order = Number(/^(\d+)-/u.exec(executionId)?.[1] ?? 1);
+  const attempt = Number(/--attempt-(\d+)$/u.exec(executionId)?.[1] ?? 1);
+  return JSON.stringify({
+    session_id: 's',
+    execution_id: executionId,
+    execution_order: order,
+    stage_id: stageId,
+    stage_attempt: attempt,
+    created_at: '2026-11-01T10:00:00.000+00:00',
+    ...fields,
+  });
 }

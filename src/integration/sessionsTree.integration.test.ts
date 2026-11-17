@@ -15,6 +15,7 @@ import type { TreeNode } from '../vscode/views/nodes';
 import {
   createProject,
   type Env,
+  executionRecord,
   freshLock,
   manifest,
   migentPath,
@@ -188,7 +189,7 @@ const scenarios: Scenario[] = [
       const future = itemOf(env, sessionNode(env, 'future'));
       assert.equal(future.description, 'Unsupported schema version 99');
       assert.equal(iconId(future), 'question');
-      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;questions;role');
+      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;role', 'B6: no pending questions, so no questions flag');
 
       // Blocked, Failed and Question count once each; Stopped and Unknown do not.
       await waitFor('badge', () => env.api.sessionsView.badge?.value === 3);
@@ -279,7 +280,7 @@ const scenarios: Scenario[] = [
       for (const executionId of executionIds) {
         write(
           migentPath(root, 'sessions', 'multi', 'executions', executionId, 'execution.json'),
-          JSON.stringify({ execution_id: executionId, stage_id: executionId.split('--')[0]!.slice(5), status: 'completed' }),
+          executionRecord(executionId, executionId.split('--')[0]!.slice(5), { status: 'completed' }),
         );
       }
       addSession(root, 'multi', 'completed');
@@ -307,7 +308,7 @@ const scenarios: Scenario[] = [
 
       const runningGroup = children(env).find((node) => itemOf(env, node).contextValue === 'group.running');
       assert.ok(runningGroup && children(env, runningGroup).some((node) => node.kind === 'session' && node.sessionId === 'running-q'));
-      assert.match(String(itemOf(env, sessionNode(env, 'asking')).contextValue), /;questions/, 'question indicator stays on the session');
+      assert.doesNotMatch(String(itemOf(env, sessionNode(env, 'asking')).contextValue), /;questions/, 'B6: no pending questions to flag');
     },
   },
   {
@@ -317,7 +318,7 @@ const scenarios: Scenario[] = [
       const executionId = '0001-plan--attempt-01';
       addSession(root, 's1', 'active');
       const execution = migentPath(root, 'sessions', 's1', 'executions', executionId);
-      write(path.join(execution, 'execution.json'), JSON.stringify({ execution_id: executionId, stage_id: 'plan', status: 'completed' }));
+      write(path.join(execution, 'execution.json'), executionRecord(executionId, 'plan', { status: 'completed' }));
       write(path.join(execution, 'prompt.md'), 'p');
       write(path.join(execution, 'custom.log'), 'custom');
       await waitForSessions(env, ['s1']);
@@ -476,9 +477,7 @@ const scenarios: Scenario[] = [
         [first, firstId, 1, '# First failure'],
         [second, secondId, 2, '# Second failure'],
       ] as const) {
-        write(path.join(execution, 'execution.json'), JSON.stringify({
-          execution_id: id, stage_id: 'plan', stage_attempt: attempt, status: 'failed',
-        }));
+        write(path.join(execution, 'execution.json'), executionRecord(id, 'plan', { status: 'failed', stage_attempt: attempt }));
         write(path.join(execution, 'failure.md'), report);
       }
       write(path.join(first, 'diagnostics.json'), '{}');

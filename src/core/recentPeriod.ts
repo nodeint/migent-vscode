@@ -15,11 +15,11 @@ export const RECENT_PERIOD_TEXT = {
 
 /** Use the same creation date and fallback as the session store's ordering. */
 export function recentPeriod(
-  snapshot: { manifest: { createdAt: string | null } | null; status: { createdAt: string | null } | null },
+  snapshot: { manifest: { created_at: string } | null; status: { created_at?: string } | null },
   now: number,
 ): RecentPeriod {
-  const value = snapshot.manifest?.createdAt ?? snapshot.status?.createdAt;
-  const date = value === undefined || value === null ? NaN : Date.parse(value);
+  const value = snapshot.manifest?.created_at ?? snapshot.status?.created_at;
+  const date = value === undefined ? NaN : Date.parse(value);
   if (!Number.isFinite(date)) return 'unknown';
   const current = new Date(now);
   const midnight = (days: number): number =>

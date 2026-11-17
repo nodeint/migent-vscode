@@ -10,6 +10,7 @@ import {
   putInput,
   putJson,
   putQuestions,
+  putRaw,
 } from './humanInputTestSupport';
 
 vi.mock('./eventTail', async (importOriginal) => {
@@ -96,6 +97,65 @@ describe('readAnswerIndex', () => {
     const dir = makeSession();
     putEvents(dir, [{ executionId: ASKED, stageId: 'plan', timestamp: 't', data: { answers: 'not a list' } }]);
     expect(readAnswerIndex(dir, new Set([ASKED])).answers.size).toBe(0);
+  });
+});
+
+describe('session.active validation', () => {
+  const legacyLine = (extra: Record<string, unknown>) =>
+    `${JSON.stringify({
+      event: 'session.active',
+      execution_id: ASKED,
+      stage_id: 'plan',
+      data: { answers: [answerEntry('1', ['A'])] },
+      ...extra,
+    })}
+`;
+  const putLine = (dir: string, line: string) => putRaw(dir, 'events.jsonl', line);
+
+  it('keeps answer evidence when an optional data member or envelope field is wrong-typed', () => {
+    const dir = makeSession();
+    const good = answerEvent(ASKED, [answerEntry('1', ['A'])]);
+    putEvents(dir, [{ ...good, data: { ...good.data, reply: 5, reason: 42 } }]);
+    expect(readAnswerIndex(dir, new Set([ASKED])).answers.get(ASKED)?.byQuestion.get('1')).toEqual({
+      selected: ['A'],
+      text: null,
+    });
+  });
+
+  it('keeps answer evidence when the data carries a __proto__ key', () => {
+    const dir = makeSession();
+    const data = Object.defineProperty({ answers: [answerEntry('1', ['A'])] }, '__proto__', {
+      value: { x: 1 },
+      enumerable: true,
+      configurable: true,
+    });
+    putRaw(
+      dir,
+      'events.jsonl',
+      `${JSON.stringify({ v: 2, seq: 1, event: 'session.active', timestamp: 't', execution_id: ASKED, stage_id: 'plan', data })}
+`,
+    );
+    expect(readAnswerIndex(dir, new Set([ASKED])).answers.get(ASKED)?.byQuestion.get('1')).toEqual({
+      selected: ['A'],
+      text: null,
+    });
+  });
+
+  it('gives no answer evidence when the answers themselves are unusable', () => {
+    const dir = makeSession();
+    putEvents(dir, [{ executionId: ASKED, stageId: 'plan', timestamp: 't', data: { answers: ['x'] } }]);
+    expect(readAnswerIndex(dir, new Set([ASKED])).answers.size).toBe(0);
+  });
+
+  it('rejects a complete legacy active line without a timestamp and recovers it with one', () => {
+    const dir = makeSession();
+    putLine(dir, legacyLine({}));
+    expect(readAnswerIndex(dir, new Set([ASKED])).answers.size).toBe(0);
+    putLine(dir, legacyLine({ timestamp: '2026-11-01T11:00:00.000Z' }));
+    expect(readAnswerIndex(dir, new Set([ASKED])).answers.get(ASKED)?.byQuestion.get('1')).toEqual({
+      selected: ['A'],
+      text: null,
+    });
   });
 });
 

@@ -1,25 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TailEvent } from './eventTail';
+import { eventEntry as event } from './testHelpers';
 import { formatTimeline, formatTimelineLine } from './timelineFormat';
 
 const utc = { isUtc: true };
-
-function event(overrides: Partial<TailEvent>): TailEvent {
-  return {
-    seq: null,
-    v: 2,
-    event: 'note',
-    timestamp: '',
-    executionId: null,
-    stageId: null,
-    summary: null,
-    data: {},
-    raw: {},
-    rawLine: null,
-    ...overrides,
-  };
-}
 
 describe('formatTimelineLine', () => {
   it('formats stage, attempt, event and summary', () => {
@@ -55,11 +39,11 @@ describe('formatTimelineLine', () => {
   });
 
   it('passes malformed and unknown-version lines through marked unrecognized', () => {
-    expect(formatTimelineLine(event({ event: null, raw: null, rawLine: 'not json at all' }), utc)).toBe(
+    expect(formatTimelineLine(event({ event: null, rawLine: 'not json at all' }), utc)).toBe(
       '--:--:-- [unrecognized] not json at all',
     );
     const future = '{"v":99,"event":"session.created"}';
-    expect(formatTimelineLine(event({ v: 99, rawLine: future }), utc)).toBe(`--:--:-- [unrecognized] ${future}`);
+    expect(formatTimelineLine(event({ isUnknownVersion: true, rawLine: future }), utc)).toBe(`--:--:-- [unrecognized] ${future}`);
   });
 });
 
