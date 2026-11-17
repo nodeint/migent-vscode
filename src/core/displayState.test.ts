@@ -1,25 +1,17 @@
+import type { SessionStatusFile } from '@nodeint/migent-contracts';
 import { describe, expect, it } from 'vitest';
 
 import { deriveDisplayState, DISPLAY_STATE_ICONS, type DisplayStatusInput } from './displayState';
-import type { DisplayStateName, LockProbe, SessionStatus } from './model';
+import type { DisplayStateName, LockProbe } from './model';
 
-function status(overrides: Partial<SessionStatus> = {}): SessionStatus {
+function status(overrides: Partial<SessionStatusFile> = {}): SessionStatusFile {
   return {
+    session_id: 's1',
     status: 'active',
-    workflowId: 'plan',
-    title: null,
-    createdAt: null,
-    updatedAt: null,
-    latestExecutionId: '0001-plan--attempt-01',
-    latestExecutionStatus: 'completed',
-    latestStageId: 'plan',
-    latestDecision: null,
-    blockedByExecutionIds: [],
-    runningStages: [],
-    questions: [],
-    outputs: [],
-    latestProviderEvent: null,
-    raw: {},
+    workflow_id: 'plan',
+    latest_execution_id: '0001-plan--attempt-01',
+    latest_execution_status: 'completed',
+    latest_stage_id: 'plan',
     ...overrides,
   };
 }
@@ -57,14 +49,14 @@ describe('deriveDisplayState', () => {
 
   it('Failed: active, no lock, latest_execution_status = failed', () => {
     expect(
-      state({ status: status({ latestExecutionStatus: 'failed' }) }, { kind: 'none' }),
+      state({ status: status({ latest_execution_status: 'failed' }) }, { kind: 'none' }),
     ).toBe('failed');
-    expect(state({ status: status({ latestExecutionStatus: 'failed' }) }, { kind: 'stale', reason: 'dead-pid' })).toBe('failed');
+    expect(state({ status: status({ latest_execution_status: 'failed' }) }, { kind: 'stale', reason: 'dead-pid' })).toBe('failed');
   });
 
   it('Stopped: active, no lock, last execution not failed', () => {
     expect(state({}, { kind: 'none' })).toBe('stopped');
-    expect(state({ status: status({ latestExecutionStatus: null }) }, { kind: 'none' })).toBe('stopped');
+    expect(state({ status: status({ latest_execution_status: undefined }) }, { kind: 'none' })).toBe('stopped');
     expect(state({}, { kind: 'stale', reason: 'unparsable' })).toBe('stopped');
   });
 

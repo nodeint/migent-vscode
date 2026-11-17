@@ -53,28 +53,20 @@ function snapshot(input: SnapshotInput = {}): SessionSnapshot {
       ...(input.unknownReason === undefined ? {} : { unknownReason: input.unknownReason }),
     },
     replyTargets: input.replyTargets ?? [],
-    manifest: { role: null, ...input.manifest },
-    status: {
-      latestStageId: null,
-      latestExecutionId: null,
-      runningStages: [],
-      questions: [],
-      blockedByExecutionIds: [],
-      latestProviderEvent: null,
-      ...input.status,
-    },
+    manifest: { ...input.manifest },
+    status: { ...input.status },
   } as unknown as SessionSnapshot;
 }
 
 describe('buildSummary', () => {
+  // B6: `running_stages` is not read, so the running stage is the latest stage.
   it('describes a running stage and its provider summary', () => {
     const summary = buildSummary(
       snapshot({
         state: 'running',
         status: {
-          latestStageId: 'plan',
-          runningStages: [{ stageId: 'implement' }],
-          latestProviderEvent: { stageId: 'plan', summary: 'writing tests' },
+          latest_stage_id: 'implement',
+          latest_provider_event: { stage_id: 'plan', summary: 'writing tests' },
         },
       }),
       [],
@@ -94,8 +86,7 @@ describe('buildSummary', () => {
       snapshot({
         state: 'running',
         status: {
-          latestStageId: 'plan',
-          latestProviderEvent: { stageId: 'review', summary: null },
+          latest_provider_event: { stage_id: 'review' },
         },
       }),
       [],
@@ -103,7 +94,7 @@ describe('buildSummary', () => {
     expect(fromEvent).toMatchObject({ runningStage: 'review', runningSummary: null });
 
     const fromStage = buildSummary(
-      snapshot({ state: 'running', status: { latestStageId: 'plan' } }),
+      snapshot({ state: 'running', status: { latest_stage_id: 'plan' } }),
       [],
     );
     expect(fromStage).toMatchObject({ runningStage: 'plan', runningSummary: null });
@@ -114,8 +105,8 @@ describe('buildSummary', () => {
       snapshot({
         state: 'completed',
         status: {
-          latestStageId: 'plan',
-          latestProviderEvent: { stageId: 'plan', summary: 'completed' },
+          latest_stage_id: 'plan',
+          latest_provider_event: { stage_id: 'plan', summary: 'completed' },
         },
       }),
       [],
@@ -124,17 +115,12 @@ describe('buildSummary', () => {
     expect(summary).toMatchObject({ runningStage: null, runningSummary: null, isRunning: false });
   });
 
-  it('joins each blocked execution id with its recorded blocker, skipping unparsable ids', () => {
+  // B6: `blocked_by_execution_ids` is not in the contract, so a blocked session lists no blocked execution.
+  it('lists no blocked execution, even when the executions record a blocker', () => {
     const summary = buildSummary(
       snapshot({
         state: 'blocked',
-        status: {
-          blockedByExecutionIds: [
-            '0001-plan--attempt-01',
-            '0002-review--attempt-02',
-            'not-an-execution',
-          ],
-        },
+        status: { latest_execution_id: '0001-plan--attempt-01' },
       }),
       [
         execution('0001-plan--attempt-01', 'plan', { status: 'blocked', blocker: 'needs a decision' }),
@@ -142,10 +128,7 @@ describe('buildSummary', () => {
       ],
     );
 
-    expect(summary.blocked).toEqual([
-      { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, blocker: 'needs a decision' },
-      { executionId: '0002-review--attempt-02', stageId: 'review', attempt: 2, blocker: null },
-    ]);
+    expect(summary.blocked).toEqual([]);
   });
 
   it('reports a quota reset only for a quota failure of the latest execution', () => {
@@ -154,11 +137,11 @@ describe('buildSummary', () => {
       snapshot({
         state: 'failed',
         status: {
-          latestExecutionId: '0001-plan--attempt-01',
-          latestProviderEvent: {
+          latest_execution_id: '0001-plan--attempt-01',
+          latest_provider_event: {
             event: 'provider.quota',
-            executionId: '0001-plan--attempt-01',
-            retryAt,
+            execution_id: '0001-plan--attempt-01',
+            details: { retry_at: retryAt },
           },
         },
       }),
@@ -170,18 +153,18 @@ describe('buildSummary', () => {
 
   it('leaves the quota reset null when the failure was not a quota or belongs to an older execution', () => {
     const notQuota = buildSummary(
-      snapshot({ state: 'failed', status: { latestProviderEvent: { event: 'provider.error' } } }),
+      snapshot({ state: 'failed', status: { latest_provider_event: { event: 'provider.error' } } }),
       [],
     );
     const older = buildSummary(
       snapshot({
         state: 'failed',
         status: {
-          latestExecutionId: '0002-plan--attempt-02',
-          latestProviderEvent: {
+          latest_execution_id: '0002-plan--attempt-02',
+          latest_provider_event: {
             event: 'provider.quota',
-            executionId: '0001-plan--attempt-01',
-            retryAt: '2026-11-03T07:05:00.000Z',
+            execution_id: '0001-plan--attempt-01',
+            details: { retry_at: '2026-11-03T07:05:00.000Z' },
           },
         },
       }),
@@ -194,7 +177,7 @@ describe('buildSummary', () => {
 
   it('prefers the execution the status names, else the highest-order summary', () => {
     const named = buildSummary(
-      snapshot({ status: { latestExecutionId: '0001-plan--attempt-01' } }),
+      snapshot({ status: { latest_execution_id: '0001-plan--attempt-01' } }),
       [
         execution('0001-plan--attempt-01', 'plan'),
         execution('0002-review--attempt-02', 'review', { attempt: 2 }),
@@ -210,7 +193,8 @@ describe('buildSummary', () => {
     expect(buildSummary(snapshot(), []).latestExecution).toBeNull();
   });
 
-  it('carries the Unknown reason and the pending question count', () => {
+  // B6: `questions` is not read from status.json, so the pending question count is 0.
+  it('carries the Unknown reason and no pending questions', () => {
     const summary = buildSummary(
       snapshot({
         state: 'unknown',
@@ -223,7 +207,7 @@ describe('buildSummary', () => {
     expect(summary).toMatchObject({
       state: 'unknown',
       unknownReason: 'missing-status',
-      pendingQuestions: 2,
+      pendingQuestions: 0,
     });
   });
 });

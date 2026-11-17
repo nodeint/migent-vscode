@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isRetentionExempt } from './attention';
 import { probeLock } from './lockProbe';
+import { manifestPriorSessionId } from './manifest';
 import type { SessionChangeEvent } from './model';
 import { SessionStore } from './store';
 import { makeProject, syntheticDir } from './testHelpers';
@@ -120,10 +121,10 @@ describe('SessionStore.load', () => {
     expect(s.snapshot('unknown-schema')?.displayState.unknownReason).toBe('unsupported-schema');
     // A session with a status but no readable manifest.
     mkdirSync(sessionDir('no-manifest'), { recursive: true });
-    writeFileSync(path.join(sessionDir('no-manifest'), 'status.json'), '{"status":"active"}');
+    writeFileSync(path.join(sessionDir('no-manifest'), 'status.json'), '{"session_id":"no-manifest","status":"active"}');
     // A session with a manifest but no status.json.
     mkdirSync(sessionDir('no-status'), { recursive: true });
-    writeFileSync(path.join(sessionDir('no-status'), 'manifest.yaml'), 'session_id: x\nschema_version: 2\n');
+    writeFileSync(path.join(sessionDir('no-status'), 'manifest.yaml'), 'session_id: x\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n');
     s.load();
     expect(s.snapshot('no-manifest')?.displayState.unknownReason).toBe('invalid-manifest');
     expect(s.snapshot('no-status')?.displayState.unknownReason).toBe('missing-status');
@@ -131,8 +132,8 @@ describe('SessionStore.load', () => {
 
   it('shows status = question as Question, and Running when a live lock exists', () => {
     mkdirSync(sessionDir('asking'), { recursive: true });
-    writeFileSync(path.join(sessionDir('asking'), 'manifest.yaml'), 'session_id: asking\nschema_version: 2\n');
-    writeFileSync(path.join(sessionDir('asking'), 'status.json'), '{"status":"question"}');
+    writeFileSync(path.join(sessionDir('asking'), 'manifest.yaml'), 'session_id: asking\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n');
+    writeFileSync(path.join(sessionDir('asking'), 'status.json'), '{"session_id":"asking","status":"question"}');
     const s = store();
     s.load();
     expect(s.snapshot('asking')?.displayState).toMatchObject({ state: 'question', icon: 'comment-discussion' });
@@ -152,7 +153,7 @@ describe('SessionStore.load', () => {
       mkdirSync(path.join(sessionDir('new-session')), { recursive: true });
       writeFileSync(
         path.join(sessionDir('new-session'), 'manifest.yaml'),
-        'session_id: new-session\nschema_version: 2\n',
+        'session_id: new-session\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n',
       );
       s.load();
     });
@@ -218,7 +219,7 @@ describe('SessionStore running fixture', () => {
     dirs.push(project);
     const sessions = path.join(project, '.migent', 'sessions', 'live');
     mkdirSync(sessions, { recursive: true });
-    writeFileSync(path.join(sessions, 'manifest.yaml'), 'session_id: live\nschema_version: 2\n');
+    writeFileSync(path.join(sessions, 'manifest.yaml'), 'session_id: live\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n');
     writeFileSync(
       path.join(sessions, 'status.json'),
       JSON.stringify({ session_id: 'live', status: 'active', updated_at: 't' }),
@@ -262,11 +263,11 @@ describe('SessionStore retention', () => {
     expect(s.hiddenCount).toBe(5);
   });
 
-  it('exempts a session that only has pending questions', () => {
+  it('no longer exempts a session that only has pending questions (B6)', () => {
     mkdirSync(sessionDir('asking'), { recursive: true });
     writeFileSync(
       path.join(sessionDir('asking'), 'manifest.yaml'),
-      'session_id: asking\ncreated_at: 2020-01-01T00:00:00.000+00:00\nschema_version: 2\n',
+      'session_id: asking\nworkflow_id: w\ncreated_at: 2020-01-01T00:00:00.000+00:00\nschema_version: 2\n',
     );
     writeFileSync(
       path.join(sessionDir('asking'), 'status.json'),
@@ -274,8 +275,8 @@ describe('SessionStore retention', () => {
     );
     const s = limited(2);
     s.load();
-    expect(s.snapshot('asking')?.status?.questions).toHaveLength(1);
-    expect(s.snapshot('asking')?.displayState.state).toBe('stopped');
+    // B6: the status has no questions in the contract, so such a session is no longer exempt and the limit hides it.
+    expect(s.snapshot('asking')).toBeUndefined();
   });
 
   it('lets a hidden session that resumes become retained, and emits a scan change for the hidden count', () => {
@@ -359,7 +360,7 @@ describe('SessionStore scan outcome', () => {
     mkdirSync(sessionDir('late'));
     s.load();
     expect(s.scanOutcome.pending).toEqual(['late']);
-    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nschema_version: 2\n');
+    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n');
     const events = changes(s, () => s.refreshSession('late'));
     expect(events).toContainEqual(expect.objectContaining({ sessionId: 'late', kind: 'added' }));
     s.load();
@@ -448,7 +449,7 @@ describe('SessionStore single-directory updates', () => {
     const project: string[] = [];
     s.onDidChangeProject((event) => project.push(event.kind));
 
-    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nschema_version: 2\n');
+    writeFileSync(path.join(sessionDir('late'), 'manifest.yaml'), 'session_id: late\nworkflow_id: w\ncreated_at: 2026-10-26T09:00:00.000+00:00\nschema_version: 2\n');
     s.refreshSession('late');
     expect(s.scanOutcome.pending).toEqual([]);
     expect(s.scanOutcome.eligible).toContain('late');
@@ -479,9 +480,11 @@ describe('replyTargets', () => {
     const dir = sessionDir(sessionId);
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, 'manifest.yaml'), `session_id: ${sessionId}
+workflow_id: w
+created_at: 2026-10-26T09:00:00.000+00:00
 schema_version: 2
 `);
-    writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ status: 'cancelled', workflow_id: 'w' }));
+    writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, status: 'cancelled', workflow_id: 'w' }));
     for (const [id, record] of Object.entries(executions)) {
       mkdirSync(path.join(dir, 'executions', id), { recursive: true });
       writeFileSync(path.join(dir, 'executions', id, 'execution.json'), JSON.stringify(record));
@@ -491,7 +494,8 @@ schema_version: 2
   it('attaches the targets of a blocked session and none for a completed one', () => {
     const s = store();
     s.load();
-    expect(s.snapshot('blocked')?.replyTargets.map((target) => target.kind)).toEqual(['blocker']);
+    // B6: blocked_by_execution_ids is not read, so a blocked session has no blocker reply targets.
+    expect(s.snapshot('blocked')?.replyTargets).toEqual([]);
     expect(s.snapshot('completed')?.replyTargets).toEqual([]);
   });
 
@@ -526,7 +530,7 @@ schema_version: 2
     writeCancelled('cancelled-old', { '0001-code--attempt-01': { status: 'cancelled', stage_id: 'code' } });
     writeFileSync(
       path.join(sessionDir('cancelled-old'), 'manifest.yaml'),
-      'session_id: cancelled-old\nschema_version: 2\ncreated_at: 2000-01-01T00:00:00Z\n',
+      'session_id: cancelled-old\nworkflow_id: w\nschema_version: 2\ncreated_at: 2000-01-01T00:00:00Z\n',
     );
     const s = new SessionStore(dirs[0], { limit: 1 });
     s.load();
@@ -567,8 +571,8 @@ describe('SessionStore numeric ids and title overlay', () => {
     addSession('3', at, 'prior_session_id: 2\n');
     const s = store();
     s.load();
-    expect(s.snapshot('3')?.manifest?.priorSessionId).toBe('2');
-    expect(s.snapshot('2')?.manifest?.sessionId).toBe('2');
+    expect(manifestPriorSessionId(s.snapshot('3')?.manifest ?? null)).toBe('2');
+    expect(s.snapshot('2')?.manifest?.session_id).toBe('2');
   });
 
   it('emits updated when only title.json changes', () => {

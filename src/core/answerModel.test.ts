@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { type AnswerModelInput, buildAnswerModel, describeDraft, parseAnswerMessage } from './answerModel';
-import type { PendingQuestion } from './model';
+import type { QuestionBase } from './model';
 import { NO_SESSION_META } from './sessionMeta';
 
-const question = (id: string, selection: string): PendingQuestion => ({
+const question = (id: string, selection: string): QuestionBase => ({
   id,
   question: `Q${id}?`,
   context: null,
@@ -17,7 +17,6 @@ const question = (id: string, selection: string): PendingQuestion => ({
   executionId: 'e1',
   stageId: 'plan',
   recipient: 'human',
-  file: null,
 });
 
 function input(overrides: Partial<AnswerModelInput> = {}): AnswerModelInput {

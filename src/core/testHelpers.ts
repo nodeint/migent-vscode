@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { deriveDisplayState } from './displayState';
 import { listExecutions } from './executions';
-import { readManifest } from './manifest';
+import { manifestFacts, readManifest } from './manifest';
 import type { LockProbe, SessionSnapshot } from './model';
 import { replyNeedsExecutions, replyTargets } from './replyFlow';
 import { readTitleOverride } from './sessionTitle';
@@ -45,14 +45,13 @@ export function workflowsFixtureDir(): string {
 
 /** Build a snapshot from the manifest and status files in a fixture directory, with the given lock. */
 export function snapshotFromDir(dir: string, lock: LockProbe = { kind: 'none' }): SessionSnapshot {
-  const manifest = readManifest(path.join(dir, 'manifest.yaml'));
+  const { manifest, unsupportedManifestVersion, state: manifestState } = manifestFacts(readManifest(path.join(dir, 'manifest.yaml')));
   const read = readStatus(path.join(dir, 'status.json'));
   const status = read.kind === 'ok' ? read.status : null;
-  let manifestState: 'ok' | 'invalid' | 'unsupported' = 'invalid';
-  if (manifest !== null) manifestState = manifest.schemaSupported ? 'ok' : 'unsupported';
   const body = {
     sessionId: path.basename(dir),
     manifest,
+    unsupportedManifestVersion,
     status,
     statusError: read.kind === 'error',
     lock,

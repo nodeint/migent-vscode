@@ -5,6 +5,14 @@
 - A `session.lock` missing `started_at` or `nonce` (or with a wrong-typed field) is now treated as unparsable, so
   its liveness follows the file's age instead of its heartbeat.
 - Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade.
+- A session whose `status.json` lacks a string `session_id` or `status` is now shown as Unknown (invalid status)
+  instead of being read with defaults.
+- A session whose `manifest.yaml` matches neither the schema 2 nor the legacy contract shape is now shown as Unknown
+  (invalid manifest) instead of being read with defaults.
+- Pending questions, running stages and blocker reply targets are no longer read from `status.json`, because the
+  Migent 0.8.0 contract does not declare them. Until the CLI provides them another way, the Sessions view and the
+  question notification show no pending questions, no running stage is marked in Progress, and a blocked session
+  offers no blocker reply target.
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions
   and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or
   answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))

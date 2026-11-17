@@ -1,6 +1,6 @@
 import type { AnswerModel, AnswerState } from '../../core/answerModel';
 import type { StateUpdate } from '../../core/answerState';
-import type { PendingQuestion } from '../../core/model';
+import type { QuestionBase } from '../../core/model';
 import { type AnswerDraft, type BatchDraft, batchFingerprint, type ReplyMap } from '../../core/questionAnswers';
 import { text } from '../../text';
 import type { ProjectKey } from '../changes';
@@ -21,7 +21,7 @@ export interface BatchIdentity {
 
 export interface EntryInit {
   identity: BatchIdentity;
-  questions: PendingQuestion[];
+  questions: QuestionBase[];
   draft: BatchDraft;
 }
 
@@ -32,10 +32,10 @@ export class Entry {
   /** Bumped whenever the host replaces the draft, so a delayed edit from before it can be dropped. */
   public generation = 0;
   /** The batch and draft replaced by Load current questions, kept read-only for reference. */
-  public archive: { questions: PendingQuestion[]; draft: BatchDraft } | null = null;
+  public archive: { questions: QuestionBase[]; draft: BatchDraft } | null = null;
   public state: AnswerState = 'editing';
   public message: string | null = null;
-  public questions: PendingQuestion[];
+  public questions: QuestionBase[];
   public fingerprint: string;
   public draft: BatchDraft;
   /** The reply of an uncertain submission, kept for Recheck. */
@@ -95,7 +95,7 @@ export class Entry {
   }
 
   /** Keep the batch and draft that are about to be replaced. */
-  public archiveCurrent(): { questions: PendingQuestion[]; draft: BatchDraft } {
+  public archiveCurrent(): { questions: QuestionBase[]; draft: BatchDraft } {
     this.archive = { questions: this.questions, draft: this.draft };
     return this.archive;
   }
@@ -106,7 +106,7 @@ export class Entry {
   }
 
   /** Adopt the current batch. Old answers are not transferred to the new question numbers. */
-  public replaceBatch(questions: PendingQuestion[]): void {
+  public replaceBatch(questions: QuestionBase[]): void {
     this.questions = questions;
     this.fingerprint = batchFingerprint(questions);
     this.draft = {};

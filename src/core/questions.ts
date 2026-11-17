@@ -1,10 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { text } from '../text';
 import { parseExecutionId } from './executions';
 import { parseAnswer, type PersistedAnswer, type QuestionAnswer, readAnswerIndex } from './humanInput';
-import type { PendingQuestion, QuestionBase, QuestionOption } from './model';
+import type { QuestionBase, QuestionOption } from './model';
 import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME } from './paths';
 import { isRecord } from './record';
 
@@ -44,7 +44,7 @@ export interface MalformedRecord {
 export interface QuestionGroup {
   stageId: string | null;
   executionId: string | null;
-  questions: PendingQuestion[];
+  questions: QuestionBase[];
 }
 
 function str(value: unknown): string | null {
@@ -85,17 +85,6 @@ export function parseQuestionBase(entry: unknown): QuestionBase | null {
     stageId: str(entry.stage_id),
     recipient: str(entry.recipient),
   };
-}
-
-/** Parse `status.json.questions`. Records without `id` and `question` are skipped. */
-export function parsePendingQuestions(value: unknown): PendingQuestion[] {
-  if (!Array.isArray(value)) return [];
-  const questions: PendingQuestion[] = [];
-  for (const entry of value) {
-    const base = parseQuestionBase(entry);
-    if (base !== null && isRecord(entry)) questions.push({ ...base, file: str(entry.file) });
-  }
-  return questions;
 }
 
 function parseStatus(value: unknown): QuestionStatus {
@@ -272,7 +261,7 @@ const NUL = '\u0000';
 /** The record with its persisted answer applied: first match wins, a stale pending row never hides an answer. */
 function withEvidence(
   record: QuestionRecord,
-  context: { persisted: PersistedAnswer | undefined; isListedPending: boolean; isLegacy: boolean },
+  context: { persisted: PersistedAnswer | undefined; isLegacy: boolean },
 ): QuestionRecord {
   if (record.status === 'answered' || record.answer !== null) return { ...record, status: 'answered' };
   const { persisted } = context;
@@ -284,7 +273,6 @@ function withEvidence(
       answeredAt: persisted.at,
     };
   }
-  if (context.isListedPending) return { ...record, status: 'pending' };
   return context.isLegacy ? record : { ...record, status: 'superseded' };
 }
 
@@ -292,9 +280,10 @@ function withEvidence(
  * Read the question history of a session on demand, from every source Migent has written: the legacy session
  * `questions.json` (up to 0.7), each execution's `questions.json`, and the persisted answers of `input.json` and
  * the answer events. Definitions come from the legacy file for the executions it lists, otherwise from the
- * execution's own file. `pending` is `status.json.questions`. Nothing is cached.
+ * execution's own file. No batch is treated as pending (B6): `status.json` no longer carries the pending summary.
+ * Nothing is cached.
  */
-export function readQuestions(sessionDirPath: string, pending: readonly PendingQuestion[] = []): QuestionsRead {
+export function readQuestions(sessionDirPath: string): QuestionsRead {
   const legacy = readLegacy(sessionDirPath);
   if (legacy.kind !== 'ok' && legacy.kind !== 'missing') return legacy;
   const batches = readExecutionBatches(sessionDirPath);
@@ -314,12 +303,10 @@ export function readQuestions(sessionDirPath: string, pending: readonly PendingQ
     }
   }
   const { answers } = readAnswerIndex(sessionDirPath, undecided);
-  const listed = new Set(pending.map((question) => `${question.executionId ?? ''}${NUL}${question.id}`));
   const legacySet = new Set(legacyRecords);
   const questions = definitions.map((record) =>
     withEvidence(record, {
       persisted: record.executionId === null ? undefined : answers.get(record.executionId),
-      isListedPending: listed.has(`${record.executionId ?? ''}${NUL}${record.id}`),
       isLegacy: legacySet.has(record),
     }),
   );
@@ -327,7 +314,7 @@ export function readQuestions(sessionDirPath: string, pending: readonly PendingQ
 }
 
 /** Group pending questions by execution (and stage), in first-seen order. */
-export function groupPendingQuestions(questions: readonly PendingQuestion[]): QuestionGroup[] {
+export function groupPendingQuestions(questions: readonly QuestionBase[]): QuestionGroup[] {
   const groups = new Map<string, QuestionGroup>();
   for (const question of questions) {
     const key = `${question.stageId ?? ''}\u0000${question.executionId ?? ''}`;
@@ -342,18 +329,14 @@ export function groupPendingQuestions(questions: readonly PendingQuestion[]): Qu
 }
 
 /**
- * The question file to open for a session: the legacy session `questions.json` when it exists, otherwise the
- * `file` of a pending batch (`executions/<id>/questions.json`), confined to the session directory. Falls back
- * to the legacy path, which then reports as missing.
+ * The question file to open for a session: the legacy session `questions.json`, which then reports as missing when
+ * it does not exist. No batch is pending (B6), so there is no execution file to prefer.
  */
-export function questionsFileToOpen(sessionDirPath: string, pending: readonly PendingQuestion[] = []): string {
-  const legacy = path.join(sessionDirPath, QUESTIONS_FILENAME);
-  if (existsSync(legacy)) return legacy;
-  for (const question of pending) {
-    if (question.file === null) continue;
-    const candidate = path.resolve(sessionDirPath, question.file);
-    const relative = path.relative(sessionDirPath, candidate);
-    if (!relative.startsWith('..') && !path.isAbsolute(relative) && existsSync(candidate)) return candidate;
-  }
-  return legacy;
+export function questionsFileToOpen(sessionDirPath: string): string {
+  return path.join(sessionDirPath, QUESTIONS_FILENAME);
+}
+
+/** The pending questions of a session. Always empty (B6): `status.json.questions` is not in the contract. */
+export function pendingQuestions(): QuestionBase[] {
+  return [];
 }

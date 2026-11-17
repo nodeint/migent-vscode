@@ -3,7 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { ExecutionFile } from './executionFiles';
-import type { LockProbe, ScanOutcome } from './model';
+import { manifestRole } from './manifest';
+import type { LockProbe, ScanOutcome, SessionSnapshot } from './model';
 import {
   executionContextValue,
   executionDescription,
@@ -60,12 +61,18 @@ describe('session title precedence', () => {
   it('prefers title.json, then manifest, status, workflow id, then the short id', () => {
     expect(sessionTitle({ ...withStatus, titleOverride: 'Renamed' })).toBe('Renamed');
     expect(sessionTitle({ ...withStatus, manifest: base.manifest && { ...base.manifest, title: 'Manifest' } })).toBe('Manifest');
-    const noManifestTitle = { ...withStatus, manifest: base.manifest && { ...base.manifest, title: null } };
-    expect(sessionTitle(noManifestTitle)).toBe(base.status?.title ?? base.status?.workflowId);
-    const noIds = base.status && { ...base.status, title: null, workflowId: null };
-    const bare = { ...withStatus, manifest: null, status: noIds };
+    const manifestWithoutTitle = Object.fromEntries(Object.entries(base.manifest ?? {}).filter(([key]) => key !== 'title'));
+    const noManifestTitle: SessionSnapshot = {
+      ...withStatus,
+      manifest: base.manifest && (manifestWithoutTitle as NonNullable<SessionSnapshot['manifest']>),
+    };
+    expect(sessionTitle(noManifestTitle)).toBe(base.status?.title ?? base.status?.workflow_id);
+    const statusWithoutIds = Object.fromEntries(
+      Object.entries(base.status ?? {}).filter(([key]) => key !== 'title' && key !== 'workflow_id'),
+    ) as NonNullable<SessionSnapshot['status']>;
+    const bare = { ...withStatus, manifest: null, status: base.status && statusWithoutIds };
     expect(sessionTitle(bare)).toBe(base.sessionId.slice(0, 8));
-    expect(sessionTitle({ ...bare, status: base.status && { ...base.status, title: null, workflowId: 'plan' } })).toBe('plan');
+    expect(sessionTitle({ ...bare, status: base.status && { ...statusWithoutIds, workflow_id: 'plan' } })).toBe('plan');
   });
 
   it('shows the overlay in the label and tooltip', () => {
@@ -80,7 +87,7 @@ describe('numeric and legacy ids side by side', () => {
     const numeric = snapshotFromDir(capturedDir('numeric-ids-0.5.6'));
     const legacy = snapshotFromDir(sessionFixture('completed'));
     expect(numeric.sessionId).not.toBe(legacy.sessionId);
-    expect(numeric.manifest?.sessionId).toBe('1');
+    expect(numeric.manifest?.session_id).toBe('1');
     expect(numeric.titleOverride).toBe('Renamed title');
     expect(sessionLabel(numeric)).toBe('Renamed title');
     expect(nodeIds.session('k', numeric.sessionId)).not.toBe(nodeIds.session('k', legacy.sessionId));
@@ -93,28 +100,30 @@ describe('session rows', () => {
     expect(sessionLabel(snapshot)).toBe(snapshot.manifest?.title);
     expect(sessionRowLabel(snapshot)).toBe(truncate(`${shortId(snapshot.sessionId)} · plan · ${snapshot.manifest?.title}`));
     expect(sessionDescription(snapshot, NOW)).toMatch(/^.+ ago$/);
-    const short = { ...snapshot, status: snapshot.status && { ...snapshot.status, workflowId: 'pr' } };
+    const short = { ...snapshot, status: snapshot.status && { ...snapshot.status, workflow_id: 'pr' } };
     expect(sessionRowLabel(short)).toBe(truncate(`${shortId(snapshot.sessionId)} · pr · ${snapshot.manifest?.title}`));
   });
 
-  it('shows elapsed time since start for a Running session, with a pending-question indicator', () => {
+  // B6: status.json no longer lists pending questions, so no row carries a pending-question indicator.
+  it('shows elapsed time since start for a Running session, without a pending-question indicator', () => {
     const snapshot = snapshotFromDir(syntheticDir('running-questions'), alive);
     expect(snapshot.displayState.state).toBe('running');
-    expect(sessionDescription(snapshot, NOW)).toBe('5m 0s · 1 question');
-    expect(sessionContextValue(snapshot)).toBe('session.running;questions');
+    expect(sessionDescription(snapshot, NOW)).toBe('5m 0s');
+    expect(sessionContextValue(snapshot)).toBe('session.running');
   });
 
   it('flags a row that can take a reply, whatever else it shows', () => {
     const snapshot = snapshotFromDir(syntheticDir('running-questions'), alive);
     const target = { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, kind: 'blocker' as const };
-    expect(sessionContextValue({ ...snapshot, replyTargets: [target] })).toBe('session.running;questions;reply');
+    expect(sessionContextValue({ ...snapshot, replyTargets: [target] })).toBe('session.running;reply');
   });
 
-  it('describes Question sessions by their pending questions', () => {
+  it('describes Question sessions by their age while the pending questions are not listed (B6)', () => {
     const snapshot = snapshotFromDir(capturedDir('question-pending'));
     expect(snapshot.displayState.state).toBe('question');
-    expect(sessionDescription(snapshot, NOW)).toContain('3 questions');
-    expect(sessionContextValue(snapshot)).toBe('session.question;questions;role');
+    expect(sessionDescription(snapshot, NOW)).toMatch(/ago$/);
+    expect(sessionDescription(snapshot, NOW)).not.toContain('question');
+    expect(sessionContextValue(snapshot)).toBe('session.question;role');
     expect(sessionIcon(snapshot)).toBe('comment-discussion');
   });
 
@@ -126,7 +135,7 @@ describe('session rows', () => {
 
   it('flags a role session so Complete is not offered for it', () => {
     const snapshot = snapshotFromDir(capturedDir('question-answered'));
-    expect(snapshot.manifest?.role).toBe('planner');
+    expect(manifestRole(snapshot.manifest)).toBe('planner');
     expect(sessionContextValue(snapshot).split(';')).toContain('role');
     expect(sessionContextValue(snapshotFromDir(capturedDir('handoff-source'))).split(';')).not.toContain('role');
   });
@@ -135,8 +144,9 @@ describe('session rows', () => {
     const blocked = snapshotFromDir(syntheticDir('blocked-questions'));
     const tooltip = sessionTooltip(blocked, NOW);
     expect(tooltip).toContain('State: Blocked');
-    expect(tooltip).toContain('Blocked by: 0002-review--attempt-01');
-    expect(tooltip).toContain('Pending questions: 2');
+    // B6: `blocked_by_execution_ids` and the pending questions are not in the contract.
+    expect(tooltip).toContain('Blocked by: unavailable');
+    expect(tooltip).not.toContain('Pending questions');
     expect(tooltip).toContain('Last update: 2026-11-01T12:01:00.000+00:00 (4m ago)');
 
     const schema = sessionTooltip(snapshotFromDir(sessionFixture('unknown-schema')), NOW);

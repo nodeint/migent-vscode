@@ -1,4 +1,4 @@
-import type { LifecycleEventV2 } from '@nodeint/migent-contracts';
+import type { LifecycleEventV2, SessionManifest, SessionStatusFile } from '@nodeint/migent-contracts';
 
 /**
  * Types shared by the `core/` modules. Nothing here may import `vscode`.
@@ -8,60 +8,13 @@ import type { LifecycleEventV2 } from '@nodeint/migent-contracts';
 /** Highest event envelope version this extension understands (events.jsonl `v`). */
 export const KNOWN_EVENT_VERSION: LifecycleEventV2['v'] = 2;
 
-/**
- * Manifest `schema_version` values this extension understands. Independent of the
- * event envelope version: each file format versions on its own.
- */
-export const CURRENT_MANIFEST_SCHEMA_VERSION = 2;
-export const SUPPORTED_MANIFEST_SCHEMA_VERSIONS: readonly number[] = [1, CURRENT_MANIFEST_SCHEMA_VERSION];
-
-/** A parsed `manifest.yaml`. Missing fields stay null instead of guessed. */
-export interface SessionManifest {
-  sessionId: string | null;
-  title: string | null;
-  workflowId: string | null;
-  workflowPath: string | null;
-  createdAt: string | null;
-  priorSessionId: string | null;
-  role: string | null;
-  /** Raw `schema_version`; null when absent (older migent). */
-  schemaVersion: number | null;
-  /** True when `schemaVersion` is null or in SUPPORTED_MANIFEST_SCHEMA_VERSIONS. */
-  schemaSupported: boolean;
-  raw: Record<string, unknown>;
-}
-
-/** A parsed `status.json`. Written atomically by migent, so reads are complete. */
-export interface SessionStatus {
-  /** Raw `status` value; null when the field is missing. */
-  status: string | null;
-  workflowId: string | null;
-  title: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-  latestExecutionId: string | null;
-  latestExecutionStatus: string | null;
-  latestStageId: string | null;
-  latestDecision: string | null;
-  blockedByExecutionIds: string[];
-  runningStages: RunningStage[];
-  /** Pending human questions (`status.json.questions`); empty once answered. */
-  questions: PendingQuestion[];
-  /** Published outputs (`status.json.outputs`), in file order. */
-  outputs: PublishedOutput[];
-  /** Small scalar fields of `latest_provider_event`; the full object is never retained. */
-  latestProviderEvent: ProviderEventSummary | null;
-  /** The parsed `status.json` without `latest_provider_event`. */
-  raw: Record<string, unknown>;
-}
-
 export interface QuestionOption {
   id: string;
   label: string;
   description: string | null;
 }
 
-/** Fields shared by the status summary and `questions.json` records. */
+/** The fields of a `questions.json` record the answer flow works with. */
 export interface QuestionBase {
   id: string;
   question: string;
@@ -72,40 +25,6 @@ export interface QuestionBase {
   executionId: string | null;
   stageId: string | null;
   recipient: string | null;
-}
-
-/** A pending question as summarized by `status.json.questions`. */
-export interface PendingQuestion extends QuestionBase {
-  /** Session-relative path of the execution `questions.json`, as reported by migent. */
-  file: string | null;
-}
-
-export interface PublishedOutput {
-  name: string;
-  /** Session-relative path as written by migent; not yet confined to the session. */
-  path: string;
-  sourceExecutionId: string | null;
-  publishedByExecutionId: string | null;
-}
-
-export interface ProviderEventSummary {
-  event: string | null;
-  summary: string | null;
-  stageId: string | null;
-  executionId: string | null;
-  client: string | null;
-  timestamp: string | null;
-  /** `details.retry_at` of a `provider.quota` event; null when absent or empty. */
-  retryAt: string | null;
-}
-
-export interface RunningStage {
-  executionId: string | null;
-  stageId: string | null;
-  client: string | null;
-  event: string | null;
-  summary: string | null;
-  updatedAt: string | null;
 }
 
 /** Result of probing `session.lock`. Derived by `lockProbe.ts`, consumed by `displayState.ts`. */
@@ -189,8 +108,11 @@ export interface ReplyTarget {
 
 export interface SessionSnapshot {
   sessionId: string;
+  /** `manifest.yaml` as the contract declares it; null when missing, invalid or of an unsupported schema. */
   manifest: SessionManifest | null;
-  status: SessionStatus | null;
+  /** The `schema_version` of a manifest this extension does not know (D3d: not a contract value); null otherwise. */
+  unsupportedManifestVersion: number | null;
+  status: SessionStatusFile | null;
   /** True when status.json exists but did not parse after retries. */
   statusError: boolean;
   lock: LockProbe;

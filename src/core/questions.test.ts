@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupPendingQuestions, parseQuestionsFile, readQuestions } from './questions';
-import { readStatus } from './statusReader';
+import type { QuestionBase } from './model';
+import { groupPendingQuestions, parseQuestionsFile, pendingQuestions, readQuestions } from './questions';
 import { capturedDir, syntheticDir } from './testHelpers';
 
 function okQuestions(dir: string) {
@@ -49,15 +49,35 @@ describe('readQuestions', () => {
   });
 });
 
+const record = (id: string, stageId: string | null, executionId: string | null): QuestionBase => ({
+  id,
+  question: 'Q?',
+  context: null,
+  selection: 'single',
+  options: [],
+  recommended: [],
+  executionId,
+  stageId,
+  recipient: 'human',
+});
+
 describe('groupPendingQuestions', () => {
   it('groups by stage and execution in first-seen order', () => {
-    const read = readStatus(`${syntheticDir('blocked-questions')}/status.json`);
-    if (read.kind !== 'ok') throw new Error('status did not read');
-    const groups = groupPendingQuestions(read.status.questions);
+    const groups = groupPendingQuestions([
+      record('1', 'review', '0002-review--attempt-01'),
+      record('2', 'plan', '0001-plan--attempt-01'),
+      record('3', 'review', '0002-review--attempt-01'),
+    ]);
     expect(groups.map((group) => [group.stageId, group.executionId, group.questions.length])).toEqual([
-      ['review', '0002-review--attempt-01', 1],
+      ['review', '0002-review--attempt-01', 2],
       ['plan', '0001-plan--attempt-01', 1],
     ]);
   });
+});
 
+// B6: status.json carries no pending questions in contracts 0.8.0, so the status source is empty.
+describe('pendingQuestions', () => {
+  it('has no source and lists nothing', () => {
+    expect(pendingQuestions()).toEqual([]);
+  });
 });

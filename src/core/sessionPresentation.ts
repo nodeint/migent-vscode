@@ -2,8 +2,12 @@ import { text } from '../text';
 import { formatDuration } from './duration';
 import type { ExecutionFile } from './executionFiles';
 import { parseExecutionId } from './executions';
+import { manifestRole } from './manifest';
 import type { ExecutionSnapshot, ScanOutcome, SessionSnapshot, UnknownReason } from './model';
+import { publishedOutputs } from './outputs';
+import { pendingQuestions } from './questions';
 import { describeQuotaReset, quotaFailure } from './replyFlow';
+import { providerEventField } from './statusReader';
 
 /** Plain-text presentation of sessions for tree views. Nothing here reads disk or imports `vscode`. */
 
@@ -26,7 +30,7 @@ export function truncate(text: string, max: number = LABEL_MAX_LENGTH): string {
 export function sessionTitle(snapshot: SessionSnapshot): string {
   const { manifest, status } = snapshot;
   const { titleOverride } = snapshot;
-  return titleOverride ?? manifest?.title ?? status?.title ?? status?.workflowId ?? shortId(snapshot.sessionId);
+  return titleOverride ?? manifest?.title ?? status?.title ?? status?.workflow_id ?? shortId(snapshot.sessionId);
 }
 
 export function sessionLabel(snapshot: SessionSnapshot): string {
@@ -34,7 +38,7 @@ export function sessionLabel(snapshot: SessionSnapshot): string {
 }
 
 function workflowOf(snapshot: SessionSnapshot): string | null {
-  return snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null;
+  return snapshot.status?.workflow_id ?? snapshot.manifest?.workflow_id ?? null;
 }
 
 const WORKFLOW_TAG_LENGTH = 4;
@@ -59,8 +63,8 @@ function parseTime(value: string | null | undefined): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
-export function pendingQuestionTotal(snapshot: SessionSnapshot): number {
-  return snapshot.status?.questions.length ?? 0;
+export function pendingQuestionTotal(_snapshot: SessionSnapshot): number {
+  return pendingQuestions().length;
 }
 
 /** Why a session is Unknown, in words (for the row description and tooltip). */
@@ -75,7 +79,7 @@ export function unknownReasonText(snapshot: SessionSnapshot): string {
     case 'invalid-manifest':
       return text('views.unknownManifestInvalid');
     case 'unsupported-schema':
-      return text('views.unknownSchema', { version: String(snapshot.manifest?.schemaVersion ?? unavailable()) });
+      return text('views.unknownSchema', { version: String(snapshot.unsupportedManifestVersion ?? unavailable()) });
     case 'unrecognized-status':
       return text('views.unknownStatus', { status: snapshot.status?.status ?? unavailable() });
     case undefined:
@@ -99,19 +103,17 @@ function questionsText(count: number): string {
 }
 
 export function stageOf(snapshot: SessionSnapshot): string | null {
-  const { status } = snapshot;
-  if (snapshot.displayState.state === 'running') return status?.runningStages[0]?.stageId ?? status?.latestStageId ?? null;
-  return status?.latestStageId ?? null;
+  return snapshot.status?.latest_stage_id ?? null;
 }
 
 /** Elapsed time since start for a Running session, time since the last update for the others. */
 function timeText(snapshot: SessionSnapshot, now: number): string | null {
   const { status, manifest } = snapshot;
   if (snapshot.displayState.state === 'running') {
-    const started = parseTime(status?.createdAt ?? manifest?.createdAt);
+    const started = parseTime(status?.created_at ?? manifest?.created_at);
     return started === null ? null : formatDuration(now - started);
   }
-  const updated = parseTime(status?.updatedAt);
+  const updated = parseTime(status?.updated_at);
   return updated === null ? null : formatAgo(now - updated);
 }
 
@@ -132,26 +134,27 @@ function stateTitle(snapshot: SessionSnapshot): string {
 }
 
 function stageLine(snapshot: SessionSnapshot): string | null {
-  const id = snapshot.status?.latestExecutionId ?? null;
+  const id = snapshot.status?.latest_execution_id ?? null;
   const parsed = id === null ? null : parseExecutionId(id);
   if (parsed !== null) return text('views.tooltipStageAttempt', { stage: parsed.stageId, attempt: parsed.attempt });
-  const stage = snapshot.status?.latestStageId ?? null;
+  const stage = snapshot.status?.latest_stage_id ?? null;
   return stage === null ? null : text('views.tooltipStage', { stage });
 }
 
 function eventLine(snapshot: SessionSnapshot): string | null {
-  const event = snapshot.status?.latestProviderEvent ?? null;
-  if (event === null) return null;
-  const detail = [event.event, event.summary, event.client].filter((part) => part !== null).join(' · ');
+  const { status } = snapshot;
+  const detail = [providerEventField(status, 'event'), providerEventField(status, 'summary'), providerEventField(status, 'client')]
+    .filter((part) => part !== null)
+    .join(' · ');
   return detail === '' ? null : text('views.tooltipEvent', { detail });
 }
 
 function blockerLine(snapshot: SessionSnapshot): string | null {
   const { status } = snapshot;
   if (snapshot.displayState.state === 'blocked' && status !== null) {
-    return text('views.tooltipBlockedBy', { ids: status.blockedByExecutionIds.join(', ') || unavailable() });
+    return text('views.tooltipBlockedBy', { ids: unavailable() });
   }
-  if (snapshot.displayState.state === 'failed') return text('views.tooltipLatestExecution', { status: status?.latestExecutionStatus ?? unavailable() });
+  if (snapshot.displayState.state === 'failed') return text('views.tooltipLatestExecution', { status: status?.latest_execution_status ?? unavailable() });
   return null;
 }
 
@@ -161,7 +164,7 @@ function quotaLine(snapshot: SessionSnapshot): string | null {
 }
 
 function updateLine(snapshot: SessionSnapshot, now: number): string {
-  const updatedAt = snapshot.status?.updatedAt ?? null;
+  const updatedAt = snapshot.status?.updated_at ?? null;
   const updated = parseTime(updatedAt);
   const value = updated === null
     ? unavailable()
@@ -194,8 +197,8 @@ export function sessionContextValue(snapshot: SessionSnapshot): string {
   const flags = [
     pendingQuestionTotal(snapshot) > 0 ? 'questions' : null,
     snapshot.displayState.writable ? null : 'foreign',
-    (snapshot.status?.outputs.length ?? 0) > 0 ? 'outputs' : null,
-    (snapshot.manifest?.role ?? null) === null ? null : 'role',
+    publishedOutputs(snapshot.status).length > 0 ? 'outputs' : null,
+    manifestRole(snapshot.manifest) === null ? null : 'role',
     snapshot.replyTargets.length > 0 ? 'reply' : null,
     snapshot.displayState.unknownReason === undefined ? null : `reason-${snapshot.displayState.unknownReason}`,
   ].filter((flag): flag is string => flag !== null);

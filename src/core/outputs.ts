@@ -1,9 +1,34 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import type { PublishedOutput } from './model';
+import type { SessionSnapshot as CliSessionSnapshot, SessionStatusFile } from '@nodeint/migent-contracts';
+
 import { OUTPUTS_DIRNAME, resolveWithin } from './paths';
 import { isRecord } from './record';
+
+/** A published output as the contract describes it (`OutputRef`). */
+export type OutputRef = CliSessionSnapshot['outputs'][string];
+
+/** A published output name with its reference; the reference always carries a path. */
+export type PublishedOutputEntry = readonly [name: string, ref: OutputRef & { path: string }];
+
+/** The usable published outputs of `status.json`, in file order: an entry without a string path is skipped. */
+export function publishedOutputs(status: SessionStatusFile | null | undefined): PublishedOutputEntry[] {
+  const entries: PublishedOutputEntry[] = [];
+  for (const [name, value] of Object.entries(status?.outputs ?? {})) {
+    if (!isRecord(value) || typeof value.path !== 'string') continue;
+    const { source_execution_id: source, published_by_execution_id: publisher } = value;
+    entries.push([
+      name,
+      {
+        path: value.path,
+        ...(typeof source === 'string' ? { source_execution_id: source } : {}),
+        ...(typeof publisher === 'string' ? { published_by_execution_id: publisher } : {}),
+      },
+    ]);
+  }
+  return entries;
+}
 
 /**
  * `ok`: the file exists. `missing`: published but absent. `rejected`: the recorded
@@ -41,17 +66,17 @@ function isFile(absolute: string): boolean {
   }
 }
 
-function publishedRow(sessionDirPath: string, output: PublishedOutput): OutputRow {
+function publishedRow(sessionDirPath: string, [name, output]: PublishedOutputEntry): OutputRow {
   const absolutePath = resolveWithin(sessionDirPath, output.path);
   let state: OutputFileState = 'rejected';
   if (absolutePath !== null) state = isFile(absolutePath) ? 'ok' : 'missing';
   return {
-    name: output.name,
+    name,
     path: normalize(output.path),
     absolutePath,
     state,
-    sourceExecutionId: output.sourceExecutionId,
-    publishedByExecutionId: output.publishedByExecutionId,
+    sourceExecutionId: output.source_execution_id ?? null,
+    publishedByExecutionId: output.published_by_execution_id ?? null,
   };
 }
 
@@ -59,7 +84,7 @@ function publishedRow(sessionDirPath: string, output: PublishedOutput): OutputRo
  * Rows for the published outputs of a session plus path-only rows for files in
  * `outputs/` that status does not name. Reads the directory on demand; nothing is cached.
  */
-export function listOutputs(sessionDirPath: string, published: readonly PublishedOutput[]): OutputListing {
+export function listOutputs(sessionDirPath: string, published: readonly PublishedOutputEntry[]): OutputListing {
   const rows = published.map((output) => publishedRow(sessionDirPath, output));
   const known = new Set(rows.map((row) => row.path));
   let directoryError: string | null = null;

@@ -3,14 +3,25 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { childrenOf, readHandoff } from './handoff';
-import { parseManifest, readManifest } from './manifest';
+import { manifestPriorSessionId, parseManifest, readManifest } from './manifest';
 import type { SessionSnapshot } from './model';
 import { capturedDir } from './testHelpers';
+
+/** A complete schema 2 manifest text for `id`, with extra lines appended. */
+function v2(id: string, extra = ''): string {
+  return `session_id: ${id}\ncreated_at: 2026-11-01T00:00:00.000+00:00\nschema_version: 2\nworkflow_id: plan\n${extra}`;
+}
+
+function manifestOf(text: string): SessionSnapshot['manifest'] {
+  const read = parseManifest(text);
+  return read.kind === 'ok' ? read.manifest : null;
+}
 
 function snapshot(sessionId: string, priorSessionId: string | null): SessionSnapshot {
   return {
     sessionId,
-    manifest: parseManifest(`session_id: ${sessionId}\n${priorSessionId === null ? '' : `prior_session_id: ${priorSessionId}\n`}`),
+    manifest: manifestOf(v2(sessionId, priorSessionId === null ? '' : `prior_session_id: ${priorSessionId}\n`)),
+    unsupportedManifestVersion: null,
     status: null,
     statusError: false,
     lock: { kind: 'none' },
@@ -22,7 +33,7 @@ function snapshot(sessionId: string, priorSessionId: string | null): SessionSnap
 
 describe('readHandoff with numeric ids', () => {
   it('reads an unquoted integer source_session_id', () => {
-    const manifest = parseManifest('session_id: 3\nhandoff: {"source_session_id": 2, "artifacts": {}}\n');
+    const manifest = manifestOf(v2('3', 'handoff: {"source_session_id": 2, "artifacts": {}}\n'));
     expect(readHandoff(manifest, '/tmp/x')).toMatchObject({ kind: 'ok', sourceSessionId: '2' });
   });
 
@@ -33,13 +44,18 @@ describe('readHandoff with numeric ids', () => {
   });
 });
 
+function okManifest(file: string): SessionSnapshot['manifest'] {
+  const read = readManifest(file);
+  return read.kind === 'ok' ? read.manifest : null;
+}
+
 describe('readHandoff', () => {
   const dir = capturedDir('handoff-target');
 
   it('parses the inline JSON mapping of the captured manifest (schema_version 2)', () => {
-    const manifest = readManifest(path.join(dir, 'manifest.yaml'));
-    expect(manifest).toMatchObject({ schemaVersion: 2, schemaSupported: true });
-    expect(manifest?.priorSessionId).toBe('00000000-0000-4000-8000-0000000000b1');
+    const manifest = okManifest(path.join(dir, 'manifest.yaml'));
+    expect(manifest).toMatchObject({ schema_version: 2 });
+    expect(manifestPriorSessionId(manifest)).toBe('00000000-0000-4000-8000-0000000000b1');
     const read = readHandoff(manifest, dir);
     expect(read).toMatchObject({ kind: 'ok', sourceSessionId: '00000000-0000-4000-8000-0000000000b1' });
     if (read.kind !== 'ok') return;
@@ -56,8 +72,8 @@ describe('readHandoff', () => {
   });
 
   it('confines the local path to the target session but keeps source_path as inert text', () => {
-    const manifest = parseManifest(
-      'session_id: t\nhandoff: {"source_session_id":"s","artifacts":{"a":{"output":"o","source_path":"C:\\\\x\\\\o.md","path":"../escape.md","sha256":"h"}}}\n',
+    const manifest = manifestOf(
+      v2('t', 'handoff: {"source_session_id":"s","artifacts":{"a":{"output":"o","source_path":"C:\\\\x\\\\o.md","path":"../escape.md","sha256":"h"}}}\n'),
     );
     const read = readHandoff(manifest, dir);
     expect(read.kind === 'ok' && read.artifacts[0]).toMatchObject({
@@ -66,15 +82,16 @@ describe('readHandoff', () => {
     });
   });
 
-  it('is absent without handoff and invalid outside the observed shape', () => {
-    expect(readHandoff(readManifest(path.join(capturedDir('handoff-source'), 'manifest.yaml')), dir)).toEqual({
+  it('is absent without a handoff mapping and invalid outside the observed shape', () => {
+    expect(readHandoff(okManifest(path.join(capturedDir('handoff-source'), 'manifest.yaml')), dir)).toEqual({
       kind: 'absent',
     });
     expect(readHandoff(null, dir)).toEqual({ kind: 'absent' });
-    expect(readHandoff(parseManifest('session_id: t\nhandoff: text\n'), dir).kind).toBe('invalid');
-    expect(readHandoff(parseManifest('session_id: t\nhandoff: {"artifacts": {}}\n'), dir).kind).toBe('invalid');
+    // The contract declares `handoff` as a mapping; the manifest reader drops a scalar, so it reads as absent.
+    expect(readHandoff(manifestOf(v2('t', 'handoff: text\n')), dir).kind).toBe('absent');
+    expect(readHandoff(manifestOf(v2('t', 'handoff: {"artifacts": {}}\n')), dir).kind).toBe('invalid');
     expect(
-      readHandoff(parseManifest('session_id: t\nhandoff: {"source_session_id":"s","artifacts":{"a":{"output":"o"}}}\n'), dir),
+      readHandoff(manifestOf(v2('t', 'handoff: {"source_session_id":"s","artifacts":{"a":{"output":"o"}}}\n')), dir),
     ).toMatchObject({ kind: 'invalid', reason: expect.stringContaining('artifact a') });
   });
 });

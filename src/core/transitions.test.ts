@@ -15,10 +15,11 @@ import {
 } from './transitions';
 
 function snapshot(raw: Record<string, unknown>, id = 's1'): SessionSnapshot {
-  const status = parseStatus(JSON.stringify(raw));
+  const status = parseStatus(JSON.stringify({ session_id: id, ...raw }));
   return {
     sessionId: id,
     manifest: null,
+    unsupportedManifestVersion: null,
     status,
     statusError: false,
     lock: { kind: 'none' },

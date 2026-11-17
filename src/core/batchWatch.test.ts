@@ -1,40 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import { BatchWatch } from './batchWatch';
-import type { PendingQuestion, SessionSnapshot } from './model';
+import type { SessionSnapshot } from './model';
 
-const question = (id: string, executionId: string): PendingQuestion => ({
-  id,
-  question: 'Q?',
-  context: null,
-  selection: 'single',
-  options: [],
-  recommended: [],
-  executionId,
-  stageId: 'plan',
-  recipient: 'human',
-  file: null,
-});
-
-function snapshot(...questions: PendingQuestion[]): SessionSnapshot {
-  // Only the status questions matter to the watch.
-  return { sessionId: 's1', status: { questions } } as unknown as SessionSnapshot;
+function snapshot(): SessionSnapshot {
+  return { sessionId: 's1', status: { session_id: 's1', status: 'active' } } as unknown as SessionSnapshot;
 }
 
+// B6: status.json no longer lists pending questions in contracts 0.8.0, so the watch has no source and no batch.
 describe('BatchWatch', () => {
-  it('stays silent for batches seen while seeding, then reports a new batch once', () => {
+  it('reports no batch while the pending-question source is empty, seeding or not', () => {
     const watch = new BatchWatch();
-    expect(watch.observe('p', snapshot(question('1', 'e1')), true)).toEqual([]);
-    expect(watch.observe('p', snapshot(question('1', 'e1')), false)).toEqual([]);
-    const fresh = watch.observe('p', snapshot(question('1', 'e2'), question('2', 'e2')), false);
-    expect(fresh).toEqual([{ sessionId: 's1', stageId: 'plan', executionId: 'e2', count: 2 }]);
-    // A file event repeating the same batch does not notify again.
-    expect(watch.observe('p', snapshot(question('1', 'e2'), question('2', 'e2')), false)).toEqual([]);
+    expect(watch.observe('p', snapshot(), true)).toEqual([]);
+    expect(watch.observe('p', snapshot(), false)).toEqual([]);
   });
 
-  it('keeps projects apart', () => {
+  it('keeps projects apart and tolerates a missing snapshot', () => {
     const watch = new BatchWatch();
-    watch.observe('a', snapshot(question('1', 'e1')), true);
-    expect(watch.observe('b', snapshot(question('1', 'e1')), false)).toHaveLength(1);
+    expect(watch.observe('a', snapshot(), true)).toEqual([]);
+    expect(watch.observe('b', undefined, false)).toEqual([]);
   });
 });

@@ -67,18 +67,9 @@ function runningSnapshot(): SessionSnapshot {
     displayState: { state: 'running', icon: 'sync~spin', writable: true },
     status: {
       ...status,
-      runningStages: [
-        { executionId: null, stageId: 'draft', client: null, event: null, summary: null, updatedAt: null },
-      ],
-      latestProviderEvent: {
-        event: 'provider.turn_started',
-        summary: 'drafting',
-        stageId: 'draft',
-        executionId: null,
-        client: null,
-        timestamp: null,
-        retryAt: null,
-      },
+      // B6: `running_stages` is not read, so the running stage comes from `latest_stage_id` and the provider event.
+      latest_stage_id: 'draft',
+      latest_provider_event: { event: 'provider.turn_started', summary: 'drafting', stage_id: 'draft' },
     },
   };
 }
@@ -89,7 +80,7 @@ function roleSnapshot(): SessionSnapshot {
   return {
     ...base,
     displayState: { state: 'completed', icon: 'pass', writable: true },
-    manifest: { ...base.manifest, role: 'reviewer' },
+    manifest: { ...base.manifest, schema_version: 2, workflow_id: 'plan', role: 'reviewer' },
     replyTargets: [
       { executionId: '0001-review--attempt-01', stageId: null, attempt: 1, kind: 'roleTurn' },
     ],

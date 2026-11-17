@@ -7,7 +7,7 @@ import { readMetrics } from '../../core/metrics';
 import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
 import { eventsPath, sessionDir } from '../../core/paths';
 import { attemptRecords, type QuestionAttempt, questionAttempts } from '../../core/questionHistory';
-import { type QuestionRecord, readQuestions } from '../../core/questions';
+import { pendingQuestions, type QuestionRecord, readQuestions } from '../../core/questions';
 import { type ResultsInput, titleCase } from '../../core/resultsModel';
 import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
 import { buildSessionMeta } from '../../core/sessionMeta';
@@ -40,21 +40,17 @@ export function batchOf(identity: Identity, ref: SessionBatchRef): BatchIdentity
 export function questionRecords(entry: PageEntry, registry: ProjectRegistry): QuestionRecord[] {
   const context = registry.project(entry.project);
   if (context === undefined) return [];
-  const read = readQuestions(
-    sessionDir(context.root, entry.sessionId),
-    context.store.snapshot(entry.sessionId)?.status?.questions,
-  );
+  const read = readQuestions(sessionDir(context.root, entry.sessionId));
   return read.kind === 'ok' ? read.questions : [];
 }
 
 /** Every attempt of the session that asked questions, from the history and the pending questions. */
 export function attemptsOf(
-  entry: PageEntry,
-  registry: ProjectRegistry,
+  _entry: PageEntry,
+  _registry: ProjectRegistry,
   records: readonly QuestionRecord[],
 ): QuestionAttempt[] {
-  const snapshot = registry.project(entry.project)?.store.snapshot(entry.sessionId);
-  return questionAttempts(records, snapshot?.status?.questions ?? []);
+  return questionAttempts(records, pendingQuestions());
 }
 
 /** The fields a page builder needs from an entry; tests can pass a plain object. */
@@ -156,7 +152,7 @@ export function buildAttemptRecord(
     generation: 0,
     fingerprint: `record:${attempt.executionId}`,
     title: snapshot === undefined ? entry.sessionId : sessionTitle(snapshot),
-    workflowId: snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null,
+    workflowId: snapshot?.status?.workflow_id ?? snapshot?.manifest?.workflow_id ?? null,
     sessionState: snapshot === undefined ? 'Unavailable' : titleCase(snapshot.displayState.state),
     meta: buildSessionMeta(snapshot),
     state: isAnswered ? 'recorded' : 'answered-elsewhere',
@@ -179,7 +175,7 @@ export function buildEmptyAnswerHeader(entry: Entry, registry: ProjectRegistry):
     generation: 0,
     fingerprint: '',
     title,
-    workflowId: snapshot?.status?.workflowId ?? snapshot?.manifest?.workflowId ?? null,
+    workflowId: snapshot?.status?.workflow_id ?? snapshot?.manifest?.workflow_id ?? null,
     sessionState,
     meta: buildSessionMeta(snapshot),
     state: 'unavailable',

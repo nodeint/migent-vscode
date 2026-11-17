@@ -22,7 +22,7 @@ export interface Transition {
 export function currentTransition(project: string, snapshot: SessionSnapshot): Transition | null {
   const { status } = snapshot;
   const base = { project, sessionId: snapshot.sessionId };
-  const latest = status?.latestExecutionId ?? null;
+  const latest = status?.latest_execution_id ?? null;
   switch (snapshot.displayState.state) {
     case 'failed':
       return { ...base, kind: 'failed', executionId: latest };

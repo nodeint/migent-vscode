@@ -148,7 +148,7 @@ describe('buildResultsModel', () => {
         ...input.snapshots[0],
         status: {
           ...status,
-          outputs: [{ name: 'note', path: 'outputs/note.md', sourceExecutionId: 'e1', publishedByExecutionId: 'e1' }],
+          outputs: { note: { path: 'outputs/note.md', source_execution_id: 'e1', published_by_execution_id: 'e1' } },
         },
       },
       input.snapshots[1],
@@ -168,20 +168,21 @@ describe('buildResultsModel', () => {
     });
   });
 
-  it('gives a child the stage selection policy of the header: running, else latest', () => {
+  it('gives a child the stage selection policy of the header: the latest stage', () => {
     const input = sourceInput([workflow('probe-target')]);
     const [source, target] = input.snapshots;
     if (target.status === null) throw new Error('fixture has no status');
-    const withStage = (state: 'blocked' | 'running', runningStages: { stageId: string | null }[]) => ({
+    const withStage = (state: 'blocked' | 'running', latestStageId: string) => ({
       ...target,
       displayState: { ...target.displayState, state },
-      status: { ...target.status!, latestStageId: 'review', runningStages: runningStages as never },
+      status: { ...target.status!, latest_stage_id: latestStageId },
     });
     const stageOfChild = (child: SessionSnapshot): string | null =>
       buildResultsModel({ ...input, snapshots: [source, child] }).children[0]?.stageId ?? null;
-    expect(stageOfChild(withStage('blocked', []))).toBe('review');
-    expect(stageOfChild(withStage('running', []))).toBe('review');
-    expect(stageOfChild(withStage('running', [{ stageId: 'build' }]))).toBe('build');
+    // B6: `running_stages` is not read, so a running child shows its latest stage like any other state.
+    expect(stageOfChild(withStage('blocked', 'review'))).toBe('review');
+    expect(stageOfChild(withStage('running', 'review'))).toBe('review');
+    expect(stageOfChild(withStage('running', 'build'))).toBe('build');
   });
 
   it('reports the target workflow as not found, duplicate or invalid', () => {
@@ -249,7 +250,7 @@ describe('buildResultsModel', () => {
 
   it('flags a handoff that does not match the observed shape but keeps the source link', () => {
     const target = captured('handoff-target');
-    const manifest = target.manifest === null ? null : { ...target.manifest, raw: { handoff: 'x' } };
+    const manifest = target.manifest === null ? null : { ...target.manifest, handoff: { artifacts: {} } };
     const model = buildResultsModel({
       sessionId: TARGET,
       sessionDirPath: tempDir(),
@@ -330,9 +331,7 @@ describe('intent resolution', () => {
     const base = snapshotFromDir(capturedDir('handoff-source'));
     const status = base.status && {
       ...base.status,
-      outputs: [
-        { name: 'outputs/loose.md', path: 'outputs/published.md', sourceExecutionId: null, publishedByExecutionId: null },
-      ],
+      outputs: { 'outputs/loose.md': { path: 'outputs/published.md' } },
     };
     const snapshot = { ...base, status };
     const input = {

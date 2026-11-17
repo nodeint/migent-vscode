@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { type BatchStateInput, refreshBatchState } from './answerState';
-import type { PendingQuestion } from './model';
+import type { QuestionBase } from './model';
 import { batchFingerprint } from './questionAnswers';
 import type { QuestionRecord } from './questions';
 
-const pending: PendingQuestion = {
+const pending: QuestionBase = {
   id: '1',
   question: 'Q?',
   context: null,
@@ -18,7 +18,6 @@ const pending: PendingQuestion = {
   executionId: '0001-plan--attempt-01',
   stageId: 'plan',
   recipient: 'human',
-  file: null,
 };
 
 function input(overrides: Partial<BatchStateInput> = {}): BatchStateInput {

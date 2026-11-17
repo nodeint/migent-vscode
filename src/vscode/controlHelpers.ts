@@ -46,8 +46,8 @@ export function workflowChange(
   context: ProjectContext, snapshot: SessionSnapshot,
 ): { frozen: string; current: string } | undefined {
   if (hasWorkflowDraft(context.root, snapshot.sessionId)) return undefined;
-  const workflowId = snapshot.manifest?.workflowId;
-  if (workflowId === null || workflowId === undefined) return undefined;
+  const workflowId = snapshot.manifest?.workflow_id;
+  if (workflowId === undefined) return undefined;
   const { entries } = context.catalog.workflows();
   const entry = entries.find((candidate) => candidate.id === workflowId && !candidate.duplicate);
   if (entry === undefined) return undefined;

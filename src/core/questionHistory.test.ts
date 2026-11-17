@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PendingQuestion } from './model';
+import type { QuestionBase } from './model';
 import { attemptRecords, defaultAttempt, questionAttempts } from './questionHistory';
 import type { QuestionRecord } from './questions';
 
@@ -22,8 +22,8 @@ function record(id: string, executionId: string | null, overrides: Partial<Quest
   return { ...base(id, executionId), status: 'pending', answer: null, answeredAt: null, ...overrides };
 }
 
-function pending(id: string, executionId: string | null, stageId: string | null = 'plan'): PendingQuestion {
-  return { ...base(id, executionId, stageId), file: null };
+function pending(id: string, executionId: string | null, stageId: string | null = 'plan'): QuestionBase {
+  return base(id, executionId, stageId);
 }
 
 const answered = (id: string, executionId: string): QuestionRecord =>

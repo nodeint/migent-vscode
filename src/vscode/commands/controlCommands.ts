@@ -224,10 +224,10 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   }
   // The identity is re-read after the save, so a stale snapshot never starts the wrong state.
   const snapshot = target.context.store.snapshot(target.sessionId);
-  const workflowId = snapshot?.manifest?.workflowId;
+  const workflowId = snapshot?.manifest?.workflow_id;
   if (snapshot === undefined || !isPrepared(snapshot)) {
     vscode.window.setStatusBarMessage(text('prompts.noLongerPrepared'), INFO_MESSAGE_MS);
-  } else if (workflowId === null || workflowId === undefined) {
+  } else if (workflowId === undefined) {
     notify('control.noWorkflowRecorded');
   } else {
     await control.runPrepared(target.context, snapshot, workflowId);

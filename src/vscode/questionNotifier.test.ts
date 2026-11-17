@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PendingQuestion, SessionSnapshot } from '../core/model';
-import { LABELS, NOTICES } from '../text/notices';
+import type { QuestionBase, SessionSnapshot } from '../core/model';
 
 const hoisted = vi.hoisted(() => ({
   enabled: new Map<string, boolean>(),
@@ -19,7 +18,7 @@ vi.mock('vscode', () => ({
 const { QuestionNotifier } = await import('./questionNotifier');
 const { window, commands } = hoisted;
 
-const question = (id: string, executionId: string, stageId: string | null = 'plan'): PendingQuestion => ({
+const question = (id: string, executionId: string, stageId: string | null = 'plan'): QuestionBase => ({
   id,
   question: 'q',
   context: null,
@@ -29,10 +28,9 @@ const question = (id: string, executionId: string, stageId: string | null = 'pla
   executionId,
   stageId,
   recipient: 'human',
-  file: null,
 });
 
-function snapshot(questions: PendingQuestion[], id = 's1'): SessionSnapshot {
+function snapshot(questions: QuestionBase[], id = 's1'): SessionSnapshot {
   return { sessionId: id, manifest: null, status: { questions }, titleOverride: 'T' } as unknown as SessionSnapshot;
 }
 
@@ -71,51 +69,35 @@ function start(initial?: SessionSnapshot): void {
   listener({ type: 'refresh' });
 }
 
+// B6: the contract's status file declares no questions, so the extension reads none from it and a status that carries
+// them yields no pending batch. Until questions come from another source, this notifier has nothing to announce.
 describe('QuestionNotifier', () => {
-  it('seeds silently, then notifies each fresh batch once', () => {
+  it('does not notify for questions a status file carries, at seed or on a later change (B6)', () => {
     start(snapshot([question('1', '0001-plan--attempt-01')]));
     listener(change());
-    expect(window.showInformationMessage).not.toHaveBeenCalled();
     snapshots.set('s1', snapshot([question('1', '0002-plan--attempt-02'), question('2', '0002-plan--attempt-02')]));
     listener(change());
     listener(change());
-    expect(window.showInformationMessage).toHaveBeenCalledTimes(1);
-    expect(window.showInformationMessage).toHaveBeenCalledWith(
-      NOTICES['notify.questions'].text({ label: 'T', stage: 'plan', count: 2 }),
-      LABELS.answerQuestions,
-    );
+    expect(window.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('notifies several batches of one session independently, without a gate', () => {
+  it('does not notify for several batches of one session (B6)', () => {
     start(snapshot([]));
     snapshots.set(
       's1',
       snapshot([question('1', '0002-a--attempt-01', 'a'), question('1', '0003-b--attempt-01', 'b')]),
     );
     listener(change());
-    expect(window.showInformationMessage).toHaveBeenCalledTimes(2);
+    expect(window.showInformationMessage).not.toHaveBeenCalled();
+    expect(commands.executeCommand).not.toHaveBeenCalled();
   });
 
-  it('opens the batch it announced', async () => {
+  it('stays silent with the setting enabled or disabled (B6)', () => {
     start(snapshot([]));
-    window.showInformationMessage.mockResolvedValueOnce(LABELS.answerQuestions);
     snapshots.set('s1', snapshot([question('1', '0002-plan--attempt-02')]));
+    hoisted.enabled.set('question', true);
     listener(change());
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(commands.executeCommand).toHaveBeenCalledWith('migent.session.open', {
-      project: 'p',
-      sessionId: 's1',
-      tab: 'questions',
-      stageId: 'plan',
-      executionId: '0002-plan--attempt-02',
-    });
-  });
-
-  it('is suppressed by a disabled setting', () => {
-    start(snapshot([]));
     hoisted.enabled.set('question', false);
-    snapshots.set('s1', snapshot([question('1', '0002-plan--attempt-02')]));
     listener(change());
     expect(window.showInformationMessage).not.toHaveBeenCalled();
   });

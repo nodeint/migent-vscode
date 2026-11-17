@@ -5,6 +5,14 @@ vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
 }));
 
+// B6: the status file no longer carries questions, so the real `pendingQuestions()` is always empty. These tests cover
+// the batch and draft handling, so they supply pending questions through the module's one source seam.
+const pending = vi.hoisted(() => ({ questions: [] as unknown[] }));
+vi.mock('../../core/questions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/questions')>();
+  return { ...actual, pendingQuestions: () => pending.questions };
+});
+
 import type { SessionSnapshot } from '../../core/model';
 import type { AnswerSubmitter } from '../answers';
 import type { ControlService } from '../control';
@@ -32,10 +40,11 @@ function question(id: string, executionId: string, stageId: string) {
 const QUESTIONS = [question('1', 'e1', 'plan'), question('2', 'e2', 'review')];
 
 function setup() {
+  pending.questions = QUESTIONS;
   const snapshot = {
     sessionId: 's1',
-    manifest: { title: 'Session', workflowId: 'wf' },
-    status: { workflowId: 'wf', questions: QUESTIONS, runningStages: [], outputs: [] },
+    manifest: { session_id: 's1', created_at: 't', schema_version: 2, workflow_id: 'wf', title: 'Session' },
+    status: { session_id: 's1', status: 'question', workflow_id: 'wf' },
     displayState: { state: 'question', icon: '', writable: true },
     titleOverride: null,
     replyTargets: [],

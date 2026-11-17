@@ -3,10 +3,11 @@ import path from 'node:path';
 
 import { text } from '../text';
 import { childrenForWorkflow, childrenOf, type HandoffArtifact, readHandoff } from './handoff';
+import { manifestPriorSessionId } from './manifest';
 import type { ExecutionSnapshot, SessionSnapshot } from './model';
 import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
-import { listOutputs, type OutputFileState, type OutputRow } from './outputs';
+import { listOutputs, type OutputFileState, type OutputRow, publishedOutputs } from './outputs';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
 import { sessionTitle, stageOf } from './sessionPresentation';
 import { readSessionTask } from './sessionTask';
@@ -149,7 +150,7 @@ function newestFirst<T extends { createdAt: string | null }>(items: T[]): T[] {
 }
 
 function childCreatedAt(child: SessionSnapshot): string | null {
-  return child.manifest?.createdAt ?? child.status?.createdAt ?? null;
+  return child.manifest?.created_at ?? child.status?.created_at ?? null;
 }
 
 function suggestionChild(child: SessionSnapshot): ResultsSuggestionChild {
@@ -181,7 +182,7 @@ function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
     title: sessionTitle(child),
     state: titleCase(child.displayState.state),
     task: readSessionTask(path.join(path.dirname(input.sessionDirPath), child.sessionId)),
-    workflowId: child.manifest?.workflowId ?? child.status?.workflowId ?? null,
+    workflowId: child.manifest?.workflow_id ?? child.status?.workflow_id ?? null,
     stageId: stageOf(child),
     createdAt: childCreatedAt(child),
   };
@@ -189,7 +190,7 @@ function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
 
 function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
   const status = input.snapshots.find((snapshot) => snapshot.sessionId === input.sessionId)?.status;
-  const published = status === undefined || status === null ? null : status.outputs.map((output) => output.name);
+  const published = status === undefined || status === null ? null : publishedOutputs(status).map(([name]) => name);
   const read = readNext(input.sessionDirPath);
   const frozen = readFrozenDownstream(input.sessionDirPath);
   const base = { suggestions: [] };
@@ -245,7 +246,7 @@ function provenanceArtifact(artifact: HandoffArtifact): ResultsProvenanceArtifac
 
 function sourceModel(input: ResultsInput, snapshot: SessionSnapshot): ResultsSource | null {
   const handoff = readHandoff(snapshot.manifest, input.sessionDirPath);
-  const sourceId = snapshot.manifest?.priorSessionId ?? (handoff.kind === 'ok' ? handoff.sourceSessionId : null);
+  const sourceId = manifestPriorSessionId(snapshot.manifest) ?? (handoff.kind === 'ok' ? handoff.sourceSessionId : null);
   if (sourceId === null) return null;
   const retained = input.snapshots.find((candidate) => candidate.sessionId === sourceId);
   let availability: SourceAvailability = 'missing';
@@ -281,14 +282,14 @@ function unavailable(sessionId: string): ResultsModel {
 export function buildResultsModel(input: ResultsInput): ResultsModel {
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
   if (snapshot === undefined) return unavailable(input.sessionId);
-  const listing = listOutputs(input.sessionDirPath, snapshot.status?.outputs ?? []);
+  const listing = listOutputs(input.sessionDirPath, publishedOutputs(snapshot.status));
   const executions = input.executions ?? [];
   return {
     availability: 'ok',
     sessionId: snapshot.sessionId,
     title: sessionTitle(snapshot),
     state: titleCase(snapshot.displayState.state),
-    workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
+    workflowId: snapshot.status?.workflow_id ?? snapshot.manifest?.workflow_id ?? null,
     meta: buildSessionMeta(snapshot),
     outputs: {
       rows: listing.rows.map((row) => outputRow(row, executions)),
@@ -303,7 +304,7 @@ export function buildResultsModel(input: ResultsInput): ResultsModel {
 /** The output row an intent key names, resolved against a fresh listing. Null when it no longer exists. */
 export function resolveOutputPath(input: ResultsInput, key: string): string | null {
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
-  const listing = listOutputs(input.sessionDirPath, snapshot?.status?.outputs ?? []);
+  const listing = listOutputs(input.sessionDirPath, publishedOutputs(snapshot?.status));
   const row = listing.rows.find((candidate) => outputKey(candidate) === key);
   return row?.state === 'ok' ? row.absolutePath : null;
 }

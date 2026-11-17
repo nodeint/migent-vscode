@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { SessionSnapshot } from '../../core/model';
+import { pendingQuestions } from '../../core/questions';
 import { isRecord } from '../../core/record';
 import { SESSION_TABS, type SessionBatchRef, type SessionTab } from '../../core/sessionPageModel';
 import { text } from '../../text';
@@ -30,9 +31,9 @@ function requestedFrom(arg: unknown): Requested {
 }
 
 /** The stage of an execution, from the session's pending questions when the caller did not name it. */
-function stageOf(snapshot: SessionSnapshot, stageId: string | null, executionId: string): string | null {
+function stageOf(stageId: string | null, executionId: string): string | null {
   if (stageId !== null) return stageId;
-  const question = (snapshot.status?.questions ?? []).find((candidate) => candidate.executionId === executionId);
+  const question = pendingQuestions().find((candidate) => candidate.executionId === executionId);
   return question?.stageId ?? null;
 }
 
@@ -45,7 +46,7 @@ function optionsFor(
   if (tab !== 'questions' || executionId === undefined) return { tab };
   return {
     tab,
-    batch: { stageId: stageOf(snapshot, requested.batch?.stageId ?? null, executionId), executionId },
+    batch: { stageId: stageOf(requested.batch?.stageId ?? null, executionId), executionId },
   };
 }
 

@@ -1,4 +1,6 @@
-import type { DisplayState, DisplayStateName, LockProbe, SessionStatus, UnknownReason } from './model';
+import type { SessionStatusFile } from '@nodeint/migent-contracts';
+
+import type { DisplayState, DisplayStateName, LockProbe, UnknownReason } from './model';
 
 export const DISPLAY_STATE_ICONS: Readonly<Record<DisplayStateName, string>> = {
   prepared: 'circle-outline',
@@ -35,7 +37,7 @@ export function stateTone(state: string): StateTone {
 
 export interface DisplayStatusInput {
   /** Parsed status.json, or null when missing or unreadable. */
-  status: SessionStatus | null;
+  status: SessionStatusFile | null;
   /** Why status.json could not be read, or null when it read cleanly or is absent. */
   statusError: 'unreadable' | 'invalid' | null;
   /**
@@ -78,14 +80,14 @@ function decide(input: DisplayStatusInput, lock: LockProbe): Decision {
   if (manifest === 'unsupported') return unknown('unsupported-schema');
   if (statusError !== null) return unknown(`${statusError}-status`);
   if (status === null) return unknown('missing-status');
-  const sessionStatus = status.status ?? 'unknown';
+  const sessionStatus = status.status;
 
   if (sessionStatus === 'prepared') return { state: 'prepared' };
   if (lock.kind === 'alive') return { state: 'running' };
   if (sessionStatus === 'blocked') return { state: 'blocked' };
   if (sessionStatus === 'question') return { state: 'question' };
   if (sessionStatus === 'active') {
-    return { state: status.latestExecutionStatus === 'failed' ? 'failed' : 'stopped' };
+    return { state: status.latest_execution_status === 'failed' ? 'failed' : 'stopped' };
   }
   if (sessionStatus === 'cancelled') return { state: 'cancelled' };
   if (sessionStatus === 'completed') return { state: 'completed' };

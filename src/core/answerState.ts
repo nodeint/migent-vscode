@@ -1,7 +1,7 @@
 import { text } from '../text';
 import type { AnswerState } from './answerModel';
 import { parseExecutionId } from './executions';
-import type { PendingQuestion } from './model';
+import type { QuestionBase } from './model';
 import { batchFingerprint } from './questionAnswers';
 import type { QuestionRecord } from './questions';
 
@@ -12,7 +12,7 @@ export interface BatchStateInput {
   /** Fingerprint of the batch the panel shows. */
   fingerprint: string;
   /** Pending records now stored for the panel's `(stage, execution)`. */
-  current: readonly PendingQuestion[];
+  current: readonly QuestionBase[];
   history: readonly QuestionRecord[] | null;
   target: { executionId: string; stageId: string | null };
   /** Executions of the whole session, including running ones: only this stage's later ones count. */

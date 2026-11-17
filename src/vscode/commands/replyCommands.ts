@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { isCompletable } from '../../core/completeEligibility';
+import { manifestRole } from '../../core/manifest';
 import type { SessionSnapshot } from '../../core/model';
 import type { ReplyTarget } from '../../core/model';
 import { blockKind, replyPrompt } from '../../core/replyFlow';
@@ -119,7 +120,7 @@ async function replyTo(source: DraftSource, replies: ReplyService): Promise<void
     await replies.open(source);
     return;
   }
-  const entered = await promptReply(replyPrompt(target, snapshot.manifest?.role ?? null));
+  const entered = await promptReply(replyPrompt(target, manifestRole(snapshot.manifest)));
   if (entered === undefined) return;
   if (entered.kind === 'editor') {
     await replies.open(source, entered.text);

@@ -86,8 +86,11 @@ export async function createProject(env: Env): Promise<ProjectContext> {
   return project;
 }
 
-export const manifest = (id: string, extra = ''): string =>
-  `session_id: ${id}\nschema_version: 2\ncreated_at: 2026-11-01T10:00:00.000+00:00\n${extra}`;
+/** A schema 2 manifest with the contract's required fields; `extra` may set its own `workflow_id`. */
+export const manifest = (id: string, extra = ''): string => {
+  const workflow = /^workflow_id:/mu.test(extra) ? '' : 'workflow_id: plan\n';
+  return `session_id: ${id}\nschema_version: 2\ncreated_at: 2026-11-01T10:00:00.000+00:00\n${workflow}${extra}`;
+};
 
 export const status = (value: string, extra: Record<string, unknown> = {}): string =>
   JSON.stringify({ session_id: 's', status: value, updated_at: new Date().toISOString(), ...extra });

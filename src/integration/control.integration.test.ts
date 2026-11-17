@@ -9,6 +9,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { manifestRole } from '../core/manifest';
 import type { SessionSnapshot } from '../core/model';
 import { LABELS, NOTICES } from '../text/notices';
 import type { ProjectContext } from '../vscode/projects';
@@ -242,7 +243,7 @@ const scenarios: Scenario[] = [
         await waitFor('prepared session in the second project', () => second.project.store.all().length === 1);
         const [prepared] = second.project.store.all();
         assert.equal(prepared.displayState.state, 'prepared');
-        assert.equal(prepared.manifest?.workflowId, 'review');
+        assert.equal(prepared.manifest?.workflow_id, 'review');
         assert.deepEqual(argvAt(second.root).map((line) => line.slice(0, 2)), [['session', 'prepare']]);
         assert.ok(argvAt(second.root)[0].includes('Draft plan'), 'the trimmed title was sent');
         assert.ok(argvAt(second.root)[0].includes('review'), 'the picked workflow was sent');
@@ -265,7 +266,7 @@ const scenarios: Scenario[] = [
       await waitFor('prepared session', () => stateOf(env, 'prepared') !== undefined);
       const prepared = stateOf(env, 'prepared');
       assert.ok(prepared);
-      assert.equal(prepared.manifest?.workflowId, 'review');
+      assert.equal(prepared.manifest?.workflow_id, 'review');
       assert.equal(fs.readFileSync(migentPath(env.root, 'sessions', prepared.sessionId, 'task.md'), 'utf8'), 'Half written');
       assert.deepEqual(argvAt(env.root).map((line) => line[1]), ['prepare'], 'nothing was run');
       await withFake({ [RUN_MS]: '200' }, async () => {
@@ -293,7 +294,7 @@ const scenarios: Scenario[] = [
       const runs = argvAt(env.root).filter((line) => line[1] === 'run');
       assert.equal(runs.length, 1, 'exactly one run');
       assert.ok(runs[0].includes('review') && runs[0].includes('Do the thing'), `workflow and task were sent: ${runs[0].join(' ')}`);
-      assert.equal(stateOf(env, 'completed')?.manifest?.workflowId, 'review');
+      assert.equal(stateOf(env, 'completed')?.manifest?.workflow_id, 'review');
     },
   },
   {
@@ -551,7 +552,7 @@ scenarios.push(
       await withFake({ [RUN_MS]: '100', MIGENT_FAKE_EXIT: '3' }, async () => {
         await env.api.control.runNew(project, 'plan', 'fail');
       });
-      const snapshot = sessions(env).find((candidate) => candidate.manifest?.workflowId === 'plan');
+      const snapshot = sessions(env).find((candidate) => candidate.manifest?.workflow_id === 'plan');
       assert.ok(snapshot, 'the session exists');
       const report = path.join(sessionFile(env, snapshot.sessionId, 'executions'), '0001-plan--attempt-01', 'failure.md');
       assert.ok(fs.existsSync(report), 'failure.md was written');
@@ -712,7 +713,7 @@ scenarios.push(
       const project = await createProject(env);
       const stopped = await stoppedSession(env, project);
       fs.appendFileSync(sessionFile(env, stopped.sessionId, 'manifest.yaml'), 'role: planner\n');
-      await waitFor('manifest shows the role', () => project.store.snapshot(stopped.sessionId)?.manifest?.role === 'planner');
+      await waitFor('manifest shows the role', () => manifestRole(project.store.snapshot(stopped.sessionId)?.manifest ?? null) === 'planner');
       await withMessages(confirmComplete, async (shown) => {
         await vscode.commands.executeCommand('migent.session.complete', { project: project.key, sessionId: stopped.sessionId });
         assert.equal(shown.some((line) => line.startsWith(`warning:${COMPLETE_CONFIRM}`)), false, 'no confirmation');

@@ -1,7 +1,7 @@
 import type { TailEvent } from './eventTail';
 import type { HumanInputFact } from './humanInput';
 import type { MetricsExecution } from './metrics';
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import type { ExecutionSnapshot } from './model';
 import { type OverviewActions,overviewActions } from './overviewActions';
 import { buildResultsModel, type ResultsInput, type ResultsModel,type ResultsNext } from './resultsModel';
 import { buildActivity, type SessionActivity } from './sessionActivity';
@@ -58,15 +58,6 @@ export interface OverviewInput extends ResultsInput {
   events: readonly TailEvent[];
 }
 
-/** The stage ids the status reports as running now. */
-function runningStageIdsOf(snapshot: SessionSnapshot): string[] {
-  const ids: string[] = [];
-  for (const stage of snapshot.status?.runningStages ?? []) {
-    if (stage.stageId !== null) ids.push(stage.stageId);
-  }
-  return ids;
-}
-
 export function buildOverviewModel(input: OverviewInput): OverviewModel {
   const base = buildResultsModel(input);
   const snapshot = input.snapshots.find((candidate) => candidate.sessionId === input.sessionId);
@@ -88,8 +79,8 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
     progress: buildProgress({
       executions: input.executions,
       plan: input.plan,
-      runningStageIds: runningStageIdsOf(snapshot),
-      latestExecutionId: snapshot.status?.latestExecutionId ?? null,
+      runningStageIds: [],
+      latestExecutionId: snapshot.status?.latest_execution_id ?? null,
       metrics: input.metrics,
       wallSeconds: input.wallSeconds,
       inputs: input.inputs,

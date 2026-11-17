@@ -1,4 +1,4 @@
-import type { PendingQuestion, QuestionOption } from './model';
+import type { QuestionBase, QuestionOption } from './model';
 import {
   ambiguousTextQuestions,
   type AnswerDraft,
@@ -90,12 +90,12 @@ export interface AnswerModelInput {
   meta: SessionMeta;
   state: AnswerState;
   message: string | null;
-  questions: readonly PendingQuestion[];
+  questions: readonly QuestionBase[];
   draft: BatchDraft;
   /** Reasons the batch cannot be sent right now (CLI, lock, pending operation, batch problem). */
   blockReason: string | null;
   records: readonly QuestionRecord[] | null;
-  archive: { questions: readonly PendingQuestion[]; draft: BatchDraft } | null;
+  archive: { questions: readonly QuestionBase[]; draft: BatchDraft } | null;
 }
 
 function isSingleOrMultiple(value: string | null): value is 'single' | 'multiple' {
@@ -122,7 +122,7 @@ function recordedAnswers(records: readonly QuestionRecord[] | null): Record<stri
 }
 
 /** The active mode of a draft as one line (option ids with labels, or the text). */
-export function describeDraft(question: PendingQuestion, draft: AnswerDraft | undefined): string {
+export function describeDraft(question: QuestionBase, draft: AnswerDraft | undefined): string {
   if (draft === undefined) return '';
   if (draft.mode === 'text') return draft.text;
   const chosen = question.options.filter((option) => draft.selected.includes(option.id));

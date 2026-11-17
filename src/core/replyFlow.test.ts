@@ -24,10 +24,11 @@ import { parseStatus } from './statusReader';
 import { snapshotFromDir, syntheticDir } from './testHelpers';
 
 function snapshot(raw: Record<string, unknown>): SessionSnapshot {
-  const status = parseStatus(JSON.stringify(raw));
+  const status = parseStatus(JSON.stringify({ session_id: 's1', ...raw }));
   return {
     sessionId: 's1',
     manifest: null,
+    unsupportedManifestVersion: null,
     status,
     statusError: false,
     lock: { kind: 'none' },
@@ -50,7 +51,8 @@ describe('blockKind', () => {
     expect(blockKind(blocker)).toBe('blocker');
     expect(blockKind(quota)).toBeNull();
     expect(blockKind(snapshot({ status: 'question' }))).toBe('question');
-    expect(blockKind(snapshotFromDir(syntheticDir('blocked-questions')))).toBe('question');
+    // B6: without a pending-question source a blocked status is an ordinary blocker.
+    expect(blockKind(snapshotFromDir(syntheticDir('blocked-questions')))).toBe('blocker');
   });
 
   it('shows no obstacle for a stopped session whose latest event is not a quota event', () => {
@@ -60,17 +62,15 @@ describe('blockKind', () => {
 });
 
 describe('blockedTargets', () => {
-  it('lists every blocked execution of an ordinary blocker, with stage names that contain hyphens', () => {
+  // B6: `blocked_by_execution_ids` is not in the contract, so a blocked session has no reply target.
+  it('lists no blocked execution, even when the file names some', () => {
     const targets = blockedTargets(
       snapshot({
         status: 'blocked',
         blocked_by_execution_ids: ['0003-code-review--attempt-02', '0001-plan--attempt-01'],
       }),
     );
-    expect(targets.map((target) => [target.stageId, target.attempt])).toEqual([
-      ['plan', 1],
-      ['code-review', 2],
-    ]);
+    expect(targets).toEqual([]);
   });
 
   it('offers nothing for a pending question, so Reply cannot answer it', () => {
@@ -276,7 +276,10 @@ describe('replyConsumed', () => {
 });
 
 describe('replyTargets', () => {
-  const role = parseManifest('session_id: s1\nrole: reviewer\n');
+  const parsedRole = parseManifest(
+    'session_id: s1\ncreated_at: 2026-11-01T00:00:00.000+00:00\nschema_version: 2\nworkflow_id: plan\nrole: reviewer\n',
+  );
+  const role = parsedRole.kind === 'ok' ? parsedRole.manifest : null;
   const withRole = (raw: Record<string, unknown>): SessionSnapshot => ({ ...snapshot(raw), manifest: role });
   const execution = (id: string, stage: string, status: string, kind: string | null = null): ExecutionSnapshot => {
     const order = Number(id.slice(0, 4));
@@ -301,10 +304,10 @@ describe('replyTargets', () => {
     };
   };
 
-  it('answers each blocked execution of a workflow with kind blocker, exactly as blockedTargets does', () => {
+  it('offers no blocker target for a blocked workflow while the blocker source is empty (B6), exactly as blockedTargets does', () => {
     const blocked = snapshot({ status: 'blocked', blocked_by_execution_ids: ['0001-plan--attempt-01'] });
     expect(replyTargets(blocked)).toEqual(blockedTargets(blocked));
-    expect(replyTargets(blocked).map((target) => target.kind)).toEqual(['blocker']);
+    expect(replyTargets(blocked)).toEqual([]);
   });
 
   it('answers a cancelled stage of a cancelled workflow, not a verify-only or a resumed one', () => {

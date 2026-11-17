@@ -188,7 +188,7 @@ const scenarios: Scenario[] = [
       const future = itemOf(env, sessionNode(env, 'future'));
       assert.equal(future.description, 'Unsupported schema version 99');
       assert.equal(iconId(future), 'question');
-      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;questions;role');
+      assert.equal(itemOf(env, sessionNode(env, 'asking')).contextValue, 'session.question;role', 'B6: no pending questions, so no questions flag');
 
       // Blocked, Failed and Question count once each; Stopped and Unknown do not.
       await waitFor('badge', () => env.api.sessionsView.badge?.value === 3);
@@ -307,7 +307,7 @@ const scenarios: Scenario[] = [
 
       const runningGroup = children(env).find((node) => itemOf(env, node).contextValue === 'group.running');
       assert.ok(runningGroup && children(env, runningGroup).some((node) => node.kind === 'session' && node.sessionId === 'running-q'));
-      assert.match(String(itemOf(env, sessionNode(env, 'asking')).contextValue), /;questions/, 'question indicator stays on the session');
+      assert.doesNotMatch(String(itemOf(env, sessionNode(env, 'asking')).contextValue), /;questions/, 'B6: no pending questions to flag');
     },
   },
   {

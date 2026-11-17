@@ -54,7 +54,6 @@ describe('Entry draft persistence', () => {
         executionId: identity.executionId,
         stageId: 'plan',
         recipient: 'human',
-        file: null,
       },
     ];
     target.setDraft('1', { mode: 'choice', selected: ['A'], text: '' });

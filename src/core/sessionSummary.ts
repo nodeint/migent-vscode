@@ -1,12 +1,13 @@
-import { parseExecutionId } from './executions';
 import type {
   DisplayStateName,
   ExecutionSnapshot,
   SessionSnapshot,
   UnknownReason,
 } from './model';
+import { pendingQuestions } from './questions';
 import { quotaFailure } from './replyFlow';
 import { stageOf } from './sessionPresentation';
+import { providerEventField } from './statusReader';
 
 /** One blocked execution the Status block explains. */
 export interface BlockedExecutionFact {
@@ -55,7 +56,7 @@ function latestExecutionOf(
   snapshot: SessionSnapshot,
   executions: readonly ExecutionSnapshot[],
 ): ExecutionSnapshot | null {
-  const id = snapshot.status?.latestExecutionId ?? null;
+  const id = snapshot.status?.latest_execution_id ?? null;
   const named = id === null ? undefined : executions.find((execution) => execution.id === id);
   if (named !== undefined) return named;
   let latest: ExecutionSnapshot | null = null;
@@ -65,29 +66,9 @@ function latestExecutionOf(
   return latest;
 }
 
-function blockedFacts(
-  snapshot: SessionSnapshot,
-  executions: readonly ExecutionSnapshot[],
-): BlockedExecutionFact[] {
-  const facts: BlockedExecutionFact[] = [];
-  for (const executionId of snapshot.status?.blockedByExecutionIds ?? []) {
-    const parsed = parseExecutionId(executionId);
-    if (parsed === null) continue;
-    const execution = executions.find((item) => item.id === executionId);
-    facts.push({
-      executionId,
-      stageId: parsed.stageId,
-      attempt: parsed.attempt,
-      blocker: execution?.blocker ?? null,
-    });
-  }
-  return facts;
-}
-
-/** Running stage from the status's running stages, then its latest provider event, then the latest stage. */
+/** Running stage from the status's latest stage, then its latest provider event. */
 function runningStageOf(snapshot: SessionSnapshot): string | null {
-  const event = snapshot.status?.latestProviderEvent ?? null;
-  return snapshot.status?.runningStages[0]?.stageId ?? event?.stageId ?? stageOf(snapshot);
+  return stageOf(snapshot) ?? providerEventField(snapshot.status, 'stage_id');
 }
 
 /** Collect the Status facts from a snapshot and its execution summaries. */
@@ -97,15 +78,14 @@ export function buildSummary(
 ): SessionSummary {
   const { state } = snapshot.displayState;
   const isRunning = state === 'running';
-  const event = snapshot.status?.latestProviderEvent ?? null;
   return {
     state,
     unknownReason: snapshot.displayState.unknownReason ?? null,
     runningStage: isRunning ? runningStageOf(snapshot) : null,
-    runningSummary: isRunning ? event?.summary ?? null : null,
-    blocked: blockedFacts(snapshot, executions),
+    runningSummary: isRunning ? providerEventField(snapshot.status, 'summary') : null,
+    blocked: [],
     quotaResetAt: quotaFailure(snapshot)?.retryAt ?? null,
-    pendingQuestions: snapshot.status?.questions.length ?? 0,
+    pendingQuestions: pendingQuestions().length,
     latestExecution: latestExecutionOf(snapshot, executions),
     isRunning,
   };

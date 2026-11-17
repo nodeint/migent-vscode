@@ -498,7 +498,7 @@ export class ControlService implements vscode.Disposable {
     if (now.lock.kind === 'alive') return true;
     if (before === undefined) return now.status !== null;
     return (
-      now.status?.latestExecutionId !== before.status?.latestExecutionId ||
+      now.status?.latest_execution_id !== before.status?.latest_execution_id ||
       now.displayState.state !== before.displayState.state
     );
   }

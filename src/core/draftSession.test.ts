@@ -27,7 +27,7 @@ describe('migent 0.3.5 draft sessions (captured)', () => {
     const dir = capturedDir('started-draft');
     expect(existsSync(path.join(dir, WORKFLOW_DRAFT_FILENAME))).toBe(true);
     expect(readFileSync(path.join(dir, FROZEN_WORKFLOW_FILENAME), 'utf8')).toMatch(/^source_sha256: \w+\nworkflow:\n/);
-    expect(readManifest(path.join(dir, 'manifest.yaml'))?.workflowId).toBe('plan');
+    expect(readManifest(path.join(dir, 'manifest.yaml'))).toMatchObject({ kind: 'ok', manifest: { workflow_id: 'plan' } });
   });
 
   it('workflowDraftPath is the session directory file', () => {

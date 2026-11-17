@@ -1,5 +1,5 @@
 import { parseExecutionId } from './executions';
-import type { PendingQuestion } from './model';
+import type { QuestionBase } from './model';
 import type { QuestionRecord } from './questions';
 
 /**
@@ -54,7 +54,7 @@ function compare(left: Group, right: Group): number {
 /** Group the history and the pending questions by attempt. A question without an execution id has no attempt. */
 export function questionAttempts(
   records: readonly QuestionRecord[],
-  pending: readonly PendingQuestion[],
+  pending: readonly QuestionBase[],
 ): QuestionAttempt[] {
   const groups = new Map<string, Group>();
   const groupOf = (stageId: string | null, executionId: string): Group => {

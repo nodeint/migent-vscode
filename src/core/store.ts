@@ -5,7 +5,7 @@ import { isRetentionExempt } from './attention';
 import { deriveDisplayState } from './displayState';
 import { listExecutions } from './executions';
 import { probeLock } from './lockProbe';
-import { readManifest } from './manifest';
+import { manifestFacts, readManifest } from './manifest';
 import type {
   ProjectChangeEvent,
   ScanOutcome,
@@ -54,6 +54,7 @@ export interface SessionStoreOptions {
 
 interface SnapshotBody {
   manifest: SessionSnapshot['manifest'];
+  unsupportedManifestVersion: SessionSnapshot['unsupportedManifestVersion'];
   status: SessionSnapshot['status'];
   statusError: boolean;
   lock: SessionSnapshot['lock'];
@@ -68,9 +69,9 @@ function sameJson(a: unknown = null, b: unknown = null): boolean {
 
 function sameBody(a: SnapshotBody, b: SnapshotBody): boolean {
   return (
-    sameJson(a.manifest?.raw, b.manifest?.raw) &&
-    sameJson(a.status?.raw, b.status?.raw) &&
-    sameJson(a.status?.latestProviderEvent, b.status?.latestProviderEvent) &&
+    sameJson(a.manifest, b.manifest) &&
+    a.unsupportedManifestVersion === b.unsupportedManifestVersion &&
+    sameJson(a.status, b.status) &&
     a.statusError === b.statusError &&
     sameJson(a.lock, b.lock) &&
     sameDisplay(a, b) &&
@@ -87,13 +88,8 @@ function sameDisplay(a: SnapshotBody, b: SnapshotBody): boolean {
   );
 }
 
-function manifestState(manifest: SessionSnapshot['manifest']): 'ok' | 'invalid' | 'unsupported' {
-  if (manifest === null) return 'invalid';
-  return manifest.schemaSupported ? 'ok' : 'unsupported';
-}
-
 function createdAtOf(snapshot: SessionSnapshot): string | null {
-  return snapshot.manifest?.createdAt ?? snapshot.status?.createdAt ?? null;
+  return snapshot.manifest?.created_at ?? snapshot.status?.created_at ?? null;
 }
 
 function isNewer(a: SessionSnapshot, b: SessionSnapshot): boolean {
@@ -360,20 +356,22 @@ export class SessionStore {
   }
 
   private buildSnapshot(sessionId: string): SessionSnapshot {
-    const manifest = readManifest(manifestPath(this.projectRoot, sessionId));
+    const facts = manifestFacts(readManifest(manifestPath(this.projectRoot, sessionId)));
+    const { manifest, unsupportedManifestVersion, state } = facts;
     const statusRead = readStatus(statusPath(this.projectRoot, sessionId));
     const lock = probeLock(lockPath(this.projectRoot, sessionId));
     const displayState = deriveDisplayState(
       {
         status: statusRead.kind === 'ok' ? statusRead.status : null,
         statusError: statusRead.kind === 'error' ? statusRead.reason : null,
-        manifest: manifestState(manifest),
+        manifest: state,
       },
       lock,
     );
     return {
       sessionId,
       manifest,
+      unsupportedManifestVersion,
       status: statusRead.kind === 'ok' ? statusRead.status : null,
       statusError: statusRead.kind === 'error',
       lock,

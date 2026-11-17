@@ -37,23 +37,10 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 function snapshot(state: 'running' | 'completed'): SessionSnapshot {
   const base = snapshotFromDir(path.join(root, '.migent', 'sessions', SESSION));
-  const {status} = base;
   return {
     ...base,
     sessionId: SESSION,
     displayState: { ...base.displayState, state, icon: 'x', writable: true },
-    ...(status === null
-      ? {}
-      : {
-          status: state === 'running'
-            ? {
-                ...status,
-                runningStages: [
-                  { executionId: null, stageId: 'draft', client: null, event: null, summary: null, updatedAt: null },
-                ],
-              }
-            : status,
-        }),
   };
 }
 
@@ -102,7 +89,8 @@ describe('buildOverviewPage', () => {
     expect(model.activity.visible).toBe(true);
     expect(model.progress).toMatchObject({
       kind: 'stages',
-      rows: [{ id: 'draft', state: 'not-run', isCurrent: true }],
+      // B6: running_stages is not read, so no stage is marked current.
+      rows: [{ id: 'draft', state: 'not-run', isCurrent: false }],
     });
   });
 

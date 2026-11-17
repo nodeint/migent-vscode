@@ -9,6 +9,7 @@ import { runLong, type RunResult } from '../cli/runner';
 import { untilReceivedOrExited } from '../cli/untilReceived';
 import { answerArgs } from '../core/controlArgs';
 import { listExecutions, parseExecutionId } from '../core/executions';
+import { manifestRole } from '../core/manifest';
 import type { ReplyTarget, ReplyTargetKind, SessionSnapshot } from '../core/model';
 import type { GateHandle } from '../core/operationGate';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../core/paths';
@@ -191,7 +192,7 @@ export class ReplyService implements vscode.Disposable {
       target,
       blocker: readBlockerText(dir, target.executionId),
       responsePath: existsSync(path.join(dir, response)) ? response : null,
-      role: snapshot.manifest?.role ?? null,
+      role: manifestRole(snapshot.manifest),
     });
     const meta = metaOf(source);
     try {

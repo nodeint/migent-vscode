@@ -7,6 +7,7 @@ function snapshotWith(lock: SessionSnapshot['lock']): SessionSnapshot {
   return {
     sessionId: 's1',
     manifest: null,
+    unsupportedManifestVersion: null,
     status: null,
     statusError: false,
     lock,

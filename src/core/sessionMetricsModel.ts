@@ -79,8 +79,8 @@ export function buildSessionMetricsModel(input: SessionMetricsInput): SessionMet
     sessionId: snapshot.sessionId,
     title: sessionTitle(snapshot),
     state: titleCase(snapshot.displayState.state),
-    workflowId: snapshot.status?.workflowId ?? snapshot.manifest?.workflowId ?? null,
-    completedAt: snapshot.displayState.state === 'completed' ? (snapshot.status?.updatedAt ?? null) : null,
+    workflowId: snapshot.status?.workflow_id ?? snapshot.manifest?.workflow_id ?? null,
+    completedAt: snapshot.displayState.state === 'completed' ? (snapshot.status?.updated_at ?? null) : null,
     meta: buildSessionMeta(snapshot),
     metrics,
   };

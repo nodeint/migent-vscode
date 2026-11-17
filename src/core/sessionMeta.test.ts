@@ -9,13 +9,11 @@ function snapshot(state: 'running' | 'completed', status: Record<string, unknown
     displayState: { state },
     titleOverride: null,
     replyTargets: [],
-    manifest: { createdAt: 'manifest-created' },
+    manifest: { created_at: 'manifest-created' },
     status: {
-      createdAt: '2026-11-01T10:00:00.000+00:00',
-      updatedAt: '2026-11-01T10:09:48.000+00:00',
-      latestStageId: 'plan',
-      runningStages: [],
-      questions: [],
+      created_at: '2026-11-01T10:00:00.000+00:00',
+      updated_at: '2026-11-01T10:09:48.000+00:00',
+      latest_stage_id: 'plan',
       ...status,
     },
   } as unknown as SessionSnapshot;
@@ -26,14 +24,15 @@ describe('buildSessionMeta', () => {
     expect(buildSessionMeta(undefined)).toEqual(NO_SESSION_META);
   });
 
-  it('reads the timestamps, the latest stage and the pending question count', () => {
+  // B6: `questions` is not read from status.json, so the pending question count is 0.
+  it('reads the timestamps and the latest stage, with no pending questions', () => {
     const meta = buildSessionMeta(snapshot('completed', { questions: [{}, {}] }));
     expect(meta).toEqual({
       stageId: 'plan',
       createdAt: '2026-11-01T10:00:00.000+00:00',
       updatedAt: '2026-11-01T10:09:48.000+00:00',
       isRunning: false,
-      pendingQuestions: 2,
+      pendingQuestions: 0,
       canComplete: false,
       canReply: false,
     });
@@ -45,7 +44,7 @@ describe('buildSessionMeta', () => {
       return { ...base, displayState: { state: 'stopped' }, ...extra } as unknown as SessionSnapshot;
     };
     expect(buildSessionMeta(stopped()).canComplete).toBe(true);
-    expect(buildSessionMeta(stopped({ manifest: { createdAt: 'x', role: 'planner' } })).canComplete).toBe(false);
+    expect(buildSessionMeta(stopped({ manifest: { created_at: 'x', role: 'planner' } })).canComplete).toBe(false);
     expect(buildSessionMeta(snapshot('running', {})).canComplete).toBe(false);
     expect(buildSessionMeta(snapshot('completed', {})).canComplete).toBe(false);
   });
@@ -57,12 +56,13 @@ describe('buildSessionMeta', () => {
     expect(buildSessionMeta(snapshot('completed', {})).canReply).toBe(false);
   });
 
-  it('prefers the running stage and marks a running session', () => {
-    const meta = buildSessionMeta(snapshot('running', { runningStages: [{ stageId: 'implement' }] }));
+  // B6: `running_stages` is not read, so the stage is the latest stage.
+  it('uses the latest stage and marks a running session', () => {
+    const meta = buildSessionMeta(snapshot('running', { latest_stage_id: 'implement' }));
     expect(meta).toMatchObject({ stageId: 'implement', isRunning: true });
   });
 
   it('falls back to the manifest for the creation time', () => {
-    expect(buildSessionMeta(snapshot('completed', { createdAt: null })).createdAt).toBe('manifest-created');
+    expect(buildSessionMeta(snapshot('completed', { created_at: null })).createdAt).toBe('manifest-created');
   });
 });

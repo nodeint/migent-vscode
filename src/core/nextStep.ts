@@ -3,6 +3,7 @@ import { childrenForWorkflow } from './handoff';
 import type { SessionSnapshot } from './model';
 import { classifyLaunch, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { markDeclared, type NextSuggestion, readFrozenDownstream, readNext } from './nextWorkflows';
+import { publishedOutputs } from './outputs';
 import { sessionTitle } from './sessionPresentation';
 import type { WorkflowEntry } from './workflows';
 
@@ -35,7 +36,8 @@ export type SuggestionLookup =
 
 /** Published output names of a session; null when the session is not loaded. */
 function publishedNames(source: SessionSnapshot | undefined): string[] | null {
-  return source?.status?.outputs.map((output) => output.name) ?? null;
+  const status = source?.status ?? null;
+  return status === null ? null : publishedOutputs(status).map(([name]) => name);
 }
 
 export function lookupSuggestion(

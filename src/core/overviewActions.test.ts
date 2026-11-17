@@ -24,7 +24,7 @@ function snapshot(input: SnapshotInput): SessionSnapshot {
       : [],
     manifest: { role: input.role ?? null },
     status: {
-      latestStageId: null,
+      latest_stage_id: null,
       runningStages: [],
       questions: [],
       blockedByExecutionIds: [],

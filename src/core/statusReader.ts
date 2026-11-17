@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 
-import type { ProviderEventSummary, PublishedOutput, RunningStage, SessionStatus } from './model';
-import { parsePendingQuestions } from './questions';
+import type { SessionStatusFile } from '@nodeint/migent-contracts';
+
+import { asSessionId } from './manifest';
 import { isRecord } from './record';
 
 /** Delay between retries when status.json does not parse (a rename can be observed mid-flight on Windows). */
@@ -9,70 +10,78 @@ export const STATUS_RETRY_DELAY_MS = 100;
 export const STATUS_MAX_ATTEMPTS = 3;
 
 export type StatusRead =
-  | { kind: 'ok'; status: SessionStatus }
+  | { kind: 'ok'; status: SessionStatusFile }
   | { kind: 'missing' }
   | { kind: 'error'; reason: 'unreadable' | 'invalid' };
 
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-function blockedIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string');
+const OPTIONAL_STRING_FIELDS = [
+  'title',
+  'workflow_id',
+  'workflow_path',
+  'task',
+  'created_at',
+  'updated_at',
+  'task_sha256',
+  'latest_execution_id',
+  'latest_execution_status',
+  'latest_stage_id',
+  'latest_decision',
+  'completion_method',
+  'terminal_execution_id',
+] as const satisfies readonly (keyof SessionStatusFile)[];
+
+/** Each output entry keeps the three `OutputRef` fields; an entry without a path is not a usable output. */
+function publishedOutputs(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  // `Object.fromEntries` defines own data properties, so a name such as `__proto__` stays an entry.
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([name, entry]) => {
+      const outputPath = isRecord(entry) ? asString(entry.path) : undefined;
+      if (!isRecord(entry) || outputPath === undefined) return [];
+      return [
+        [
+          name,
+          {
+            path: outputPath,
+            ...optionalString('source_execution_id', entry.source_execution_id),
+            ...optionalString('published_by_execution_id', entry.published_by_execution_id),
+          },
+        ],
+      ];
+    }),
+  );
 }
 
-function runningStages(value: unknown): RunningStage[] {
-  if (!Array.isArray(value)) return [];
-  const rows: RunningStage[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) continue;
-    const raw = entry;
-    rows.push({
-      executionId: asString(raw.execution_id),
-      stageId: asString(raw.stage_id),
-      client: asString(raw.client),
-      event: asString(raw.event),
-      summary: asString(raw.summary),
-      updatedAt: asString(raw.updated_at),
-    });
-  }
-  return rows;
-}
-
-function publishedOutputs(value: unknown): PublishedOutput[] {
-  if (!isRecord(value)) return [];
-  const rows: PublishedOutput[] = [];
-  for (const [name, entry] of Object.entries(value)) {
-    if (!isRecord(entry)) continue;
-    const outputPath = asString(entry.path);
-    if (outputPath === null) continue;
-    rows.push({
-      name,
-      path: outputPath,
-      sourceExecutionId: asString(entry.source_execution_id),
-      publishedByExecutionId: asString(entry.published_by_execution_id),
-    });
-  }
-  return rows;
+function optionalString(name: string, value: unknown): Record<string, string> {
+  const text = asString(value);
+  return text === undefined ? {} : { [name]: text };
 }
 
 /** Keep only the small scalar fields: the full event can carry very large `details` and `usage`. */
-function providerEventSummary(value: unknown): ProviderEventSummary | null {
-  if (!isRecord(value)) return null;
-  const retryAt = isRecord(value.details) ? asString(value.details.retry_at) : null;
+function providerEvent(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const retryAt = isRecord(value.details) ? asString(value.details.retry_at)?.trim() : undefined;
   return {
-    event: asString(value.event),
-    summary: asString(value.summary),
-    stageId: asString(value.stage_id),
-    executionId: asString(value.execution_id),
-    client: asString(value.client),
-    timestamp: asString(value.timestamp),
-    retryAt: retryAt === null || retryAt.trim() === '' ? null : retryAt,
+    ...optionalString('event', value.event),
+    ...optionalString('summary', value.summary),
+    ...optionalString('stage_id', value.stage_id),
+    ...optionalString('execution_id', value.execution_id),
+    ...optionalString('client', value.client),
+    ...optionalString('timestamp', value.timestamp),
+    ...(retryAt === undefined || retryAt === '' ? {} : { details: { retry_at: retryAt } }),
   };
 }
 
-export function parseStatus(text: string): SessionStatus | null {
+/**
+ * Parse `status.json` as the contract's `SessionStatusFile`. A missing or wrong-typed `session_id` or `status`
+ * rejects the record; an optional field of the wrong type is dropped. Fields the contract does not declare
+ * (`questions`, `running_stages`, `blocked_by_execution_ids`) are not read.
+ */
+export function parseStatus(text: string): SessionStatusFile | null {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -80,24 +89,44 @@ export function parseStatus(text: string): SessionStatus | null {
     return null;
   }
   if (!isRecord(value)) return null;
-  const { latest_provider_event: providerEvent, ...raw } = value;
-  return {
-    status: asString(raw.status),
-    workflowId: asString(raw.workflow_id),
-    title: asString(raw.title),
-    createdAt: asString(raw.created_at),
-    updatedAt: asString(raw.updated_at),
-    latestExecutionId: asString(raw.latest_execution_id),
-    latestExecutionStatus: asString(raw.latest_execution_status),
-    latestStageId: asString(raw.latest_stage_id),
-    latestDecision: asString(raw.latest_decision),
-    blockedByExecutionIds: blockedIds(raw.blocked_by_execution_ids),
-    runningStages: runningStages(raw.running_stages),
-    questions: parsePendingQuestions(raw.questions),
-    outputs: publishedOutputs(raw.outputs),
-    latestProviderEvent: providerEventSummary(providerEvent),
-    raw,
-  };
+  const sessionId = asSessionId(value.session_id);
+  const status = asString(value.status);
+  if (sessionId === null || status === undefined) return null;
+  return { session_id: sessionId, status, ...readOptionalFields(value) };
+}
+
+/** Copy the optional contract fields that have the right type; a wrong-typed one is dropped. */
+function readOptionalFields(value: Record<string, unknown>): Partial<SessionStatusFile> {
+  const result: Partial<SessionStatusFile> = {};
+  for (const name of OPTIONAL_STRING_FIELDS) {
+    const field = asString(value[name]);
+    if (field !== undefined) result[name] = field;
+  }
+  const priorSessionId = asSessionId(value.prior_session_id);
+  if (priorSessionId !== null) result.prior_session_id = priorSessionId;
+  if (isRecord(value.handoff)) result.handoff = value.handoff;
+  if (isRecord(value.baseline)) result.baseline = value.baseline;
+  const outputs = publishedOutputs(value.outputs);
+  if (outputs !== undefined) result.outputs = outputs;
+  const event = providerEvent(value.latest_provider_event);
+  if (event !== undefined) result.latest_provider_event = event;
+  return result;
+}
+
+/** The scalar fields of `latest_provider_event` the views read. */
+export type ProviderEventKey = 'event' | 'summary' | 'stage_id' | 'execution_id' | 'client' | 'timestamp';
+
+/** One scalar of the latest provider event; null when the status has no event or the field is absent. */
+export function providerEventField(status: SessionStatusFile | null | undefined, key: ProviderEventKey): string | null {
+  const value = status?.latest_provider_event?.[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** `details.retry_at` of the latest provider event (`provider.quota`); null when absent or blank. */
+export function providerRetryAt(status: SessionStatusFile | null | undefined): string | null {
+  const details = status?.latest_provider_event?.details;
+  const value = isRecord(details) ? details.retry_at : undefined;
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
 function sleepSync(ms: number): void {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { text } from '../text';
-import type { PendingQuestion, QuestionBase, QuestionOption } from './model';
+import type { QuestionBase, QuestionOption } from './model';
 import type { QuestionRecord, QuestionsRead } from './questions';
 
 /**
@@ -103,7 +103,7 @@ export interface QuestionValidation {
   issue: QuestionIssue | null;
 }
 
-function validateOne(question: PendingQuestion, draft: AnswerDraft | undefined): QuestionIssue | null {
+function validateOne(question: QuestionBase, draft: AnswerDraft | undefined): QuestionIssue | null {
   const value = draft ?? emptyDraft();
   if (value.mode === 'text') return value.text.trim().length === 0 ? 'empty-text' : null;
   if (value.selected.length === 0) return 'unanswered';
@@ -116,7 +116,7 @@ function validateOne(question: PendingQuestion, draft: AnswerDraft | undefined):
 
 /** Validate only each question's active mode. */
 export function validateBatch(
-  questions: readonly PendingQuestion[],
+  questions: readonly QuestionBase[],
   draft: Readonly<BatchDraft>,
 ): QuestionValidation[] {
   return questions.map((question) => ({ questionId: question.id, issue: validateOne(question, draft[question.id]) }));
@@ -130,7 +130,7 @@ export function answeredCount(validation: readonly QuestionValidation[]): number
  * Serialize the active modes into the documented reply map. Returns null unless every question is valid.
  * Multiple choices are emitted in option order, a single choice as one id, free text verbatim.
  */
-export function serializeAnswers(questions: readonly PendingQuestion[], draft: Readonly<BatchDraft>): ReplyMap | null {
+export function serializeAnswers(questions: readonly QuestionBase[], draft: Readonly<BatchDraft>): ReplyMap | null {
   const reply: ReplyMap = {};
   for (const question of questions) {
     const value = draft[question.id] ?? emptyDraft();
@@ -156,11 +156,11 @@ export function replyFileText(reply: ReplyMap): string {
  * Free text the current CLI reader would take for an option id (a JSON string "A" selects option A even
  * after the user chose Other). Reported, never rewritten: the plan has no explicit free-text transport.
  */
-const hasOption = (question: PendingQuestion, id: string): boolean =>
+const hasOption = (question: QuestionBase, id: string): boolean =>
   question.options.some((option) => option.id === id);
 
 export function ambiguousTextQuestions(
-  questions: readonly PendingQuestion[],
+  questions: readonly QuestionBase[],
   draft: Readonly<BatchDraft>,
 ): string[] {
   const ambiguous: string[] = [];
@@ -228,7 +228,7 @@ const HUMAN_RECIPIENT = 'human';
 
 export interface VerifyInput {
   /** `status.json.questions`, the lightweight summary. */
-  summary: readonly PendingQuestion[];
+  summary: readonly QuestionBase[];
   /** The session `questions.json` read: the authoritative records. */
   history: QuestionsRead;
   target: Pick<BatchTarget, 'executionId' | 'stageId'>;
