@@ -3,7 +3,7 @@
 ## Unreleased
 
 - The Questions tab can answer again: an execution that ended by asking, with no answer and no later attempt of its
-  stage, is now treated as waiting, so its options can be selected and the Send footer is shown.
+  stage, is now treated as waiting, so its options can be selected and the Send footer is shown. ([#80](https://github.com/nodeint/migent-vscode/pull/80))
 - A `session.lock` missing `started_at` or `nonce` (or with a wrong-typed field) is now treated as unparsable, so
   its liveness follows the file's age instead of its heartbeat. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
