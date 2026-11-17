@@ -9,7 +9,7 @@ function base(id: string, executionId: string, stageId = 'plan'): QuestionItem {
 }
 
 function record(id: string, executionId: string): QuestionEntry {
-  return questionEntry(base(id, executionId));
+  return questionEntry(base(id, executionId), { status: 'superseded' });
 }
 
 function pending(id: string, executionId: string, stageId = 'plan'): QuestionItem {
@@ -40,6 +40,15 @@ describe('questionAttempts', () => {
       [record('1', '0001-plan--attempt-01'), record('1', '0002-plan--attempt-02')],
       [pending('1', '0002-plan--attempt-02')],
     );
+    expect(attempts.map((attempt) => [attempt.executionId, attempt.status])).toEqual([
+      ['0001-plan--attempt-01', 'superseded'],
+      ['0002-plan--attempt-02', 'pending'],
+    ]);
+  });
+
+  it('marks an attempt pending when its own question records wait for an answer', () => {
+    const waiting = questionEntry(base('1', '0002-plan--attempt-02'), { status: 'pending' });
+    const attempts = questionAttempts([record('1', '0001-plan--attempt-01'), waiting], []);
     expect(attempts.map((attempt) => [attempt.executionId, attempt.status])).toEqual([
       ['0001-plan--attempt-01', 'superseded'],
       ['0002-plan--attempt-02', 'pending'],

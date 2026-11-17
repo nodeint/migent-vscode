@@ -210,10 +210,21 @@ function replyBlocker(id) {
 // answer) and the answer is a session.active event on the asking execution, then input.json on the next execution.
 //   record               event, then 0002 input.json, status cleared (the CLI continues)
 //   fail-after-record    event only, status left listing the batch as pending, exit 1 (dispatch failed)
+// The pending batch is the latest execution's questions.json (optionally of `--stage`) whose execution ended by asking
+// and has no later attempt of its stage, as `status.json` lists no questions in 0.8.0.
+function perExecutionBatches(id) {
+  const root = path.join(dirOf(id), 'executions');
+  const names = fs.existsSync(root) ? fs.readdirSync(root).sort() : [];
+  return names.filter((name) => fs.existsSync(path.join(root, name, 'questions.json'))).map((name) => {
+    const file = JSON.parse(fs.readFileSync(path.join(root, name, 'questions.json'), 'utf8'));
+    return { name, stage: file.stage_id, questions: file.questions.map((record) => ({ ...record, execution_id: file.execution_id, stage_id: file.stage_id })) };
+  });
+}
+
 function answerPerExecution(id, mode) {
-  const status = JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8'));
   const stage = option('--stage');
-  const target = (status.questions ?? []).filter((record) => stage === undefined || record.stage_id === stage);
+  const batches = perExecutionBatches(id).filter((batch) => stage === undefined || batch.stage === stage);
+  const target = batches.at(-1)?.questions ?? [];
   if (target.length === 0) {
     console.error('no single pending question batch to answer; pass --stage');
     process.exit(2);
@@ -262,7 +273,8 @@ function answerPerExecution(id, mode) {
     input,
     answers,
   });
-  writeStatus(id, 'active', { questions: [] });
+  writeJson(path.join(dir, 'execution.json'), executionBody(id, next, target[0].stage_id, { resumes_execution_id: asking }));
+  writeStatus(id, 'active', {});
 }
 
 // `session continue --reply-file`: normalize the reply map into the question records, as the real CLI does.
@@ -279,9 +291,7 @@ function answer(id) {
   }
   if (process.env.MIGENT_FAKE_ANSWER_DELAY_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.MIGENT_FAKE_ANSWER_DELAY_MS));
   const file = path.join(dirOf(id), 'questions.json');
-  const hasExecutionQuestions = (JSON.parse(fs.readFileSync(path.join(dirOf(id), 'status.json'), 'utf8')).questions ?? []).some(
-    (record) => fs.existsSync(path.join(dirOf(id), record.file ?? '')),
-  );
+  const hasExecutionQuestions = perExecutionBatches(id).length > 0;
   if (!fs.existsSync(file) && hasExecutionQuestions) return answerPerExecution(id, mode);
   if (!fs.existsSync(file)) return replyBlocker(id);
   if (mode === 'reject') {

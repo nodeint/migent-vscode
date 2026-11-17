@@ -16,7 +16,7 @@ import {
   type ReplyMap,
   verifyBatch,
 } from '../core/questionAnswers';
-import { pendingQuestions, readQuestions } from '../core/questions';
+import { pendingOf, readQuestions } from '../core/questions';
 import { isRecord } from '../core/record';
 import { text } from '../text';
 import type { AnswerRuntime, ControlService } from './control';
@@ -258,7 +258,7 @@ export class AnswerSubmitter {
     if (blocked !== null) return blocked;
     const history = readQuestions(sessionDir(context.root, sessionId));
     const verified = verifyBatch({
-      summary: pendingQuestions(),
+      summary: pendingOf(history),
       history,
       target,
       fingerprint: request.fingerprint,
