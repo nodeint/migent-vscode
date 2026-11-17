@@ -69,6 +69,7 @@ export function questionAttempts(
     const group = groupOf(item.stage_id, item.execution_id);
     group.ids.add(item.id);
     if (answer !== null || status === 'answered') group.isAnswered = true;
+    if (status === 'pending') group.isPending = true;
   }
   for (const question of pending) {
     const group = groupOf(question.stage_id, question.execution_id);

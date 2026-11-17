@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { SessionQuestions } from '@nodeint/migent-contracts';
 
 import { text } from '../text';
-import { parseExecutionId } from './executions';
+import { type ExecutionEntry, executionOutcomeStatus, listExecutions, parseExecutionId } from './executions';
 import { parseAnswer, type PersistedAnswer, type QuestionAnswer, readAnswerIndex } from './humanInput';
 import { EXECUTIONS_DIRNAME, QUESTIONS_FILENAME } from './paths';
 import { isRecord } from './record';
@@ -325,10 +325,20 @@ function readExecutionBatches(sessionDirPath: string): ExecutionBatch[] {
 
 const NUL = '\u0000';
 
+/**
+ * Whether the execution's own question file still waits for an answer: it ended by asking and no later attempt of
+ * its stage exists (a reply or answers open the next attempt).
+ */
+function isWaiting(item: QuestionItem, executions: readonly ExecutionEntry[]): boolean {
+  const own = executions.find((entry) => entry.id === item.execution_id);
+  if (own === undefined || executionOutcomeStatus(own.execution) !== 'question') return false;
+  return !executions.some((entry) => entry.execution.stage_id === own.execution.stage_id && entry.order > own.order);
+}
+
 /** The entry with its persisted answer applied: first match wins, a stale pending row never hides an answer. */
 function withEvidence(
   entry: QuestionEntry,
-  context: { persisted: PersistedAnswer | undefined; isLegacy: boolean },
+  context: { persisted: PersistedAnswer | undefined; isLegacy: boolean; executions: readonly ExecutionEntry[] },
 ): QuestionEntry {
   if (entry.status === 'answered' || entry.answer !== null) return { ...entry, status: 'answered' };
   const { persisted } = context;
@@ -340,14 +350,16 @@ function withEvidence(
       answeredAt: persisted.at,
     };
   }
-  return context.isLegacy ? entry : { ...entry, status: 'superseded' };
+  if (context.isLegacy) return entry;
+  return { ...entry, status: isWaiting(entry.item, context.executions) ? 'pending' : 'superseded' };
 }
 
 /**
  * Read the question history of a session on demand, from every source Migent has written: the legacy session
  * `questions.json` (up to 0.7), each execution's `questions.json`, and the persisted answers of `input.json` and
  * the answer events. Definitions come from the legacy file for the executions it lists, otherwise from the
- * execution's own file. No batch is treated as pending (B6): `status.json` no longer carries the pending summary.
+ * execution's own file. `status.json` carries no pending summary (B6), so an execution's own questions are pending
+ * when it ended by asking and no later attempt of its stage exists.
  * Nothing is cached.
  */
 export function readQuestions(sessionDirPath: string): QuestionsRead {
@@ -369,8 +381,13 @@ export function readQuestions(sessionDirPath: string): QuestionsRead {
   }
   const { answers } = readAnswerIndex(sessionDirPath, undecided);
   const legacySet = new Set(legacyEntries);
+  const executions = listExecutions(sessionDirPath);
   const questions = definitions.map((entry) =>
-    withEvidence(entry, { persisted: answers.get(entry.item.execution_id), isLegacy: legacySet.has(entry) }),
+    withEvidence(entry, {
+      persisted: answers.get(entry.item.execution_id),
+      isLegacy: legacySet.has(entry),
+      executions,
+    }),
   );
   return { kind: 'ok', questions, malformed };
 }
@@ -401,4 +418,9 @@ export function questionsFileToOpen(sessionDirPath: string): string {
 /** The pending questions of a session. Always empty (B6): `status.json.questions` is not in the contract. */
 export function pendingQuestions(): QuestionItem[] {
   return [];
+}
+
+/** The questions of a read that still wait for an answer, in stored order. */
+export function pendingOf(read: QuestionsRead): QuestionItem[] {
+  return read.kind === 'ok' ? read.questions.filter(({ status }) => status === 'pending').map(({ item }) => item) : [];
 }

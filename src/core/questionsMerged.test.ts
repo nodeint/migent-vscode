@@ -49,6 +49,15 @@ describe('readQuestions over Migent 0.8.0 files', () => {
     expect(list[0]).toMatchObject({ item: { stage_id: 'plan', recipient: 'human' }, answer: null });
   });
 
+  it('lists the batch of an execution that ended by asking as pending until a later attempt of its stage exists', () => {
+    const dir = makeSession();
+    putExecution(dir, PLAN_1, { outcomeStatus: 'question' });
+    putQuestions(dir, PLAN_1);
+    expect(statusesOf(records(dir))).toEqual([[PLAN_1, '1', 'pending'], [PLAN_1, '2', 'pending']]);
+    putExecution(dir, PLAN_2);
+    expect(statusesOf(records(dir))).toEqual([[PLAN_1, '1', 'superseded'], [PLAN_1, '2', 'superseded']]);
+  });
+
   it('shows the answer from input.json', () => {
     const dir = makeSession();
     putQuestions(dir, PLAN_1);

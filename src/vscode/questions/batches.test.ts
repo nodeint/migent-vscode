@@ -10,7 +10,7 @@ vi.mock('vscode', () => ({
 const pending = vi.hoisted(() => ({ questions: [] as unknown[] }));
 vi.mock('../../core/questions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/questions')>();
-  return { ...actual, pendingQuestions: () => pending.questions };
+  return { ...actual, pendingQuestions: () => pending.questions, pendingOf: () => pending.questions };
 });
 
 import type { SessionSnapshot } from '../../core/model';

@@ -14,7 +14,7 @@ import {
   serializeAnswers,
   verifyBatch,
 } from '../../core/questionAnswers';
-import { pendingQuestions, type QuestionEntry, type QuestionItem, questionsFileToOpen, type QuestionsRead, readQuestions } from '../../core/questions';
+import { pendingOf, type QuestionEntry, type QuestionItem, questionsFileToOpen, type QuestionsRead, readQuestions } from '../../core/questions';
 import { titleCase } from '../../core/resultsModel';
 import { buildSessionMeta } from '../../core/sessionMeta';
 import { sessionTitle } from '../../core/sessionPresentation';
@@ -35,9 +35,9 @@ const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
   snapshot?.status?.workflow_id ?? snapshot?.manifest?.workflow_id ?? null;
 
 
-/** Pending records of one batch, in stored order. Always empty (B6): no source reports pending questions. */
-export function pendingBatch(id: BatchIdentity): QuestionItem[] {
-  return pendingQuestions().filter(
+/** Pending records of one batch, in stored order, from the question files of its session. */
+export function pendingBatch(id: BatchIdentity, history: QuestionsRead | null): QuestionItem[] {
+  return pendingOf(history ?? { kind: 'missing' }).filter(
     (question) => question.execution_id === id.executionId && question.stage_id === id.stageId,
   );
 }
@@ -164,7 +164,7 @@ export class QuestionBatches implements vscode.Disposable {
   }
 
   #makeEntry(identity: BatchIdentity): Entry {
-    const current = pendingBatch(identity);
+    const current = pendingBatch(identity, this.#readHistory(identity));
     const key = batchKeyOf(identity);
     const kept = this.#unsaved.get(key);
     this.#unsaved.delete(key);
@@ -284,7 +284,7 @@ export class QuestionBatches implements vscode.Disposable {
   }
 
   async #reload(entry: Entry): Promise<void> {
-    const current = pendingBatch(entry.identity);
+    const current = pendingBatch(entry.identity, this.#readHistory(entry.identity));
     if (current.length === 0 || entry.state !== 'stale') return;
     // The old batch and draft are archived durably before the current questions replace them.
     const old = { questions: entry.questions, draft: entry.draft };
@@ -349,9 +349,9 @@ export class QuestionBatches implements vscode.Disposable {
     this.#apply(entry, { reconciliation, stderrLast: null, cleanupError });
   }
 
-  #readHistory(entry: Entry): QuestionsRead | null {
-    const resolved = this.#resolve(entry.identity);
-    return resolved === undefined ? null : readQuestions(sessionDir(resolved.context.root, entry.identity.sessionId));
+  #readHistory(identity: BatchIdentity): QuestionsRead | null {
+    const resolved = this.#resolve(identity);
+    return resolved === undefined ? null : readQuestions(sessionDir(resolved.context.root, identity.sessionId));
   }
 
   /**
@@ -360,11 +360,11 @@ export class QuestionBatches implements vscode.Disposable {
    * Draft editing stays possible either way.
    */
   #blockReason(entry: Entry, resolved: Resolved | undefined): string | null {
-    const history = this.#readHistory(entry);
+    const history = this.#readHistory(entry.identity);
     if (resolved?.snapshot === undefined || history === null) return text('prompts.sessionUnavailable');
     const { executionId, stageId } = entry.identity;
     const verified = verifyBatch({
-      summary: pendingQuestions(),
+      summary: pendingBatch(entry.identity, history),
       history,
       target: { executionId, stageId },
       fingerprint: entry.fingerprint,
@@ -442,12 +442,12 @@ export class QuestionBatches implements vscode.Disposable {
 
   #stateInput(entry: Entry, resolved: Resolved): Parameters<typeof refreshBatchState>[0] {
     const { identity } = entry;
-    const history = this.#readHistory(entry);
+    const history = this.#readHistory(identity);
     const dir = sessionDir(resolved.context.root, identity.sessionId);
     return {
       state: entry.state,
       fingerprint: entry.fingerprint,
-      current: pendingBatch(identity),
+      current: pendingBatch(identity, history),
       history: history?.kind === 'ok' ? history.questions : null,
       target: { executionId: identity.executionId, stageId: identity.stageId },
       executions: listExecutions(dir).map(({ id, execution }) => ({ id, stage: execution.stage_id })),
@@ -466,7 +466,7 @@ export class QuestionBatches implements vscode.Disposable {
       }
       return;
     }
-    const current = pendingBatch(entry.identity);
+    const current = pendingBatch(entry.identity, this.#readHistory(entry.identity));
     if (entry.questions.length === 0 && current.length > 0) entry.replaceBatch(current);
     const update = refreshBatchState(this.#stateInput(entry, resolved));
     entry.move(update);
@@ -477,7 +477,7 @@ export class QuestionBatches implements vscode.Disposable {
   #recorded(entry: Entry): QuestionEntry[] | null {
     if (entry.isEditable || entry.state === 'stale') return null;
     const { executionId, stageId } = entry.identity;
-    const history = this.#readHistory(entry);
+    const history = this.#readHistory(entry.identity);
     const records = history?.kind === 'ok' ? history.questions : [];
     return records.filter(
       ({ item, status }) => item.execution_id === executionId && item.stage_id === stageId && status === 'answered',
