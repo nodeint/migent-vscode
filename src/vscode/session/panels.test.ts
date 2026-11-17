@@ -14,6 +14,7 @@ vi.mock('../../core/questions', async (importOriginal) => {
 
 import type { SessionSnapshot } from '../../core/model';
 import { sessionDir } from '../../core/paths';
+import { executionJson, questionItem } from '../../core/testHelpers';
 
 const invoke = vi.hoisted(() => ({ json: vi.fn() }));
 vi.mock('../../cli/invoke', () => ({ invokeJson: invoke.json, invokeText: vi.fn() }));
@@ -81,22 +82,18 @@ function makeRoot(withExecution: boolean, schema = 7): string {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'workflow.yaml'), `schema_version: ${schema}\nid: a\nstages:\n  - id: plan\n    role: dev\n`);
   if (withExecution) mkdirSync(path.join(dir, 'executions', '0001-plan--attempt-01'), { recursive: true });
+  if (withExecution) writeFileSync(path.join(dir, 'executions', '0001-plan--attempt-01', 'execution.json'), JSON.stringify(executionJson('0001-plan--attempt-01')));
   return root;
 }
 
 function question(id: string, executionId: string, stageId: string) {
-  return {
-    id,
+  return questionItem(id, {
     question: `Question ${id}`,
-    context: null,
-    selection: 'single',
-    options: [{ id: 'A', label: 'A', description: null }],
+    options: [{ id: 'A', label: 'A' }],
     recommended: [],
-    executionId,
-    stageId,
-    recipient: 'human',
-    file: null,
-  };
+    execution_id: executionId,
+    stage_id: stageId,
+  });
 }
 
 function snapshot(questions: ReturnType<typeof question>[] = []): SessionSnapshot {
@@ -276,6 +273,7 @@ describe('SessionPanels tabs', () => {
       recommended: [],
       execution_id: '0001-plan--attempt-01',
       stage_id: 'plan',
+      recipient: 'human',
       status: 'answered',
       answer: { selected: ['B'] },
       answered_at: '2026-11-01T11:00:00Z',

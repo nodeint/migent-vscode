@@ -5,8 +5,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { deriveDisplayState } from './displayState';
+import type { ExecutionEntry } from './executions';
 import { parseManifest } from './manifest';
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import type { SessionSnapshot } from './model';
 import {
   blockedTargets,
   blockKind,
@@ -21,7 +22,7 @@ import {
   replyText,
 } from './replyFlow';
 import { parseStatus } from './statusReader';
-import { snapshotFromDir, syntheticDir } from './testHelpers';
+import { executionEntry, executionJson, snapshotFromDir, syntheticDir } from './testHelpers';
 
 function snapshot(raw: Record<string, unknown>): SessionSnapshot {
   const status = parseStatus(JSON.stringify({ session_id: 's1', ...raw }));
@@ -140,7 +141,7 @@ function sessionWith(executions: Record<string, [history: Turn[], resumes: strin
   for (const [id, [history, resumes]] of Object.entries(executions)) {
     const root = path.join(dir, 'executions', id);
     mkdirSync(root, { recursive: true });
-    writeFileSync(path.join(root, 'execution.json'), JSON.stringify({ resumes_execution_id: resumes }));
+    writeFileSync(path.join(root, 'execution.json'), JSON.stringify(executionJson(id, { resumes_execution_id: resumes })));
     writeFileSync(
       path.join(root, 'conversation.json'),
       JSON.stringify({ history: history.map(([role, content]) => ({ role, content })) }),
@@ -281,28 +282,8 @@ describe('replyTargets', () => {
   );
   const role = parsedRole.kind === 'ok' ? parsedRole.manifest : null;
   const withRole = (raw: Record<string, unknown>): SessionSnapshot => ({ ...snapshot(raw), manifest: role });
-  const execution = (id: string, stage: string, status: string, kind: string | null = null): ExecutionSnapshot => {
-    const order = Number(id.slice(0, 4));
-    return {
-      id,
-      order,
-      stage,
-      attempt: 1,
-      status,
-      decision: null,
-      client: null,
-      model: null,
-      effort: null,
-      turnKind: null,
-      outcomeStatus: null,
-      error: null,
-      hasFailureReport: false,
-      blocker: null,
-      kind,
-      createdAt: null,
-      completedAt: null,
-    };
-  };
+  const execution = (id: string, stage: string, status: string, kind: string | null = null): ExecutionEntry =>
+    executionEntry({ id, stage, status, kind });
 
   it('offers no blocker target for a blocked workflow while the blocker source is empty (B6), exactly as blockedTargets does', () => {
     const blocked = snapshot({ status: 'blocked', blocked_by_execution_ids: ['0001-plan--attempt-01'] });

@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { text } from '../text';
-import type { QuestionBase, QuestionOption } from './model';
-import type { QuestionRecord, QuestionsRead } from './questions';
+import { type OptionView, type QuestionEntry, type QuestionItem, questionOptions, type QuestionsRead } from './questions';
 
 /**
  * Pure draft validation, JSON reply-file serialization, batch fingerprints and reconciliation for
@@ -47,29 +46,28 @@ export type BatchProblem =
   | { kind: 'bad-options'; questionId: string }
   | { kind: 'duplicate-id'; questionId: string };
 
-function modeOf(question: QuestionBase): QuestionMode | null {
-  return question.selection === 'single' || question.selection === 'multiple' ? question.selection : null;
+function modeOf(question: QuestionItem): QuestionMode | null {
+  return question.selection ?? null;
 }
 
 /**
  * Whether the pending records form one submittable batch: one stage, one execution, a supported mode,
  * 2-26 distinct options and unique ids. Any problem disables submission for that batch.
  */
-export function checkBatch(questions: readonly QuestionBase[]): BatchProblem | null {
+export function checkBatch(questions: readonly QuestionItem[]): BatchProblem | null {
   const [first] = questions;
   if (questions.length === 0) return { kind: 'empty' };
   const ids = new Set<string>();
   for (const question of questions) {
-    if (question.stageId !== first.stageId || question.executionId !== first.executionId) {
+    if (question.stage_id !== first.stage_id || question.execution_id !== first.execution_id) {
       return { kind: 'mixed-batch', detail: text('states.mixedStages') };
     }
-    // A standalone role session has no stage; the execution still identifies the batch.
-    if (question.executionId === null) return { kind: 'mixed-batch', detail: text('states.noExecution') };
     if (ids.has(question.id)) return { kind: 'duplicate-id', questionId: question.id };
     ids.add(question.id);
     if (modeOf(question) === null) return { kind: 'unsupported-mode', questionId: question.id };
-    const optionIds = new Set(question.options.map((option) => option.id));
-    const count = question.options.length;
+    const options = questionOptions(question);
+    const optionIds = new Set(options.map((option) => option.id));
+    const count = options.length;
     if (count < MIN_OPTIONS || count > MAX_OPTIONS || optionIds.size !== count) {
       return { kind: 'bad-options', questionId: question.id };
     }
@@ -81,16 +79,16 @@ export function checkBatch(questions: readonly QuestionBase[]): BatchProblem | n
  * Identity of a batch's content: ids, text, context, mode, options and recommendations in stored order.
  * A changed fingerprint makes a draft stale.
  */
-const optionTuple = (option: QuestionOption): (string | null)[] => [option.id, option.label, option.description];
+const optionTuple = (option: OptionView): (string | null)[] => [option.id, option.label, option.description];
 
-export function batchFingerprint(questions: readonly QuestionBase[]): string {
+export function batchFingerprint(questions: readonly QuestionItem[]): string {
   const canonical = questions.map((question) => [
     question.id,
-    question.question,
-    question.context,
-    question.selection,
-    question.options.map(optionTuple),
-    question.recommended,
+    question.question ?? '',
+    question.context ?? null,
+    question.selection ?? null,
+    questionOptions(question).map(optionTuple),
+    question.recommended ?? [],
   ]);
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, FINGERPRINT_LENGTH);
 }
@@ -103,11 +101,11 @@ export interface QuestionValidation {
   issue: QuestionIssue | null;
 }
 
-function validateOne(question: QuestionBase, draft: AnswerDraft | undefined): QuestionIssue | null {
+function validateOne(question: QuestionItem, draft: AnswerDraft | undefined): QuestionIssue | null {
   const value = draft ?? emptyDraft();
   if (value.mode === 'text') return value.text.trim().length === 0 ? 'empty-text' : null;
   if (value.selected.length === 0) return 'unanswered';
-  const known = new Set(question.options.map((option) => option.id));
+  const known = new Set(questionOptions(question).map((option) => option.id));
   if (new Set(value.selected).size !== value.selected.length) return 'duplicate-option';
   if (!value.selected.every((id) => known.has(id))) return 'unknown-option';
   if (modeOf(question) === 'single' && value.selected.length > 1) return 'too-many';
@@ -116,7 +114,7 @@ function validateOne(question: QuestionBase, draft: AnswerDraft | undefined): Qu
 
 /** Validate only each question's active mode. */
 export function validateBatch(
-  questions: readonly QuestionBase[],
+  questions: readonly QuestionItem[],
   draft: Readonly<BatchDraft>,
 ): QuestionValidation[] {
   return questions.map((question) => ({ questionId: question.id, issue: validateOne(question, draft[question.id]) }));
@@ -130,7 +128,7 @@ export function answeredCount(validation: readonly QuestionValidation[]): number
  * Serialize the active modes into the documented reply map. Returns null unless every question is valid.
  * Multiple choices are emitted in option order, a single choice as one id, free text verbatim.
  */
-export function serializeAnswers(questions: readonly QuestionBase[], draft: Readonly<BatchDraft>): ReplyMap | null {
+export function serializeAnswers(questions: readonly QuestionItem[], draft: Readonly<BatchDraft>): ReplyMap | null {
   const reply: ReplyMap = {};
   for (const question of questions) {
     const value = draft[question.id] ?? emptyDraft();
@@ -141,7 +139,8 @@ export function serializeAnswers(questions: readonly QuestionBase[], draft: Read
       reply[question.id] = value.selected[0] ?? '';
     } else {
       const chosen = new Set(value.selected);
-      reply[question.id] = question.options.filter((option) => chosen.has(option.id)).map((option) => option.id);
+      const picked = questionOptions(question).filter((option) => chosen.has(option.id));
+      reply[question.id] = picked.map((option) => option.id);
     }
   }
   return reply;
@@ -156,11 +155,11 @@ export function replyFileText(reply: ReplyMap): string {
  * Free text the current CLI reader would take for an option id (a JSON string "A" selects option A even
  * after the user chose Other). Reported, never rewritten: the plan has no explicit free-text transport.
  */
-const hasOption = (question: QuestionBase, id: string): boolean =>
-  question.options.some((option) => option.id === id);
+const hasOption = (question: QuestionItem, id: string): boolean =>
+  questionOptions(question).some((option) => option.id === id);
 
 export function ambiguousTextQuestions(
-  questions: readonly QuestionBase[],
+  questions: readonly QuestionItem[],
   draft: Readonly<BatchDraft>,
 ): string[] {
   const ambiguous: string[] = [];
@@ -186,17 +185,17 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
 }
 
 /** Whether the stored answer for `question` equals the reply value (option ids, or free text). */
-function answerMatches(record: QuestionRecord, value: string | string[]): boolean {
+function answerMatches(record: QuestionEntry, value: string | string[]): boolean {
   const { answer } = record;
   if (answer === null) return false;
   if (Array.isArray(value)) return answer.text === null && sameSet(answer.selected, value);
-  const isOption = record.options.some((option) => option.id === value);
+  const isOption = questionOptions(record.item).some((option) => option.id === value);
   // The CLI reads a string equal to an option id as that option.
   return isOption ? sameSet(answer.selected, [value]) : answer.selected.length === 0 && answer.text === value;
 }
 
-function matchesReply(record: QuestionRecord, reply: Readonly<ReplyMap>): boolean {
-  const value = reply[record.id];
+function matchesReply(record: QuestionEntry, reply: Readonly<ReplyMap>): boolean {
+  const value = reply[record.item.id];
   return value !== undefined && answerMatches(record, value);
 }
 
@@ -205,14 +204,14 @@ function matchesReply(record: QuestionRecord, reply: Readonly<ReplyMap>): boolea
  * independent of the session's overall state. Superseded or missing records are never evidence of acceptance.
  */
 export function reconcileSubmission(
-  history: readonly QuestionRecord[],
+  history: readonly QuestionEntry[],
   target: Pick<BatchTarget, 'executionId' | 'stageId'>,
   reply: Readonly<ReplyMap>,
 ): Reconciliation {
-  const found: QuestionRecord[] = [];
+  const found: QuestionEntry[] = [];
   for (const id of Object.keys(reply)) {
     const record = history.find(
-      (item) => item.executionId === target.executionId && item.stageId === target.stageId && item.id === id,
+      ({ item }) => item.execution_id === target.executionId && item.stage_id === target.stageId && item.id === id,
     );
     if (record === undefined) return { kind: 'unconfirmed' };
     found.push(record);
@@ -228,7 +227,7 @@ const HUMAN_RECIPIENT = 'human';
 
 export interface VerifyInput {
   /** `status.json.questions`, the lightweight summary. */
-  summary: readonly QuestionBase[];
+  summary: readonly QuestionItem[];
   /** The session `questions.json` read: the authoritative records. */
   history: QuestionsRead;
   target: Pick<BatchTarget, 'executionId' | 'stageId'>;
@@ -237,7 +236,7 @@ export interface VerifyInput {
 }
 
 export type Verified =
-  | { kind: 'ok'; questions: QuestionBase[] }
+  | { kind: 'ok'; questions: QuestionItem[] }
   /** The batch is absent or differs from what the user saw. */
   | { kind: 'changed'; reason: string }
   /** The batch cannot be submitted from here; monitoring and raw files stay available. */
@@ -272,26 +271,29 @@ export function verifyBatch(input: VerifyInput): Verified {
   if (history.kind !== 'ok') return { kind: 'unsupported', reason: historyProblem(history.kind) };
   const isTarget = (item: { executionId: string | null; stageId: string | null }): boolean =>
     item.executionId === target.executionId && item.stageId === target.stageId;
+  const isItemTarget = (item: QuestionItem): boolean =>
+    item.execution_id === target.executionId && item.stage_id === target.stageId;
   // A malformed record of this batch (or one that names no execution) is never validated by its remnants.
   const broken = history.malformed.find((item) => item.executionId === null || isTarget(item));
   if (broken !== undefined) {
     return { kind: 'unsupported', reason: text('states.malformedRecord', { reason: broken.reason }) };
   }
-  const summary = input.summary.filter(isTarget);
-  const records = history.questions.filter((record) => isTarget(record) && record.status === 'pending');
+  const summary = input.summary.filter(isItemTarget);
+  const records = history.questions.filter((entry) => isItemTarget(entry.item) && entry.status === 'pending');
   if (summary.length === 0 || records.length === 0) return { kind: 'changed', reason: text('states.noLongerWaiting') };
-  if (!sameIds(summary, records)) {
+  const items = records.map((record) => record.item);
+  if (!sameIds(summary, items)) {
     return { kind: 'unsupported', reason: text('states.filesDisagree') };
   }
-  if (records.some((record) => record.recipient !== HUMAN_RECIPIENT)) {
+  if (records.some((record) => record.item.recipient !== HUMAN_RECIPIENT)) {
     return { kind: 'unsupported', reason: text('states.notForPerson') };
   }
-  const problem = checkBatch(records);
+  const problem = checkBatch(items);
   if (problem !== null) return { kind: 'unsupported', reason: describeBatchProblem(problem) };
-  if (batchFingerprint(records) !== input.fingerprint) {
+  if (batchFingerprint(items) !== input.fingerprint) {
     return { kind: 'changed', reason: text('states.questionsChanged') };
   }
-  return { kind: 'ok', questions: records };
+  return { kind: 'ok', questions: items };
 }
 
 export function describeBatchProblem(problem: BatchProblem): string {

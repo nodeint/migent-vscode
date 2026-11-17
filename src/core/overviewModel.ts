@@ -1,7 +1,7 @@
-import type { TailEvent } from './eventTail';
+import type { EventEntry } from './eventTail';
+import type { ExecutionEntry } from './executions';
 import type { HumanInputFact } from './humanInput';
 import type { MetricsExecution } from './metrics';
-import type { ExecutionSnapshot } from './model';
 import { type OverviewActions,overviewActions } from './overviewActions';
 import { buildResultsModel, type ResultsInput, type ResultsModel,type ResultsNext } from './resultsModel';
 import { buildActivity, type SessionActivity } from './sessionActivity';
@@ -46,7 +46,7 @@ export function nextStepAction(state: string, next: ResultsNext): NextStepAction
 }
 
 export interface OverviewInput extends ResultsInput {
-  executions: readonly ExecutionSnapshot[];
+  executions: readonly ExecutionEntry[];
   plan: SessionStagePlan;
   /** `metrics.json` executions when the file is readable; the host passes none otherwise. */
   metrics?: readonly MetricsExecution[];
@@ -55,7 +55,7 @@ export interface OverviewInput extends ResultsInput {
   /** The human input each execution opened with; the host reads it for any session state. */
   inputs?: ReadonlyMap<string, HumanInputFact>;
   /** Already-read recent events; the host passes none unless the session is Running. */
-  events: readonly TailEvent[];
+  events: readonly EventEntry[];
 }
 
 export function buildOverviewModel(input: OverviewInput): OverviewModel {

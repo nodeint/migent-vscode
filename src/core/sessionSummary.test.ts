@@ -1,38 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  DisplayStateName,
-  ExecutionSnapshot,
-  SessionSnapshot,
-  UnknownReason,
-} from './model';
+import type { ExecutionEntry } from './executions';
+import type { DisplayStateName, SessionSnapshot, UnknownReason } from './model';
 import { buildSummary } from './sessionSummary';
+import { executionEntry, type ExecutionFixture } from './testHelpers';
 
 function execution(
   id: string,
   stage: string,
-  overrides: Partial<ExecutionSnapshot> = {},
-): ExecutionSnapshot {
-  return {
-    id,
-    order: Number(id.slice(0, 4)),
-    stage,
-    attempt: 1,
-    status: 'completed',
-    decision: null,
-    blocker: null,
-    client: null,
-    model: null,
-    effort: null,
-    turnKind: null,
-    outcomeStatus: null,
-    error: null,
-    hasFailureReport: false,
-    kind: null,
-    createdAt: null,
-    completedAt: null,
-    ...overrides,
-  };
+  overrides: Partial<ExecutionFixture> = {},
+): ExecutionEntry {
+  return executionEntry({ id, stage, status: 'completed', ...overrides });
 }
 
 interface SnapshotInput {

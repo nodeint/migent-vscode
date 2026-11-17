@@ -127,6 +127,7 @@ const PINS: Record<TextId, Pin> = {
   'states.unrecognizedStatus': [undefined, 'unrecognized status'],
   'states.notObject': [undefined, 'not an object'],
   'states.missingIdOrQuestion': [undefined, 'missing id or question'],
+  'states.missingRequiredField': [{'field':'<field>'}, 'missing or invalid <field>'],
   'states.handoffNotMapping': [undefined, 'handoff is not a mapping'],
   'states.handoffSourceMissing': [undefined, 'source_session_id is missing'],
   'states.handoffArtifactsNotMapping': [undefined, 'artifacts is not a mapping'],

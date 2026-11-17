@@ -2,9 +2,10 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { text } from '../text';
+import type { ExecutionEntry } from './executions';
 import { childrenForWorkflow, childrenOf, type HandoffArtifact, readHandoff } from './handoff';
 import { manifestPriorSessionId } from './manifest';
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import type { SessionSnapshot } from './model';
 import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
 import { listOutputs, type OutputFileState, type OutputRow, publishedOutputs } from './outputs';
@@ -121,7 +122,7 @@ export interface ResultsInput {
   eligibleIds: readonly string[];
   workflows: readonly WorkflowEntry[];
   /** The session's executions, oldest first; they resolve who published an output. Empty when not read. */
-  executions?: readonly ExecutionSnapshot[];
+  executions?: readonly ExecutionEntry[];
 }
 
 /** Published names and unnamed paths live in separate namespaces, so one can never select the other's file. */
@@ -162,7 +163,7 @@ function suggestionChild(child: SessionSnapshot): ResultsSuggestionChild {
   };
 }
 
-function outputRow(row: OutputRow, executions: readonly ExecutionSnapshot[]): ResultsOutput {
+function outputRow(row: OutputRow, executions: readonly ExecutionEntry[]): ResultsOutput {
   const publisherId = row.publishedByExecutionId ?? row.sourceExecutionId;
   const publisher = executions.find((execution) => execution.id === publisherId);
   return {
@@ -170,9 +171,9 @@ function outputRow(row: OutputRow, executions: readonly ExecutionSnapshot[]): Re
     label: row.name ?? path.posix.basename(row.path),
     path: row.path,
     state: row.state,
-    stage: publisher?.stage ?? null,
+    stage: publisher?.execution.stage_id ?? null,
     attempt: publisher?.attempt ?? null,
-    publishedAt: publisher?.completedAt ?? null,
+    publishedAt: publisher?.execution.completed_at ?? null,
   };
 }
 

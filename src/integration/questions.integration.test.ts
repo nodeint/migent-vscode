@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 
 import type { BatchIdentity } from '../vscode/questions/entry';
-import { createProject, type Env, freshLock, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
+import { createProject, type Env, executionRecord, freshLock, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
 
 const EXECUTION = '0001-plan--attempt-01';
 const OPTIONS = [
@@ -77,9 +77,9 @@ function seedSession(env: Env, sessionId: string, seed: Seed = {}): BatchIdentit
       JSON.stringify({ schema_version: seed.schemaVersion ?? 1, questions: records }),
     );
   }
-  write(migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'execution.json'), JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'completed' }));
+  write(migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'execution.json'), executionRecord(EXECUTION, 'plan', { status: 'completed' }));
   if (seed.twoStages === true) {
-    write(migentPath(env.root, 'sessions', sessionId, 'executions', '0001-test--attempt-01', 'execution.json'), JSON.stringify({ execution_id: '0001-test--attempt-01', stage_id: 'test', status: 'completed' }));
+    write(migentPath(env.root, 'sessions', sessionId, 'executions', '0001-test--attempt-01', 'execution.json'), executionRecord('0001-test--attempt-01', 'test', { status: 'completed' }));
   }
   if (seed.lock === true) write(migentPath(env.root, 'sessions', sessionId, 'session.lock'), freshLock());
   return { project: env.project()?.key ?? '', sessionId, stageId: 'plan', executionId: EXECUTION };

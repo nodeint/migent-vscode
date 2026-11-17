@@ -33,8 +33,8 @@ function requestedFrom(arg: unknown): Requested {
 /** The stage of an execution, from the session's pending questions when the caller did not name it. */
 function stageOf(stageId: string | null, executionId: string): string | null {
   if (stageId !== null) return stageId;
-  const question = pendingQuestions().find((candidate) => candidate.executionId === executionId);
-  return question?.stageId ?? null;
+  const question = pendingQuestions().find((candidate) => candidate.execution_id === executionId);
+  return question?.stage_id ?? null;
 }
 
 function optionsFor(

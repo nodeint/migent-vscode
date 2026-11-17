@@ -13,7 +13,7 @@ import { groupOf, summarize } from '../core/attention';
 import type { SessionSnapshot } from '../core/model';
 import { blockedTargets } from '../core/replyFlow';
 import { ReplyService } from '../vscode/reply';
-import { createProject, type Env, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
+import { createProject, type Env, executionRecord, manifest, migentPath, runScenarios, type Scenario, status, waitFor, write } from './harness';
 
 const EXECUTION = '0001-plan--attempt-01';
 const ROLE_EXECUTION = '0001-reviewer--attempt-01';
@@ -26,7 +26,7 @@ function seedBlocked(env: Env, sessionId: string): void {
   );
   write(
     migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'execution.json'),
-    JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'blocked', outcome: { blocker: 'needs a decision' } }),
+    executionRecord(EXECUTION, 'plan', { status: 'blocked', outcome: { blocker: 'needs a decision' } }),
   );
   write(migentPath(env.root, 'sessions', sessionId, 'executions', EXECUTION, 'response.md'), 'Which database?');
   // The baseline the CLI keeps for the blocked execution; without readable history nothing is confirmed.
@@ -52,7 +52,7 @@ function seedOther(env: Env, sessionId: string, kind: Seed): string {
   write(migentPath(env.root, 'sessions', sessionId, 'manifest.yaml'), manifest(sessionId, isRole ? 'role: reviewer\n' : 'workflow_id: plan\n'));
   write(migentPath(env.root, 'sessions', sessionId, 'status.json'), status(SESSION_STATUS[kind], { latest_execution_id: executionId }));
   const dir = ['sessions', sessionId, 'executions', executionId] as const;
-  write(migentPath(env.root, ...dir, 'execution.json'), JSON.stringify({ execution_id: executionId, stage_id: stage, status: executionStatus }));
+  write(migentPath(env.root, ...dir, 'execution.json'), executionRecord(executionId, stage, { status: executionStatus }));
   write(migentPath(env.root, ...dir, 'response.md'), 'Working on it.');
   write(migentPath(env.root, ...dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: 'Read the task.' }] }));
   return executionId;
@@ -107,6 +107,11 @@ const scenarios: Scenario[] = [
       const [call] = argvLog(env);
       assert.deepEqual(call.slice(0, 5), ['session', 'continue', 'c1', '--stage', 'plan']);
       assert.equal(call.length, 7, 'no run flags are added to a reply');
+      const persisted = JSON.parse(
+        fs.readFileSync(migentPath(env.root, 'sessions', 'c1', 'executions', '0002-plan--attempt-02', 'execution.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      assert.equal(persisted.execution_order, 2, 'the continued execution records its order');
+      assert.equal(persisted.stage_attempt, 2, 'the continued execution records its attempt');
     },
   },
   {
@@ -168,7 +173,7 @@ const scenarios: Scenario[] = [
       assert.equal(fs.existsSync(role.file), true);
       const cancelled = await openOther(env, 'st2', 'cancelled');
       fs.appendFileSync(cancelled.file, 'Late.\n');
-      write(migentPath(env.root, 'sessions', 'st2', 'executions', EXECUTION, 'execution.json'), JSON.stringify({ execution_id: EXECUTION, stage_id: 'plan', status: 'completed' }));
+      write(migentPath(env.root, 'sessions', 'st2', 'executions', EXECUTION, 'execution.json'), executionRecord(EXECUTION, 'plan', { status: 'completed' }));
       write(migentPath(env.root, 'sessions', 'st2', 'status.json'), status('completed', { latest_execution_id: EXECUTION }));
       await waitFor('stage no longer replyable', () => env.project()?.store.snapshot('st2')?.replyTargets.length === 0);
       assert.equal((await env.api.replies.send(cancelled.meta)).kind, 'blocked');

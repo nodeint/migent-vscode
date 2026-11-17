@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { QuestionBase } from './model';
 import {
   answeredCount,
   type BatchDraft,
@@ -15,26 +14,11 @@ import {
   validateBatch,
   verifyBatch,
 } from './questionAnswers';
-import { parseQuestionsFile, readQuestions } from './questions';
-import { capturedDir } from './testHelpers';
+import { parseQuestionsFile, type QuestionItem, readQuestions } from './questions';
+import { capturedDir, questionItem } from './testHelpers';
 
-function question(id: string, selection: string, overrides: Partial<QuestionBase> = {}): QuestionBase {
-  return {
-    id,
-    question: `Question ${id}?`,
-    context: 'ctx',
-    selection,
-    options: [
-      { id: 'A', label: 'One', description: null },
-      { id: 'B', label: 'Two', description: null },
-      { id: 'C', label: 'Three', description: null },
-    ],
-    recommended: ['A'],
-    executionId: 'e1',
-    stageId: 'plan',
-    recipient: 'human',
-    ...overrides,
-  };
+function question(id: string, selection: QuestionItem['selection'], overrides: Partial<QuestionItem> = {}): QuestionItem {
+  return questionItem(id, { selection, ...overrides });
 }
 
 const single = question('1', 'single');
@@ -66,7 +50,7 @@ describe('serializeAnswers', () => {
   });
 
   it('rejects whitespace-only text, unknown, duplicate and surplus options', () => {
-    const issue = (target: QuestionBase, value: BatchDraft[string]) =>
+    const issue = (target: QuestionItem, value: BatchDraft[string]) =>
       validateBatch([target], { [target.id]: value })[0]?.issue;
     expect(issue(single, { mode: 'text', selected: [], text: '  \n' })).toBe('empty-text');
     expect(issue(single, { mode: 'choice', selected: ['Z'], text: '' })).toBe('unknown-option');
@@ -79,11 +63,11 @@ describe('checkBatch and fingerprint', () => {
   it('accepts a valid batch and rejects mixed, unsupported and out-of-range ones', () => {
     expect(checkBatch(batch)).toBeNull();
     expect(checkBatch([])).toEqual({ kind: 'empty' });
-    expect(checkBatch([...batch, question('4', 'single', { stageId: 'other' })])?.kind).toBe('mixed-batch');
-    expect(checkBatch([question('1', 'text')])).toEqual({ kind: 'unsupported-mode', questionId: '1' });
+    expect(checkBatch([...batch, question('4', 'single', { stage_id: 'other' })])?.kind).toBe('mixed-batch');
+    expect(checkBatch([question('1', undefined)])).toEqual({ kind: 'unsupported-mode', questionId: '1' });
     expect(checkBatch([question('1', 'single', { options: [] })])?.kind).toBe('bad-options');
     expect(checkBatch([single, question('1', 'single')])?.kind).toBe('duplicate-id');
-    const options = Array.from({ length: 27 }, (_, index) => ({ id: `O${index}`, label: 'x', description: null }));
+    const options = Array.from({ length: 27 }, (_, index) => ({ id: `O${index}`, label: 'x' }));
     expect(checkBatch([question('1', 'single', { options: options.slice(0, 26) })])).toBeNull();
     expect(checkBatch([question('1', 'single', { options })])?.kind).toBe('bad-options');
   });
@@ -103,7 +87,7 @@ describe('reconcileSubmission (captured fixtures)', () => {
     return result.questions;
   };
   const answered = read('question-answered');
-  const target = { executionId: answered[0]?.executionId ?? '', stageId: answered[0]?.stageId ?? '' };
+  const target = { executionId: answered[0]?.item.execution_id ?? '', stageId: answered[0]?.item.stage_id ?? '' };
   const freeText = answered[2]?.answer?.text ?? '';
 
   it('recognizes recorded answers by normalized selected/text', () => {
@@ -117,7 +101,7 @@ describe('reconcileSubmission (captured fixtures)', () => {
       kind: 'answered-elsewhere',
     });
     const pending = read('question-pending');
-    const pendingTarget = { executionId: pending[0]?.executionId ?? '', stageId: pending[0]?.stageId ?? '' };
+    const pendingTarget = { executionId: pending[0]?.item.execution_id ?? '', stageId: pending[0]?.item.stage_id ?? '' };
     expect(reconcileSubmission(pending, pendingTarget, { '1': 'A', '2': ['A'], '3': 'x' })).toEqual({
       kind: 'pending',
     });
@@ -134,13 +118,13 @@ describe('reconcileSubmission (captured fixtures)', () => {
  * The pending batch the user saw. `status.json` no longer lists pending questions (B6), so the fixture's own
  * question records stand in for it, tagged with the execution the captured sample ran.
  */
-function pendingSummary(dir: string): QuestionBase[] {
+function pendingSummary(dir: string): QuestionItem[] {
   const read = readQuestions(dir);
   if (read.kind !== 'ok') throw new Error('fixture questions did not read');
-  return read.questions.map(({ status: _status, answer: _answer, answeredAt: _answeredAt, ...base }) => ({
-    ...base,
-    executionId: '0001-planner--attempt-01',
-    stageId: 'planner',
+  return read.questions.map(({ item }) => ({
+    ...item,
+    execution_id: '0001-planner--attempt-01',
+    stage_id: 'planner',
   }));
 }
 
@@ -148,7 +132,7 @@ describe('verifyBatch (captured question-pending)', () => {
   const dir = capturedDir('question-pending');
   const history = readQuestions(dir);
   const summary = pendingSummary(dir);
-  const target = { executionId: summary[0]?.executionId ?? '', stageId: summary[0]?.stageId ?? null };
+  const target = { executionId: summary[0]?.execution_id ?? '', stageId: summary[0]?.stage_id ?? null };
   const fingerprint = batchFingerprint(summary);
 
   it('accepts the authoritative pending batch the user saw', () => {
@@ -167,7 +151,7 @@ describe('verifyBatch (captured question-pending)', () => {
 
   it('blocks a non-human recipient, disagreeing membership and a changed batch', () => {
     if (history.kind !== 'ok') throw new Error('fixture');
-    const other = history.questions.map((record) => ({ ...record, recipient: 'agent' }));
+    const other = history.questions.map((entry) => ({ ...entry, item: { ...entry.item, recipient: 'agent' } }));
     expect(verifyBatch({ summary, history: { kind: 'ok', questions: other, malformed: [] }, target, fingerprint }).kind).toBe('unsupported');
     expect(verifyBatch({ summary: summary.slice(1), history, target, fingerprint }).kind).toBe('unsupported');
     expect(verifyBatch({ summary, history, target, fingerprint: 'other' }).kind).toBe('changed');
@@ -178,7 +162,7 @@ describe('verifyBatch (captured question-pending)', () => {
 describe('verifyBatch rejects malformed records instead of validating remnants', () => {
   const dir = capturedDir('question-pending');
   const summary = pendingSummary(dir);
-  const target = { executionId: summary[0]?.executionId ?? '', stageId: summary[0]?.stageId ?? null };
+  const target = { executionId: summary[0]?.execution_id ?? '', stageId: summary[0]?.stage_id ?? null };
   const fingerprint = batchFingerprint(summary);
   const raw = JSON.parse(readFileSync(path.join(dir, 'questions.json'), 'utf8')) as {
     schema_version: number;

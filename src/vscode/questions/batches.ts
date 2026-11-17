@@ -4,7 +4,7 @@ import { type AnswerModel, buildAnswerModel, parseAnswerMessage } from '../../co
 import { refreshBatchState } from '../../core/answerState';
 import { listExecutions } from '../../core/executions';
 import { manifestRole } from '../../core/manifest';
-import type { QuestionBase, SessionSnapshot } from '../../core/model';
+import type { SessionSnapshot } from '../../core/model';
 import { sessionDir } from '../../core/paths';
 import {
   type AnswerDraft,
@@ -14,7 +14,7 @@ import {
   serializeAnswers,
   verifyBatch,
 } from '../../core/questionAnswers';
-import { pendingQuestions, type QuestionRecord, questionsFileToOpen, type QuestionsRead, readQuestions } from '../../core/questions';
+import { pendingQuestions, type QuestionEntry, type QuestionItem, questionsFileToOpen, type QuestionsRead, readQuestions } from '../../core/questions';
 import { titleCase } from '../../core/resultsModel';
 import { buildSessionMeta } from '../../core/sessionMeta';
 import { sessionTitle } from '../../core/sessionPresentation';
@@ -36,9 +36,9 @@ const workflowIdOf = (snapshot: SessionSnapshot | undefined): string | null =>
 
 
 /** Pending records of one batch, in stored order. Always empty (B6): no source reports pending questions. */
-export function pendingBatch(id: BatchIdentity): QuestionBase[] {
+export function pendingBatch(id: BatchIdentity): QuestionItem[] {
   return pendingQuestions().filter(
-    (question) => question.executionId === id.executionId && question.stageId === id.stageId,
+    (question) => question.execution_id === id.executionId && question.stage_id === id.stageId,
   );
 }
 
@@ -450,7 +450,7 @@ export class QuestionBatches implements vscode.Disposable {
       current: pendingBatch(identity),
       history: history?.kind === 'ok' ? history.questions : null,
       target: { executionId: identity.executionId, stageId: identity.stageId },
-      executions: listExecutions(dir).map(({ id, stage }) => ({ id, stage })),
+      executions: listExecutions(dir).map(({ id, execution }) => ({ id, stage: execution.stage_id })),
     };
   }
 
@@ -474,13 +474,13 @@ export class QuestionBatches implements vscode.Disposable {
   }
 
   /** Answered records of this batch, shown read-only once the form is no longer editable. */
-  #recorded(entry: Entry): QuestionRecord[] | null {
+  #recorded(entry: Entry): QuestionEntry[] | null {
     if (entry.isEditable || entry.state === 'stale') return null;
     const { executionId, stageId } = entry.identity;
     const history = this.#readHistory(entry);
     const records = history?.kind === 'ok' ? history.questions : [];
     return records.filter(
-      (record) => record.executionId === executionId && record.stageId === stageId && record.status === 'answered',
+      ({ item, status }) => item.execution_id === executionId && item.stage_id === stageId && status === 'answered',
     );
   }
 

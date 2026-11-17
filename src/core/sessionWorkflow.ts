@@ -45,7 +45,8 @@ export function readSessionWorkflow(input: SessionWorkflowInput): SessionWorkflo
     config: input.config,
     clients: input.clients,
   });
-  const ranStages = [...new Set(listExecutions(sessionDir(input.projectRoot, input.sessionId)).map((e) => e.stage))];
+  const executions = listExecutions(sessionDir(input.projectRoot, input.sessionId));
+  const ranStages = [...new Set(executions.map((e) => e.execution.stage_id))];
   const { snapshot } = input;
   return {
     ...base,

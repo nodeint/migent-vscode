@@ -1,4 +1,5 @@
-import type { ExecutionSnapshot, SessionSnapshot } from './model';
+import type { ExecutionEntry } from './executions';
+import type { SessionSnapshot } from './model';
 import type { SessionAction } from './resultsIntent';
 import { buildSessionMeta } from './sessionMeta';
 
@@ -18,7 +19,7 @@ export interface OverviewActions {
  */
 export function overviewActions(
   snapshot: SessionSnapshot,
-  latestExecution: ExecutionSnapshot | null,
+  latestExecution: ExecutionEntry | null,
 ): OverviewActions {
   const meta = buildSessionMeta(snapshot);
   switch (snapshot.displayState.state) {

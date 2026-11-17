@@ -10,30 +10,30 @@ import {
   putJson,
   putQuestions,
 } from './humanInputTestSupport';
-import type { QuestionBase } from './model';
 import { batchFingerprint, reconcileSubmission, verifyBatch } from './questionAnswers';
 import { questionAttempts } from './questionHistory';
-import { parseQuestionBase, type QuestionRecord, readQuestions } from './questions';
+import { parseQuestionsFile, type QuestionEntry, type QuestionItem, readQuestions } from './questions';
 
 const PLAN_1 = '0001-plan--attempt-01';
 const PLAN_2 = '0002-plan--attempt-02';
 const TEST_3 = '0003-test--attempt-01';
 
 /** The batch a user saw. `status.json` no longer lists pending questions (B6), so a test builds it from the rows. */
-function summaryOf(rows: readonly Record<string, unknown>[]): QuestionBase[] {
-  return rows.flatMap((row) => {
-    const base = parseQuestionBase(row);
-    return base === null ? [] : [base];
-  });
+function summaryOf(rows: readonly Record<string, unknown>[]): QuestionItem[] {
+  const read = parseQuestionsFile(
+    JSON.stringify({ schema_version: 1, questions: rows.map((row) => ({ ...row, status: 'pending', answer: null })) }),
+  );
+  return read.kind === 'ok' ? read.questions.map((entry) => entry.item) : [];
 }
 
-function records(dir: string): QuestionRecord[] {
+function records(dir: string): QuestionEntry[] {
   const read = readQuestions(dir);
   if (read.kind !== 'ok') throw new Error(`history did not read: ${read.kind}`);
   return read.questions;
 }
 
-const statusesOf = (list: readonly QuestionRecord[]) => list.map((item) => [item.executionId, item.id, item.status]);
+const statusesOf = (list: readonly QuestionEntry[]) =>
+  list.map((entry) => [entry.item.execution_id, entry.item.id, entry.status]);
 
 describe('readQuestions over Migent 0.8.0 files', () => {
   it('is missing without any question file', () => {
@@ -46,7 +46,7 @@ describe('readQuestions over Migent 0.8.0 files', () => {
     putQuestions(dir, PLAN_1);
     const list = records(dir);
     expect(statusesOf(list)).toEqual([[PLAN_1, '1', 'superseded'], [PLAN_1, '2', 'superseded']]);
-    expect(list[0]).toMatchObject({ stageId: 'plan', recipient: 'human', answer: null });
+    expect(list[0]).toMatchObject({ item: { stage_id: 'plan', recipient: 'human' }, answer: null });
   });
 
   it('shows the answer from input.json', () => {
@@ -93,7 +93,7 @@ describe('readQuestions over Migent 0.8.0 files', () => {
     const read = readQuestions(dir);
     if (read.kind !== 'ok') throw new Error(read.kind);
     expect(read.malformed.map((item) => [item.executionId, item.stageId])).toEqual([[PLAN_1, 'plan']]);
-    expect(read.questions.map((item) => item.executionId)).toEqual([PLAN_2, PLAN_2]);
+    expect(read.questions.map((entry) => entry.item.execution_id)).toEqual([PLAN_2, PLAN_2]);
   });
 
   it('orders attempts across stages and answers every attempt of the session', () => {
@@ -157,11 +157,11 @@ describe('readQuestions over a session that continued after an upgrade (0.7 then
     putInput(dir, '0004-test--attempt-02', { respondsTo: TEST_3, answers: [answerEntry('1', ['B'])] });
     const summaryRows = [pendingRow(TEST_3, 'test', '1')];
     const list = records(dir);
-    const batch = list.find((item) => item.executionId === TEST_3);
+    const batch = list.find((entry) => entry.item.execution_id === TEST_3);
     expect(batch).toMatchObject({ status: 'answered', answer: { selected: ['B'], text: null } });
     // The legacy definition still fingerprints like the status row that the user answered from.
     const seen = batchFingerprint(summaryOf(summaryRows));
-    expect(batchFingerprint(batch === undefined ? [] : [batch])).toBe(seen);
+    expect(batchFingerprint(batch === undefined ? [] : [batch.item])).toBe(seen);
     expect(
       reconcileSubmission(list, { executionId: TEST_3, stageId: 'test' }, { '1': 'B' }),
     ).toEqual({ kind: 'recorded' });

@@ -1,23 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { type AnswerModelInput, buildAnswerModel, describeDraft, parseAnswerMessage } from './answerModel';
-import type { QuestionBase } from './model';
+import type { QuestionItem } from './questions';
 import { NO_SESSION_META } from './sessionMeta';
+import { questionItem } from './testHelpers';
 
-const question = (id: string, selection: string): QuestionBase => ({
-  id,
-  question: `Q${id}?`,
-  context: null,
-  selection,
-  options: [
-    { id: 'A', label: 'a', description: null },
-    { id: 'B', label: 'b', description: null },
-  ],
-  recommended: ['A'],
-  executionId: 'e1',
-  stageId: 'plan',
-  recipient: 'human',
-});
+const question = (id: string, selection: 'single' | 'multiple'): QuestionItem =>
+  questionItem(id, {
+    question: `Q${id}?`,
+    selection,
+    options: [
+      { id: 'A', label: 'a' },
+      { id: 'B', label: 'b' },
+    ],
+  });
 
 function input(overrides: Partial<AnswerModelInput> = {}): AnswerModelInput {
   return {
@@ -49,7 +45,7 @@ describe('buildAnswerModel', () => {
 
   it('is read-only once stale, and unsupported questions are not exposed as a form', () => {
     expect(buildAnswerModel(input({ state: 'stale' })).editable).toBe(false);
-    expect(buildAnswerModel(input({ questions: [question('1', 'text')] })).questions).toEqual([]);
+    expect(buildAnswerModel(input({ questions: [{ ...question('1', 'single'), selection: undefined }] })).questions).toEqual([]);
   });
 });
 

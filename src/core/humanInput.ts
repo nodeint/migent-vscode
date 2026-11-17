@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { type TailEvent, tailEvents } from './eventTail';
-import { listExecutions } from './executions';
-import type { ExecutionSnapshot } from './model';
+import { type EventEntry, tailEvents } from './eventTail';
+import type { ExecutionEntry } from './executions';
+import { executionOutcomeStatus, listExecutions } from './executions';
 import { EVENTS_FILENAME, EXECUTIONS_DIRNAME } from './paths';
 import { isRecord } from './record';
 
@@ -122,9 +122,9 @@ function readInputFiles(sessionDirPath: string): Map<string, InputFile> {
   return files;
 }
 
-const readEvents = (sessionDirPath: string): TailEvent[] =>
+const readEvents = (sessionDirPath: string): EventEntry[] =>
   tailEvents(path.join(sessionDirPath, EVENTS_FILENAME), 0).events.filter(
-    (event) => event.event === 'session.active' && event.rawLine === null && event.executionId !== null,
+    (event) => event.event?.event === 'session.active' && event.rawLine === null && event.executionId !== null,
   );
 
 export interface AnswerIndex {
@@ -167,7 +167,7 @@ function timeOf(value: string | null): number | null {
 
 /** The latest cancelled-reply event on `executionId` written at or before `recordedAt`. */
 function cancelledReplyFor(
-  events: readonly TailEvent[],
+  events: readonly EventEntry[],
   executionId: string,
   recordedAt: string | null,
 ): { found: boolean; origin: InputOrigin | null } {
@@ -181,33 +181,33 @@ function cancelledReplyFor(
   return { found: true, origin: originOf(eligible.at(-1)?.data.origin) };
 }
 
-const isAwaitingInput = (execution: ExecutionSnapshot): boolean =>
-  execution.status === 'cancelled' || execution.outcomeStatus === 'question';
+const isAwaitingInput = (execution: ExecutionEntry): boolean =>
+  execution.execution.status === 'cancelled' || executionOutcomeStatus(execution.execution) === 'question';
 
 /** Whether an execution that stopped for input is followed by an attempt of its stage with no `input.json`. */
 function followsWithoutInput(
-  executions: readonly ExecutionSnapshot[],
+  executions: readonly ExecutionEntry[],
   files: ReadonlyMap<string, InputFile>,
 ): boolean {
-  const isLaterWithoutInput = (earlier: ExecutionSnapshot, later: ExecutionSnapshot): boolean =>
-    later.stage === earlier.stage && later.order > earlier.order && !files.has(later.id);
-  const hasLater = (earlier: ExecutionSnapshot): boolean =>
+  const isLaterWithoutInput = (earlier: ExecutionEntry, later: ExecutionEntry): boolean =>
+    later.execution.stage_id === earlier.execution.stage_id && later.order > earlier.order && !files.has(later.id);
+  const hasLater = (earlier: ExecutionEntry): boolean =>
     executions.some((later) => isLaterWithoutInput(earlier, later));
   return executions.filter((execution) => isAwaitingInput(execution)).some((execution) => hasLater(execution));
 }
 
 function needsEventsForInputs(
-  executions: readonly ExecutionSnapshot[],
+  executions: readonly ExecutionEntry[],
   files: ReadonlyMap<string, InputFile>,
 ): boolean {
-  const cancelled = new Set(executions.filter((execution) => execution.status === 'cancelled').map((e) => e.id));
+  const cancelled = new Set(executions.filter((execution) => execution.execution.status === 'cancelled').map((e) => e.id));
   for (const file of files.values()) {
     if (file.respondsTo !== null && cancelled.has(file.respondsTo)) return true;
   }
   return followsWithoutInput(executions, files);
 }
 
-function eventInput(event: TailEvent): HumanInputFact | null {
+function eventInput(event: EventEntry): HumanInputFact | null {
   const { data } = event;
   if (Array.isArray(data.answers)) {
     return { kind: 'answers', text: typeof data.input === 'string' ? data.input : null, origin: originOf(data.origin) };
@@ -218,16 +218,16 @@ function eventInput(event: TailEvent): HumanInputFact | null {
 
 /** The attempt an event opened: the earliest later execution of the stage created at or after the event. */
 function openedBy(
-  event: TailEvent,
-  executions: readonly ExecutionSnapshot[],
+  event: EventEntry,
+  executions: readonly ExecutionEntry[],
   files: ReadonlyMap<string, InputFile>,
-): ExecutionSnapshot | null {
+): ExecutionEntry | null {
   const source = executions.find((execution) => execution.id === event.executionId);
   if (source === undefined) return null;
   const at = timeOf(event.timestamp);
   const candidates = executions.filter((execution) => {
-    if (execution.stage !== source.stage || execution.order <= source.order) return false;
-    const created = timeOf(execution.createdAt);
+    if (execution.execution.stage_id !== source.execution.stage_id || execution.order <= source.order) return false;
+    const created = timeOf(execution.execution.created_at);
     return at === null || created === null || created >= at;
   });
   // The actual successor: when it already has an input.json, the event belongs to it and opens nothing else.

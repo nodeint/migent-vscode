@@ -28,6 +28,11 @@ function put(dir: string, file: string, content: string): void {
   writeFileSync(path.join(dir, file), content);
 }
 
+/** A file with the given text verbatim (the caller adds any trailing newline). */
+export function putRaw(dir: string, file: string, content: string): void {
+  put(dir, file, content);
+}
+
 export function putJson(dir: string, file: string, value: unknown): void {
   put(dir, file, JSON.stringify(value));
 }
@@ -38,8 +43,13 @@ export function putExecution(
   id: string,
   fields: { status?: string; outcomeStatus?: string; createdAt?: string } = {},
 ): void {
+  const parsed = parseExecutionId(id);
   putJson(dir, `executions/${id}/execution.json`, {
+    session_id: 's',
     execution_id: id,
+    execution_order: parsed?.order ?? 1,
+    stage_id: parsed?.stageId ?? 'plan',
+    stage_attempt: parsed?.attempt ?? 1,
     status: fields.status ?? 'completed',
     created_at: fields.createdAt ?? '2026-11-01T10:00:00.000Z',
     outcome: fields.outcomeStatus === undefined ? undefined : { status: fields.outcomeStatus },

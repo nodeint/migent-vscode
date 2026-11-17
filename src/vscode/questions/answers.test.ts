@@ -97,7 +97,7 @@ function pendingFixture(extra: object): Fixture {
   copyFileSync(path.join(capturedDir('question-pending'), 'questions.json'), path.join(session, 'questions.json'));
   const read = readQuestions(session);
   const first = read.kind === 'ok' ? read.questions[0] : undefined;
-  const target = { executionId: first?.executionId ?? '', stageId: first?.stageId ?? null };
+  const target = { executionId: first?.item.execution_id ?? '', stageId: first?.item.stage_id ?? null };
   const dir = path.join(root, 'answers');
   const batchKey = 'proj#s1#batch';
   writeRecord(dir, batchKey, 's1', extra);

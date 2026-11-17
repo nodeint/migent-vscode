@@ -1,9 +1,5 @@
-import type {
-  DisplayStateName,
-  ExecutionSnapshot,
-  SessionSnapshot,
-  UnknownReason,
-} from './model';
+import type { ExecutionEntry } from './executions';
+import type { DisplayStateName, SessionSnapshot, UnknownReason } from './model';
 import { pendingQuestions } from './questions';
 import { quotaFailure } from './replyFlow';
 import { stageOf } from './sessionPresentation';
@@ -35,7 +31,7 @@ export interface SessionSummary {
   quotaResetAt: number | null;
   pendingQuestions: number;
   /** The execution `status.json` names, else the highest-order summary. */
-  latestExecution: ExecutionSnapshot | null;
+  latestExecution: ExecutionEntry | null;
   isRunning: boolean;
 }
 
@@ -54,12 +50,12 @@ export const NO_SESSION_SUMMARY: SessionSummary = {
 
 function latestExecutionOf(
   snapshot: SessionSnapshot,
-  executions: readonly ExecutionSnapshot[],
-): ExecutionSnapshot | null {
+  executions: readonly ExecutionEntry[],
+): ExecutionEntry | null {
   const id = snapshot.status?.latest_execution_id ?? null;
   const named = id === null ? undefined : executions.find((execution) => execution.id === id);
   if (named !== undefined) return named;
-  let latest: ExecutionSnapshot | null = null;
+  let latest: ExecutionEntry | null = null;
   for (const execution of executions) {
     if (latest === null || execution.order >= latest.order) latest = execution;
   }
@@ -74,7 +70,7 @@ function runningStageOf(snapshot: SessionSnapshot): string | null {
 /** Collect the Status facts from a snapshot and its execution summaries. */
 export function buildSummary(
   snapshot: SessionSnapshot,
-  executions: readonly ExecutionSnapshot[],
+  executions: readonly ExecutionEntry[],
 ): SessionSummary {
   const { state } = snapshot.displayState;
   const isRunning = state === 'running';

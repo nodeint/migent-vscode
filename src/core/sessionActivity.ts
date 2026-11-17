@@ -1,4 +1,4 @@
-import type { TailEvent } from './eventTail';
+import type { EventEntry } from './eventTail';
 import { formatTimelineLine } from './timelineFormat';
 
 /** How many recent events the Overview "Latest activity" block shows. */
@@ -15,7 +15,7 @@ export type SessionActivity = { visible: false } | { visible: true; lines: strin
  * first. Pure: the caller decides whether the session is Running and supplies the
  * events it read; this module never reads a file.
  */
-export function buildActivity(events: readonly TailEvent[]): SessionActivity {
+export function buildActivity(events: readonly EventEntry[]): SessionActivity {
   return {
     visible: true,
     lines: events.slice(-OVERVIEW_ACTIVITY_LIMIT).map((event) => formatTimelineLine(event)),

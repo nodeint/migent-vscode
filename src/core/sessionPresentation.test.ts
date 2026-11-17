@@ -25,7 +25,7 @@ import {
   shortId,
   truncate,
 } from './sessionPresentation';
-import { capturedDir, snapshotFromDir, syntheticDir } from './testHelpers';
+import { capturedDir, executionEntry, snapshotFromDir, syntheticDir } from './testHelpers';
 
 const NOW = Date.parse('2026-11-01T12:05:00.000+00:00');
 const alive: LockProbe = { kind: 'alive', pid: 1, host: 'h', heartbeatAt: 't', foreignHost: false };
@@ -164,7 +164,7 @@ describe('session rows', () => {
 });
 
 describe('execution rows', () => {
-  const execution = {
+  const fields = {
     id: '0001-plan--attempt-02',
     order: 1,
     stage: 'plan',
@@ -173,26 +173,18 @@ describe('execution rows', () => {
     decision: 'approved',
     client: 'claude',
     model: 'sonnet',
-    effort: null,
-    turnKind: null,
-    outcomeStatus: null,
-    error: null,
-    hasFailureReport: false,
-    blocker: null,
-    kind: null,
-    createdAt: null,
-    completedAt: null,
   };
+  const execution = executionEntry(fields);
 
   it('labels by stage and attempt, describes by provider and decision', () => {
     expect(executionLabel(execution)).toBe('plan · attempt 2');
     expect(executionDescription(execution)).toBe('claude/sonnet · approved');
-    expect(executionDescription({ ...execution, client: null, model: null, decision: null })).toBe('');
+    expect(executionDescription(executionEntry({ ...fields, client: null, model: null, decision: null }))).toBe('');
     expect(executionIcon(execution)).toBe('pass');
-    expect(executionIcon({ ...execution, status: 'failed' })).toBe('error');
-    expect(executionIcon({ ...execution, status: null })).toBe('circle-outline');
-    expect(executionContextValue({ ...execution, status: null })).toBe('execution.unknown');
-    expect(executionContextValue({ ...execution, status: 'failed', hasFailureReport: true })).toBe(
+    expect(executionIcon(executionEntry({ ...fields, status: 'failed' }))).toBe('error');
+    expect(executionIcon(executionEntry({ ...fields, status: null }))).toBe('circle-outline');
+    expect(executionContextValue(executionEntry({ ...fields, status: null }))).toBe('execution.unknown');
+    expect(executionContextValue(executionEntry({ ...fields, status: 'failed', hasFailureReport: true }))).toBe(
       'execution.failed;failure',
     );
   });

@@ -172,6 +172,20 @@ function replyTurn(context, text) {
 }
 
 // An ordinary blocker has no questions: the reply becomes the prompt of the stage's next attempt.
+/** An `execution.json` with the contract's required fields; the order and attempt come from the id. */
+function executionBody(sessionId, executionId, stage, extra = {}) {
+  return {
+    session_id: sessionId,
+    execution_id: executionId,
+    execution_order: Number(/^(\d+)-/.exec(executionId)?.[1] ?? 1),
+    stage_id: stage,
+    stage_attempt: Number(/--attempt-(\d+)$/.exec(executionId)?.[1] ?? 1),
+    status: 'running',
+    created_at: new Date().toISOString(),
+    ...extra,
+  };
+}
+
 function replyBlocker(id) {
   const mode = process.env.MIGENT_FAKE_REPLY ?? 'consume';
   if (mode === 'reject') {
@@ -183,7 +197,10 @@ function replyBlocker(id) {
   const stage = context.stage;
   const dir = path.join(dirOf(id), 'executions', `0002-${stage}--attempt-02`);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'execution.json'), JSON.stringify({ stage_id: stage, resumes_execution_id: context.resumes }));
+  fs.writeFileSync(
+    path.join(dir, 'execution.json'),
+    JSON.stringify(executionBody(id, `0002-${stage}--attempt-02`, stage, { resumes_execution_id: context.resumes })),
+  );
   // The real CLI records the reply as its own user turn (`## Human reply`) in the execution's conversation.json history.
   const turn = mode === 'ignore' ? 'Continue.' : replyTurn(context, text);
   fs.writeFileSync(path.join(dir, 'conversation.json'), JSON.stringify({ history: [{ role: 'user', content: turn }] }));
@@ -363,7 +380,7 @@ function run() {
     // Keep what `replyBlocker` recorded (the execution it resumes) instead of overwriting it.
     const recordFile = path.join(dir, 'execution.json');
     const kept = fs.existsSync(recordFile) ? JSON.parse(fs.readFileSync(recordFile, 'utf8')) : {};
-    writeJson(recordFile, { execution_id: executionId, stage_id: replyStage, status: 'running', ...kept });
+    writeJson(recordFile, { ...executionBody(id, executionId, replyStage), ...kept });
   }
   writeStatus(id, 'active', { workflow_id: workflow, latest_execution_id: executionId });
   console.error(`[migent] session_id: ${id}`);

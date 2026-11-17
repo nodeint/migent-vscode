@@ -7,7 +7,7 @@ import { readMetrics } from '../../core/metrics';
 import { buildOverviewModel, type OverviewInput } from '../../core/overviewModel';
 import { eventsPath, sessionDir } from '../../core/paths';
 import { attemptRecords, type QuestionAttempt, questionAttempts } from '../../core/questionHistory';
-import { pendingQuestions, type QuestionRecord, readQuestions } from '../../core/questions';
+import { pendingQuestions, type QuestionEntry, readQuestions } from '../../core/questions';
 import { type ResultsInput, titleCase } from '../../core/resultsModel';
 import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
 import { buildSessionMeta } from '../../core/sessionMeta';
@@ -37,7 +37,7 @@ export function batchOf(identity: Identity, ref: SessionBatchRef): BatchIdentity
 }
 
 /** The session's question history (`questions.json`); empty when the file is missing or cannot be read. */
-export function questionRecords(entry: PageEntry, registry: ProjectRegistry): QuestionRecord[] {
+export function questionRecords(entry: PageEntry, registry: ProjectRegistry): QuestionEntry[] {
   const context = registry.project(entry.project);
   if (context === undefined) return [];
   const read = readQuestions(sessionDir(context.root, entry.sessionId));
@@ -48,7 +48,7 @@ export function questionRecords(entry: PageEntry, registry: ProjectRegistry): Qu
 export function attemptsOf(
   _entry: PageEntry,
   _registry: ProjectRegistry,
-  records: readonly QuestionRecord[],
+  records: readonly QuestionEntry[],
 ): QuestionAttempt[] {
   return questionAttempts(records, pendingQuestions());
 }
@@ -141,7 +141,7 @@ export function buildQuestionsPage(
 export function buildAttemptRecord(
   entry: PageEntry,
   registry: ProjectRegistry,
-  shown: { attempt: QuestionAttempt; records: readonly QuestionRecord[] },
+  shown: { attempt: QuestionAttempt; records: readonly QuestionEntry[] },
 ): AnswerModel {
   const { attempt, records } = shown;
   const snapshot = registry.project(entry.project)?.store.snapshot(entry.sessionId);
@@ -157,7 +157,7 @@ export function buildAttemptRecord(
     meta: buildSessionMeta(snapshot),
     state: isAnswered ? 'recorded' : 'answered-elsewhere',
     message: isAnswered ? null : text('prompts.questionsSuperseded'),
-    questions: own.map((record) => ({ ...record, file: null })),
+    questions: own.map((record) => record.item),
     draft: {},
     blockReason: null,
     records: own,

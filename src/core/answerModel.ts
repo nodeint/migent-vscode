@@ -1,4 +1,3 @@
-import type { QuestionBase, QuestionOption } from './model';
 import {
   ambiguousTextQuestions,
   type AnswerDraft,
@@ -7,7 +6,7 @@ import {
   type QuestionIssue,
   validateBatch,
 } from './questionAnswers';
-import type { QuestionRecord } from './questions';
+import { type OptionView, type QuestionEntry, type QuestionItem, questionOptions } from './questions';
 import { isRecord } from './record';
 import { SESSION_ACTIONS, type SessionAction } from './resultsIntent';
 import type { SessionMeta } from './sessionMeta';
@@ -35,7 +34,7 @@ export interface QuestionView {
   question: string;
   context: string | null;
   selection: 'single' | 'multiple';
-  options: QuestionOption[];
+  options: OptionView[];
   recommended: string[];
 }
 
@@ -90,42 +89,38 @@ export interface AnswerModelInput {
   meta: SessionMeta;
   state: AnswerState;
   message: string | null;
-  questions: readonly QuestionBase[];
+  questions: readonly QuestionItem[];
   draft: BatchDraft;
   /** Reasons the batch cannot be sent right now (CLI, lock, pending operation, batch problem). */
   blockReason: string | null;
-  records: readonly QuestionRecord[] | null;
-  archive: { questions: readonly QuestionBase[]; draft: BatchDraft } | null;
-}
-
-function isSingleOrMultiple(value: string | null): value is 'single' | 'multiple' {
-  return value === 'single' || value === 'multiple';
+  records: readonly QuestionEntry[] | null;
+  archive: { questions: readonly QuestionItem[]; draft: BatchDraft } | null;
 }
 
 /** One-line display of a stored answer: option labels by letter, or the free text. */
-function optionLabel(record: QuestionRecord, id: string): string {
-  const option = record.options.find((candidate) => candidate.id === id);
+function optionLabel(record: QuestionEntry, id: string): string {
+  const option = questionOptions(record.item).find((candidate) => candidate.id === id);
   return option === undefined ? id : `${id}. ${option.label}`;
 }
 
-export function describeAnswer(record: QuestionRecord): string {
+export function describeAnswer(record: QuestionEntry): string {
   const { answer } = record;
   if (answer === null) return '';
   if (answer.selected.length === 0) return answer.text ?? '';
   return answer.selected.map((id) => optionLabel(record, id)).join('; ');
 }
 
-function recordedAnswers(records: readonly QuestionRecord[] | null): Record<string, string> | null {
+function recordedAnswers(records: readonly QuestionEntry[] | null): Record<string, string> | null {
   const answered = (records ?? []).filter((record) => record.answer !== null);
   if (answered.length === 0) return null;
-  return Object.fromEntries(answered.map((record) => [record.id, describeAnswer(record)]));
+  return Object.fromEntries(answered.map((record) => [record.item.id, describeAnswer(record)]));
 }
 
 /** The active mode of a draft as one line (option ids with labels, or the text). */
-export function describeDraft(question: QuestionBase, draft: AnswerDraft | undefined): string {
+export function describeDraft(question: QuestionItem, draft: AnswerDraft | undefined): string {
   if (draft === undefined) return '';
   if (draft.mode === 'text') return draft.text;
-  const chosen = question.options.filter((option) => draft.selected.includes(option.id));
+  const chosen = questionOptions(question).filter((option) => draft.selected.includes(option.id));
   return chosen.map((option) => `${option.id}. ${option.label}`).join('; ');
 }
 
@@ -133,25 +128,25 @@ function archiveView(archive: AnswerModelInput['archive']): ArchivedView[] | nul
   if (archive === null) return null;
   return archive.questions.map((question) => ({
     id: question.id,
-    question: question.question,
+    question: question.question ?? '',
     answer: describeDraft(question, archive.draft[question.id]),
   }));
 }
 
 export function buildAnswerModel(input: AnswerModelInput): AnswerModel {
   const questions: QuestionView[] = input.questions.flatMap((question) =>
-    isSingleOrMultiple(question.selection)
-      ? [
+    question.selection === undefined
+      ? []
+      : [
           {
             id: question.id,
-            question: question.question,
-            context: question.context,
+            question: question.question ?? '',
+            context: question.context ?? null,
             selection: question.selection,
-            options: question.options,
-            recommended: question.recommended,
+            options: questionOptions(question),
+            recommended: question.recommended ?? [],
           },
-        ]
-      : [],
+        ],
   );
   const issues = validateBatch(input.questions, input.draft);
   const answered = answeredCount(issues);

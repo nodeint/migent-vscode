@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DisplayStateName, ExecutionSnapshot, SessionSnapshot } from './model';
+import type { ExecutionEntry } from './executions';
+import type { DisplayStateName, SessionSnapshot } from './model';
 import { overviewActions } from './overviewActions';
+import { executionEntry } from './testHelpers';
 
 interface SnapshotInput {
   state: DisplayStateName;
@@ -33,26 +35,8 @@ function snapshot(input: SnapshotInput): SessionSnapshot {
   } as unknown as SessionSnapshot;
 }
 
-function execution(hasFailureReport: boolean): ExecutionSnapshot {
-  return {
-    id: '0001-plan--attempt-01',
-    order: 1,
-    stage: 'plan',
-    attempt: 1,
-    status: 'failed',
-    decision: null,
-    blocker: null,
-    client: null,
-    model: null,
-    effort: null,
-    turnKind: null,
-    outcomeStatus: null,
-    error: null,
-    hasFailureReport,
-    kind: null,
-    createdAt: null,
-    completedAt: null,
-  };
+function execution(hasFailureReport: boolean): ExecutionEntry {
+  return executionEntry({ id: '0001-plan--attempt-01', stage: 'plan', status: 'failed', hasFailureReport });
 }
 
 describe('overviewActions', () => {

@@ -3,8 +3,9 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 
 import { groupOf, type SessionGroup, summarize } from '../../core/attention';
+import type { ExecutionEntry } from '../../core/executions';
 import { readExecutionSummary } from '../../core/executions';
-import type { DisplayStateName, ExecutionSnapshot } from '../../core/model';
+import type { DisplayStateName } from '../../core/model';
 import { EXECUTIONS_DIRNAME, sessionDir } from '../../core/paths';
 import { RECENT_PERIOD_TEXT } from '../../core/recentPeriod';
 import {
@@ -325,7 +326,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
   }
 
   /** Fresh summary of one execution for a targeted row refresh; null when it cannot be read. */
-  #executionSummary(project: string, sessionId: string, executionId: string): ExecutionSnapshot | null {
+  #executionSummary(project: string, sessionId: string, executionId: string): ExecutionEntry | null {
     const context = this.#registry.project(project);
     if (context === undefined) return null;
     return readExecutionSummary(path.join(sessionDir(context.root, sessionId), EXECUTIONS_DIRNAME, executionId));
@@ -413,7 +414,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     return item;
   }
 
-  #executionItem(execution: ExecutionSnapshot): vscode.TreeItem {
+  #executionItem(execution: ExecutionEntry): vscode.TreeItem {
     const item = new vscode.TreeItem(executionLabel(execution), vscode.TreeItemCollapsibleState.Collapsed);
     item.description = executionDescription(execution);
     item.iconPath = icon(executionIcon(execution));

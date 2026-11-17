@@ -51,9 +51,11 @@ describe('Entry draft persistence', () => {
         selection: 'single',
         options: [],
         recommended: [],
-        executionId: identity.executionId,
-        stageId: 'plan',
+        execution_id: identity.executionId,
+        stage_id: 'plan',
         recipient: 'human',
+        status: 'pending',
+        answer: null,
       },
     ];
     target.setDraft('1', { mode: 'choice', selected: ['A'], text: '' });

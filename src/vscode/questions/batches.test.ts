@@ -14,6 +14,7 @@ vi.mock('../../core/questions', async (importOriginal) => {
 });
 
 import type { SessionSnapshot } from '../../core/model';
+import { questionItem } from '../../core/testHelpers';
 import type { AnswerSubmitter } from '../answers';
 import type { ControlService } from '../control';
 import type { BatchIdentity } from './entry';
@@ -23,18 +24,13 @@ const { QuestionBatches } = await import('./batches');
 const identity: BatchIdentity = { project: 'k', sessionId: 's1', stageId: 'plan', executionId: 'e1' };
 
 function question(id: string, executionId: string, stageId: string) {
-  return {
-    id,
+  return questionItem(id, {
     question: `Question ${id}`,
-    context: null,
-    selection: 'single',
-    options: [{ id: 'A', label: 'A', description: null }],
+    options: [{ id: 'A', label: 'A' }],
     recommended: [],
-    executionId,
-    stageId,
-    recipient: 'human',
-    file: null,
-  };
+    execution_id: executionId,
+    stage_id: stageId,
+  });
 }
 
 const QUESTIONS = [question('1', 'e1', 'plan'), question('2', 'e2', 'review')];

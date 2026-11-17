@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { text } from '../text';
-import { listExecutions, parseExecutionId, readExecution } from './executions';
+import type { ExecutionEntry } from './executions';
+import { executionBlocker, listExecutions, parseExecutionId, readExecution } from './executions';
 import { manifestRole } from './manifest';
-import type { ExecutionSnapshot, ReplyTarget, SessionSnapshot } from './model';
+import type { ReplyTarget, SessionSnapshot } from './model';
 import { EXECUTIONS_DIRNAME } from './paths';
 import { pendingQuestions } from './questions';
 import { isRecord } from './record';
@@ -56,16 +57,16 @@ function roleTarget(snapshot: ReplyInput): ReplyTarget[] {
 }
 
 /** The latest non-skipped execution of each stage, as the CLI picks the one an interrupted reply resumes. */
-function cancelledTargets(executions: readonly ExecutionSnapshot[]): ReplyTarget[] {
-  const latest = new Map<string, ExecutionSnapshot>();
+function cancelledTargets(executions: readonly ExecutionEntry[]): ReplyTarget[] {
+  const latest = new Map<string, ExecutionEntry>();
   for (const execution of executions) {
-    if (execution.status === 'skipped') continue;
-    const current = latest.get(execution.stage);
-    if (current === undefined || execution.order > current.order) latest.set(execution.stage, execution);
+    if (execution.execution.status === 'skipped') continue;
+    const current = latest.get(execution.execution.stage_id);
+    if (current === undefined || execution.order > current.order) latest.set(execution.execution.stage_id, execution);
   }
   return [...latest.values()]
-    .filter((execution) => execution.status === 'cancelled' && execution.kind !== 'verify')
-    .map((execution) => ({ executionId: execution.id, stageId: execution.stage, attempt: execution.attempt, kind: 'cancelled' as const }))
+    .filter((execution) => execution.execution.status === 'cancelled' && execution.execution.kind !== 'verify')
+    .map((execution) => ({ executionId: execution.id, stageId: execution.execution.stage_id, attempt: execution.attempt, kind: 'cancelled' as const }))
     .sort((left, right) => left.executionId.localeCompare(right.executionId));
 }
 
@@ -74,7 +75,7 @@ function cancelledTargets(executions: readonly ExecutionSnapshot[]): ReplyTarget
  * A pending question is the Questions page's; a workflow replies to its blocked or interrupted stages, a role session
  * to its latest execution. `executions` is read only when `replyNeedsExecutions` says so.
  */
-export function replyTargets(snapshot: ReplyInput, executions: readonly ExecutionSnapshot[] = []): ReplyTarget[] {
+export function replyTargets(snapshot: ReplyInput, executions: readonly ExecutionEntry[] = []): ReplyTarget[] {
   if (blockKind(snapshot) === 'question') return [];
   const { state } = snapshot.displayState;
   if (manifestRole(snapshot.manifest) !== null) return ROLE_REPLY_STATES.has(state) ? roleTarget(snapshot) : [];
@@ -139,9 +140,8 @@ function commentSafe(text: string): string {
 /** The recorded blocker of an execution (`execution.json` outcome), or null. */
 export function readBlockerText(sessionDir: string, executionId: string): string | null {
   const record = readExecution(path.join(sessionDir, EXECUTIONS_DIRNAME, executionId));
-  const outcome = record?.outcome;
-  if (typeof outcome !== 'object' || outcome === null || !('blocker' in outcome)) return null;
-  return typeof outcome.blocker === 'string' && outcome.blocker.trim() !== '' ? outcome.blocker : null;
+  const blocker = record === null ? null : executionBlocker(record);
+  return blocker !== null && blocker.trim() !== '' ? blocker : null;
 }
 
 export interface ReplyHeaderInput {
@@ -277,7 +277,7 @@ export function replyResumed(sessionDir: string, blocked: ReplyTarget): boolean 
   const stage = targetStage(blocked);
   return listExecutions(sessionDir).some(
     (execution) =>
-      execution.stage === stage &&
+      execution.execution.stage_id === stage &&
       execution.order > blockedOrder &&
       readExecution(path.join(executions, execution.id))?.resumes_execution_id === blocked.executionId,
   );
@@ -300,7 +300,7 @@ export function replyConsumed(sessionDir: string, blocked: ReplyTarget, reply: s
   // the new one, so nothing is confirmed and the draft is kept.
   if (before === null) return false;
   return listExecutions(sessionDir).some((execution) => {
-    if (execution.stage !== stage || execution.order <= blockedOrder) return false;
+    if (execution.execution.stage_id !== stage || execution.order <= blockedOrder) return false;
     const dir = path.join(executions, execution.id);
     if (readExecution(dir)?.resumes_execution_id !== blocked.executionId) return false;
     const after = countReplyTurns(dir, reply, blocked.stageId === null);

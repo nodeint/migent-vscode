@@ -1,24 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import { type BatchStateInput, refreshBatchState } from './answerState';
-import type { QuestionBase } from './model';
 import { batchFingerprint } from './questionAnswers';
-import type { QuestionRecord } from './questions';
+import { questionEntry, questionItem } from './testHelpers';
 
-const pending: QuestionBase = {
-  id: '1',
+const pending = questionItem('1', {
   question: 'Q?',
-  context: null,
-  selection: 'single',
   options: [
-    { id: 'A', label: 'a', description: null },
-    { id: 'B', label: 'b', description: null },
+    { id: 'A', label: 'a' },
+    { id: 'B', label: 'b' },
   ],
   recommended: [],
-  executionId: '0001-plan--attempt-01',
-  stageId: 'plan',
-  recipient: 'human',
-};
+  execution_id: '0001-plan--attempt-01',
+});
 
 function input(overrides: Partial<BatchStateInput> = {}): BatchStateInput {
   return {
@@ -32,7 +26,7 @@ function input(overrides: Partial<BatchStateInput> = {}): BatchStateInput {
   };
 }
 
-const answered: QuestionRecord = { ...pending, status: 'answered', answer: { selected: ['A'], text: null }, answeredAt: null };
+const answered = questionEntry(pending, { status: 'answered', answer: { selected: ['A'], text: null } });
 
 describe('refreshBatchState', () => {
   it('leaves an unchanged batch alone', () => {
@@ -52,7 +46,7 @@ describe('refreshBatchState', () => {
   it('treats a vanished batch as answered elsewhere only with an answered record', () => {
     expect(refreshBatchState(input({ current: [], history: [answered] }))?.state).toBe('answered-elsewhere');
     expect(refreshBatchState(input({ current: [], history: [{ ...answered, status: 'superseded' }] }))?.state).toBe('unavailable');
-    expect(refreshBatchState(input({ current: [], history: [{ ...answered, executionId: 'e2' }] }))?.state).toBe('unavailable');
+    expect(refreshBatchState(input({ current: [], history: [{ ...answered, item: { ...answered.item, execution_id: 'e2' } }] }))?.state).toBe('unavailable');
   });
 
   it('separates recorded answers from a continuation of this stage', () => {

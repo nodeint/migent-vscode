@@ -13,7 +13,7 @@ import {
   resolveOutputPath,
   type ResultsInput,
 } from './resultsModel';
-import { capturedDir, snapshotFromDir } from './testHelpers';
+import { capturedDir, executionEntry, snapshotFromDir } from './testHelpers';
 import type { WorkflowEntry } from './workflows';
 
 const SOURCE = '00000000-0000-4000-8000-0000000000b1';
@@ -154,12 +154,7 @@ describe('buildResultsModel', () => {
       input.snapshots[1],
     ];
     const executions = [
-      {
-        id: 'e1', order: 1, stage: 'draft', attempt: 2, status: 'completed', decision: null, blocker: null,
-        client: null, model: null, effort: null, turnKind: null, outcomeStatus: null, error: null,
-        hasFailureReport: false, kind: null, createdAt: null,
-        completedAt: '2026-11-01T11:00:00Z',
-      },
+      executionEntry({ id: 'e1', order: 1, stage: 'draft', attempt: 2, status: 'completed', completedAt: '2026-11-01T11:00:00Z' }),
     ];
     expect(buildResultsModel({ ...input, snapshots, executions }).outputs.rows[0]).toMatchObject({
       stage: 'draft',

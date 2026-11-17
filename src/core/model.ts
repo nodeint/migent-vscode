@@ -8,25 +8,6 @@ import type { LifecycleEventV2, SessionManifest, SessionStatusFile } from '@node
 /** Highest event envelope version this extension understands (events.jsonl `v`). */
 export const KNOWN_EVENT_VERSION: LifecycleEventV2['v'] = 2;
 
-export interface QuestionOption {
-  id: string;
-  label: string;
-  description: string | null;
-}
-
-/** The fields of a `questions.json` record the answer flow works with. */
-export interface QuestionBase {
-  id: string;
-  question: string;
-  context: string | null;
-  selection: string | null;
-  options: QuestionOption[];
-  recommended: string[];
-  executionId: string | null;
-  stageId: string | null;
-  recipient: string | null;
-}
-
 /** Result of probing `session.lock`. Derived by `lockProbe.ts`, consumed by `displayState.ts`. */
 export type LockProbe =
   | { kind: 'none' }
@@ -63,36 +44,6 @@ export interface DisplayState {
    * from here, so write operations are disabled. Running on this host stays writable.
    */
   writable: boolean;
-}
-
-/** Lightweight execution summary for the tree. Read on demand by `listExecutions`; not held by the store. */
-export interface ExecutionSnapshot {
-  id: string;
-  order: number;
-  stage: string;
-  attempt: number;
-  status: string | null;
-  decision: string | null;
-  /** `outcome.blocker` recorded by the CLI when the execution blocked; null otherwise. */
-  blocker: string | null;
-  /** The failure reason and error the CLI recorded in `execution.json` (clipped); null when it recorded none. */
-  error: string | null;
-  client: string | null;
-  model: string | null;
-  /** `execution.json` `options.effort`, else `options.model_reasoning_effort` (codex); null when absent. */
-  effort: string | null;
-  /** `execution.json` `turn_kind` (`start`, `continue`, `answers`); null when absent. */
-  turnKind: string | null;
-  /** `execution.json` `outcome.status` (`question` when the attempt ended by asking); null when absent. */
-  outcomeStatus: string | null;
-  /** Whether the execution wrote `failure.md` (CLI 0.3.6 and later); old sessions have none. */
-  hasFailureReport: boolean;
-  /** `execution.json` `kind`; `verify` marks a verify-only run, which has no agent to reply to. */
-  kind: string | null;
-  /** `execution.json` `created_at`; null when absent. */
-  createdAt: string | null;
-  /** `execution.json` `completed_at`; null while running or when absent. */
-  completedAt: string | null;
 }
 
 /** What a reply answers: a blocker, an interrupted stage, or the next turn of a role session. */

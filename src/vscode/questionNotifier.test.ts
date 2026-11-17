@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { QuestionBase, SessionSnapshot } from '../core/model';
+import type { SessionSnapshot } from '../core/model';
+import type { QuestionItem } from '../core/questions';
+import { questionItem } from '../core/testHelpers';
 
 const hoisted = vi.hoisted(() => ({
   enabled: new Map<string, boolean>(),
@@ -18,19 +20,10 @@ vi.mock('vscode', () => ({
 const { QuestionNotifier } = await import('./questionNotifier');
 const { window, commands } = hoisted;
 
-const question = (id: string, executionId: string, stageId: string | null = 'plan'): QuestionBase => ({
-  id,
-  question: 'q',
-  context: null,
-  selection: null,
-  options: [],
-  recommended: [],
-  executionId,
-  stageId,
-  recipient: 'human',
-});
+const question = (id: string, executionId: string, stageId = 'plan'): QuestionItem =>
+  questionItem(id, { question: 'q', options: [], recommended: [], execution_id: executionId, stage_id: stageId });
 
-function snapshot(questions: QuestionBase[], id = 's1'): SessionSnapshot {
+function snapshot(questions: QuestionItem[], id = 's1'): SessionSnapshot {
   return { sessionId: id, manifest: null, status: { questions }, titleOverride: 'T' } as unknown as SessionSnapshot;
 }
 

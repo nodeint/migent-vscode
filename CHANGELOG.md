@@ -16,6 +16,12 @@
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions
   and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or
   answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))
+- An execution whose `execution.json` lacks a required field of the Migent 0.8.0 contract (or has a wrong-typed one) is
+  now omitted from the session instead of being shown with defaults.
+- A question missing a required field of the Migent 0.8.0 contract is now skipped and reported as a malformed record
+  instead of being read with defaults; an unrecognized question status no longer shows as its own state.
+- Lines of `events.jsonl` that do not match the Migent 0.8.0 event shape are now shown as unrecognized lines in the
+  timeline instead of being read with defaults.
 
 - Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
 - Answer questions (Overview and Sessions view) now opens the Questions tab on the attempt awaiting answers instead of

@@ -1,9 +1,10 @@
 import { text } from '../text';
 import { formatDuration } from './duration';
 import type { ExecutionFile } from './executionFiles';
-import { parseExecutionId } from './executions';
+import type { ExecutionEntry } from './executions';
+import { executionDecision, parseExecutionId } from './executions';
 import { manifestRole } from './manifest';
-import type { ExecutionSnapshot, ScanOutcome, SessionSnapshot, UnknownReason } from './model';
+import type { ScanOutcome, SessionSnapshot, UnknownReason } from './model';
 import { publishedOutputs } from './outputs';
 import { pendingQuestions } from './questions';
 import { describeQuotaReset, quotaFailure } from './replyFlow';
@@ -205,19 +206,19 @@ export function sessionContextValue(snapshot: SessionSnapshot): string {
   return [`session.${snapshot.displayState.state}`, ...flags].join(';');
 }
 
-export function executionLabel(execution: ExecutionSnapshot): string {
-  return text('views.executionLabel', { stage: execution.stage || execution.id, attempt: execution.attempt });
+export function executionLabel(execution: ExecutionEntry): string {
+  return text('views.executionLabel', { stage: execution.execution.stage_id || execution.id, attempt: execution.attempt });
 }
 
-export function executionDescription(execution: ExecutionSnapshot): string {
-  const client = [execution.client, execution.model].filter((part) => part !== null).join('/');
-  return [client === '' ? null : client, execution.decision]
+export function executionDescription(execution: ExecutionEntry): string {
+  const client = [execution.execution.client ?? null, execution.execution.model ?? null].filter((part) => part !== null).join('/');
+  return [client === '' ? null : client, executionDecision(execution.execution)]
     .filter((part): part is string => part !== null)
     .join(' · ');
 }
 
-export function executionIcon(execution: ExecutionSnapshot): string {
-  switch (execution.status) {
+export function executionIcon(execution: ExecutionEntry): string {
+  switch (execution.execution.status) {
     case 'completed':
       return 'pass';
     case 'failed':
@@ -230,8 +231,8 @@ export function executionIcon(execution: ExecutionSnapshot): string {
 }
 
 /** `execution.<status>` plus `;failure` when the execution wrote a `failure.md` report. */
-export function executionContextValue(execution: ExecutionSnapshot): string {
-  const base = `execution.${execution.status ?? 'unknown'}`;
+export function executionContextValue(execution: ExecutionEntry): string {
+  const base = `execution.${execution.execution.status}`;
   return execution.hasFailureReport ? `${base};failure` : base;
 }
 

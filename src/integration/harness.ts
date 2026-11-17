@@ -321,3 +321,25 @@ async function runScenario(scenario: Scenario): Promise<number> {
   if (failed === 0) console.log(`PASS ${scenario.name} (${Date.now() - started} ms)`);
   return failed + (await attempt('scenario cleanup', scenario.name, () => opened.dispose()));
 }
+
+/**
+ * An `execution.json` with the contract's required fields. The order and attempt come from an id of the form
+ * `<order>-<stage>--attempt-<n>`; `fields` adds or overrides fields.
+ */
+export function executionRecord(
+  executionId: string,
+  stageId: string,
+  fields: { status: string } & Record<string, unknown>,
+): string {
+  const order = Number(/^(\d+)-/u.exec(executionId)?.[1] ?? 1);
+  const attempt = Number(/--attempt-(\d+)$/u.exec(executionId)?.[1] ?? 1);
+  return JSON.stringify({
+    session_id: 's',
+    execution_id: executionId,
+    execution_order: order,
+    stage_id: stageId,
+    stage_attempt: attempt,
+    created_at: '2026-11-01T10:00:00.000+00:00',
+    ...fields,
+  });
+}

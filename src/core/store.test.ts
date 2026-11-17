@@ -9,7 +9,7 @@ import { probeLock } from './lockProbe';
 import { manifestPriorSessionId } from './manifest';
 import type { SessionChangeEvent } from './model';
 import { SessionStore } from './store';
-import { makeProject, syntheticDir } from './testHelpers';
+import { executionJson, makeProject, syntheticDir } from './testHelpers';
 
 // Lets one test make listing the sessions directory fail with a chosen error code.
 const fault = vi.hoisted(() => ({ code: null as string | null }));
@@ -487,7 +487,7 @@ schema_version: 2
     writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, status: 'cancelled', workflow_id: 'w' }));
     for (const [id, record] of Object.entries(executions)) {
       mkdirSync(path.join(dir, 'executions', id), { recursive: true });
-      writeFileSync(path.join(dir, 'executions', id, 'execution.json'), JSON.stringify(record));
+      writeFileSync(path.join(dir, 'executions', id, 'execution.json'), JSON.stringify(executionJson(id, record)));
     }
   }
 
@@ -519,7 +519,7 @@ schema_version: 2
     s.onDidChange((event) => events.push(event));
     writeFileSync(
       path.join(sessionDir('cancelled-two'), 'executions', '0001-code--attempt-01', 'execution.json'),
-      JSON.stringify({ status: 'completed', stage_id: 'code' }),
+      JSON.stringify(executionJson('0001-code--attempt-01', { status: 'completed' })),
     );
     s.refreshSession('cancelled-two');
     expect(events).toEqual([expect.objectContaining({ sessionId: 'cancelled-two', kind: 'updated' })]);

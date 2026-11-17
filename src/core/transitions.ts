@@ -112,9 +112,9 @@ export function failureDetails(sessionDir: string, executionId: string | null): 
   const cause = executionCause(record);
   const { files } = listExecutionFiles(dir);
   const failureReport = files.find((file) => file.kind === 'failure')?.absolutePath ?? null;
-  const reason = typeof record?.failure_reason === 'string' ? record.failure_reason : '';
+  const reason = record?.failure_reason ?? '';
   const file = failureFile(files, reason);
-  const stageId = typeof record?.stage_id === 'string' ? record.stage_id : null;
-  const attempt = typeof record?.stage_attempt === 'number' ? record.stage_attempt : null;
+  const stageId = record?.stage_id ?? null;
+  const attempt = record?.stage_attempt ?? null;
   return { cause, file, failureReport, stageId, attempt };
 }
