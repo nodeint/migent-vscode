@@ -3,7 +3,6 @@ id: product
 constraints:
   - Product specification only. Do not modify source code or design internal software architecture.
   - Follow .agents/skills/product/SKILL.md and its template.
-  - Obtain human approval for major scope, user experience, and behavior decisions.
 
 artifacts:
   prd:
@@ -23,11 +22,6 @@ stages:
       - Before starting, check that the workspace is on a working branch created from origin/next (the branch in the prior issue artifact when provided), not on main or next; otherwise ask the human how to proceed.
       - Read prior issue artifacts and their required References; stop and report missing or inconsistent required inputs.
       - Follow the product skill in .agents/skills/product/SKILL.md and write prd.md using its template.
-      - Define primary use cases and interaction flows for the affected VS Code surfaces, such as commands, tree views, webviews, settings, and notifications. Include CLI interactions only when the feature involves the CLI.
-      - Detail functional requirements, business rules, validations, and edge cases from the user's perspective.
-      - "Explicitly define scope boundaries: in-scope vs non-goals (out-of-scope)."
-      - Formulate observable acceptance criteria focused on user experience and product behavior.
-      - Do not make internal architecture or code choices (modules, classes, database schemas); focus on what and why, not how.
       - Resolve substantive review findings when revising.
     artifacts: [prd]
 
@@ -36,13 +30,8 @@ stages:
     depends_on:
       - product
     instructions:
-      - Review against the issue, task, user requirements, and shared constraints.
-      - Check that user problems are clearly articulated and the proposed behavior directly addresses them.
-      - Verify that user interactions, visible states, and feedback are well-specified and consistent with existing VS Code interactions in this extension. Review CLI interactions only when the feature involves the CLI.
-      - Check that acceptance criteria are observable, unambiguous, and testable from a product perspective.
-      - Ensure non-goals and scope boundaries are explicitly stated to prevent scope creep.
-      - Check that no premature internal implementation details or architectural restrictions are imposed unnecessarily.
-      - Report substantive gaps together with their impact and required corrections.
+      - Follow .agents/skills/review/SKILL.md, reviewing prd.md against the issue, task, user requirements, and .agents/skills/product/SKILL.md and its template.
+      - Check that the proposed behavior directly addresses the stated user problem and is consistent with existing VS Code interactions in this extension.
       - Keep comments observational; do not defer required product decisions.
     decision:
       - approved:

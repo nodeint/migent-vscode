@@ -32,6 +32,20 @@ from a correct result.
 
 Core tests use fixtures and temporary directories without launching VS Code.
 
+Run unit tests by repository-relative directory or exact test-file path:
+
+```bash
+pnpm test -- src/cli
+pnpm test -- src/cli/exitCode.test.ts
+pnpm test -- scripts/test-selection.test.mjs src/cli/exitCode.test.ts
+```
+
+Paths select from the configured Vitest tests and `scripts/*.test.mjs` Node tests.
+Multiple paths are combined without duplicate files; each path must select at least
+one test. Absolute paths are also accepted. These are file and directory selectors,
+not source-to-test mapping, globs, or runner flags. Integration tests use the separate
+runner below. Without paths, `pnpm test` runs the full unit suite.
+
 For extension commands, activation, or UI changes, also verify the behavior in
 VS Code and describe the manual steps in the PR.
 
