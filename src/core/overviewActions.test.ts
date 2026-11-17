@@ -47,10 +47,10 @@ describe('overviewActions', () => {
     });
   });
 
-  it('Blocked offers Reply when one can be sent, with View log beside it', () => {
+  it('Blocked offers Reply and Continue without reply when a reply can be sent, with View log beside them', () => {
     expect(overviewActions(snapshot({ state: 'blocked', canReply: true }), null)).toEqual({
       primary: 'reply',
-      secondary: ['showLog'],
+      secondary: ['continueWithoutReply', 'showLog'],
     });
     expect(overviewActions(snapshot({ state: 'blocked' }), null)).toEqual({
       primary: null,
@@ -130,7 +130,7 @@ describe('overviewActions', () => {
   it('keeps the table for a foreign lock: the commands, not this rule, block the write', () => {
     expect(overviewActions(snapshot({ state: 'blocked', canReply: true, writable: false }), null)).toEqual({
       primary: 'reply',
-      secondary: ['showLog'],
+      secondary: ['continueWithoutReply', 'showLog'],
     });
   });
 });

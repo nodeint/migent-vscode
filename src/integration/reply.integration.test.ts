@@ -83,15 +83,43 @@ const argvLog = (env: Env): string[][] =>
 
 const scenarios: Scenario[] = [
   {
-    name: 'Reply: a blocked session has no blocker reply target, because the status declares none (B6)',
+    name: 'Reply: a blocked session offers its latest execution as the blocker reply target',
     async run(env) {
       const project = await createProject(env);
       seedBlocked(env, 'r1');
       await waitFor('blocked session', () => project.store.snapshot('r1')?.displayState.state === 'blocked');
       const snapshot = project.store.snapshot('r1');
       assert.ok(snapshot);
-      assert.deepEqual(blockedTargets(snapshot), []);
-      assert.deepEqual(snapshot.replyTargets, []);
+      const expected = [{ executionId: EXECUTION, stageId: 'plan', attempt: 1, kind: 'blocker' }];
+      assert.deepEqual(blockedTargets(snapshot), expected);
+      assert.deepEqual(snapshot.replyTargets, expected);
+    },
+  },
+  {
+    name: 'Reply: a blocked workflow takes a reply for its stage, the draft keeps the blocker, and the consumed reply settles it',
+    async run(env) {
+      fs.rmSync(path.join(env.root, 'fake-argv.log'), { force: true });
+      const project = await createProject(env);
+      seedBlocked(env, 'b1');
+      await waitFor('blocker target', () => (project.store.snapshot('b1')?.replyTargets.length ?? 0) > 0);
+      const snapshot = project.store.snapshot('b1');
+      assert.ok(snapshot);
+      const [target] = snapshot.replyTargets;
+      assert.equal(target.kind, 'blocker');
+      await env.api.replies.open({ context: project, snapshot, target });
+      const file = env.api.replies.draftPath({ project: project.key, sessionId: 'b1', executionId: EXECUTION });
+      const meta = env.api.replies.identityOf(vscode.Uri.file(file));
+      assert.ok(meta, 'the draft names its execution');
+      assert.equal(meta.kind, 'blocker');
+      assert.match(fs.readFileSync(file, 'utf8'), /needs a decision/, 'the draft header shows the recorded blocker');
+      fs.appendFileSync(file, 'Use Postgres.\n');
+      const result = await env.api.replies.send(meta);
+      assert.equal(result.kind, 'sent');
+      assert.equal(fs.existsSync(file), false, 'the consumed reply deletes the draft');
+      const [call] = argvLog(env);
+      assert.deepEqual(call.slice(0, 5), ['session', 'continue', 'b1', '--stage', 'plan']);
+      assert.equal(call[5], '--reply-file');
+      assert.equal(call.length, 7, 'no run flags are added to a reply');
     },
   },
   {

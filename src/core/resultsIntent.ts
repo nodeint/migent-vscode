@@ -18,6 +18,7 @@ export const SESSION_ACTIONS = [
   'continue',
   'openFailure',
   'reply',
+  'continueWithoutReply',
 ] as const;
 
 export type SessionAction = (typeof SESSION_ACTIONS)[number];

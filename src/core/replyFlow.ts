@@ -29,10 +29,16 @@ export function blockKind(snapshot: ReplyInput): BlockKind | null {
   return null;
 }
 
-/** The blocked executions of an ordinary blocker, oldest first. Empty for any other session. */
+/**
+ * The blocked execution of an ordinary blocker. Contracts 0.8.0 do not declare `blocked_by_execution_ids`, so the
+ * target is the session's latest execution, where a blocked workflow session stops. Empty for any other session.
+ */
 export function blockedTargets(snapshot: ReplyInput): ReplyTarget[] {
   if (blockKind(snapshot) !== 'blocker') return [];
-  return [];
+  const executionId = snapshot.status?.latest_execution_id ?? null;
+  const parsed = executionId === null ? null : parseExecutionId(executionId);
+  if (executionId === null || parsed === null) return [];
+  return [{ executionId, stageId: parsed.stageId, attempt: parsed.attempt, kind: 'blocker' }];
 }
 
 /** What the reply rule reads: a snapshot before the store has attached its reply targets. */
@@ -43,7 +49,7 @@ const ROLE_REPLY_STATES: ReadonlySet<string> = new Set(['stopped', 'failed', 'bl
 
 /**
  * Whether the rule needs the execution summaries: only a cancelled workflow session does. Blocked workflow targets
- * come from `status.json` and a role session names its latest execution there.
+ * come from `status.json` (`latest_execution_id`) and a role session names its latest execution there.
  */
 export function replyNeedsExecutions(snapshot: ReplyInput): boolean {
   return manifestRole(snapshot.manifest) === null && snapshot.displayState.state === 'cancelled' && blockKind(snapshot) === null;

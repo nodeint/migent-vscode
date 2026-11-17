@@ -19,4 +19,5 @@ export const SESSION_ACTION_COMMANDS: Partial<Record<SessionAction, string>> = {
   continue: 'migent.session.continue',
   openFailure: 'migent.session.openFailure',
   reply: 'migent.session.reply',
+  continueWithoutReply: 'migent.session.continueWithoutReply',
 };
