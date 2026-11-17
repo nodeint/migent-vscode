@@ -2,19 +2,21 @@
 
 ## Unreleased
 
+## 0.1.13
+
 - The Questions tab can answer again: an execution that ended by asking, with no answer and no later attempt of its
   stage, is now treated as waiting, so its options can be selected and the Send footer is shown. ([#80](https://github.com/nodeint/migent-vscode/pull/80))
 - A `session.lock` missing `started_at` or `nonce` (or with a wrong-typed field) is now treated as unparsable, so
   its liveness follows the file's age instead of its heartbeat. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Require Migent CLI 0.8.0 or newer; users on earlier versions must upgrade. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
-- A session whose `status.json` lacks a string `session_id` or `status` is now shown as Unknown (invalid status)
-  instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
+- A session whose `status.json` lacks a valid `session_id` (a string or a non-negative integer) or a nonempty string
+  `status` is now shown as Unknown (invalid status) instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - A session whose `manifest.yaml` matches neither the schema 2 nor the legacy contract shape is now shown as Unknown
   (invalid manifest) instead of being read with defaults. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
-- Pending questions, running stages and blocker reply targets are no longer read from `status.json`, because the
+- Pending questions, `running_stages` and blocker reply targets are no longer read from `status.json`, because the
   Migent 0.8.0 contract does not declare them. Until the CLI provides them another way, the Sessions view and the
-  question notification show no pending questions, no running stage is marked in Progress, and a blocked session
-  offers no blocker reply target. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
+  question notification show no pending questions and a blocked session offers no blocker reply target. Progress
+  still marks the current stage from the session's running execution records. ([#78](https://github.com/nodeint/migent-vscode/pull/78))
 - Questions now read the per-execution files written by Migent 0.8.0 (questions, answers and replies), so questions
   and answers still show once the session-level file is gone, and the Progress timeline notes each attempt's reply or
   answers. ([#76](https://github.com/nodeint/migent-vscode/pull/76))
