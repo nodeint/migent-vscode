@@ -13,7 +13,7 @@
 //                        Otherwise it models 0.8.0: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
-//                        `continue` keeps the frozen copy, and `--refresh-workflow` re-freezes from the draft.
+//                        `continue` keeps the frozen copy.
 //                        A failed execution writes `failure.md`; `workflow validate` and `get` are implemented.
 //   MIGENT_FAKE_COMPLETE_WARN  1 makes `session complete` warn on stderr about a missing required artifact (exit 0)
 //   MIGENT_FAKE_IDS      numeric makes new sessions get short numeric ids (1, 2, ...) written as unquoted integers in
@@ -373,8 +373,6 @@ function run() {
   if (!IS_LEGACY && fs.existsSync(draftOf(id))) {
     if (args[1] === 'run') {
       if (!fs.existsSync(frozenOf(id))) startDraft(id);
-    } else if (args.includes('--refresh-workflow')) {
-      fs.copyFileSync(draftOf(id), frozenOf(id));
     }
   }
   const lockFile = path.join(dirOf(id), 'session.lock');

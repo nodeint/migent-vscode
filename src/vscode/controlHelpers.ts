@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync } from 'node:fs';
 
 import * as vscode from 'vscode';
 
@@ -7,7 +6,7 @@ import { invokeCaptured, invokeText } from '../cli/invoke';
 import type { LaunchSpec } from '../cli/locate';
 import { doctorArgs, doctorLines, parseDoctorOutput, renameArgs } from '../core/controlArgs';
 import type { SessionSnapshot } from '../core/model';
-import { frozenWorkflowPath, workflowDraftPath, workflowsDir } from '../core/paths';
+import { workflowDraftPath } from '../core/paths';
 import { sessionLabel } from '../core/sessionPresentation';
 import { text } from '../text';
 import { progress, show } from './notices';
@@ -15,48 +14,13 @@ import type { ProjectContext } from './projects';
 
 const COMPLETED_MESSAGE_MS = 3000;
 
-function normalizeYaml(text: string): string {
-  return text.replaceAll('\r\n', '\n').replace(/[ \t]+$/gm, '').trim();
-}
-
-function readText(file: string): string | undefined {
-  try {
-    return readFileSync(file, 'utf8');
-  } catch {
-    return undefined;
-  }
-}
-
 /**
- * Whether the session directory holds its editable `workflow.yaml`. The CLI keeps it after freezing, and a
- * Continue (even with `--refresh-workflow`) reads it, never the live `.migent/workflows` file, so the live file
- * is not a source of change for such a session.
+ * Whether the session directory holds its editable `workflow.yaml`. The CLI keeps it after freezing.
  *
  * This reads session data, not the CLI version: a session prepared before CLI 0.3.5 has no file.
  */
 export function hasWorkflowDraft(projectRoot: string, sessionId: string): boolean {
   return existsSync(workflowDraftPath(projectRoot, sessionId));
-}
-
-/**
- * Undefined for a session that has its own `workflow.yaml`; a session prepared before CLI 0.3.5 has none and
- * compares the live and frozen copies.
- */
-export function workflowChange(
-  context: ProjectContext, snapshot: SessionSnapshot,
-): { frozen: string; current: string } | undefined {
-  if (hasWorkflowDraft(context.root, snapshot.sessionId)) return undefined;
-  const workflowId = snapshot.manifest?.workflow_id;
-  if (workflowId === undefined) return undefined;
-  const { entries } = context.catalog.workflows();
-  const entry = entries.find((candidate) => candidate.id === workflowId && !candidate.duplicate);
-  if (entry === undefined) return undefined;
-  const frozen = frozenWorkflowPath(context.root, snapshot.sessionId);
-  const frozenText = readText(frozen);
-  const current = path.join(workflowsDir(context.root), entry.file);
-  const currentText = readText(current);
-  if (frozenText === undefined || currentText === undefined) return undefined;
-  return normalizeYaml(frozenText) === normalizeYaml(currentText) ? undefined : { frozen, current };
 }
 
 /**

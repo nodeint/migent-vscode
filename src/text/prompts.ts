@@ -117,7 +117,6 @@ export const PROMPTS = {
   'prompts.newSessionTitle': () => 'New session',
   'prompts.runWorkflow': ({ workflow }: { workflow: string }) => `Run ${workflow}`,
   'prompts.prepareWorkflow': ({ workflow }: { workflow: string }) => `Prepare ${workflow}`,
-  'prompts.sessionWorkflowDiff': () => 'Session workflow ↔ updated workflow',
   'prompts.replyPlaceholder': () => 'Write a short reply, or open the editor for a long one',
   'prompts.newWorkflow': () => 'New workflow',
   'prompts.duplicateWorkflowTitle': () => 'Duplicate workflow',

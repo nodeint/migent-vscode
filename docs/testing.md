@@ -213,7 +213,7 @@ The fixture CLI implements `session rename` (it writes only `title.json`, takes 
 The fixture CLI models 0.8.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
-frozen copy, and `--refresh-workflow` re-freezes from the draft. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`
+frozen copy. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`
 print `Preflight failed: ...` and exit 2 without creating or freezing anything, unless `--skip-preflight` is passed.
 A failed execution writes its `failure.md`, and `workflow validate` and `get` (including `get clients` and
 `get models`) are implemented; `get providers` exits 2 as in 0.5.0 and later.
@@ -221,10 +221,8 @@ A failed execution writes its `failure.md`, and `workflow validate` and `get` (i
 0.3.1), which `capability.integration.test.ts` uses for the old CLI path.
 
 Those scenarios cover Prepare returning the session's `workflow.yaml`, opening it (and a vanished file), Continue
-sending no `--refresh-workflow` for a drafted session while a session without `workflow.yaml` still compares and
-adopts, a rejected draft releasing the gate so that a corrected draft runs, a failed preflight leaving the session
-prepared so the fixed draft can run, and a failed execution writing `failure.md`. A drafted session whose
-`workflow.yaml` was deleted falls back to the legacy comparison through the same code path.
+never sending `--refresh-workflow`, a rejected draft releasing the gate so that a corrected draft runs, a failed
+preflight leaving the session prepared so the fixed draft can run, and a failed execution writing `failure.md`.
 
 `failureText.test.ts` covers the wording of failure messages. Notifications and their buttons are not driven, so check
 them by hand in VS Code:

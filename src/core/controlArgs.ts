@@ -79,14 +79,11 @@ export interface ContinueInput {
   sessionId: string;
   /** Dispatch one stage without resetting revision counts. */
   once?: boolean;
-  /** Re-run the workflow definition the user chose to adopt. */
-  refreshWorkflow?: boolean;
 }
 
 export function continueArgs(input: ContinueInput, settings: RunSettings): string[] {
   const args = ['session', 'continue', input.sessionId];
   if (input.once === true) args.push('--once');
-  if (input.refreshWorkflow === true) args.push('--refresh-workflow');
   return [...args, ...runFlags(settings)];
 }
 

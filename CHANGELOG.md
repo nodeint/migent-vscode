@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Continue and Continue without reply always use the session's own workflow and no longer ask whether to adopt an
+  updated workflow. The extension no longer sends `--refresh-workflow`; sessions prepared before CLI 0.3.5 can no
+  longer adopt an updated workflow from the extension.
+
 ## 0.1.13
 
 - The Questions tab can answer again: an execution that ended by asking, with no answer and no later attempt of its

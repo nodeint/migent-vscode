@@ -97,13 +97,6 @@ const PINS: Record<NoticeId, Pin> = {
     buttons: [FIX_LOG],
   },
   'control.doctorFailed': { params: D, text: 'Doctor could not run: d', severity: 'error', buttons: [FIX_LOG] },
-  'control.workflowChanged': {
-    text:
-      'The workflow changed since this session started. Continue resets revision counts. ' +
-      'Choose which definition to use.',
-    severity: 'warning',
-    buttons: ['View changes', 'Use session version', 'Use updated workflow'],
-  },
   'control.repairing': { params: L, text: 'Repairing S', location: 'window', isCancellable: false },
   'control.completing': { params: L, text: 'Completing S', location: 'window', isCancellable: false },
   'control.renaming': { params: L, text: 'Renaming S', location: 'window', isCancellable: false },

@@ -7,9 +7,9 @@ import type { SessionSnapshot } from '../../core/model';
 import { sessionDir, TASK_FILENAME, workflowDraftPath } from '../../core/paths';
 import type { WorkflowEntry } from '../../core/workflows';
 import { text } from '../../text';
-import type { ControlService, WorkflowChoice } from '../control';
+import type { ControlService } from '../control';
 import { askTask, askTitle, LAUNCH_MODE_ITEMS, titleOf } from '../launchPrompts';
-import { notify, show } from '../notices';
+import { notify } from '../notices';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import { isMetaFileNode } from '../views/projectNodes';
@@ -234,32 +234,6 @@ async function start(control: ControlService, host: CommandHost, arg: unknown): 
   }
 }
 
-
-/** Ask which workflow definition to continue with; View changes returns to the same decision. */
-export async function chooseWorkflow(
-  control: ControlService,
-  context: ProjectContext,
-  snapshot: SessionSnapshot,
-): Promise<WorkflowChoice | undefined> {
-  const change = control.workflowChange(context, snapshot);
-  if (change === undefined) return 'session';
-  for (;;) {
-    const picked = await show('control.workflowChanged', undefined);
-    if (picked === 'viewChanges') {
-      await vscode.commands.executeCommand(
-        'vscode.diff',
-        vscode.Uri.file(change.frozen),
-        vscode.Uri.file(change.current),
-        text('prompts.sessionWorkflowDiff'),
-      );
-      continue;
-    }
-    if (picked === 'keepSession') return 'session';
-    if (picked === 'adoptUpdated') return 'updated';
-    return undefined;
-  }
-}
-
 /** Palette, tree and editor-title entry points for the core write commands. */
 export function registerControlCommands(
   host: CommandHost,
@@ -279,8 +253,7 @@ export function registerControlCommands(
       if (resolved === undefined) return;
       const { context, snapshot } = resolved;
       if (!(await control.ensureWritable(context, snapshot))) return;
-      const choice = await chooseWorkflow(control, context, snapshot);
-      if (choice !== undefined) await control.continueSession(context, snapshot, choice);
+      await control.continueSession(context, snapshot);
     }),
     vscode.commands.registerCommand('migent.session.cancel', async (arg: unknown) => {
       const resolved = await resolveWith(host, arg, { title: text('prompts.stopWhich'), isEligible: isRunning });

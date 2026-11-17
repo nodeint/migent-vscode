@@ -349,7 +349,6 @@ const PINS: Record<TextId, Pin> = {
   'prompts.newSessionTitle': [undefined, 'New session'],
   'prompts.runWorkflow': [{'workflow':'<workflow>'}, 'Run <workflow>'],
   'prompts.prepareWorkflow': [{'workflow':'<workflow>'}, 'Prepare <workflow>'],
-  'prompts.sessionWorkflowDiff': [undefined, 'Session workflow ↔ updated workflow'],
   'prompts.replyPlaceholder': [undefined, 'Write a short reply, or open the editor for a long one'],
   'prompts.newWorkflow': [undefined, 'New workflow'],
   'prompts.duplicateWorkflowTitle': [undefined, 'Duplicate workflow'],
