@@ -7,7 +7,7 @@ import { childrenForWorkflow, childrenOf, type HandoffArtifact, readHandoff } fr
 import { manifestPriorSessionId } from './manifest';
 import type { SessionSnapshot } from './model';
 import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
-import { markDeclared, readFrozenDownstream, readNext, type SuggestionArtifact } from './nextWorkflows';
+import { type ArtifactAvailability, markDeclared, type NextEntry, readFrozenDownstream, readNext } from './nextWorkflows';
 import { listOutputs, type OutputFileState, type OutputRow, publishedOutputs } from './outputs';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
 import { sessionTitle, stageOf } from './sessionPresentation';
@@ -43,7 +43,18 @@ export interface ResultsSuggestion {
   launch: LaunchEligibility;
   /** Sessions started from this one that run the suggestion's workflow, newest first. */
   children: ResultsSuggestionChild[];
-  artifacts: SuggestionArtifact[];
+  artifacts: ResultsSuggestionArtifact[];
+}
+
+/** One artifact of a suggestion, as the page shows it. */
+export interface ResultsSuggestionArtifact {
+  /** Input name in the target workflow. */
+  name: string;
+  /** Name of the source session's output that feeds it. */
+  output: string;
+  /** Session-relative path as written in `next.json`. */
+  path: string;
+  availability: ArtifactAvailability;
 }
 
 export interface ResultsSuggestionChild {
@@ -130,6 +141,18 @@ function outputKey(row: { name: string | null; path: string }): string {
   return row.name === null ? `path:${row.path}` : `name:${row.name}`;
 }
 
+function suggestionArtifacts(
+  entry: NextEntry,
+  availability: Record<string, ArtifactAvailability> = {},
+): ResultsSuggestionArtifact[] {
+  return Object.entries(entry.artifacts).map(([name, artifact]) => ({
+    name,
+    output: artifact.output,
+    path: artifact.path,
+    availability: availability[name] ?? 'missing',
+  }));
+}
+
 export function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -208,27 +231,30 @@ function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
         state: 'unsupported',
         detail: read.schemaVersion === null ? text('states.schemaMissing') : text('states.schemaVersion', { version: String(read.schemaVersion) }),
       };
-    case 'ok':
+    case 'ok': {
+      const declaredFlags = markDeclared(read, frozen, published);
       return {
         ...base,
         state: 'ok',
         detail: null,
-        suggestions: markDeclared(read.suggestions, frozen, published).map((suggestion) => {
-          const target = targetState(suggestion.workflow, input.workflows);
+        suggestions: read.next.next.map((entry, index) => {
+          const target = targetState(entry.workflow, input.workflows);
+          const declared = declaredFlags[index] ?? null;
           return {
-            workflow: suggestion.workflow,
-            task: suggestion.task,
-            declared: suggestion.declared,
+            workflow: entry.workflow,
+            task: entry.task,
+            declared,
             target,
-            launch: classifyLaunch({ sourceState, declared: suggestion.declared, target }),
+            launch: classifyLaunch({ sourceState, declared, target }),
             children: newestFirst(
-              childrenForWorkflow(input.snapshots, input.sessionId, suggestion.workflow).map(suggestionChild),
+              childrenForWorkflow(input.snapshots, input.sessionId, entry.workflow).map(suggestionChild),
             ),
-            // `argv` is dropped on purpose: it is never shown or run.
-            artifacts: suggestion.artifacts,
+            // `argv` and `command` are dropped on purpose: they are never shown or run.
+            artifacts: suggestionArtifacts(entry, read.availability[index]),
           };
         }),
       };
+    }
   }
 }
 

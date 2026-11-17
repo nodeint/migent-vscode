@@ -88,7 +88,15 @@ describe('previewNextStep', () => {
       next,
       JSON.stringify({
         schema_version: 1,
-        next: [{ workflow: 'probe-target', task: 'Evil', artifacts: { x: { output: 'secret', path: 'outputs/s.md' } } }],
+        source_session_id: SOURCE,
+        next: [
+          {
+            workflow: 'probe-target',
+            task: 'Evil',
+            artifacts: { x: { output: 'secret', path: 'outputs/s.md' } },
+            argv: [],
+          },
+        ],
       }),
     );
     expect(previewNextStep(input({ sessionDirPath: dir })).launchBlock).toMatch(/not declared/);

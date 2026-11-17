@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { type ExecutionEntry, listExecutions } from './executions';
-import type { MetricsExecution, MetricsUsage } from './metrics';
+import type { ExecutionView, UsageView } from './sessionMetricsModel';
 import { buildProgress, type SessionProgress, type StageProgressRow } from './sessionProgress';
 import { executionEntry, type ExecutionFixture } from './testHelpers';
 import type { SessionStagePlan } from './workflowStages';
@@ -219,7 +219,7 @@ describe('attempt facts', () => {
   const usage = (inputTokens: number | null, outputTokens: number | null) => ({
     inputTokens, outputTokens, reasoningTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null,
   });
-  const measured = (id: string, extra: Partial<MetricsExecution>): MetricsExecution => ({
+  const measured = (id: string, extra: Partial<ExecutionView>): ExecutionView => ({
     id,
     order: Number(id.slice(0, 4)),
     stageId: 'plan',
@@ -266,7 +266,7 @@ describe('attempt facts', () => {
     });
   });
 
-  const usageOf = (extra: Partial<MetricsUsage>): MetricsUsage => ({ ...usage(null, null), ...extra });
+  const usageOf = (extra: Partial<UsageView>): UsageView => ({ ...usage(null, null), ...extra });
 
   it('takes duration and each usage field from metrics, uncombined, and names the resumed attempt', () => {
     const executions = [
@@ -391,7 +391,7 @@ describe('attempt facts', () => {
   });
 
   describe('totals', () => {
-    const run = (metrics?: MetricsExecution[], wallSeconds?: number | null) => buildProgress({
+    const run = (metrics?: ExecutionView[], wallSeconds?: number | null) => buildProgress({
       executions: [
         execution('0001-plan--attempt-01', 'plan', 1, 'completed'),
         execution('0002-plan--attempt-02', 'plan', 2, 'completed'),

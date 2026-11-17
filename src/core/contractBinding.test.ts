@@ -15,6 +15,7 @@ import type { AuthoringDiagnostic, AuthoringResult } from './authoring';
 import type { Expect, Same } from './contractDraft';
 import type { ClientChoice, DoctorCheck, parsePrepared } from './controlArgs';
 import type { EventEntry } from './eventTail';
+import type { EXCLUDED_EXECUTION_KEYS, SanitizedExecution } from './metrics';
 
 type Prepared = NonNullable<ReturnType<typeof parsePrepared>>;
 
@@ -40,6 +41,8 @@ export type ForwardedFieldsMatchContract = [
   Expect<Same<Static<typeof GetModel>['default'], boolean>>,
   // Event line: an entry holds the contract's own `SessionEvent` (null for a raw line).
   Expect<Same<NonNullable<EventEntry['event']>, SessionEvent>>,
+  // Metrics projection: no machine-specific execution key survives the sanitized type.
+  Expect<Same<Extract<keyof SanitizedExecution, (typeof EXCLUDED_EXECUTION_KEYS)[number]>, never>>,
 ];
 
 describe('contract binding', () => {

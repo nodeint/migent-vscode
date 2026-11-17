@@ -11,7 +11,7 @@ import { pendingQuestions, type QuestionEntry, readQuestions } from '../../core/
 import { type ResultsInput, titleCase } from '../../core/resultsModel';
 import { OVERVIEW_ACTIVITY_LIMIT } from '../../core/sessionActivity';
 import { buildSessionMeta } from '../../core/sessionMeta';
-import { buildSessionMetricsModel, type SessionMetricsInput, type SessionMetricsModel } from '../../core/sessionMetricsModel';
+import { buildSessionMetricsModel, executionView, type SessionMetricsInput, type SessionMetricsModel } from '../../core/sessionMetricsModel';
 import {
   answerHeader,
   metricsHeader,
@@ -90,8 +90,8 @@ export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): 
     input.inputs = readInputIndex(input.sessionDirPath);
     const metrics = readMetrics(input.sessionDirPath);
     if (metrics.kind === 'ok') {
-      input.metrics = metrics.metrics.executions;
-      input.wallSeconds = metrics.metrics.totals.wallSeconds;
+      input.metrics = metrics.metrics.executions.map(executionView);
+      input.wallSeconds = metrics.metrics.totals.wall_seconds ?? null;
     }
     if (snapshot.displayState.state === 'running') {
       input.events = readRecentEvents(eventsPath(context.root, entry.sessionId), OVERVIEW_ACTIVITY_LIMIT);

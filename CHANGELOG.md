@@ -22,6 +22,8 @@
   instead of being read with defaults; an unrecognized question status no longer shows as its own state.
 - Lines of `events.jsonl` that do not match the Migent 0.8.0 event shape are now shown as unrecognized lines in the
   timeline instead of being read with defaults.
+- A `next.json` suggestion missing a required field of the Migent 0.8.0 contract is now skipped, and a `next.json`
+  without `source_session_id` is shown as invalid, instead of being read with defaults.
 
 - Completing a session with warnings no longer opens a notification; the warnings stay in the Migent log.
 - Answer questions (Overview and Sessions view) now opens the Questions tab on the attempt awaiting answers instead of

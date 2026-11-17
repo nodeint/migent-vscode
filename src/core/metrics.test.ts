@@ -5,7 +5,7 @@ import path from 'node:path';
 import { isValid, SealedMetricsHistorical } from '@nodeint/migent-contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { parseMetrics, readMetrics } from './metrics';
+import { EXCLUDED_EXECUTION_KEYS, parseMetrics, readMetrics } from './metrics';
 import { METRICS_FILENAME } from './paths';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'sessions', 'completed');
@@ -61,11 +61,11 @@ describe('readMetrics', () => {
     const read = readMetrics(FIXTURE);
     expect(read.kind).toBe('ok');
     if (read.kind !== 'ok') return;
-    expect(read.metrics.totals).toMatchObject({ executions: 2, wallSeconds: 1200, costPartial: true, revisions: 1 });
-    expect(read.metrics.totals.usage.costUsd).toBe(0.5);
-    expect(read.metrics.totals.usageMissing.costUsd).toBe(1);
-    expect(read.metrics.stages.map((stage) => stage.id)).toEqual(['plan', 'review_plan']);
-    expect(read.metrics.executions.map((item) => [item.order, item.stageId, item.client])).toEqual([
+    expect(read.metrics.totals).toMatchObject({ executions: 2, wall_seconds: 1200, cost_partial: true, revisions: 1 });
+    expect(read.metrics.totals.usage?.cost_usd).toBe(0.5);
+    expect(read.metrics.totals.usage_missing?.cost_usd).toBe(1);
+    expect(Object.keys(read.metrics.stages)).toEqual(['plan', 'review_plan']);
+    expect(read.metrics.executions.map((item) => [item.execution_order, item.stage_id, item.client])).toEqual([
       [1, 'plan', 'claude'],
       [2, 'review_plan', 'codex'],
     ]);
@@ -75,12 +75,38 @@ describe('readMetrics', () => {
     const read = readMetrics(FIXTURE);
     if (read.kind !== 'ok') throw new Error('expected ok');
     const [first, second] = read.metrics.executions;
-    expect(first?.usage.reasoningTokens).toBeNull();
-    expect(second?.usage.costUsd).toBeNull();
-    expect(second?.usageMissing.costUsd).toBe(1);
+    expect(first?.usage?.reasoning_tokens).toBeNull();
+    expect(second?.usage?.cost_usd).toBeNull();
+    expect(second?.usage_missing?.cost_usd).toBe(1);
     expect(first?.verify).toBeNull();
-    expect(first?.skipReason).toBeNull();
-    expect(first?.resumesExecutionId).toBeNull();
+    expect(first?.skip).toBeNull();
+    expect(first?.resumes_execution_id).toBeNull();
+  });
+
+  it('copies none of the excluded execution keys', () => {
+    const read = parseMetrics(
+      file({
+        executions: [
+          execution({ argv: ['x'], agent_id: 'a', cli_version: '1', git_head: 'abc', git_dirty: true, error: 'boom' }),
+        ],
+      }),
+    );
+    if (read.kind !== 'ok') throw new Error('expected ok');
+    for (const key of EXCLUDED_EXECUTION_KEYS) expect(read.metrics.executions[0]).not.toHaveProperty(key);
+    expect(read.metrics.executions[0]).not.toHaveProperty('error');
+    expect(Object.keys(read.metrics).sort()).toEqual(['executions', 'stages', 'totals']);
+  });
+
+  it('accepts a conforming record that omits every optional field', () => {
+    const read = parseMetrics({
+      totals: {},
+      stages: { plan: {} },
+      executions: [{ execution_id: 'e1', execution_order: 1, stage_id: 'plan', status: 'completed' }],
+    });
+    expect(read.kind).toBe('ok');
+    if (read.kind !== 'ok') return;
+    expect(read.metrics.executions[0]?.usage).toBeUndefined();
+    expect(read.metrics.totals.wall_seconds).toBeUndefined();
   });
 
   it('never returns argv, agent id, CLI version, git fields or machine paths', () => {
@@ -128,6 +154,21 @@ describe('parseMetrics', () => {
     expect(JSON.stringify(parseMetrics(file({ stages: { argv: 1 } })))).not.toContain('argv');
   });
 
+  it('keeps a stage id of __proto__', () => {
+    const read = parseMetrics(JSON.parse('{"totals":{},"stages":{"__proto__":{"executions":2},"plan":{}},"executions":[]}'));
+    if (read.kind !== 'ok') throw new Error('expected ok');
+    expect(Object.keys(read.metrics.stages)).toEqual(['__proto__', 'plan']);
+    expect(Object.getOwnPropertyDescriptor(read.metrics.stages, '__proto__')?.value).toMatchObject({ executions: 2 });
+  });
+
+  it.each(['totals', 'stages', 'executions'])('is invalid when %s is missing or of the wrong type, without throwing', (field) => {
+    for (const bad of [undefined, null, 7, 'x', true]) {
+      const read = parseMetrics(file({ [field]: bad }));
+      expect(read.kind).toBe('invalid');
+      expect(JSON.stringify(read)).not.toMatch(/argv|agent/);
+    }
+  });
+
   it('is invalid when totals, stages or executions have the wrong shape', () => {
     expect(parseMetrics(file({ totals: [] }))).toEqual({ kind: 'invalid', error: 'totals is not an object' });
     expect(parseMetrics(file({ totals: undefined })).kind).toBe('invalid');
@@ -141,13 +182,25 @@ describe('parseMetrics', () => {
     });
   });
 
-  it('ignores unknown fields and keeps absent numbers null', () => {
+  it.each(['execution_id', 'execution_order', 'stage_id', 'status'])(
+    'rejects an execution whose required %s is missing or of the wrong type',
+    (field) => {
+      for (const bad of field === 'execution_order' ? [undefined, null, {}, '1', ''] : [undefined, null, 7, {}, '']) {
+        expect(parseMetrics(file({ executions: [execution({ [field]: bad })] }))).toEqual({
+          kind: 'invalid',
+          error: 'execution 1 is malformed',
+        });
+      }
+    },
+  );
+
+  it('ignores unknown fields and leaves absent numbers absent, never 0', () => {
     const read = parseMetrics(file({ future: { a: 1 }, executions: [execution({ extra: true })] }));
     expect(read.kind).toBe('ok');
     if (read.kind !== 'ok') return;
-    expect(read.metrics.totals.wallSeconds).toBeNull();
-    expect(read.metrics.totals.costPartial).toBeNull();
-    expect(read.metrics.totals.revisions).toBeNull();
+    expect(read.metrics.totals.wall_seconds).toBeUndefined();
+    expect(read.metrics.totals.cost_partial).toBeUndefined();
+    expect(read.metrics.totals.revisions).toBeUndefined();
     expect(read.metrics.executions[0]).not.toHaveProperty('extra');
   });
 
@@ -167,18 +220,18 @@ describe('parseMetrics', () => {
     );
     if (read.kind !== 'ok') throw new Error('expected ok');
     const [skipped, verified] = read.metrics.executions;
-    expect(skipped?.skipReason).toBe('run_when was false');
-    expect(verified?.verify).toEqual({ runs: 3, red: 2, firstPass: false, failedCommands: ['pnpm gate'] });
-    expect(verified?.resumesExecutionId).toBe('0001-plan--attempt-01');
-    expect(verified?.routedFrom).toBe('0002-review--attempt-01');
+    expect(skipped?.skip).toEqual({ reason: 'run_when was false' });
+    expect(verified?.verify).toEqual({ runs: 3, red: 2, first_pass: false, failed_commands: ['pnpm gate'] });
+    expect(verified?.resumes_execution_id).toBe('0001-plan--attempt-01');
+    expect(verified?.routed_from).toBe('0002-review--attempt-01');
   });
 
   it('treats non-finite or non-numeric values as absent', () => {
     const read = parseMetrics(file({ totals: { wall_seconds: '12', turns: Number.NaN, usage: { cost_usd: '1' } } }));
     if (read.kind !== 'ok') throw new Error('expected ok');
-    expect(read.metrics.totals.wallSeconds).toBeNull();
-    expect(read.metrics.totals.turns).toBeNull();
-    expect(read.metrics.totals.usage.costUsd).toBeNull();
+    expect(read.metrics.totals.wall_seconds).toBeUndefined();
+    expect(read.metrics.totals.turns).toBeUndefined();
+    expect(read.metrics.totals.usage?.cost_usd).toBeUndefined();
   });
 });
 

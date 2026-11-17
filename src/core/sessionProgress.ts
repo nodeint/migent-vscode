@@ -7,7 +7,7 @@ import {
   executionOutcomeStatus,
 } from './executions';
 import type { HumanInputFact } from './humanInput';
-import type { MetricsExecution, MetricsUsage } from './metrics';
+import type { ExecutionView, UsageView } from './sessionMetricsModel';
 import type { SessionStagePlan } from './workflowStages';
 
 /**
@@ -53,7 +53,7 @@ export interface AttemptFacts {
   createdAt: string | null;
   wallSeconds: number | null;
   /** Each token count and the cost as `metrics.json` reports them, never combined; null without a metrics entry. */
-  usage: MetricsUsage | null;
+  usage: UsageView | null;
   /** The earlier attempt this one resumed, when `metrics.json` names one that is in the session. */
   resumes: AttemptRef | null;
   /** Why the attempt ran (`turn_kind` with `routed_from`); null when it started the stage or the data is not enough. */
@@ -71,7 +71,7 @@ export interface ProgressTotals {
   /** `metrics.json` `totals.wall_seconds`: the elapsed time of the session. Null when not reported. */
   wallSeconds: number | null;
   /** Per field, the sum over attempts that report it; null when none does, or without any metrics entry. */
-  usage: MetricsUsage | null;
+  usage: UsageView | null;
   /** Attempts without a cost (no metrics entry, or none reported), so a summed cost understates the spend. */
   costMissing: number;
 }
@@ -124,7 +124,7 @@ export interface ProgressInput {
   /** `status.json` `latest_execution_id`, used to find the latest running execution. */
   latestExecutionId: string | null;
   /** `metrics.json` executions; absent for an old or running session, which then shows no duration or tokens. */
-  metrics?: readonly MetricsExecution[];
+  metrics?: readonly ExecutionView[];
   /** `metrics.json` `totals.wall_seconds`; absent when the file is. */
   wallSeconds?: number | null;
   /** The human input each execution opened with, by execution id (`readInputIndex`); absent when none was read. */
@@ -200,7 +200,7 @@ const USAGE_FIELDS = [
 
 function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null): ProgressTotals {
   const measured = attempts.flatMap((attempt) => (attempt.usage === null ? [] : [attempt.usage]));
-  const usage: MetricsUsage | null = measured.length === 0
+  const usage: UsageView | null = measured.length === 0
     ? null
     : {
       inputTokens: null,
@@ -224,7 +224,7 @@ function totalsOf(attempts: readonly AttemptFacts[], wallSeconds: number | null)
 /** The facts of every execution by id, resolving `resumes` and `routed from` to named attempts. */
 function factsOf(
   executions: readonly ExecutionEntry[],
-  metrics: readonly MetricsExecution[],
+  metrics: readonly ExecutionView[],
   inputs: ReadonlyMap<string, HumanInputFact>,
 ): (execution: ExecutionEntry) => AttemptFacts {
   const byId = new Map(executions.map((execution) => [execution.id, execution]));
