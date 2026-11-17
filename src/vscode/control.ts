@@ -27,7 +27,7 @@ import { checkWrite, describeBlock, type WriteBlock, type WriteCheck } from '../
 import { text } from '../text';
 import { PROGRESS_MESSAGES } from '../text/notices';
 import type { CapabilityService } from './capability';
-import { hasWorkflowDraft, isRejectedStart, reportCompleted, runDoctor, runRename, workflowChange } from './controlHelpers';
+import { isRejectedStart, reportCompleted, runDoctor, runRename } from './controlHelpers';
 import { notify, progress, show } from './notices';
 import type { ProjectContext, ProjectRegistry } from './projects';
 import { type PreparedSession, preparedSession, reportFailure } from './workflowDraft';
@@ -58,8 +58,6 @@ export interface AnswerRuntime {
   log: (line: string) => void;
   logError: (line: string) => void;
 }
-
-export type WorkflowChoice = 'session' | 'updated';
 
 export interface PrepareInput {
   workflowId: string;
@@ -244,49 +242,25 @@ export class ControlService implements vscode.Disposable {
     return { kind: 'session', project, sessionId };
   }
 
-  /** Resume a stopped session. `choice` selects the workflow definition the user decided on. */
-  public async continueSession(
-    context: ProjectContext,
-    snapshot: SessionSnapshot,
-    choice: WorkflowChoice = 'session',
-  ): Promise<void> {
-    await this.#continue(context, snapshot, { choice, isOnce: false });
+  /** Resume a stopped session with its own workflow definition. */
+  public async continueSession(context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+    await this.#continue(context, snapshot, { isOnce: false });
   }
 
   /** Dispatch the next eligible stage once (`--once`), without resetting revision counts. */
-  public async continueOnce(
-    context: ProjectContext,
-    snapshot: SessionSnapshot,
-    choice: WorkflowChoice = 'session',
-  ): Promise<void> {
-    await this.#continue(context, snapshot, { choice, isOnce: true });
+  public async continueOnce(context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
+    await this.#continue(context, snapshot, { isOnce: true });
   }
 
-  async #continue(
-    context: ProjectContext,
-    snapshot: SessionSnapshot,
-    options: { choice: WorkflowChoice; isOnce: boolean },
-  ): Promise<void> {
+  async #continue(context: ProjectContext, snapshot: SessionSnapshot, options: { isOnce: boolean }): Promise<void> {
     if (!(await this.ensureWritable(context, snapshot))) return;
-    // A drafted session continues from its own copy: --refresh-workflow would re-freeze the draft, not the live file.
-    const isAdopting = options.choice === 'updated' && !hasWorkflowDraft(context.root, snapshot.sessionId);
-    const input = { sessionId: snapshot.sessionId, refreshWorkflow: isAdopting, once: options.isOnce };
+    const input = { sessionId: snapshot.sessionId, once: options.isOnce };
     await this.#execute(context, {
       key: this.#sessionKey(context, snapshot.sessionId),
       args: continueArgs(input, this.settings(context)),
       title: text(options.isOnce ? 'prompts.runNextStage' : 'prompts.continuing', { label: sessionLabel(snapshot) }),
       sessionId: snapshot.sessionId,
     });
-  }
-
-  /**
-   * Whether the workflow file changed since the session froze its copy, and where both live.
-   * Undefined when either side is unavailable: the session version then simply continues.
-   */
-  public workflowChange(
-    context: ProjectContext, snapshot: SessionSnapshot,
-  ): { frozen: string; current: string } | undefined {
-    return workflowChange(context, snapshot);
   }
 
   /** `session prepare`, then (optionally) the user's task text. Returns the real file paths. */

@@ -44,9 +44,9 @@ describe('control argv builders', () => {
     expect(args).toEqual(['session', 'continue', 's', '--max-dispatches', '1']);
   });
 
-  it('adds --once and --refresh-workflow only when asked', () => {
-    expect(continueArgs({ sessionId: 's', once: true, refreshWorkflow: true }, DEFAULT_RUN_SETTINGS)).toEqual([
-      'session', 'continue', 's', '--once', '--refresh-workflow', '--max-dispatches', '20', '--progress',
+  it('adds --once only when asked', () => {
+    expect(continueArgs({ sessionId: 's', once: true }, DEFAULT_RUN_SETTINGS)).toEqual([
+      'session', 'continue', 's', '--once', '--max-dispatches', '20', '--progress',
     ]);
   });
 

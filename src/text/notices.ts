@@ -125,13 +125,6 @@ export const NOTICES = {
   'control.completeFailed': toast('error', ({ detail }: Detail) => `Could not complete the session: ${detail}`, keys('viewLog')),
   'control.renameFailed': toast('error', ({ detail }: Detail) => `Could not rename the session: ${detail}`, keys('viewLog')),
   'control.doctorFailed': toast('error', ({ detail }: Detail) => `Doctor could not run: ${detail}`, keys('viewLog')),
-  'control.workflowChanged': toast(
-    'warning',
-    () =>
-      'The workflow changed since this session started. Continue resets revision counts. ' +
-      'Choose which definition to use.',
-    keys('viewChanges', 'keepSession', 'adoptUpdated'),
-  ),
   'control.repairing': progress('window', ({ label }: Label) => `Repairing ${label}`),
   'control.completing': progress('window', ({ label }: Label) => `Completing ${label}`),
   'control.renaming': progress('window', ({ label }: Label) => `Renaming ${label}`),

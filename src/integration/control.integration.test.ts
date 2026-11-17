@@ -399,27 +399,6 @@ const scenarios: Scenario[] = [
       assert.ok(path.isAbsolute(env.root));
     },
   },
-  {
-    name: 'AC7: a changed workflow file is detected against the session copy, with absolute paths for the diff',
-    async run(env) {
-      const original = ['id: plan', 'stages:', '  - id: a', ''].join('\n');
-      write(migentPath(env.root, 'workflows', 'plan.yaml'), original);
-      write(migentPath(env.root, 'sessions', 'w1', 'manifest.yaml'), manifest('w1', 'workflow_id: plan' + '\n'));
-      write(migentPath(env.root, 'sessions', 'w1', 'status.json'), status('cancelled'));
-      write(migentPath(env.root, 'sessions', 'w1', 'workflow.frozen.yaml'), original);
-      const project = await createProject(env);
-      await waitFor('workflow and session', () => project.catalog.workflows().entries.length === 1 && sessions(env).length === 1);
-      const snapshot = project.store.snapshot('w1');
-      assert.ok(snapshot);
-      assert.equal(env.api.control.workflowChange(project, snapshot), undefined, 'identical copy is not a change');
-      write(migentPath(env.root, 'workflows', 'plan.yaml'), original + '  - id: b' + '\n');
-      project.catalog.reloadWorkflow('plan.yaml');
-      const change = env.api.control.workflowChange(project, snapshot);
-      assert.ok(change, 'edited workflow is a change');
-      assert.ok(path.isAbsolute(change.current) && fs.existsSync(change.current), 'current path is a real file');
-      assert.ok(fs.existsSync(change.frozen), 'frozen path is a real file');
-    },
-  },
 ];
 
 const argvLog = (env: Env): string[][] =>
@@ -471,7 +450,7 @@ scenarios.push(
     },
   },
   {
-    name: 'AC1/AC4: Continue on an edited draft shows no change and never sends --refresh-workflow; a legacy session still adopts',
+    name: 'AC1/AC4: Continue on an edited draft never sends --refresh-workflow',
     async run(env) {
       const project = await createProject(env);
       write(migentPath(env.root, 'workflows', 'plan.yaml'), 'id: plan\nstages: []\n');
@@ -482,30 +461,17 @@ scenarios.push(
         await env.api.control.runPrepared(project, snapshotOf(project, prepared.sessionId), 'plan');
         await waitFor('stopped', () => project.store.snapshot(prepared.sessionId)?.displayState.state === 'stopped');
         assert.ok(fs.existsSync(sessionFile(env, prepared.sessionId, 'workflow.frozen.yaml')), 'frozen');
-        // The live file now differs from the frozen draft, which must not count as a change for a drafted session.
         write(migentPath(env.root, 'workflows', 'plan.yaml'), 'id: plan\nstages:\n  - id: b\n');
         project.catalog.reloadWorkflow('plan.yaml');
         stopped = snapshotOf(project, prepared.sessionId);
-        assert.equal(env.api.control.workflowChange(project, stopped), undefined);
       });
       await withFake({ [RUN_MS]: '100' }, async () => {
         assert.ok(stopped);
-        await env.api.control.continueSession(project, stopped, 'updated');
+        await env.api.control.continueSession(project, stopped);
       });
       const last = argvLog(env).at(-1);
       assert.ok(last !== undefined && last.includes('continue'), 'continue was dispatched');
       assert.ok(!last.includes('--refresh-workflow'), `no adoption flag: ${JSON.stringify(last)}`);
-      // Without workflow.yaml the live file is compared and adoption is still sent.
-      write(migentPath(env.root, 'sessions', 'old', 'manifest.yaml'), manifest('old', 'workflow_id: plan\n'));
-      write(migentPath(env.root, 'sessions', 'old', 'status.json'), status('cancelled'));
-      write(migentPath(env.root, 'sessions', 'old', 'workflow.frozen.yaml'), 'id: plan\nstages: []\n');
-      await waitFor('legacy session', () => project.store.snapshot('old') !== undefined);
-      const old = snapshotOf(project, 'old');
-      assert.ok(env.api.control.workflowChange(project, old), 'legacy session still sees the changed workflow');
-      await withFake({ [RUN_MS]: '100' }, async () => {
-        await env.api.control.continueSession(project, old, 'updated');
-      });
-      assert.ok(argvLog(env).at(-1)?.includes('--refresh-workflow'), 'legacy adoption still sends the flag');
     },
   },
   {

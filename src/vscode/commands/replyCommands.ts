@@ -14,7 +14,7 @@ import { confirm, progress } from '../notices';
 import { pickProject } from '../pick';
 import type { ProjectContext } from '../projects';
 import type { DraftSource, ReplyService, SendResult } from '../reply';
-import { chooseWorkflow, CONTINUABLE } from './controlCommands';
+import { CONTINUABLE } from './controlCommands';
 import { initializeProject } from './initCommand';
 import { type CommandHost, resolveWith } from './sessionCommands';
 
@@ -183,8 +183,7 @@ async function continueWithoutReply(
   }
   if (!(await control.ensureWritable(context, snapshot))) return;
   if (!(await confirm('reply.continueWithoutConfirm', { label: sessionLabel(snapshot) }))) return;
-  const choice = await chooseWorkflow(control, context, snapshot);
-  if (choice !== undefined) await control.continueSession(context, snapshot, choice);
+  await control.continueSession(context, snapshot);
 }
 
 async function repair(control: ControlService, context: ProjectContext, snapshot: SessionSnapshot): Promise<void> {
