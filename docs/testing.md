@@ -162,16 +162,17 @@ whitespace-only Run task reaching no CLI call, the entered Prepare title, cancel
 and Open existing session creating no new session. One scenario also drives the real quick pick and input boxes through
 VS Code's quick-open commands: Escape on each prompt, then Prepare with the prefilled title.
 
-`reply.integration.test.ts` drives `ReplyService` against the fixture CLI. A blocked session has no blocker reply target,
-because the contract's status declares none (B6), so one scenario asserts that and the integration scenarios for the
-ordinary-blocker reply flow (draft keeping the blocker, the exact argv of a send, rejected sends, superseding
-executions, edits made while sending, an empty reply) were removed with it. No test drives `ReplyService` for that path
-now; `replyFlow.test.ts` covers only the pure parts (block classification, reply text, resume and consumption evidence
-and reply targets). The fixture CLI still answers a reply to a cancelled workflow stage (interrupted wording) and to a
-role session (no `--stage`, `## Role` prefix), so the suite covers their argv, draft settlement, a stale target being
-refused, a completed role session reopening as Running and returning to Recent with the counts following, and quick
-text becoming the draft body without overwriting an existing draft. Quick Picks and the input box are not driven, and
-neither are notification buttons in the test host. Notifications are covered at the boundary with a mocked `vscode`:
+`reply.integration.test.ts` drives `ReplyService` against the fixture CLI. A blocked workflow session's reply
+target is its `latest_execution_id` (the contract's status declares no `blocked_by_execution_ids`, B6). One scenario
+asserts the target; another opens the blocker draft (it keeps the recorded blocker), sends it with the exact argv and
+sees the consumed reply settle the draft. Rejected sends, superseding executions, edits made while sending and an empty
+reply for that path have no scenario; `replyFlow.test.ts` covers the pure parts (block classification, reply text,
+resume and consumption evidence and reply targets). The fixture CLI still answers a reply to a cancelled workflow
+stage (interrupted wording) and to a role session (no `--stage`, `## Role` prefix), so the suite covers their argv,
+draft settlement, a stale target being refused, a completed role session reopening as Running and returning to
+Recent with the counts following, and quick text becoming the draft body without overwriting an existing
+draft. Quick Picks and the input box are not driven, and neither are notification buttons in the test host.
+Notifications are covered at the boundary with a mocked `vscode`:
 `notices.test.ts` (the facade: severity, buttons, picked key, modal confirmations, progress) and `notifier.test.ts` and
 `questionNotifier.test.ts` (when a notification fires, queueing, which command a button runs, the settings), plus
 `deleteSession.test.ts` for the delete ids. Their rules are covered by `transitions.test.ts`, `notificationGate.test.ts`,

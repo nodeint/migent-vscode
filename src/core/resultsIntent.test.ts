@@ -75,6 +75,7 @@ describe('parseResultsMessage', () => {
       'continue',
       'openFailure',
       'reply',
+      'continueWithoutReply',
     ]) {
       expect(parseResultsMessage({ type: 'intent', intent: 'sessionAction', action })).toEqual({
         type: 'intent',

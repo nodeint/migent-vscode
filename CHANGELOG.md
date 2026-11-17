@@ -5,6 +5,8 @@
 - Continue and Continue without reply always use the session's own workflow and no longer ask whether to adopt an
   updated workflow. The extension no longer sends `--refresh-workflow`; sessions prepared before CLI 0.3.5 can no
   longer adopt an updated workflow from the extension.
+- A blocked workflow session shows Reply and Continue without reply again. The blocker reply target is the session's
+  latest execution (`latest_execution_id`), since `blocked_by_execution_ids` is not part of the contract.
 
 ## 0.1.13
 

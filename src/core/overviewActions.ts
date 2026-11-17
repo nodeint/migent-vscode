@@ -12,6 +12,11 @@ export interface OverviewActions {
   secondary: SessionAction[];
 }
 
+/** A blocked session continues without a reply only when it can be replied to (an ordinary blocker). */
+function blockedSecondary(canReply: boolean): SessionAction[] {
+  return canReply ? ['continueWithoutReply', 'showLog'] : ['showLog'];
+}
+
 /**
  * The Overview action table. Eligibility comes from the session's own facts
  * (`replyTargets`, `isCompletable`) and the latest execution's failure report;
@@ -28,7 +33,7 @@ export function overviewActions(
     case 'blocked':
       return {
         primary: meta.canReply ? 'reply' : null,
-        secondary: ['showLog'],
+        secondary: blockedSecondary(meta.canReply),
       };
     case 'running':
       return { primary: 'showLog', secondary: ['stop'] };

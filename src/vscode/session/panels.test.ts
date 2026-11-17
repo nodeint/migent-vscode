@@ -323,6 +323,7 @@ describe('SessionPanels session actions', () => {
     ['stop', 'migent.session.cancel'],
     ['continue', 'migent.session.continue'],
     ['openFailure', 'migent.session.openFailure'],
+    ['continueWithoutReply', 'migent.session.continueWithoutReply'],
   ])('runs %s as %s for the panel’s own session', async (action, command) => {
     const { panels } = setup(makeRoot(false), snapshot());
     panels.open(identity);

@@ -139,6 +139,7 @@
     actions: {
       answerQuestions: 'Answer questions',
       reply: 'Reply…',
+      continueWithoutReply: 'Continue without reply',
       stop: 'Stop',
       continue: 'Continue',
       openFailure: 'Open failure report',

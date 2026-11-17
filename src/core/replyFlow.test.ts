@@ -63,15 +63,25 @@ describe('blockKind', () => {
 });
 
 describe('blockedTargets', () => {
-  // B6: `blocked_by_execution_ids` is not in the contract, so a blocked session has no reply target.
-  it('lists no blocked execution, even when the file names some', () => {
+  // `blocked_by_execution_ids` is not in the contract, so the target comes from `latest_execution_id`.
+  it('targets the latest execution of a blocked session, whatever blocked_by_execution_ids holds', () => {
     const targets = blockedTargets(
       snapshot({
         status: 'blocked',
-        blocked_by_execution_ids: ['0003-code-review--attempt-02', '0001-plan--attempt-01'],
+        latest_execution_id: '0003-code-review--attempt-02',
+        blocked_by_execution_ids: ['0001-plan--attempt-01'],
       }),
     );
-    expect(targets).toEqual([]);
+    expect(targets).toEqual([{ executionId: '0003-code-review--attempt-02', stageId: 'code-review', attempt: 2, kind: 'blocker' }]);
+  });
+
+  it('lists no target when a blocked session names no usable latest execution', () => {
+    expect(blockedTargets(snapshot({ status: 'blocked' }))).toEqual([]);
+    expect(blockedTargets(snapshot({ status: 'blocked', latest_execution_id: 'not-an-execution' }))).toEqual([]);
+  });
+
+  it('lists no target for a session that is not blocked', () => {
+    expect(blockedTargets(snapshot({ status: 'active', latest_execution_id: '0001-plan--attempt-01' }))).toEqual([]);
   });
 
   it('offers nothing for a pending question, so Reply cannot answer it', () => {
@@ -285,10 +295,10 @@ describe('replyTargets', () => {
   const execution = (id: string, stage: string, status: string, kind: string | null = null): ExecutionEntry =>
     executionEntry({ id, stage, status, kind });
 
-  it('offers no blocker target for a blocked workflow while the blocker source is empty (B6), exactly as blockedTargets does', () => {
-    const blocked = snapshot({ status: 'blocked', blocked_by_execution_ids: ['0001-plan--attempt-01'] });
+  it('offers the blocker target of a blocked workflow, exactly as blockedTargets does', () => {
+    const blocked = snapshot({ status: 'blocked', latest_execution_id: '0001-plan--attempt-01' });
     expect(replyTargets(blocked)).toEqual(blockedTargets(blocked));
-    expect(replyTargets(blocked)).toEqual([]);
+    expect(replyTargets(blocked)).toEqual([{ executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, kind: 'blocker' }]);
   });
 
   it('answers a cancelled stage of a cancelled workflow, not a verify-only or a resumed one', () => {

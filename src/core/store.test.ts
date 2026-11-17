@@ -494,8 +494,9 @@ schema_version: 2
   it('attaches the targets of a blocked session and none for a completed one', () => {
     const s = store();
     s.load();
-    // B6: blocked_by_execution_ids is not read, so a blocked session has no blocker reply targets.
-    expect(s.snapshot('blocked')?.replyTargets).toEqual([]);
+    expect(s.snapshot('blocked')?.replyTargets).toEqual([
+      { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, kind: 'blocker' },
+    ]);
     expect(s.snapshot('completed')?.replyTargets).toEqual([]);
   });
 
