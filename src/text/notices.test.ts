@@ -102,12 +102,6 @@ const PINS: Record<NoticeId, Pin> = {
   'control.renaming': { params: L, text: 'Renaming S', location: 'window', isCancellable: false },
   'control.stopping': { params: L, text: 'Stopping S', location: 'window', isCancellable: false },
   'control.doctorRunning': { text: 'Running Migent doctor', location: 'window', isCancellable: false },
-  'control.running': {
-    params: { title: 'Run' },
-    text: 'Run — continues after closing VS Code',
-    location: 'window',
-    isCancellable: false,
-  },
   'control.noTaskSaved': { text: 'The task.md file was not saved, so the session was not started.', severity: 'error' },
   'control.taskEmpty': { text: 'The task.md file is empty. Write the task, then run again.', severity: 'error' },
   'control.workflowNotSaved': { text: 'The workflow was not saved, so it was not run.', severity: 'error' },

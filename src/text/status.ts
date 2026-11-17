@@ -2,7 +2,8 @@
 export const STATUS = {
   'status.running': ({ count }: { count: number }) => `${count} running`,
   'status.needsAttention': ({ count }: { count: number }) => `${count} needs attention`,
-  'status.text': ({ parts }: { parts: string }) => `$(sync~spin) Migent: ${parts}`,
+  'status.text': ({ icon, parts }: { icon: string; parts: string }) => `${icon} Migent: ${parts}`,
+  'status.continuesAfterClose': () => 'Running sessions continue after closing VS Code.',
   'status.detailRunning': ({ count }: { count: number }) => `${count} running`,
   'status.detailNeedAttention': ({ count }: { count: number }) => `${count} need attention`,
   'status.detailPending': ({ count }: { count: number }) => `${count} pending question(s)`,

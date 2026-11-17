@@ -130,7 +130,6 @@ export const NOTICES = {
   'control.renaming': progress('window', ({ label }: Label) => `Renaming ${label}`),
   'control.stopping': progress('window', ({ label }: Label) => `Stopping ${label}`),
   'control.doctorRunning': progress('window', () => 'Running Migent doctor'),
-  'control.running': progress('window', ({ title }: { title: string }) => `${title} — continues after closing VS Code`),
   'control.noTaskSaved': toast('error', () => 'The task.md file was not saved, so the session was not started.'),
   'control.taskEmpty': toast('error', () => 'The task.md file is empty. Write the task, then run again.'),
   'control.workflowNotSaved': toast('error', () => 'The workflow was not saved, so it was not run.'),

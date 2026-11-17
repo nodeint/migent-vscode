@@ -33,6 +33,7 @@ const scenarios: Scenario[] = [
       assert.equal(env.api.statusBar.isVisible, false);
       addSession(env, 'r1', 'active', {}, true);
       await waitFor('running shown', () => env.api.statusBar.text === '$(sync~spin) Migent: 1 running');
+      assert.match(env.api.statusBar.tooltip, /continue after closing VS Code/);
       addSession(env, 'f1', 'active', { latest_execution_status: 'failed' });
       await waitFor('both parts', () => env.api.statusBar.text === '$(sync~spin) Migent: 1 running · 1 needs attention');
       addSession(env, 'c1', 'completed');
