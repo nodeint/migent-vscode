@@ -2,13 +2,15 @@
 
 ## Unreleased
 
+## 0.1.14
+
 - The Migent status bar item is now the only status bar entry while a job runs. The separate "continues after
   closing VS Code" progress is removed; the item spins only while a session is running (a static icon shows when
   sessions only need attention), and its tooltip notes that runs continue after closing VS Code.
   ([#87](https://github.com/nodeint/migent-vscode/pull/87))
 - Continue and Continue without reply always use the session's own workflow and no longer ask whether to adopt an
   updated workflow. The extension no longer sends `--refresh-workflow`; sessions prepared before CLI 0.3.5 can no
-  longer adopt an updated workflow from the extension.
+  longer adopt an updated workflow from the extension. ([#84](https://github.com/nodeint/migent-vscode/pull/84))
 - A blocked workflow session shows Reply and Continue without reply again. The blocker reply target is the session's
   latest execution (`latest_execution_id`), since `blocked_by_execution_ids` is not part of the contract. ([#86](https://github.com/nodeint/migent-vscode/pull/86))
 
