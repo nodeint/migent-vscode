@@ -6,7 +6,7 @@
   and cost figures of Overview Progress are now read from `plugins/metrics/metrics.json`, and "Open metrics.json"
   opens that file. Sessions completed before 0.9.0 keep their metrics in the root `metrics.json`, which is no longer
   read, so they show no metrics. Saving the Config page keeps the new `plugins:` section unchanged, and `plugin.*`
-  events show as ordinary events in the timeline and log.
+  events show as ordinary events in the timeline and log. ([#89](https://github.com/nodeint/migent-vscode/pull/89))
 
 ## 0.1.14
 
