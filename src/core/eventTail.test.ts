@@ -119,6 +119,35 @@ describe('tailEvents', () => {
   });
 });
 
+describe('plugin events (CLI 0.9.0)', () => {
+  it('reads plugin.decision and plugins.frozen lines as recognized events, not as unrecognized lines', () => {
+    const decision = JSON.stringify({
+      v: 2,
+      seq: 3,
+      event: 'plugin.decision',
+      timestamp: 't3',
+      data: {
+        plugin: 'metrics',
+        invocation_id: 'inv-1',
+        proposed: [{ kind: 'artifact' }],
+        results: [{ kind: 'artifact', status: 'applied', path: 'plugins/metrics/metrics.json' }],
+      },
+    });
+    const frozen = JSON.stringify({
+      v: 2,
+      seq: 4,
+      event: 'plugins.frozen',
+      timestamp: 't4',
+      data: { freeze_hash: 'abc', plugins: [{ id: 'metrics', enabled: true, advisory: false, version: '0.9.0', target: null }] },
+    });
+    const events = readRecentEvents(tmpFile('events.jsonl', `${decision}
+${frozen}
+`), 5);
+    expect(events.map((event) => event.event?.event)).toEqual(['plugin.decision', 'plugins.frozen']);
+    expect(events.every((event) => event.rawLine === null)).toBe(true);
+  });
+});
+
 describe('readRecentEvents', () => {
   function numbered(count: number): string[] {
     return Array.from({ length: count }, (_, index) =>

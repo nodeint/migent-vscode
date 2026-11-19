@@ -1,30 +1,35 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { SealedMetricsHistorical, Static } from '@nodeint/migent-contracts';
+import type { SessionMetrics as SessionMetricsFile, Static } from '@nodeint/migent-contracts';
 
 import { text as describe } from '../text';
 import { type Declared, declaredOf } from './contractRead';
-import { METRICS_FILENAME } from './paths';
+import { METRICS_RELATIVE_PATH } from './paths';
 import { isRecord } from './record';
 
 /**
- * `metrics.json` of a completed workflow session, reduced to what the Session Metrics page shows.
+ * `plugins/metrics/metrics.json` of a completed workflow session, reduced to what the Session Metrics page shows.
  *
- * The result is a projection of the contract's `SealedMetricsHistorical`, limited to `totals`, `stages` and
- * `executions`. Field names and value types come from the contract; documented nulls stay null and a missing value
- * is never replaced by 0. The machine-specific execution fields in {@link EXCLUDED_EXECUTION_KEYS} are a data
- * exposure boundary: the reader copies fields one by one from an allow-list, so neither those keys nor any unknown
- * key ever leaves this module. Display values are computed in `sessionMetricsModel.ts`.
+ * The result is a projection of the contract's `SessionMetrics` (`plugins/metrics/metrics.json`), limited to `totals`,
+ * `stages` and `executions`. Field names and value types come from the contract; documented nulls stay null and a
+ * missing value is never replaced by 0. The machine-specific execution fields in {@link EXCLUDED_EXECUTION_KEYS} are a
+ * data exposure boundary: the reader copies fields one by one from an allow-list, so neither those keys nor any
+ * unknown key ever leaves this module. Display values are computed in `sessionMetricsModel.ts`.
  */
 
 /**
- * The opt-in historical shape (every field optional) is the upper bound of what is read: each reader below takes its
- * field names from it, so an upstream rename fails typecheck. Values stay `unknown` until checked.
+ * The contract shape of the metrics file, with every field optional, is the upper bound of what is read: each reader
+ * below takes its field names from it, so an upstream rename fails typecheck. Values stay `unknown` until checked.
  */
-type HistoricalMetrics = Static<typeof SealedMetricsHistorical>;
+type DeepOptional<T> = T extends readonly (infer Item)[]
+  ? DeepOptional<Item>[]
+  : T extends object
+    ? { [Key in keyof T]?: DeepOptional<T[Key]> }
+    : T;
+type HistoricalMetrics = DeepOptional<Static<typeof SessionMetricsFile>>;
 type TotalsWire = NonNullable<HistoricalMetrics['totals']>;
-type StageWire = NonNullable<HistoricalMetrics['stages']>[string];
+type StageWire = NonNullable<NonNullable<HistoricalMetrics['stages']>[string]>;
 type ExecutionWire = NonNullable<HistoricalMetrics['executions']>[number];
 type UsageWire = NonNullable<TotalsWire['usage']>;
 type UsageMissingWire = NonNullable<TotalsWire['usage_missing']>;
@@ -268,7 +273,7 @@ export function parseMetrics(raw: unknown): MetricsRead {
 export function readMetrics(sessionDirPath: string): MetricsRead {
   let text: string;
   try {
-    text = readFileSync(path.join(sessionDirPath, METRICS_FILENAME), 'utf8');
+    text = readFileSync(path.join(sessionDirPath, METRICS_RELATIVE_PATH), 'utf8');
   } catch (error) {
     const code = errorCode(error);
     return code === 'ENOENT' || code === 'ENOTDIR' ? { kind: 'missing' } : { kind: 'unreadable', error: code };

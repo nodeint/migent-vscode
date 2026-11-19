@@ -67,12 +67,35 @@ const same = (left: string, right: string): boolean => left.toLowerCase() === pa
 
 const fixtureDir = (): string => path.join(repoRoot(), 'src', 'core', 'fixtures', 'sessions', 'completed');
 const sessionFile = (env: Env, ...parts: string[]): string => migentPath(env.root, 'sessions', SESSION, ...parts);
+/** The metrics file of CLI 0.9.0 and later, written by the metrics plugin. */
+const metricsFile = (env: Env): string => sessionFile(env, 'plugins', 'metrics', 'metrics.json');
 
-/** A project with the completed fixture session, with or without its metrics.json. */
+/**
+ * Record a plugin artifact the way the CLI does: the artifact is written first, then a `plugin.decision` line is
+ * appended to `events.jsonl`. That append is the change the page reacts to (the plugin folder is not watched).
+ */
+function recordPluginDecision(env: Env): void {
+  const line = JSON.stringify({
+    v: 2,
+    seq: 1000,
+    event: 'plugin.decision',
+    timestamp: '2026-10-26T09:21:00.000+00:00',
+    data: {
+      plugin: 'metrics',
+      invocation_id: 'inv-metrics',
+      proposed: [],
+      results: [{ kind: 'artifact', status: 'applied', path: 'plugins/metrics/metrics.json' }],
+    },
+  });
+  fs.appendFileSync(sessionFile(env, 'events.jsonl'), `${line}
+`);
+}
+
+/** A project with the completed fixture session, with or without its plugins/metrics/metrics.json. */
 async function metricsProject(env: Env, options: { isMetricsKept: boolean }): Promise<void> {
   fs.mkdirSync(migentPath(env.root, 'sessions'), { recursive: true });
   fs.cpSync(fixtureDir(), migentPath(env.root, 'sessions', SESSION), { recursive: true });
-  if (!options.isMetricsKept) fs.rmSync(sessionFile(env, 'metrics.json'));
+  if (!options.isMetricsKept) fs.rmSync(sessionFile(env, 'plugins'), { recursive: true });
   write(sessionFile(env, 'task.md'), 'a task\n');
   const project = await createProject(env);
   await waitFor('session loaded', () => project.store.snapshot(SESSION) !== undefined);
@@ -132,7 +155,7 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: 'metrics: a Completed session without metrics.json opens an explanatory model; the file appearing updates it',
+    name: 'metrics: a Completed session without plugins/metrics/metrics.json opens an explanatory model; the file and its decision event updating it',
     async run(env) {
       await metricsProject(env, { isMetricsKept: false });
       const id = identity(env);
@@ -147,10 +170,23 @@ const scenarios: Scenario[] = [
       await waitFor('editor focused', () => same(activeFile(), taskFile));
       const baseline = await settledRevision(env, id);
 
-      fs.copyFileSync(path.join(fixtureDir(), 'metrics.json'), sessionFile(env, 'metrics.json'));
+      write(metricsFile(env), fs.readFileSync(path.join(fixtureDir(), 'plugins', 'metrics', 'metrics.json'), 'utf8'));
+      recordPluginDecision(env);
       await waitFor('created metrics.json shown', () => metricsOf(env, id)?.metrics.kind === 'ok');
       assert.ok(env.api.session.revision(id) > baseline, 'the revision grew');
       assert.ok(same(activeFile(), taskFile), 'a background change did not move the active editor');
+      await closeAll(env);
+    },
+  },
+  {
+    name: 'metrics: a session with only the legacy root metrics.json shows missing',
+    async run(env) {
+      await metricsProject(env, { isMetricsKept: false });
+      fs.copyFileSync(path.join(fixtureDir(), 'plugins', 'metrics', 'metrics.json'), sessionFile(env, 'metrics.json'));
+      const id = identity(env);
+      env.api.session.open(id, { tab: 'metrics' });
+      await waitFor('model posted', () => metricsOf(env, id) !== null);
+      assert.deepEqual(metricsOf(env, id)?.metrics, { kind: 'missing' });
       await closeAll(env);
     },
   },
@@ -163,18 +199,20 @@ const scenarios: Scenario[] = [
       await waitFor('model posted', () => metricsOf(env, id)?.metrics.kind === 'ok');
       const first = await settledRevision(env, id);
 
-      const changed = JSON.parse(fs.readFileSync(sessionFile(env, 'metrics.json'), 'utf8')) as {
+      const changed = JSON.parse(fs.readFileSync(metricsFile(env), 'utf8')) as {
         totals: { cost_partial: boolean };
       };
       changed.totals.cost_partial = false;
-      write(sessionFile(env, 'metrics.json'), JSON.stringify(changed));
+      write(metricsFile(env), JSON.stringify(changed));
+      recordPluginDecision(env);
       await waitFor('rewritten metrics shown', () => {
         const metrics = metricsOf(env, id)?.metrics;
         return metrics?.kind === 'ok' && metrics.totals.costPartial === false;
       });
       assert.ok(env.api.session.revision(id) > first, 'the revision grew');
 
-      write(sessionFile(env, 'metrics.json'), '{ not json');
+      write(metricsFile(env), '{ not json');
+      recordPluginDecision(env);
       await waitFor('invalid metrics shown', () => metricsOf(env, id)?.metrics.kind === 'invalid');
       assert.equal(metricsOf(env, id)?.state, 'Completed', 'an invalid file keeps the session Completed');
 
@@ -194,7 +232,7 @@ const scenarios: Scenario[] = [
       await waitFor('model posted', () => metricsOf(env, id) !== null);
 
       await env.api.session.handle(id, { type: 'intent', intent: 'openMetricsFile' });
-      await waitFor('metrics.json opened', () => same(activeFile(), sessionFile(env, 'metrics.json')));
+      await waitFor('metrics.json opened', () => same(activeFile(), metricsFile(env)));
       await env.api.session.handle(id, { type: 'intent', intent: 'sessionAction', action: 'openTask' });
       await waitFor('task.md opened', () => same(activeFile(), sessionFile(env, 'task.md')));
       const before = activeFile();

@@ -59,6 +59,13 @@ describe('config form', () => {
     expect(configBodyFromForm(form, 'local')).toEqual(local);
   });
 
+  it('keeps a plugins section unchanged through the form (CLI 0.9.0)', () => {
+    const withPlugins = { ...SOURCE, plugins: { metrics: { enabled: true, future: [1] } } };
+    expect(roundTrip(withPlugins)).toEqual(withPlugins);
+    expect(roundTrip(withPlugins, 'local')).toEqual(withPlugins);
+    expect(parse(configDraftFromForm(configFormFromBody(withPlugins), 'project'))).toEqual(withPlugins);
+  });
+
   it('serializes to YAML the CLI can read back', () => {
     expect(parse(configDraftFromForm(configFormFromBody(SOURCE), 'project'))).toEqual(SOURCE);
   });

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { TSchema } from '@nodeint/migent-contracts';
-import { isValid, SealedMetricsHistorical, SESSION_FILE_EXCLUSIONS, SESSION_FILES, validationIssues } from '@nodeint/migent-contracts';
+import { isValid, SESSION_FILE_EXCLUSIONS, SESSION_FILES, validationIssues } from '@nodeint/migent-contracts';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
@@ -20,11 +20,8 @@ const NON_CONFORMING: readonly { readonly fixture: string; readonly file: string
   { fixture: 'synthetic/questions-superseded', file: 'questions.json', reason: 'It has a superseded record and an answer outside the observed shapes.' },
 ];
 
-/** The contract lists `metrics.json` as undescribed, but `SealedMetricsHistorical` describes it, so it is checked. */
-const METRICS_FILE = 'metrics.json';
-
 /** Session files the contract does not describe, plus files that are not session data. */
-const UNDESCRIBED = new Set(SESSION_FILE_EXCLUSIONS.map((entry) => entry.name).filter((name) => name !== METRICS_FILE));
+const UNDESCRIBED = new Set(SESSION_FILE_EXCLUSIONS.map((entry) => entry.name));
 const NOT_SESSION_DATA = /(^|\/)(task\.md|reply\.txt|README\.md|probe-[^/]*\.yaml)$/;
 
 interface FixtureFile {
@@ -69,7 +66,6 @@ function patternMatches(pattern: string, file: string): boolean {
 }
 
 function schemaFor(file: string): TSchema | undefined {
-  if (file === METRICS_FILE) return SealedMetricsHistorical;
   return SESSION_FILES.find((entry) => patternMatches(entry.path, file))?.schema;
 }
 
@@ -108,8 +104,12 @@ const isListed = (file: FixtureFile): boolean =>
   NON_CONFORMING.some((entry) => entry.fixture === file.fixture && entry.file === file.file);
 
 const all = fixtureFiles();
+// A file the contract describes is always checked, even when its name is also listed as undescribed
+// (`plugins/metrics/metrics.json` shares its name with the excluded legacy root `metrics.json`).
 const described = all.filter(
-  (file) => !NOT_SESSION_DATA.test(file.file) && !UNDESCRIBED.has(path.posix.basename(file.file)),
+  (file) =>
+    !NOT_SESSION_DATA.test(file.file) &&
+    (schemaFor(file.file) !== undefined || !UNDESCRIBED.has(path.posix.basename(file.file))),
 );
 const unmapped = described.filter((file) => schemaFor(file.file) === undefined);
 

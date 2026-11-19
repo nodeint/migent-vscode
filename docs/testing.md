@@ -62,7 +62,7 @@ Core tests read two fixture sets in place under `src/core/fixtures/`:
 
 `src/core/fixtureConformance.test.ts` checks every session file under the `sessions`, `captured` and `synthetic`
 fixture sets against its `@nodeint/migent-contracts` schema (`status.json`, `manifest.yaml`, `session.lock`,
-`execution.json`, `questions.json`, `next.json`, `events.jsonl` and `metrics.json`). The contract's `SESSION_FILES`
+`execution.json`, `questions.json`, `next.json`, `events.jsonl` and `plugins/metrics/metrics.json`). The contract's `SESSION_FILES`
 registry maps each path to its schema. Files the contract does not describe (`title.json`, the workflow files) and files
 that are not session data (`task.md`, `reply.txt`, probe files) are skipped by name. A fixture file that is none of
 these fails the test, so a new kind of file needs a schema mapping or an explicit skip. A fixture that is meant not to
@@ -148,8 +148,8 @@ follows without changing focus or opening another panel. The pickers are driven 
 The Overview page's pure parts have their own tests: `sessionSummary.test.ts` derives the Status facts,
 `overviewActions.test.ts` holds the state action table, `sessionProgress.test.ts` maps stages or executions to
 rows (with each attempt's model, effort, blocker, error, duration, separate usage fields, why it ran, whether it asked
-a question and the section totals, and none of the metrics figures without `metrics.json`), `executions.test.ts` also
-covers `turn_kind`, `outcome.status` and the codex effort key,
+a question and the section totals, and none of the metrics figures without `plugins/metrics/metrics.json`),
+`executions.test.ts` also covers `turn_kind`, `outcome.status` and the codex effort key,
 `sessionActivity.test.ts` bounds and formats the activity lines, and
 `overviewModel.test.ts` composes them without reading disk. `overviewPage.test.ts` renders the fixed block order
 and the Progress timeline against the fake DOM (usage format, tooltips, the asked marker, run-reason labels and
@@ -209,9 +209,9 @@ time.
 The fixture CLI implements `session rename` (it writes only `title.json`, takes no lock) and, with
 `MIGENT_FAKE_IDS=numeric`, gives new sessions numeric ids.
 
-### Session drafts and CLI 0.8.0 behavior
+### Session drafts and CLI 0.9.0 behavior
 
-The fixture CLI models 0.8.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
+The fixture CLI models 0.9.0 by default. `session prepare` writes an empty `task.md` and a schema 7 `workflow.yaml`.
 `session run --session` rejects a draft whose `id` differs from the manifest, or an empty `task.md`, with exit 2
 before writing anything; otherwise it freezes the draft as `workflow.frozen.yaml`. `session continue` keeps the
 frozen copy. `MIGENT_FAKE_PREFLIGHT=fail` makes `session run`

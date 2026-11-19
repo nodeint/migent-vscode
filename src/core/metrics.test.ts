@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 
-import { isValid, SealedMetricsHistorical } from '@nodeint/migent-contracts';
+import { isValid, SessionMetrics } from '@nodeint/migent-contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { EXCLUDED_EXECUTION_KEYS, parseMetrics, readMetrics } from './metrics';
-import { METRICS_FILENAME } from './paths';
+import { METRICS_RELATIVE_PATH } from './paths';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'sessions', 'completed');
 const temps: string[] = [];
@@ -18,7 +18,10 @@ afterEach(() => {
 function tempSession(content?: string): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-metrics-'));
   temps.push(dir);
-  if (content !== undefined) writeFileSync(path.join(dir, METRICS_FILENAME), content);
+  if (content !== undefined) {
+    mkdirSync(path.dirname(path.join(dir, METRICS_RELATIVE_PATH)), { recursive: true });
+    writeFileSync(path.join(dir, METRICS_RELATIVE_PATH), content);
+  }
   return dir;
 }
 
@@ -131,7 +134,7 @@ describe('readMetrics', () => {
 
   it('is unreadable with the error code when the file cannot be read', () => {
     const dir = tempSession();
-    mkdirSync(path.join(dir, METRICS_FILENAME));
+    mkdirSync(path.join(dir, METRICS_RELATIVE_PATH), { recursive: true });
     const read = readMetrics(dir);
     expect(read.kind).toBe('unreadable');
     expect(read.kind === 'unreadable' && read.error).toMatch(/^E[A-Z]+$/);
@@ -235,10 +238,25 @@ describe('parseMetrics', () => {
   });
 });
 
-describe('captured metrics.json against the contract', () => {
-  it('conforms to the historical known shape and still reads ok', () => {
-    const value: unknown = JSON.parse(readFileSync(path.join(FIXTURE, METRICS_FILENAME), 'utf8'));
-    expect(isValid(SealedMetricsHistorical, value)).toBe(true);
+describe('plugin metrics file location', () => {
+  it('is missing when only the legacy root metrics.json exists', () => {
+    const dir = tempSession();
+    writeFileSync(path.join(dir, 'metrics.json'), readFileSync(path.join(FIXTURE, METRICS_RELATIVE_PATH), 'utf8'));
+    expect(readMetrics(dir)).toEqual({ kind: 'missing' });
+  });
+
+  it('is missing when plugins/ or plugins/metrics/ is absent', () => {
+    const dir = tempSession();
+    expect(readMetrics(dir)).toEqual({ kind: 'missing' });
+    mkdirSync(path.join(dir, 'plugins'));
+    expect(readMetrics(dir)).toEqual({ kind: 'missing' });
+  });
+});
+
+describe('captured plugins/metrics/metrics.json against the contract', () => {
+  it('conforms to the contract shape and still reads ok', () => {
+    const value: unknown = JSON.parse(readFileSync(path.join(FIXTURE, METRICS_RELATIVE_PATH), 'utf8'));
+    expect(isValid(SessionMetrics, value)).toBe(true);
     expect(parseMetrics(value).kind).toBe('ok');
   });
 });

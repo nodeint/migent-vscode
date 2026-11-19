@@ -52,10 +52,10 @@ test("branch pushes preserve the source branch name, including HEAD", () => {
 });
 
 test("branch names follow the work types or release/X.Y.Z", () => {
-  for (const branch of ["feat/session-tree", "fix/status", "refactor/store", "docs/contributing", "chore/require-cli-v6", "fix/123-status", "release/0.1.12"]) {
+  for (const branch of ["feat/session-tree", "fix/status", "refactor/store", "docs/contributing", "chore/require-cli-v6", "fix/123-status", "chore/require-cli-0.6.0", "feat/require-cli-0.9.0", "release/0.1.12"]) {
     assert.equal(branchProblem(branch), null);
   }
-  for (const branch of ["results-header-ui", "feature/x", "fix/Status", "fix/", "fix/a--b", "release/0.1", "release/01.0.0", "chore/require-cli-0.6.0", "fix/0-status", "fix/123"]) {
+  for (const branch of ["results-header-ui", "feature/x", "fix/Status", "fix/", "fix/a--b", "release/0.1", "release/01.0.0", "fix/a..b", "fix/a.", "fix/.a", "fix/0-status", "fix/123"]) {
     assert.ok(branchProblem(branch), branch);
   }
   assert.ok(commitProblem("migrate-to-migent-0.5.4"));
