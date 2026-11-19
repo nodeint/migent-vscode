@@ -102,7 +102,7 @@ Blank issues are disabled; write issues in English.
 ### Naming conventions
 
 - Branch: `<type>/<issue-number>-<slug>` (omit the number without an issue); slug is
-  lowercase kebab-case.
+  lowercase kebab-case; single dots between segments are allowed (e.g. `require-cli-0.9.0`).
 - Commit/PR title: `<type>: <imperative summary>`; short English, no scope or final period.
 - Release: branch `release/X.Y.Z`, title `Release X.Y.Z`.
 

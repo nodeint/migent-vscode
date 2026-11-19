@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.9.0 or newer; users on earlier versions must upgrade. The Metrics tab and the duration, token
+  and cost figures of Overview Progress are now read from `plugins/metrics/metrics.json`, and "Open metrics.json"
+  opens that file. Sessions completed before 0.9.0 keep their metrics in the root `metrics.json`, which is no longer
+  read, so they show no metrics. Saving the Config page keeps the new `plugins:` section unchanged, and `plugin.*`
+  events show as ordinary events in the timeline and log.
+
 ## 0.1.14
 
 - The Migent status bar item is now the only status bar entry while a job runs. The separate "continues after

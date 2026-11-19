@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const workBranch = /^(feat|fix|refactor|docs|chore)\/(?:[1-9]\d*-)?[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const workBranch = /^(feat|fix|refactor|docs|chore)\/(?:[1-9]\d*-)?[a-z][a-z0-9]*(?:[-.][a-z0-9]+)*$/;
 const releaseBranch = /^release\/(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const workSubject = /^(feat|fix|refactor|docs|chore): [^\s.](?:[^\r\n]*[^\s.])?$/;
 

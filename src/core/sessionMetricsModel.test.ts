@@ -14,12 +14,15 @@ afterEach(() => {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-/** A session folder without metrics.json, or with the given content. */
+/** A session folder without plugins/metrics/metrics.json, or with the given content. */
 function session(metrics?: string): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'migent-vscode-metricsmodel-'));
   temps.push(dir);
   cpSync(path.join(FIXTURE, 'status.json'), path.join(dir, 'status.json'));
-  if (metrics !== undefined) writeFileSync(path.join(dir, 'metrics.json'), metrics);
+  if (metrics !== undefined) {
+    mkdirSync(path.join(dir, 'plugins', 'metrics'), { recursive: true });
+    writeFileSync(path.join(dir, 'plugins', 'metrics', 'metrics.json'), metrics);
+  }
   return dir;
 }
 
@@ -73,7 +76,7 @@ describe('buildSessionMetricsModel', () => {
 
   it('shows an unreadable file with its error code', () => {
     const dir = session();
-    mkdirSync(path.join(dir, 'metrics.json'));
+    mkdirSync(path.join(dir, 'plugins', 'metrics', 'metrics.json'), { recursive: true });
     expect(build(dir).metrics.kind).toBe('unreadable');
   });
 

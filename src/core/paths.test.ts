@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { resolveWithin } from './paths';
+import { metricsPath, resolveWithin } from './paths';
 
 describe('resolveWithin', () => {
   const base = path.resolve('/p', '.migent', 'sessions', 's1');
@@ -21,5 +21,11 @@ describe('resolveWithin', () => {
     expect(resolveWithin(base, 'outputs/../../s2/status.json')).toBeNull();
     expect(resolveWithin(base, path.resolve('/etc/passwd'))).toBeNull();
     expect(resolveWithin(base, 'C:\\secret.txt')).toBeNull();
+  });
+});
+
+describe('metricsPath', () => {
+  it('points at the metrics plugin file inside the session folder', () => {
+    expect(metricsPath('/project', 's1')).toBe(path.join('/project', '.migent', 'sessions', 's1', 'plugins', 'metrics', 'metrics.json'));
   });
 });

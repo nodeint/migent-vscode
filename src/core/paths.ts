@@ -17,6 +17,12 @@ export const TASK_FILENAME = 'task.md';
 /** The editable session workflow written by `session prepare` (CLI 0.3.5 and later). */
 export const WORKFLOW_DRAFT_FILENAME = 'workflow.yaml';
 export const METRICS_FILENAME = 'metrics.json';
+/** Session folder of plugin artifacts (CLI 0.9.0 and later). */
+export const PLUGINS_DIRNAME = 'plugins';
+/** The metrics plugin's folder inside `plugins/`. */
+export const METRICS_PLUGIN_DIRNAME = 'metrics';
+/** The session-relative metrics file written by the metrics plugin (CLI 0.9.0 and later). */
+export const METRICS_RELATIVE_PATH = path.join(PLUGINS_DIRNAME, METRICS_PLUGIN_DIRNAME, METRICS_FILENAME);
 /** The CLI's per-session title overlay (CLI 0.5.6 and later); written only by `session rename`. */
 export const TITLE_FILENAME = 'title.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';
@@ -97,7 +103,7 @@ export function taskPath(projectRoot: string, sessionId: string): string {
 }
 
 export function metricsPath(projectRoot: string, sessionId: string): string {
-  return path.join(sessionDir(projectRoot, sessionId), METRICS_FILENAME);
+  return path.join(sessionDir(projectRoot, sessionId), METRICS_RELATIVE_PATH);
 }
 
 export function cancelRequestPath(projectRoot: string, sessionId: string): string {

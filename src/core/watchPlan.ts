@@ -12,7 +12,6 @@ import {
   FROZEN_WORKFLOW_FILENAME,
   LOCK_FILENAME,
   MANIFEST_FILENAME,
-  METRICS_FILENAME,
   MIGENT_DIR,
   NEXT_FILENAME,
   OUTPUTS_DIRNAME,
@@ -66,7 +65,6 @@ const SESSION_PATTERN = `{${[
   QUESTIONS_FILENAME,
   NEXT_FILENAME,
   FROZEN_WORKFLOW_FILENAME,
-  METRICS_FILENAME,
   EVENTS_FILENAME,
   EXECUTIONS_DIRNAME,
   OUTPUTS_DIRNAME,
@@ -170,7 +168,7 @@ export function diffWatches(desired: readonly WatchSpec[], live: ReadonlyMap<str
 
 /** A file change the host reports without reading data (`MigentChange` of type `files`). */
 export type FileTarget =
-  | { kind: 'questions' | 'next' | 'outputs' | 'executions' | 'events' | 'metrics' }
+  | { kind: 'questions' | 'next' | 'outputs' | 'executions' | 'events' }
   | { kind: 'execution'; executionId: string };
 
 export type ClassifiedPath =
@@ -187,7 +185,6 @@ const SESSION_FILE_TARGETS: Readonly<Record<string, FileTarget>> = {
   [QUESTIONS_FILENAME]: { kind: 'questions' },
   [NEXT_FILENAME]: { kind: 'next' },
   [FROZEN_WORKFLOW_FILENAME]: { kind: 'next' },
-  [METRICS_FILENAME]: { kind: 'metrics' },
   [EVENTS_FILENAME]: { kind: 'events' },
   [EXECUTIONS_DIRNAME]: { kind: 'executions' },
   [OUTPUTS_DIRNAME]: { kind: 'outputs' },

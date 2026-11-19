@@ -97,20 +97,20 @@ const completedEvents = events(
 );
 
 // --- completed -----------------------------------------------------------------
-// metrics.json as migent writes it for a completed workflow session. argv, agent_id, cli_version and the git
+// plugins/metrics/metrics.json as migent 0.9.0 writes it for a completed workflow session. argv, agent_id, cli_version and the git
 // fields are machine-specific and must never reach the Session Metrics page; the fixture keeps them to prove it.
 const usage = (cost, input = 0) => ({ input_tokens: input, output_tokens: 10, reasoning_tokens: null, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: cost });
 const missing = (cost) => ({ input_tokens: 0, output_tokens: 0, reasoning_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: cost });
-const metricsExecution = (order, stage, attempt, role, provider, model, decision, cost) => ({
+const metricsExecution = (order, stage, attempt, role, client, model, decision, cost) => ({
   execution_id: `000${order}-${stage}--attempt-0${attempt}`,
   execution_order: order,
   stage_id: stage,
   stage_attempt: attempt,
   role,
-  provider,
+  client,
   model,
   cli_version: "9.9.9 (Test CLI)",
-  argv: [provider, "-C", "D:\\secret\\project", "--session-id", "agent-secret"],
+  argv: [client, "-C", "D:\\secret\\project", "--session-id", "agent-secret"],
   agent_id: "agent-secret",
   resumes_execution_id: null,
   routed_from: null,
@@ -119,21 +119,31 @@ const metricsExecution = (order, stage, attempt, role, provider, model, decision
   status: "completed",
   outcome_status: "complete",
   decision,
+  blocker: null,
+  error: null,
+  failure_reason: null,
   created_at: order === 1 ? T0 : T1,
   completed_at: order === 1 ? T1 : T2,
   wall_seconds: 600,
   verify_seconds: 0,
   turns: 1,
   uncaptured_turns: 0,
+  provider_exit_anomalies: 0,
+  provider_exit_anomalies_accepted: 0,
   usage: usage(cost, 100 * order),
   usage_missing: missing(cost === null ? 1 : 0),
   verify: null,
   skip: null,
+  fresh_reason: null,
 });
 const completedMetrics = {
   session_id: "00000000-0000-4000-8000-000000000001",
   workflow_id: "plan",
+  workflow_hash: null,
   status: "completed",
+  latest_decision: "approved",
+  task_sha256: null,
+  prior_session_id: "00000000-0000-4000-8000-0000000000ff",
   created_at: T0,
   updated_at: T2,
   totals: {
@@ -144,6 +154,8 @@ const completedMetrics = {
     verify_seconds: 0,
     turns: 2,
     uncaptured_turns: 0,
+    provider_exit_anomalies: 0,
+    provider_exit_anomalies_accepted: 0,
     usage: usage(0.5, 300),
     usage_missing: missing(1),
     cost_partial: true,
@@ -153,6 +165,8 @@ const completedMetrics = {
     verify_red: 0,
     revisions: 1,
     revisions_reset: 0,
+    fresh_starts: 0,
+    expired_resumes: 0,
   },
   stages: {
     plan: { executions: 1, skipped: 0, revisions: 1, failed: 0, blocked: 0 },
@@ -175,7 +189,7 @@ session("completed", {
   }),
   "events.jsonl": completedEvents,
   "executions/0001-plan--attempt-01/execution.json": execution(),
-  "metrics.json": JSON.stringify(completedMetrics, null, 2),
+  "plugins/metrics/metrics.json": JSON.stringify(completedMetrics, null, 2),
 });
 
 // --- active-stopped (active, no lock, last execution not failed) ---------------
