@@ -14,8 +14,11 @@ import {
   MANIFEST_FILENAME,
   MIGENT_DIR,
   NEXT_FILENAME,
+  NEXT_PLUGIN_DIRNAME,
   OUTPUTS_DIRNAME,
+  PLUGINS_DIRNAME,
   QUESTIONS_FILENAME,
+  RECOMMENDATIONS_FILENAME,
   SESSIONS_DIRNAME,
   STATUS_FILENAME,
   TITLE_FILENAME,
@@ -40,7 +43,8 @@ interface ExecutionTarget {
 }
 
 /** What a consumer keeps watched beyond the session-level files. */
-export type WatchTarget = { kind: 'executions'; sessionId: string } | ExecutionTarget | { kind: 'outputs'; sessionId: string };
+export type WatchTarget = { kind: 'executions'; sessionId: string } | ExecutionTarget | { kind: 'outputs'; sessionId: string }
+  | { kind: 'recommendations'; sessionId: string };
 
 export function watchTargetKey(target: WatchTarget): string {
   switch (target.kind) {
@@ -48,6 +52,7 @@ export function watchTargetKey(target: WatchTarget): string {
       return `execution:${target.sessionId}/${target.executionId}`;
     case 'executions':
     case 'outputs':
+    case 'recommendations':
       return `${target.kind}:${target.sessionId}`;
   }
 }
@@ -68,6 +73,7 @@ const SESSION_PATTERN = `{${[
   EVENTS_FILENAME,
   EXECUTIONS_DIRNAME,
   OUTPUTS_DIRNAME,
+  PLUGINS_DIRNAME,
 ].join(',')}}`;
 
 const EXECUTION_PATTERN = `{execution.json,conversation.json,questions.json,input.json,prompt.md,task.md,response.md,${FAILURE_REPORT_FILENAME},${DIAGNOSTICS_FILENAME},stream.jsonl,artifacts,turns}`;
@@ -113,6 +119,16 @@ function executionWatches(input: WatchPlanInput, target: ExecutionTarget): Watch
   return watches;
 }
 
+/** `plugins/` and `plugins/next/`, each only while it exists, so the file's first write is seen. */
+function recommendationWatches(input: WatchPlanInput, sessionFolder: string): WatchSpec[] {
+  const plugins = path.join(sessionFolder, PLUGINS_DIRNAME);
+  const next = path.join(plugins, NEXT_PLUGIN_DIRNAME);
+  const watches: WatchSpec[] = [];
+  if (input.dirExists(plugins)) watches.push(spec(plugins, NEXT_PLUGIN_DIRNAME));
+  if (input.dirExists(next)) watches.push(spec(next, RECOMMENDATIONS_FILENAME));
+  return watches;
+}
+
 function detailWatches(input: WatchPlanInput, discovered: ReadonlySet<string>): WatchSpec[] {
   const watches: WatchSpec[] = [];
   const sessionsFolder = path.join(input.projectRoot, MIGENT_DIR, SESSIONS_DIRNAME);
@@ -123,6 +139,10 @@ function detailWatches(input: WatchPlanInput, discovered: ReadonlySet<string>): 
       continue;
     }
     const sessionFolder = path.join(sessionsFolder, target.sessionId);
+    if (target.kind === 'recommendations') {
+      watches.push(...recommendationWatches(input, sessionFolder));
+      continue;
+    }
     const detailDir = target.kind === 'executions' ? EXECUTIONS_DIRNAME : OUTPUTS_DIRNAME;
     const folder = path.join(sessionFolder, detailDir);
     if (input.dirExists(folder)) watches.push(spec(folder, '*'));
@@ -193,9 +213,21 @@ const SESSION_FILE_TARGETS: Readonly<Record<string, FileTarget>> = {
 /** Path segments before the area (`.migent`, area) and inside `executions/` (`<id>`, then a child). */
 const AREA_DEPTH = 2;
 const EXECUTION_DIR_DEPTH = 2;
+/** Segments of `plugins/next` and `plugins/next/<file>` below the session. */
+const PLUGIN_DIR_DEPTH = 2;
+const PLUGIN_FILE_DEPTH = 3;
 
 function at(list: readonly string[], index: number): string | undefined {
   return list[index];
+}
+
+/** `plugins/next/` and its recommendations file are the only plugin paths shown. */
+function classifyPlugins(sessionId: string, rest: readonly string[]): ClassifiedPath | null {
+  const [, plugin, file] = rest;
+  const isNextDir = plugin === NEXT_PLUGIN_DIRNAME;
+  const isFile = rest.length === PLUGIN_FILE_DEPTH && file === RECOMMENDATIONS_FILENAME;
+  const isShown = rest.length === 1 || (isNextDir && (rest.length === PLUGIN_DIR_DEPTH || isFile));
+  return isShown ? { kind: 'session-files', sessionId, target: { kind: 'next' } } : null;
 }
 
 function classifySessionChild(sessionId: string, rest: readonly string[]): ClassifiedPath | null {
@@ -205,6 +237,7 @@ function classifySessionChild(sessionId: string, rest: readonly string[]): Class
   if ((SNAPSHOT_FILES as readonly string[]).includes(name)) {
     return second === undefined ? { kind: 'session-snapshot', sessionId } : null;
   }
+  if (name === PLUGINS_DIRNAME) return classifyPlugins(sessionId, rest);
   if (name === OUTPUTS_DIRNAME) return { kind: 'session-files', sessionId, target: { kind: 'outputs' } };
   if (name === EXECUTIONS_DIRNAME) {
     // The execution directory itself (create/delete) is a change of the executions list;

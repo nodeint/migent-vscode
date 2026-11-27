@@ -115,8 +115,8 @@ const scenarios: Scenario[] = [
       fs.rmSync(migentPath(env.root, 'workflows', 'broken.yaml'));
       await waitFor('only plan remains', () => project.catalog.workflows().entries.length === 1);
 
-      writeAtomic(migentPath(env.root, 'config.yaml'), 'schema_version: 7\n');
-      await waitFor('config re-read', () => project.catalog.config().schemaVersion === 7);
+      writeAtomic(migentPath(env.root, 'config.yaml'), 'schema_version: 8\n');
+      await waitFor('config re-read', () => project.catalog.config().schemaVersion === 8);
 
       fs.rmSync(migentPath(env.root, 'workflows'), { recursive: true });
       await waitFor('workflows folder missing', () => project.catalog.workflows().state === 'missing');

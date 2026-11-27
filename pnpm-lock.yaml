@@ -12,8 +12,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.13.0)
       '@nodeint/migent-contracts':
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: 0.10.1
+        version: 0.10.1
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -665,8 +665,8 @@ packages:
     resolution: {integrity: sha512-gOYKFwkojSdWrSmreCcGocRcAXSpRkNZYxv6nscmtddSWBKVGypdMbfLxu5qgmymdaCNApajuwZblYEfs7HswA==}
     engines: {node: '>= 10'}
 
-  '@nodeint/migent-contracts@0.9.0':
-    resolution: {integrity: sha512-CV2YVQwrHJirIwAfnrRGV/cPio12uTd63D3JGNymUWA8j2P/2EAES9SiR6rSs2/USc3VEWObLITzAcpNBkk/1g==}
+  '@nodeint/migent-contracts@0.10.1':
+    resolution: {integrity: sha512-eHD6yRX3VsmG7dfBRwrbhRnlwdid9TnUJgMCg6k5nAtab2g0js0adg7XUX8PLvYJ3hqP2tS0gZmgIo4YSfMIdA==}
     engines: {node: '>=22'}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -2893,7 +2893,7 @@ snapshots:
       '@node-rs/crc32-win32-ia32-msvc': 1.10.8
       '@node-rs/crc32-win32-x64-msvc': 1.10.8
 
-  '@nodeint/migent-contracts@0.9.0':
+  '@nodeint/migent-contracts@0.10.1':
     dependencies:
       typebox: 1.4.6
 

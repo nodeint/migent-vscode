@@ -8,7 +8,7 @@ import { sessionDir } from './paths';
 import { readSessionWorkflow } from './sessionWorkflow';
 import { executionJson } from './testHelpers';
 
-function project(withExecution: boolean, schema = 7): string {
+function project(withExecution: boolean, schema = 8): string {
   const root = mkdtempSync(path.join(tmpdir(), 'sw-'));
   const dir = sessionDir(root, 's1');
   mkdirSync(dir, { recursive: true });

@@ -36,6 +36,16 @@ export function isIdentity(value: unknown): value is Identity {
 export const isTab = (value: unknown): value is SessionTab =>
   value === 'questions' || value === 'overview' || value === 'metrics' || value === 'workflow';
 
+/** One handle that releases both. */
+function both(first: Releasable, second: Releasable): Releasable {
+  return {
+    dispose: () => {
+      first.dispose();
+      second.dispose();
+    },
+  };
+}
+
 export interface Retained {
   watcher: ProjectContext['watcher'];
   handle: Releasable;
@@ -100,7 +110,10 @@ export class Entry {
     if (context === undefined || this.#retained !== null) return;
     this.#retained = {
       watcher: context.watcher,
-      handle: context.watcher.retain({ kind: 'outputs', sessionId: this.sessionId }),
+      handle: both(
+        context.watcher.retain({ kind: 'outputs', sessionId: this.sessionId }),
+        context.watcher.retain({ kind: 'recommendations', sessionId: this.sessionId }),
+      ),
     };
   }
 

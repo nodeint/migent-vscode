@@ -1,10 +1,11 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import type { SessionNext, WorkflowDocumentInput } from '@nodeint/migent-contracts';
+import type { SessionNext } from '@nodeint/migent-contracts';
 import { parse } from 'yaml';
 
 import { text as describe } from '../text';
+import type { CoreWorkflow } from './contractCore';
 import { asSessionId } from './manifest';
 import { FROZEN_WORKFLOW_FILENAME, NEXT_FILENAME, resolveWithin } from './paths';
 import { isRecord } from './record';
@@ -19,7 +20,7 @@ export type NextEntry = SessionNext['next'][number];
 
 /** The `downstream` fields the declared rule reads, taken from the contract item. `task` is not read. */
 export type DownstreamDeclaration = Pick<
-  NonNullable<WorkflowDocumentInput['downstream']>[number],
+  NonNullable<CoreWorkflow['downstream']>[number],
   'workflow' | 'artifacts'
 >;
 

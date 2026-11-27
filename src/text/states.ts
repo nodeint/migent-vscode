@@ -177,6 +177,7 @@ export const STATES = {
   'states.unparsableJson': () => 'unparsable JSON',
   'states.unparsableYaml': () => 'unparsable YAML',
   'states.nextNotList': () => 'next is not a list',
+  'states.recommendationsNotList': () => 'recommendations is not a list',
   'states.downstreamNotList': () => 'downstream is not a list',
   'states.totalsNotObject': () => 'totals is not an object',
   'states.stagesNotObject': () => 'stages is not an object',

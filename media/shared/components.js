@@ -155,7 +155,7 @@
     return node;
   }
 
-  /** A short, quiet value such as a role or a count. `options`: `tone` (`info`, `warn` or `error`). */
+  /** A short, quiet value such as a role or a count. `options`: `tone` (`ok`, `info`, `warn` or `error`). */
   function chip(label, options) {
     const tone = options && options.tone;
     return el('span', label, 'mg-chip' + (tone ? ' mg-chip--' + tone : ''));

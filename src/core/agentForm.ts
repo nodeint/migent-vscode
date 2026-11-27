@@ -6,8 +6,9 @@
  * Presence is kept: an optional field is absent (`undefined`) or present, and an empty present value is still
  * present. Keys the form does not model are kept as inert JSON in `extra` and written back unchanged.
  */
-import type { ClientSelection, InlineAgent, Static } from '@nodeint/migent-contracts';
+import type { ClientSelection, Static } from '@nodeint/migent-contracts';
 
+import type { CoreAgent } from './contractCore';
 import type { Draft, Expect, OpenPart, SameKeys } from './contractDraft';
 import { wireOf } from './contractRead';
 import { isRecord } from './record';
@@ -19,7 +20,7 @@ type ContractClientSelection = Static<typeof ClientSelection>;
 export type ClientDraft = Draft<ContractClientSelection> & OpenPart;
 
 /** What `agentBody` writes for an agent (an inline agent, or a named agent fragment): every key optional. */
-export type AgentDraft = Draft<Omit<InlineAgent, 'client'>> & { client?: ClientDraft } & OpenPart;
+export type AgentDraft = Draft<Omit<CoreAgent, 'client'>> & { client?: ClientDraft } & OpenPart;
 
 export interface OptionPair {
   key: string;
@@ -60,15 +61,18 @@ function optionPairs(value: unknown): OptionPair[] | undefined {
 }
 
 const CLIENT_KEYS = ['type', 'options'] as const satisfies readonly (keyof ContractClientSelection)[];
-const AGENT_KEYS = ['model', 'effort', 'client'] as const satisfies readonly (keyof InlineAgent)[];
-/** Contract agent keys the form does not model. They stay in `extra`, so they survive an edit unchanged. */
-type AgentPassthroughKey = Extract<keyof InlineAgent, 'resume_policy'>;
+const AGENT_KEYS = ['model', 'effort', 'client'] as const satisfies readonly (keyof CoreAgent)[];
+/**
+ * The agent keys the form models. Plugin-claimed keys (`prompt_cache_ttl`) are not here: they stay in `extra` and
+ * survive an edit unchanged. `contractCore.test.ts` ties this list to the contract's runtime schema.
+ */
+export const AGENT_MODELED_KEYS: readonly string[] = AGENT_KEYS;
 
-// A key added to or removed from the contract's client or agent fails typecheck here.
+// A key added to or removed from the contract's client or core agent fails typecheck here.
 export type ModeledKeysMatchContract = [
   Expect<SameKeys<(typeof CLIENT_KEYS)[number], keyof ContractClientSelection>>,
-  Expect<SameKeys<(typeof AGENT_KEYS)[number] | AgentPassthroughKey, keyof InlineAgent>>,
-  Expect<SameKeys<keyof NonNullable<InlineAgent['client']>, keyof ContractClientSelection>>,
+  Expect<SameKeys<(typeof AGENT_KEYS)[number], keyof CoreAgent>>,
+  Expect<SameKeys<keyof NonNullable<CoreAgent['client']>, keyof ContractClientSelection>>,
 ];
 
 function parseClient(value: unknown): ClientForm {
@@ -84,7 +88,7 @@ function parseClient(value: unknown): ClientForm {
 /** Read an agent mapping from a YAML value. Anything that is not a mapping reads as an empty agent. */
 export function parseAgent(value: unknown): AgentForm {
   const body = isRecord(value) ? value : {};
-  const wire = wireOf<InlineAgent>(value) ?? {};
+  const wire = wireOf<CoreAgent>(value) ?? {};
   const agent: AgentForm = { extra: pick(body, AGENT_KEYS) };
   if (typeof wire.model === 'string') agent.model = wire.model;
   if (typeof wire.effort === 'string') agent.effort = wire.effort;

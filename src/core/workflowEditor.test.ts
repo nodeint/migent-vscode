@@ -40,7 +40,7 @@ function model(root: string, file: string, clients: ClientChoice[] = []) {
   });
 }
 
-const FULL = `schema_version: 7
+const FULL = `schema_version: 8
 id: plan
 concurrency: 1
 constraints:
@@ -106,12 +106,12 @@ downstream:
 const CONFIG = 'schema_version: 5\nroles:\n  planner: {}\n  reviewer: {}\nagents:\n  deep_reasoning: {}\n';
 
 describe('readWorkflowEditor', () => {
-  it('projects a schema 7 workflow into the form model', () => {
+  it('projects a schema 8 workflow into the form model', () => {
     const result = model(
       project(
         {
           'plan.yaml': FULL,
-          'implement.yaml': 'schema_version: 7\nid: implement\nstages:\n  - id: implement\n',
+          'implement.yaml': 'schema_version: 8\nid: implement\nstages:\n  - id: implement\n',
         },
         CONFIG,
       ),
@@ -176,7 +176,7 @@ describe('readWorkflowEditor', () => {
     expect(result.canSave).toBe(true);
   });
 
-  it('round-trips a schema 7 file without dropping the registry, stage artifacts or an omitted mapping', () => {
+  it('round-trips a schema 8 file without dropping the registry, stage artifacts or an omitted mapping', () => {
     const result = model(project({ 'plan.yaml': FULL }, CONFIG), 'plan.yaml');
     const draft = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
     expect(draft).toEqual(parse(FULL));
@@ -184,7 +184,7 @@ describe('readWorkflowEditor', () => {
 
   it('keeps an explicit empty mapping apart from an omitted one, through a save round trip', () => {
     const source =
-      'schema_version: 7\nid: a\nstages:\n  - id: s\ndownstream:\n  - workflow: b\n    artifacts: {}\n  - workflow: c\n';
+      'schema_version: 8\nid: a\nstages:\n  - id: s\ndownstream:\n  - workflow: b\n    artifacts: {}\n  - workflow: c\n';
     const result = model(project({ 'a.yaml': source }), 'a.yaml');
     expect(result.form.downstream.map((target) => target.artifacts)).toEqual([[], null]);
     const body = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
@@ -194,7 +194,8 @@ describe('readWorkflowEditor', () => {
   it.each(['plan.yaml', 'implement.yaml', 'schema-workflow.yaml'])(
     'round-trips the official 0.5.1 %s without losing its registry or artifact references',
     (file) => {
-      const text = readFileSync(path.join(__dirname, 'fixtures', 'workflows-0.5.1', file), 'utf8');
+      // The captured files are schema 7; the structure is unchanged in schema 8, so only the version line moves.
+      const text = readFileSync(path.join(__dirname, 'fixtures', 'workflows-0.5.1', file), 'utf8').replace('schema_version: 7', 'schema_version: 8');
       const result = model(project({ [file]: text }), file);
       expect(result.state).toBe('ok');
       expect(result.form.artifacts.length).toBeGreaterThan(0);
@@ -209,7 +210,7 @@ describe('readWorkflowEditor', () => {
   );
 
   it('turns a list of decision destinations into comma-separated text and back', () => {
-    const source = `schema_version: 7
+    const source = `schema_version: 8
 id: routed
 stages:
   - id: review
@@ -239,8 +240,8 @@ stages:
     expect(result.form.stages).toEqual([]);
   });
 
-  it('reads any schema other than 7 as unsupported and cannot be saved', () => {
-    for (const text of ['schema_version: 6\nid: old\nstages:\n  - id: a\n', 'id: old\nstages:\n  - id: a\n']) {
+  it('reads any schema other than 8 as unsupported and cannot be saved', () => {
+    for (const text of ['schema_version: 7\nid: old\nstages:\n  - id: a\n', 'schema_version: 6\nid: old\nstages:\n  - id: a\n', 'id: old\nstages:\n  - id: a\n']) {
       const result = model(project({ 'old.yaml': text }), 'old.yaml');
       expect(result.state).toBe('unsupported');
       expect(result.isSupported).toBe(false);
@@ -248,6 +249,14 @@ stages:
       expect(result.yaml).toBe(text);
       expect(result.readError).toBeNull();
     }
+  });
+
+  it('drops a stage prompt_cache_ttl on a form save (known limitation, tracked by a follow-up issue)', () => {
+    const text = 'schema_version: 8\nid: a\nstages:\n  - id: s\n    prompt_cache_ttl:\n      on_expired: fresh\n';
+    const result = model(project({ 'a.yaml': text }), 'a.yaml');
+    expect(result.state).toBe('ok');
+    const body = workflowBodyFromForm(workflowFormFromClient(result.form), result.schemaVersion);
+    expect((body.stages as Record<string, unknown>[])[0]).not.toHaveProperty('prompt_cache_ttl');
   });
 
   it('reports a missing file as unreadable, never creating it', () => {
@@ -258,13 +267,13 @@ stages:
   });
 
   it('lists the other files that declare the same id', () => {
-    const root = project({ 'a.yaml': 'schema_version: 7\nid: shared\n', 'b.yaml': 'schema_version: 7\nid: shared\n' });
+    const root = project({ 'a.yaml': 'schema_version: 8\nid: shared\n', 'b.yaml': 'schema_version: 8\nid: shared\n' });
     expect(model(root, 'a.yaml').duplicateOf).toEqual(['b.yaml']);
   });
 
   it('carries the client suggestions into the model', () => {
     const clients = [{ id: 'codex', models: ['gpt-5'], optionKeys: ['model_reasoning_effort'] }];
-    const result = model(project({ 'a.yaml': 'schema_version: 7\nid: a\n' }), 'a.yaml', clients);
+    const result = model(project({ 'a.yaml': 'schema_version: 8\nid: a\n' }), 'a.yaml', clients);
     expect(result.clients).toEqual(clients);
   });
 });
@@ -290,10 +299,10 @@ describe('the page draft', () => {
     expect(form.stages[0]).toMatchObject({ id: 'a', agentMode: 'named', agentName: 'fast' });
     expect(form.stages[0]).not.toHaveProperty('options');
     expect(form.stages[1].agent).toMatchObject({ clientType: 'codex', model: 'gpt-5' });
-    expect(workflowBodyFromForm(form, 7)).not.toHaveProperty('title');
+    expect(workflowBodyFromForm(form, 8)).not.toHaveProperty('title');
   });
 
-  it('serializes the form as a canonical schema 7 draft', () => {
+  it('serializes the form as a canonical schema 8 draft', () => {
     const form = workflowFormFromClient({
       id: 'plan',
       concurrency: 1,
@@ -315,9 +324,9 @@ describe('the page draft', () => {
         { workflow: 'docs', task: 'Doc it.' },
       ],
     });
-    const draft = workflowDraftFromForm(form, 7);
+    const draft = workflowDraftFromForm(form, 8);
     expect(parse(draft)).toEqual({
-      schema_version: 7,
+      schema_version: 8,
       id: 'plan',
       concurrency: 1,
       constraints: ['Plan only.'],
@@ -351,7 +360,7 @@ describe('the page draft', () => {
         },
       ],
     });
-    const body = workflowBodyFromForm(form, 7);
+    const body = workflowBodyFromForm(form, 8);
     expect(body.stages).toEqual([
       {
         id: 'plan',
@@ -365,7 +374,7 @@ describe('the page draft', () => {
 describe('inline agent options (CLI 0.6.0)', () => {
   it('loads number and boolean option values and saves them as strings', () => {
     const yaml = [
-      'schema_version: 7',
+      'schema_version: 8',
       'id: w',
       'stages:',
       '  - id: s',
@@ -382,7 +391,7 @@ describe('inline agent options (CLI 0.6.0)', () => {
       { key: 'retries', value: '3' },
       { key: 'verbose', value: 'true' },
     ]);
-    const body = workflowBodyFromForm(result.form, 7) as { stages: { agent: { client: unknown } }[] };
+    const body = workflowBodyFromForm(result.form, 8) as { stages: { agent: { client: unknown } }[] };
     expect(body.stages[0].agent.client).toEqual({ type: 'codex', options: { retries: '3', verbose: 'true' } });
   });
 });
@@ -474,10 +483,10 @@ describe('creating and duplicating workflows', () => {
   });
 
   it('copies the saved text with a new id and keeps comments', () => {
-    const text = '# keep\nschema_version: 7\nid: a\nstages: []\n';
+    const text = '# keep\nschema_version: 8\nid: a\nstages: []\n';
     const copy = duplicateWorkflowText(text, 'b') ?? '';
     expect(copy).toContain('# keep');
-    expect(parse(copy)).toMatchObject({ id: 'b', schema_version: 7 });
+    expect(parse(copy)).toMatchObject({ id: 'b', schema_version: 8 });
     expect(duplicateWorkflowText('- a\n- b\n', 'b')).toBeNull();
   });
 });

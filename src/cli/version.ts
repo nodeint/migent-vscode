@@ -9,7 +9,7 @@ import { CLI_COMMAND, type LaunchSpec, locateCli, type LocateOptions } from './l
  * state and are asked to upgrade. Do not add per-feature version gates or capability flags; every feature is
  * available at this minimum.
  */
-export const MINIMUM_CLI_VERSION = '0.9.0';
+export const MINIMUM_CLI_VERSION = '0.10.1';
 
 export const VERSION_CHECK_TIMEOUT_MS = 5000;
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Require Migent CLI 0.10.1 or newer and schema version 8 for config and workflow files; run `migent migrate` on
+  older projects (schema 7 files open read-only as unsupported). Saving the Config page keeps agent
+  `prompt_cache_ttl` and the root `plugins:` section. Saving a workflow from the Workflow editor or the Session
+  Workflow tab removes a stage's `prompt_cache_ttl`; edit that key in YAML.
+- Session Overview Next steps show the recommendations the next plugin writes to `plugins/next/recommendations.json`:
+  a Recommended chip and a `stage — reason` line on matching cards, and notes for abstentions, warnings and unmatched
+  workflows. They are informational and do not change what can run.
 - Require Migent CLI 0.9.0 or newer; users on earlier versions must upgrade. The Metrics tab and the duration, token
   and cost figures of Overview Progress are now read from `plugins/metrics/metrics.json`, and "Open metrics.json"
   opens that file. Sessions completed before 0.9.0 keep their metrics in the root `metrics.json`, which is no longer

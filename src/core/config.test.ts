@@ -16,7 +16,7 @@ import {
 } from './config';
 
 const SOURCE = {
-  schema_version: 7,
+  schema_version: 8,
   top_future: { a: 1 },
   agents: {
     fast: { model: 'm', effort: '', future: 1, client: { type: 'codex', options: {}, more: 'x' } },
@@ -51,7 +51,7 @@ describe('config form', () => {
   });
 
   it('writes an absent field as absent on the local overlay and omits entries with nothing present', () => {
-    const local = { schema_version: 7, agents: { fast: { effort: 'high' } }, roles: { dev: { responsibilities: [] } } };
+    const local = { schema_version: 8, agents: { fast: { effort: 'high' } }, roles: { dev: { responsibilities: [] } } };
     expect(roundTrip(local, 'local')).toEqual(local);
     const form = configFormFromBody(local);
     form.agents.push({ name: 'idle', agent: { extra: {} } });
@@ -59,11 +59,16 @@ describe('config form', () => {
     expect(configBodyFromForm(form, 'local')).toEqual(local);
   });
 
-  it('keeps a plugins section unchanged through the form (CLI 0.9.0)', () => {
+  it('keeps a plugins section unchanged through the form', () => {
     const withPlugins = { ...SOURCE, plugins: { metrics: { enabled: true, future: [1] } } };
     expect(roundTrip(withPlugins)).toEqual(withPlugins);
     expect(roundTrip(withPlugins, 'local')).toEqual(withPlugins);
     expect(parse(configDraftFromForm(configFormFromBody(withPlugins), 'project'))).toEqual(withPlugins);
+  });
+
+  it('keeps an agent prompt_cache_ttl unchanged through the form', () => {
+    const source = { ...SOURCE, agents: { fast: { model: 'm', prompt_cache_ttl: { policy: 'fresh' } } } };
+    expect(roundTrip(source)).toEqual(source);
   });
 
   it('serializes to YAML the CLI can read back', () => {
@@ -110,7 +115,7 @@ describe('readConfigTab', () => {
 
   it('loads number and boolean option values (CLI 0.6.0) and saves them as strings', () => {
     const yaml = [
-      'schema_version: 7',
+      'schema_version: 8',
       'agents:',
       '  coding:',
       '    model: m',
@@ -130,17 +135,19 @@ describe('readConfigTab', () => {
     expect(saved.agents.coding.client).toEqual({ type: 'codex', options: { retries: '3', verbose: 'true', mode: 'fast' } });
   });
 
-  it('reports a missing local file as an empty schema 7 draft that a save can create', () => {
-    const tab = readConfigTab(project({ 'config.yaml': 'schema_version: 7\n' }), 'local');
-    expect(tab).toMatchObject({ state: 'missing', exists: false, canSave: true, schemaVersion: 7 });
-    expect(tab.form).toEqual({ schemaVersion: 7, agents: [], roles: [], extra: {} });
+  it('reports a missing local file as an empty schema 8 draft that a save can create', () => {
+    const tab = readConfigTab(project({ 'config.yaml': 'schema_version: 8\n' }), 'local');
+    expect(tab).toMatchObject({ state: 'missing', exists: false, canSave: true, schemaVersion: 8 });
+    expect(tab.form).toEqual({ schemaVersion: 8, agents: [], roles: [], extra: {} });
   });
 
-  it('reads an existing file with its hash, and refuses other schema versions and bad YAML', () => {
-    const root = project({ 'config.yaml': 'schema_version: 7\nagents: {a: {model: m}}\n', 'config.local.yaml': 'schema_version: 5\n' });
+  it('reads an existing file with its hash, and refuses schema 7 and other versions and bad YAML', () => {
+    const root = project({ 'config.yaml': 'schema_version: 8\nagents: {a: {model: m}}\n', 'config.local.yaml': 'schema_version: 5\n' });
     expect(readConfigTab(root, 'project')).toMatchObject({ state: 'ok', exists: true, canSave: true });
     expect(readConfigTab(root, 'project').hash).toMatch(/^[0-9a-f]{64}$/);
     expect(readConfigTab(root, 'local')).toMatchObject({ state: 'unsupported', canSave: false });
+    const old = project({ 'config.yaml': 'schema_version: 7\nagents: {a: {model: m}}\n' });
+    expect(readConfigTab(old, 'project')).toMatchObject({ state: 'unsupported', exists: true, canSave: false });
     expect(readConfigTab(project({ 'config.yaml': 'a: [' }), 'project')).toMatchObject({ state: 'invalid', canSave: false });
   });
 });

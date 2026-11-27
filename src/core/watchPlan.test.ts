@@ -53,9 +53,15 @@ describe('desiredWatches', () => {
     expect(watches.find((watch) => watch.folder === migent)?.pattern).toBe('{config.yaml,config.local.yaml,sessions,workflows}');
     expect(watches.find((watch) => watch.folder === sessions)?.pattern).toBe('*');
     expect(watches.find((watch) => watch.folder === path.join(sessions, 's1'))?.pattern).toBe(
-      '{manifest.yaml,status.json,session.lock,cancel.requested,title.json,questions.json,next.json,workflow.frozen.yaml,events.jsonl,executions,outputs}',
+      '{manifest.yaml,status.json,session.lock,cancel.requested,title.json,questions.json,next.json,workflow.frozen.yaml,events.jsonl,executions,outputs,plugins}',
     );
     expect(watches.find((watch) => watch.folder === path.join(migent, 'workflows'))?.pattern).toBe('*.{yaml,yml}');
+  });
+
+  it('watches plugins/ and plugins/next/ for a retained recommendations target, only while they exist', () => {
+    const plan = input({ retained: [{ kind: 'recommendations', sessionId: 's1' }] });
+    expect(folders(plan)).toEqual(expect.arrayContaining(['.migent/sessions/s1/plugins', '.migent/sessions/s1/plugins/next']));
+    expect(folders({ ...plan, dirExists: () => false })).not.toContain('.migent/sessions/s1/plugins');
   });
 
   it('uses only patterns without path separators', () => {
@@ -145,7 +151,8 @@ describe('watchTargetKey', () => {
       watchTargetKey({ kind: 'outputs', sessionId: 's1' }),
       watchTargetKey({ kind: 'execution', sessionId: 's1', executionId: 'e1' }),
     ];
-    expect(new Set(keys).size).toBe(3);
+    keys.push(watchTargetKey({ kind: 'recommendations', sessionId: 's1' }));
+    expect(new Set(keys).size).toBe(4);
   });
 });
 
@@ -178,6 +185,9 @@ describe('classifyPath', () => {
     expect(at('sessions', 's1', 'events.jsonl')).toMatchObject({ target: { kind: 'events' } });
     expect(at('sessions', 's1', 'metrics.json')).toBeNull();
     expect(at('sessions', 's1', 'plugins', 'metrics', 'metrics.json')).toBeNull();
+    expect(at('sessions', 's1', 'plugins', 'next', 'recommendations.json')).toMatchObject({ target: { kind: 'next' } });
+    expect(at('sessions', 's1', 'plugins', 'next')).toMatchObject({ target: { kind: 'next' } });
+    expect(at('sessions', 's1', 'plugins', 'next', 'other.json')).toBeNull();
     expect(at('sessions', 's1', 'outputs')).toMatchObject({ target: { kind: 'outputs' } });
     expect(at('sessions', 's1', 'outputs', 'note.md')).toMatchObject({ target: { kind: 'outputs' } });
   });

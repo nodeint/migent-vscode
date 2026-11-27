@@ -89,6 +89,7 @@ describe('buildResultsModel', () => {
         launch: { state: 'ready' },
         children: [{ sessionId: TARGET, title: 'Acknowledge the note.', state: 'Completed', createdAt: expect.any(String) }],
         artifacts: [{ name: 'context_note', output: 'note', path: 'outputs/note.md', availability: 'missing' }],
+        recommendedBy: [],
       },
     ]);
     expect(model.children).toMatchObject([
@@ -260,6 +261,81 @@ describe('buildResultsModel', () => {
 const NL = String.fromCharCode(10);
 const BLANK_TASK = ['   ', '', ''].join(NL);
 const LONG_TASK = ['', '# Heading', '', 'Do the thing.', '  second line  ', '', ''].join(NL);
+
+describe('recommendations in the Next steps model', () => {
+  /** The captured source session (workflow `probe-target` suggested) copied with a recommendations file. */
+  function withRecommendations(content: string | null): ResultsInput {
+    const dir = tempDir();
+    cpSync(capturedDir('handoff-source'), dir, { recursive: true });
+    if (content !== null) {
+      mkdirSync(path.join(dir, 'plugins', 'next'), { recursive: true });
+      writeFileSync(path.join(dir, 'plugins', 'next', 'recommendations.json'), content);
+    }
+    return { ...sourceInput([workflow('probe-target')]), sessionDirPath: dir };
+  }
+  const file = (recommendations: unknown[]): string => JSON.stringify({ schema_version: 1, recommendations });
+  const rec = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+    stage_id: 's',
+    execution_id: 'e',
+    workflow: 'probe-target',
+    reason: 'r',
+    ...overrides,
+  });
+
+  it('marks the matching suggestion with each recommending stage and keeps its launch policy', () => {
+    const plain = buildResultsModel(withRecommendations(null)).next;
+    const model = buildResultsModel(
+      withRecommendations(file([rec({ stage_id: 'a', reason: 'one' }), rec({ stage_id: 'b', reason: 'two' })])),
+    ).next;
+    expect(model.suggestions[0]?.recommendedBy).toEqual([
+      { stageId: 'a', reason: 'one' },
+      { stageId: 'b', reason: 'two' },
+    ]);
+    expect(model.recommendations).toMatchObject({ state: 'ok', notes: [], count: 2 });
+    expect({ ...model.suggestions[0], recommendedBy: [] }).toEqual(plain.suggestions[0]);
+  });
+
+  it('lists an abstention, a warning entry and an unmatched workflow as notes without marking a card', () => {
+    const model = buildResultsModel(
+      withRecommendations(
+        file([
+          rec({ stage_id: 'a', workflow: null }),
+          rec({ stage_id: 'b', warning: 'not downstream' }),
+          rec({ stage_id: 'c', workflow: 'elsewhere' }),
+        ]),
+      ),
+    ).next;
+    expect(model.suggestions[0]?.recommendedBy).toEqual([]);
+    expect(model.recommendations.notes.map((note) => [note.stageId, note.workflow, note.warning])).toEqual([
+      ['a', null, null],
+      ['b', 'probe-target', 'not downstream'],
+      ['c', 'elsewhere', null],
+    ]);
+  });
+
+  it('shows recommendations without next.json, as in a running session', () => {
+    const input = withRecommendations(file([rec({})]));
+    rmSync(path.join(input.sessionDirPath, 'next.json'), { force: true });
+    const model = buildResultsModel(input).next;
+    expect(model).toMatchObject({ state: 'missing', suggestions: [] });
+    expect(model.recommendations.notes).toHaveLength(1);
+  });
+
+  it('reports a missing file as nothing and other states as a detail, never touching the suggestions', () => {
+    expect(buildResultsModel(withRecommendations(null)).next.recommendations).toEqual({
+      state: 'missing',
+      detail: null,
+      notes: [],
+      count: 0,
+    });
+    for (const [content, state] of [['{', 'invalid'], [JSON.stringify({ schema_version: 2 }), 'unsupported']] as const) {
+      const {next} = buildResultsModel(withRecommendations(content));
+      expect(next.recommendations.state).toBe(state);
+      expect(next.recommendations.detail).not.toBeNull();
+      expect(next.suggestions).toHaveLength(1);
+    }
+  });
+});
 
 describe('session meta and child task', () => {
   const withStatus = (patch: { createdAt?: string | null; updatedAt?: string | null }): ResultsInput => {

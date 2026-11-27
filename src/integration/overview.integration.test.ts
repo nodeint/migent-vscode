@@ -333,6 +333,14 @@ const scenarios: Scenario[] = [
       await waitFor('missing next.json shown', () => overviewOf(env, source)?.next.state === 'missing');
       assert.equal(overviewOf(env, source)?.outputs.rows.length, 2, 'outputs stay visible');
 
+      // A recommendations file written under plugins/next/ (a folder that did not exist) reposts the Overview.
+      const recommendations = migentPath(env.root, 'sessions', SOURCE, 'plugins', 'next', 'recommendations.json');
+      write(recommendations, '{ not json');
+      await waitFor('invalid recommendations shown', () => overviewOf(env, source)?.next.recommendations.state === 'invalid');
+      write(recommendations, JSON.stringify({ schema_version: 1, recommendations: [{ stage_id: 'review', execution_id: '0001', workflow: null, reason: 'Nothing to do.' }] }));
+      await waitFor('recommendations shown', () => overviewOf(env, source)?.next.recommendations.state === 'ok');
+      assert.equal(overviewOf(env, source)?.state, 'Completed', 'recommendations never change the session state');
+
       assert.ok(same(activeFile(), taskFile), 'the active editor did not change');
       assert.equal(env.api.session.activeTarget(), undefined, 'the panel was not focused');
 

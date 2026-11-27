@@ -73,16 +73,19 @@
     const launch = suggestion.launch;
     const ready = launch.state === 'ready';
     const summary = [suggestion.task || ''];
+    for (const by of suggestion.recommendedBy) summary.push(text.recommendation.by(by.stageId, by.reason));
     if (suggestion.children.length > 0) summary.push(text.suggestion.ran(suggestion.children[0].title));
+    const chips = suggestion.recommendedBy.length > 0 ? [ui.chip(text.recommendation.recommended, { tone: 'ok' })] : [];
     const card = { title: suggestion.workflow, summary };
     if (ready) {
       return ui.itemCard({
         ...card,
+        alerts: chips,
         leading: 'play',
         onClick: () => page.send({ intent: 'openNextStep', workflow: suggestion.workflow }),
       });
     }
-    const alerts = [ui.chip(text.suggestion.block[launch.reason], { tone: 'warn' })];
+    const alerts = [...chips, ui.chip(text.suggestion.block[launch.reason], { tone: 'warn' })];
     if (suggestion.target === 'invalid' || suggestion.target === 'duplicate') {
       return ui.itemCard({
         ...card,
@@ -93,14 +96,38 @@
     return ui.itemCard({ ...card, alerts });
   }
 
-  /** Next steps show only with suggestions or an unusable next.json; otherwise there is nothing to say. */
+  /** One note line for a recommendation entry no card shows; a flagged entry adds its warning in the warn tone. */
+  function recommendationNote(note) {
+    const workflow = note.workflow === null ? text.recommendation.none : note.workflow;
+    const line = text.recommendation.note(note.stageId, workflow, note.reason);
+    if (note.warning === null) return ui.alertLine(line, { tone: 'info' });
+    return ui.alertLine(text.recommendation.warned(line, note.warning), { tone: 'warn' });
+  }
+
+  /** The recommendations beside the cards: entry notes, or one warning line when the file cannot be used. */
+  function recommendationNodes(recommendations) {
+    if (recommendations.state === 'missing') return [];
+    if (recommendations.state !== 'ok') {
+      const line = text.recommendation.state[recommendations.state];
+      return [ui.alertLine(text.next.withDetail(line, recommendations.detail), { tone: 'warn' })];
+    }
+    return recommendations.notes.map(recommendationNote);
+  }
+
+  /**
+   * Next steps show with suggestions, an unusable next.json or any recommendation content; otherwise there is
+   * nothing to say. Recommendations are informational: they mark cards and add notes, never a card action.
+   */
   function renderNext(model) {
     const next = model.next;
-    if (next.state === 'missing' || (next.state === 'ok' && next.suggestions.length === 0)) return null;
+    const recommendations = recommendationNodes(next.recommendations);
+    const hasCards = next.state === 'ok' && next.suggestions.length > 0;
+    const unusable = next.state !== 'ok' && next.state !== 'missing';
+    if (!hasCards && !unusable && recommendations.length === 0) return null;
     const children = [];
-    if (next.state === 'ok') {
+    if (hasCards) {
       children.push(ui.stack(next.suggestions.map(suggestionCard), { gap: 'card' }));
-    } else {
+    } else if (unusable) {
       const lines = [text.next.state[next.state]];
       if (next.detail !== null) lines.push({ text: next.detail, className: 'mg-muted mg-mono' });
       children.push(
@@ -111,6 +138,7 @@
         }),
       );
     }
+    if (recommendations.length > 0) children.push(ui.stack(recommendations, { gap: 'card' }));
     const count = next.state === 'ok' ? countOf(next.suggestions.length) : undefined;
     return ui.section(text.next.title, { note: text.next.note, count, children });
   }

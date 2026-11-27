@@ -48,17 +48,17 @@ describe('probeCapability', () => {
   it('is ok when the detected version meets the minimum', async () => {
     const state = await probeCapability({
       locate: locate(),
-      run: outputting({ kind: 'output', stdout: '0.9.0\n' }),
+      run: outputting({ kind: 'output', stdout: '0.10.1\n' }),
     });
-    expect(state).toMatchObject({ kind: 'ok', detected: '0.9.0', required: '0.9.0', resolvedPath: '/bin/migent' });
+    expect(state).toMatchObject({ kind: 'ok', detected: '0.10.1', required: '0.10.1', resolvedPath: '/bin/migent' });
   });
 
-  it('is old for a 0.8.x CLI against the built-in minimum', async () => {
+  it('is old for a 0.10.0 CLI against the built-in minimum', async () => {
     const state = await probeCapability({
       locate: locate(),
-      run: outputting({ kind: 'output', stdout: '0.8.0' }),
+      run: outputting({ kind: 'output', stdout: '0.10.0' }),
     });
-    expect(state).toMatchObject({ kind: 'old', detected: '0.8.0', required: '0.9.0' });
+    expect(state).toMatchObject({ kind: 'old', detected: '0.10.0', required: '0.10.1' });
   });
 
   it('is old just below the built-in minimum', async () => {
@@ -74,7 +74,7 @@ describe('probeCapability', () => {
       locate: locate(),
       run: outputting({ kind: 'output', stdout: '0.5.6' }),
     });
-    expect(state).toMatchObject({ kind: 'old', detected: '0.5.6', required: '0.9.0' });
+    expect(state).toMatchObject({ kind: 'old', detected: '0.5.6', required: '0.10.1' });
   });
 
   it('is old when below the effective minimum, even if above the constant', async () => {

@@ -170,6 +170,8 @@ function execution(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const NO_RECOMMENDATIONS = { state: 'missing', detail: null, notes: [], count: 0 };
+
 /** The Overview tab model of the Session page, as the host builds it. */
 function pageModel(overrides: Record<string, unknown> = {}) {
   return {
@@ -183,7 +185,7 @@ function pageModel(overrides: Record<string, unknown> = {}) {
       workflowId: 'wf',
       meta: HEADER.meta,
       outputs: { rows: [], directoryError: null },
-      next: { state: 'ok', detail: null, suggestions: [] },
+      next: { state: 'ok', detail: null, suggestions: [], recommendations: NO_RECOMMENDATIONS },
       children: [],
       source: null,
       summary: summary(),
@@ -858,6 +860,7 @@ describe('Overview page', () => {
     launch: { state: 'ready' },
     children: [],
     artifacts: [],
+    recommendedBy: [],
     ...overrides,
   });
 
@@ -895,7 +898,7 @@ describe('Overview page', () => {
       summary: summary({ state: 'running', isRunning: true }),
       activity: { visible: true, lines: ['10:15:30 plan started'] },
       outputs: { rows: [outputRow('report.md')], directoryError: null },
-      next: { state: 'ok', detail: null, suggestions: [suggestion()] },
+      next: { state: 'ok', detail: null, suggestions: [suggestion()], recommendations: NO_RECOMMENDATIONS },
       children: [{ sessionId: 'c1', title: 'Child', state: 'Running', task: 'Do the next task', stageId: null, createdAt: null }],
       source: SOURCE_MODEL,
     }));
@@ -924,11 +927,11 @@ describe('Overview page', () => {
 
   it('shows no Next steps section without a suggestion, and a warn banner with Open next.json when the file is unusable', () => {
     const empty = load();
-    empty.deliver(pageModel({ next: { state: 'missing', detail: null, suggestions: [] } }));
+    empty.deliver(pageModel({ next: { state: 'missing', detail: null, suggestions: [], recommendations: NO_RECOMMENDATIONS } }));
     expect(empty.titles()).not.toContain('Next steps');
 
     const invalid = load();
-    invalid.deliver(pageModel({ next: { state: 'invalid', detail: 'bad', suggestions: [] } }));
+    invalid.deliver(pageModel({ next: { state: 'invalid', detail: 'bad', suggestions: [], recommendations: NO_RECOMMENDATIONS } }));
     const section = invalid.section('Next steps');
     const banner = section?.descendants().find((node) => node.classList.contains('mg-banner'));
     expect(banner?.classList.contains('mg-banner--warn')).toBe(true);
@@ -941,7 +944,7 @@ describe('Overview page', () => {
     const links = (host: ReturnType<typeof load>) =>
       (host.section('Next steps')?.descendants() ?? []).filter((node) => node.classList.contains('mg-item-link'));
     const page = load();
-    page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion()] } }));
+    page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion()], recommendations: NO_RECOMMENDATIONS } }));
     const [card] = links(page);
     expect(card?.textContent).toContain('next-wf');
     expect(card?.textContent).toContain('Go');
@@ -959,6 +962,7 @@ describe('Overview page', () => {
             { sessionId: 'c1', title: 'Older', state: 'Completed', createdAt: null },
           ],
         })],
+        recommendations: NO_RECOMMENDATIONS,
       },
     }));
     expect(links(ran)).toHaveLength(1);
@@ -975,7 +979,7 @@ describe('Overview page', () => {
     ];
     for (const [overrides, chip, clickable] of cases) {
       const page = load();
-      page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion(overrides)] } }));
+      page.deliver(pageModel({ next: { state: 'ok', detail: null, suggestions: [suggestion(overrides)], recommendations: NO_RECOMMENDATIONS } }));
       const next = page.section('Next steps');
       expect(next?.textContent, chip).toContain(chip);
       const link = next?.descendants().find((node) => node.classList.contains('mg-item-link'));
@@ -983,6 +987,82 @@ describe('Overview page', () => {
       link?.click();
       if (clickable) expect(page.posted.at(-1)).toMatchObject({ intent: 'openTargetWorkflow', workflow: 'next-wf' });
     }
+  });
+
+  describe('recommendations in Next steps', () => {
+    const recommendations = (overrides: Record<string, unknown>) => ({
+      state: 'ok',
+      detail: null,
+      notes: [],
+      count: 1,
+      ...overrides,
+    });
+    const nextWith = (suggestions: unknown[], overrides: Record<string, unknown>, state = 'ok') => ({
+      next: { state, detail: null, suggestions, recommendations: recommendations(overrides) },
+    });
+
+    it('marks the recommended card with a chip and a stage and reason line, and keeps the card action', () => {
+      const page = load();
+      page.deliver(
+        pageModel(
+          nextWith([suggestion({ recommendedBy: [{ stageId: 'design', reason: 'Ready to plan' }] }), suggestion({ workflow: 'other' })], {}),
+        ),
+      );
+      const next = page.section('Next steps');
+      expect(next?.textContent).toContain('Recommended');
+      expect(next?.textContent).toContain('design — Ready to plan');
+      expect(next?.textContent?.split('Recommended').length).toBe(2);
+      const cards = (next?.descendants() ?? []).filter((node) => node.classList.contains('mg-item-link'));
+      expect(cards).toHaveLength(2);
+      cards[0]?.click();
+      expect(page.posted.at(-1)).toMatchObject({ intent: 'openNextStep', workflow: 'next-wf' });
+    });
+
+    it('lists an abstention, a warning and an unmatched workflow as note lines, the warning in the warn tone', () => {
+      const page = load();
+      page.deliver(
+        pageModel(
+          nextWith([suggestion()], {
+            count: 3,
+            notes: [
+              { stageId: 'a', workflow: null, reason: 'nothing to run', warning: null },
+              { stageId: 'b', workflow: 'next-wf', reason: 'go', warning: 'not in downstream' },
+              { stageId: 'c', workflow: 'elsewhere', reason: 'maybe', warning: null },
+            ],
+          }),
+        ),
+      );
+      const lines = (page.section('Next steps')?.descendants() ?? []).filter((node) => node.classList.contains('mg-alert'));
+      expect(lines.map((node) => node.textContent)).toEqual([
+        'a: no recommendation — nothing to run',
+        'b: next-wf — go (not in downstream)',
+        'c: elsewhere — maybe',
+      ]);
+      expect(lines.map((node) => node.classList.contains('mg-warn'))).toEqual([false, true, false]);
+    });
+
+    it('shows the section with recommendations alone, as in a running session', () => {
+      const page = load();
+      page.deliver(
+        pageModel(
+          nextWith([], { notes: [{ stageId: 'a', workflow: 'w', reason: 'r', warning: null }] }, 'missing'),
+        ),
+      );
+      expect(page.section('Next steps')?.textContent).toContain('a: w — r');
+    });
+
+    it('shows nothing extra for a missing file and one warning line for an unusable one', () => {
+      const missing = load();
+      missing.deliver(pageModel(nextWith([], { state: 'missing', count: 0 }, 'missing')));
+      expect(missing.titles()).not.toContain('Next steps');
+
+      const page = load();
+      page.deliver(pageModel(nextWith([suggestion()], { state: 'invalid', detail: 'bad json', count: 0 })));
+      const lines = (page.section('Next steps')?.descendants() ?? []).filter((node) => node.classList.contains('mg-alert'));
+      expect(lines.map((node) => node.textContent)).toEqual(['Recommendations are invalid (bad json)']);
+      expect(lines[0]?.classList.contains('mg-warn')).toBe(true);
+      expect((page.section('Next steps')?.descendants() ?? []).filter((node) => node.classList.contains('mg-item-link'))).toHaveLength(1);
+    });
   });
 
   it('puts the next action in Status as a line, never a run button', () => {
