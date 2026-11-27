@@ -76,7 +76,7 @@ const HASH = 'a'.repeat(64);
 const identity = { project: 'k', sessionId: 's1' };
 const form = { stages: [{ id: 'plan', role: 'dev' }], artifacts: [], downstream: [] };
 
-function makeRoot(withExecution: boolean, schema = 7): string {
+function makeRoot(withExecution: boolean, schema = 8): string {
   const root = mkdtempSync(path.join(tmpdir(), 'session-'));
   const dir = sessionDir(root, 's1');
   mkdirSync(dir, { recursive: true });

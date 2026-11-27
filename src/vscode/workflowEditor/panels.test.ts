@@ -94,7 +94,7 @@ function setup(roles: string[] = ['developer']) {
     root,
     catalog: {
       workflows: () => ({ state: 'empty', error: null, entries: [] }),
-      config: () => ({ state: 'ok', error: null, schemaVersion: 7, roles, agents: [] }),
+      config: () => ({ state: 'ok', error: null, schemaVersion: 8, roles, agents: [] }),
       reloadWorkflow: () => undefined,
     },
   };
@@ -131,7 +131,7 @@ describe('unsaved workflow draft lifecycle', () => {
     expect(last().model.mode).toBe('edit');
     writeFileSync(
       path.join(root, '.migent', 'workflows', 'there.yaml'),
-      'schema_version: 7\nid: there\nstages:\n  - id: s\n    role: developer\n',
+      'schema_version: 8\nid: there\nstages:\n  - id: s\n    role: developer\n',
     );
     await host.restore?.(fakePanel(), { project: 'k', file: 'there.yaml', isNew: true });
     expect(last().model).toMatchObject({ mode: 'edit', canSave: true });

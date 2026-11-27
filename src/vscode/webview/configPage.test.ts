@@ -208,7 +208,7 @@ type Form = ReturnType<typeof form>;
 
 function form(over: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     agents: [
       { name: 'fast', agent: { model: 'm', client: { type: 'codex', options: [{ key: 'sandbox', value: 'ro' }], extra: {} }, extra: {} } },
     ],
@@ -234,7 +234,7 @@ function tab(scope: string, over: Partial<Tab> = {}) {
     state: 'ok',
     exists: true,
     hash: HASH,
-    schemaVersion: 7,
+    schemaVersion: 8,
     readError: null,
     form: form(),
     canSave: true,

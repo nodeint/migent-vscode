@@ -13,3 +13,4 @@ them.
 | `next-invalid` | `next.json` that is not JSON |
 | `numeric-ids-unquoted` | Manifests with `session_id: 2` and `session_id: 3` plus `prior_session_id: 2` written as unquoted integers (the CLI's reader accepts them; the CLI itself writes them quoted) |
 | `frozen-downstream` | `workflow.downstream` in `workflow.frozen.yaml` (captured sample is in `captured/handoff-source`; this one adds a second entry with a different mapping) |
+| `recommendations` | `plugins/next/recommendations.json` (CLI 0.10.1): one matched entry, one abstention and one entry with a `warning`; shaped from the contract, not from a captured file |

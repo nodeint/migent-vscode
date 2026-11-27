@@ -175,14 +175,17 @@ function suggestion(workflow: string, launch: ResultsSuggestion['launch'], ran =
     launch,
     children: ran ? [{ sessionId: 'c', title: 't', state: 'Completed', createdAt: null }] : [],
     artifacts: [],
+    recommendedBy: [],
   };
 }
+
+const NO_RECOMMENDATIONS: ResultsNext['recommendations'] = { state: 'missing', detail: null, notes: [], count: 0 };
 
 const READY = { state: 'ready' } as const;
 const BLOCKED = { state: 'blocked', reason: 'notDeclared' } as const;
 
 function nextOf(...suggestions: ResultsSuggestion[]): ResultsNext {
-  return { state: 'ok', detail: null, suggestions };
+  return { state: 'ok', detail: null, suggestions, recommendations: NO_RECOMMENDATIONS };
 }
 
 describe('nextStepAction', () => {
@@ -216,11 +219,27 @@ describe('nextStepAction', () => {
   it('is done when every suggestion already ran or there are none', () => {
     expect(nextStepAction('completed', nextOf(suggestion('a', READY, true)))).toEqual({ kind: 'done' });
     expect(nextStepAction('completed', nextOf())).toEqual({ kind: 'done' });
-    expect(nextStepAction('completed', { state: 'missing', detail: null, suggestions: [] })).toEqual({ kind: 'done' });
+    expect(nextStepAction('completed', { state: 'missing', detail: null, suggestions: [], recommendations: NO_RECOMMENDATIONS })).toEqual({ kind: 'done' });
+  });
+
+  it('does not change with recommendations (AC8)', () => {
+    const withRecommendations: ResultsNext = {
+      ...nextOf(suggestion('a', READY), suggestion('b', READY)),
+      recommendations: {
+        state: 'ok',
+        detail: null,
+        count: 2,
+        notes: [{ stageId: 'design', workflow: null, reason: 'none', warning: null }],
+      },
+    };
+    const suggestions = [{ ...suggestion('a', READY), recommendedBy: [{ stageId: 'design', reason: 'r' }] }, suggestion('b', READY)];
+    for (const next of [nextOf(...suggestions), withRecommendations, { ...withRecommendations, suggestions }]) {
+      expect(nextStepAction('completed', next)).toEqual({ kind: 'choose', count: 2 });
+    }
   });
 
   it('is null for a session that is not Completed or an unusable next.json', () => {
     expect(nextStepAction('running', nextOf(suggestion('a', READY)))).toBeNull();
-    expect(nextStepAction('completed', { state: 'invalid', detail: 'x', suggestions: [] })).toBeNull();
+    expect(nextStepAction('completed', { state: 'invalid', detail: 'x', suggestions: [], recommendations: NO_RECOMMENDATIONS })).toBeNull();
   });
 });

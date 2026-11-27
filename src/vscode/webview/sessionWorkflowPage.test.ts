@@ -767,8 +767,9 @@ describe('Session Overview and Metrics tabs', () => {
           state: 'ok',
           detail: null,
           suggestions: [
-            { workflow: 'next-wf', task: 'Go', declared: true, target: 'available', launch: { state: 'ready' }, children: [], artifacts: [] },
+            { workflow: 'next-wf', task: 'Go', declared: true, target: 'available', launch: { state: 'ready' }, children: [], artifacts: [], recommendedBy: [] },
           ],
+          recommendations: { state: 'missing', detail: null, notes: [], count: 0 },
         },
         children: [],
         source: null,

@@ -23,6 +23,11 @@ export const PLUGINS_DIRNAME = 'plugins';
 export const METRICS_PLUGIN_DIRNAME = 'metrics';
 /** The session-relative metrics file written by the metrics plugin (CLI 0.9.0 and later). */
 export const METRICS_RELATIVE_PATH = path.join(PLUGINS_DIRNAME, METRICS_PLUGIN_DIRNAME, METRICS_FILENAME);
+/** The next plugin's folder inside `plugins/` (CLI 0.10.1 and later). */
+export const NEXT_PLUGIN_DIRNAME = 'next';
+export const RECOMMENDATIONS_FILENAME = 'recommendations.json';
+/** The session-relative recommendations file written by the next plugin (CLI 0.10.1 and later). */
+export const RECOMMENDATIONS_RELATIVE_PATH = path.join(PLUGINS_DIRNAME, NEXT_PLUGIN_DIRNAME, RECOMMENDATIONS_FILENAME);
 /** The CLI's per-session title overlay (CLI 0.5.6 and later); written only by `session rename`. */
 export const TITLE_FILENAME = 'title.json';
 export const CANCEL_REQUEST_FILENAME = 'cancel.requested';

@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { WorkflowDocumentInput, WorkflowStageInput } from '@nodeint/migent-contracts';
 import { parse, stringify } from 'yaml';
 
 import { text as describe,text } from '../text';
 import { agentBody as agentBodyOf, type AgentForm, parseAgent } from './agentForm';
 import { type AuthoringDiagnostic, type AuthoringResult, parseAuthoringEnvelope } from './authoring';
+import type { CoreStage, CoreWorkflow } from './contractCore';
 import { wireOf } from './contractRead';
 import type { ClientChoice } from './controlArgs';
 import { MIGENT_DIR, WORKFLOWS_DIRNAME } from './paths';
@@ -113,11 +113,11 @@ function navigationText(value: unknown): string {
   return strings(value).join(', ');
 }
 
-type ContractArtifact = NonNullable<WorkflowDocumentInput['artifacts']>[string];
-type ContractDecisionBody = NonNullable<NonNullable<WorkflowStageInput['decision']>[number][string]>;
-type ContractSession = NonNullable<WorkflowStageInput['session']>;
-type ContractRunWhen = NonNullable<WorkflowStageInput['run_when']>;
-type ContractDownstream = NonNullable<WorkflowDocumentInput['downstream']>[number];
+type ContractArtifact = NonNullable<CoreWorkflow['artifacts']>[string];
+type ContractDecisionBody = NonNullable<NonNullable<CoreStage['decision']>[number][string]>;
+type ContractSession = NonNullable<CoreStage['session']>;
+type ContractRunWhen = NonNullable<CoreStage['run_when']>;
+type ContractDownstream = NonNullable<CoreWorkflow['downstream']>[number];
 
 function localArtifactBody(id: string, value: unknown): WorkflowLocalArtifactForm {
   const body = wireOf<ContractArtifact>(value) ?? {};
@@ -169,7 +169,7 @@ function agentFields(value: unknown): Pick<WorkflowStageForm, 'agentMode' | 'age
 }
 
 function stageForm(value: unknown): WorkflowStageForm {
-  const body = wireOf<WorkflowStageInput>(value) ?? {};
+  const body = wireOf<CoreStage>(value) ?? {};
   const session = wireOf<ContractSession>(body.session) ?? {};
   const runWhen = wireOf<ContractRunWhen>(body.run_when) ?? {};
   return {
@@ -192,7 +192,7 @@ function stageForm(value: unknown): WorkflowStageForm {
 }
 
 function formFromBody(raw: Record<string, unknown>, fallbackId: string): WorkflowForm {
-  const body = wireOf<WorkflowDocumentInput>(raw) ?? {};
+  const body = wireOf<CoreWorkflow>(raw) ?? {};
   const registry = isRecord(body.artifacts) ? Object.entries(body.artifacts) : [];
   const downstream = Array.isArray(body.downstream) ? body.downstream : [];
   return {
@@ -309,7 +309,7 @@ export function readWorkflowEditor(input: WorkflowEditorInput): WorkflowEditorMo
   }
   const body = isRecord(parsed) ? parsed : {};
   const form = formFromBody(body, fallbackId(input.file));
-  const schemaVersion = numberValue(wireOf<WorkflowDocumentInput>(body)?.schema_version);
+  const schemaVersion = numberValue(wireOf<CoreWorkflow>(body)?.schema_version);
   const isSupported = schemaVersion === EDITABLE_SCHEMA_VERSION;
   return {
     ...base,
@@ -415,7 +415,7 @@ export function workflowFormFromClient(raw: unknown): WorkflowForm {
   };
 }
 
-// ---------- the canonical schema 7 draft the CLI saves ----------
+// ---------- the canonical schema 8 draft the CLI saves ----------
 
 function pairsToRecord(values: { key: string; value: string }[]): Record<string, string> | undefined {
   const record: Record<string, string> = {};

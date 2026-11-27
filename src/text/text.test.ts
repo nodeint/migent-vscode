@@ -135,6 +135,7 @@ const PINS: Record<TextId, Pin> = {
   'states.unparsableJson': [undefined, 'unparsable JSON'],
   'states.unparsableYaml': [undefined, 'unparsable YAML'],
   'states.nextNotList': [undefined, 'next is not a list'],
+  'states.recommendationsNotList': [undefined, 'recommendations is not a list'],
   'states.downstreamNotList': [undefined, 'downstream is not a list'],
   'states.totalsNotObject': [undefined, 'totals is not an object'],
   'states.stagesNotObject': [undefined, 'stages is not an object'],

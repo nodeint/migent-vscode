@@ -39,7 +39,7 @@ function expectConforms(schema: TSchema, value: unknown): void {
 }
 
 // The integration suite trusts the fixture CLI; this keeps it from drifting from the published contracts.
-describe('fixture CLI JSON output conforms to the CLI 0.9.0 contracts', () => {
+describe('fixture CLI JSON output conforms to the CLI 0.10.1 contracts', () => {
   it('session prepare', () => {
     expectConforms(PrepareResult, fixtureJson(['session', 'prepare', 'A title', '--workflow', 'demo']));
   });
@@ -62,6 +62,6 @@ describe('fixture CLI JSON output conforms to the CLI 0.9.0 contracts', () => {
     const workflow = ['workflow', 'save', '-', '--target', 'w.yaml', '--format', 'yaml', '--json'];
     const config = ['config', 'save', '-', '--scope', 'project', '--format', 'yaml', '--preserve-comments', '--json'];
     expectConforms(AuthoringEnvelope, fixtureJson(workflow, 'id: demo\n'));
-    expectConforms(AuthoringEnvelope, fixtureJson(config, 'schema_version: 7\n'));
+    expectConforms(AuthoringEnvelope, fixtureJson(config, 'schema_version: 8\n'));
   });
 });

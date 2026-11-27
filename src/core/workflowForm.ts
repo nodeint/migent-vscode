@@ -13,7 +13,7 @@ export interface WorkflowAgentForm {
 export type WorkflowAgentMode = 'role' | 'named' | 'inline';
 
 /** Schema version the editor reads and writes. Older files are shown read-only; `migent migrate` upgrades them. */
-export const EDITABLE_SCHEMA_VERSION: typeof WORKFLOW_SCHEMA_VERSION = 7;
+export const EDITABLE_SCHEMA_VERSION: typeof WORKFLOW_SCHEMA_VERSION = 8;
 
 /** Who a stage asks: nobody (`''`) or the human, the only value the contract accepts. */
 export type WorkflowAsk = '' | 'human';

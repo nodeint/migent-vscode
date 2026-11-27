@@ -10,7 +10,7 @@
 //                        Migent 0.8.0 one: record writes the answer event and the next execution's input.json,
 //                        fail-after-record writes only the event.
 //   MIGENT_FAKE_LEGACY   1 behaves like CLI 0.3.1: `prepare` writes no task.md and no workflow.yaml, `--version` says 0.3.1.
-//                        Otherwise it models 0.9.0: `prepare` writes an empty task.md and an editable workflow.yaml;
+//                        Otherwise it models 0.10.1: `prepare` writes an empty task.md and an editable workflow.yaml;
 //                        `run --session` validates the draft (its `id:` must match the manifest, task.md must not be
 //                        empty) and exits 2 before writing anything, else freezes it as workflow.frozen.yaml;
 //                        `continue` keeps the frozen copy.
@@ -109,7 +109,7 @@ function writeDraft(id, workflow) {
   fs.writeFileSync(
     draftOf(id),
     `# Session workflow draft. Edit this file before starting the session.
-schema_version: 7
+schema_version: 8
 id: ${workflow}
 stages: []
 `,
@@ -639,7 +639,7 @@ function doctor() {
 }
 
 if (args[0] === '--version') {
-  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.9.0');
+  console.log(IS_LEGACY ? 'migent 0.3.1' : 'migent 0.10.1');
 } else if (args[0] === 'workflow' && args[1] === 'validate' && !IS_LEGACY) {
   workflowValidate();
 } else if ((args[0] === 'workflow' || args[0] === 'config') && args[1] === 'save' && !IS_LEGACY) {

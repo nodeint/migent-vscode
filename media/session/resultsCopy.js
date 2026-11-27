@@ -34,6 +34,24 @@
       openFile: 'Open next.json',
     },
 
+    /** Recommendations from the next plugin (plugins/next/recommendations.json); informational only. */
+    recommendation: {
+      recommended: 'Recommended',
+      /** A summary line of a recommended card: the stage and its reason. */
+      by: (stage, reason) => stage + ' — ' + reason,
+      none: 'no recommendation',
+      /** A note line for an entry no card shows. */
+      note: (stage, workflow, reason) => stage + ': ' + workflow + ' — ' + reason,
+      /** The note line of an entry the plugin flagged, with its warning appended. */
+      warned: (line, warning) => line + ' (' + warning + ')',
+      /** Why the file cannot be used, by the state the host reports. */
+      state: {
+        unreadable: 'Recommendations cannot be read',
+        invalid: 'Recommendations are invalid',
+        unsupported: 'Recommendations use an unsupported schema version',
+      },
+    },
+
     suggestion: {
       /** A warning chip with the reason a suggestion cannot launch, by the reason the host reports. */
       block: {

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "recommendations": [
+    {
+      "stage_id": "design",
+      "execution_id": "0001-design--attempt-01",
+      "workflow": "plan",
+      "reason": "The design is approved and ready to be split into phases."
+    },
+    {
+      "stage_id": "review",
+      "execution_id": "0002-review--attempt-01",
+      "workflow": null,
+      "reason": "Nothing further to run."
+    },
+    {
+      "stage_id": "verify",
+      "execution_id": "0003-verify--attempt-01",
+      "workflow": "release",
+      "reason": "Everything passed.",
+      "warning": "release is not in the frozen downstream"
+    }
+  ]
+}

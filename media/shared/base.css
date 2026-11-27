@@ -1075,6 +1075,11 @@ select.mg-select:disabled {
   white-space: nowrap;
 }
 
+.mg-chip--ok {
+  color: var(--mg-ok);
+  border-color: var(--mg-ok);
+}
+
 .mg-chip--info {
   color: var(--mg-info);
   border-color: var(--mg-info);

@@ -83,7 +83,7 @@ const { isConfigIdentity, saveArgs, ConfigPanels, validationOf } = await import(
 const HASH = 'a'.repeat(64);
 const written = { kind: 'ok', value: { schema_version: 1, valid: true, diagnostics: [], written: true, hash: 'c'.repeat(64) } };
 
-function setup(files: Record<string, string> = { 'config.yaml': 'schema_version: 7\nroles:\n  dev:\n    agent: fast\nagents:\n  fast:\n    model: m\n' }) {
+function setup(files: Record<string, string> = { 'config.yaml': 'schema_version: 8\nroles:\n  dev:\n    agent: fast\nagents:\n  fast:\n    model: m\n' }) {
   const root = mkdtempSync(path.join(tmpdir(), 'config-panels-'));
   mkdirSync(path.join(root, '.migent'), { recursive: true });
   for (const [name, content] of Object.entries(files)) writeFileSync(path.join(root, '.migent', name), content);
@@ -167,10 +167,10 @@ describe('saveArgs', () => {
 });
 
 describe('Configuration save', () => {
-  const form = { schemaVersion: 7, agents: [{ name: 'a', agent: { model: 'm', extra: {} } }], roles: [], extra: {} };
+  const form = { schemaVersion: 8, agents: [{ name: 'a', agent: { model: 'm', extra: {} } }], roles: [], extra: {} };
 
   it('creates the local file without a base hash even when it exists now, and the CLI decides', async () => {
-    const { panels, last } = setup({ 'config.yaml': 'schema_version: 7\n', 'config.local.yaml': 'schema_version: 7\n' });
+    const { panels, last } = setup({ 'config.yaml': 'schema_version: 8\n', 'config.local.yaml': 'schema_version: 8\n' });
     panels.open('k');
     host.next = () => ({ kind: 'error', error: { exitCode: 2, stderr: '', stdout: JSON.stringify({ schema_version: 1, valid: false, diagnostics: [{ severity: 'error', message: 'exists', code: 'x' }] }) } });
     await panels.handle('k', { type: 'saveForm', tab: 'local', form, base: { kind: 'create' } });
@@ -185,7 +185,7 @@ describe('Configuration save', () => {
     host.next = () => written;
     await panels.handle('k', { type: 'saveForm', tab: 'project', form, base: { kind: 'replace', hash: HASH } });
     expect(host.invoked[0].args).toEqual(expect.arrayContaining(['--base-hash', HASH, '--scope', 'project']));
-    expect(host.invoked[0].input).toContain('schema_version: 7');
+    expect(host.invoked[0].input).toContain('schema_version: 8');
   });
 
   it('counts only a written, versioned envelope as saved', async () => {

@@ -9,6 +9,7 @@ import type { SessionSnapshot } from './model';
 import { classifyLaunch, type LaunchEligibility, targetState, type TargetWorkflowState } from './nextStepEligibility';
 import { type ArtifactAvailability, markDeclared, type NextEntry, readFrozenDownstream, readNext } from './nextWorkflows';
 import { listOutputs, type OutputFileState, type OutputRow, publishedOutputs } from './outputs';
+import { readRecommendations,type RecommendationEntry } from './recommendations';
 import { buildSessionMeta, NO_SESSION_META, type SessionMeta } from './sessionMeta';
 import { sessionTitle, stageOf } from './sessionPresentation';
 import { readSessionTask } from './sessionTask';
@@ -44,6 +45,33 @@ export interface ResultsSuggestion {
   /** Sessions started from this one that run the suggestion's workflow, newest first. */
   children: ResultsSuggestionChild[];
   artifacts: ResultsSuggestionArtifact[];
+  /** Stages whose recommendation names this workflow without a warning. Informational; never affects `launch`. */
+  recommendedBy: ResultsRecommendedBy[];
+}
+
+/** A stage that recommended a workflow, with its reason. */
+export interface ResultsRecommendedBy {
+  stageId: string;
+  reason: string;
+}
+
+/** One recommendation entry that marks no card: an abstention, a warning, or a workflow with no suggestion. */
+export interface ResultsRecommendationNote {
+  stageId: string;
+  /** The recommended workflow; null when the stage abstained. */
+  workflow: string | null;
+  reason: string;
+  warning: string | null;
+}
+
+/** `plugins/next/recommendations.json`, informational only. Never affects the session state or the Status action. */
+export interface ResultsRecommendations {
+  state: 'ok' | 'missing' | 'unreadable' | 'invalid' | 'unsupported';
+  detail: string | null;
+  /** Entries no card shows, in file order. */
+  notes: ResultsRecommendationNote[];
+  /** Number of entries read, matched or not. */
+  count: number;
 }
 
 /** One artifact of a suggestion, as the page shows it. */
@@ -69,6 +97,7 @@ export interface ResultsNext {
   state: 'ok' | 'missing' | 'unreadable' | 'invalid' | 'unsupported';
   detail: string | null;
   suggestions: ResultsSuggestion[];
+  recommendations: ResultsRecommendations;
 }
 
 export interface ResultsProvenanceArtifact {
@@ -212,7 +241,63 @@ function childRow(child: SessionSnapshot, input: ResultsInput): ResultsChild {
   };
 }
 
+const NO_RECOMMENDATIONS: ResultsRecommendations = { state: 'missing', detail: null, notes: [], count: 0 };
+
+function recommendationsModel(sessionDirPath: string): {
+  model: ResultsRecommendations;
+  entries: RecommendationEntry[];
+} {
+  const read = readRecommendations(sessionDirPath);
+  switch (read.kind) {
+    case 'missing':
+      return { model: NO_RECOMMENDATIONS, entries: [] };
+    case 'unreadable':
+    case 'invalid':
+      return { model: { ...NO_RECOMMENDATIONS, state: read.kind, detail: read.error }, entries: [] };
+    case 'unsupported':
+      return {
+        model: {
+          ...NO_RECOMMENDATIONS,
+          state: 'unsupported',
+          detail:
+            read.schemaVersion === null
+              ? text('states.schemaMissing')
+              : text('states.schemaVersion', { version: String(read.schemaVersion) }),
+        },
+        entries: [],
+      };
+    case 'ok':
+      return { model: { ...NO_RECOMMENDATIONS, state: 'ok', count: read.entries.length }, entries: read.entries };
+  }
+}
+
+/** The stages whose warning-free recommendation names `workflow`, in file order. */
+function recommendedBy(entries: RecommendationEntry[], workflow: string): ResultsRecommendedBy[] {
+  return entries
+    .filter((entry) => entry.workflow === workflow && entry.warning === null)
+    .map((entry) => ({ stageId: entry.stage_id, reason: entry.reason }));
+}
+
 function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
+  const { model, entries } = recommendationsModel(input.sessionDirPath);
+  const next = nextSuggestions(input, sourceState, entries);
+  const shown = new Set(next.suggestions.map((suggestion) => suggestion.workflow));
+  const notes = entries
+    .filter((entry) => entry.workflow === null || entry.warning !== null || !shown.has(entry.workflow))
+    .map((entry) => ({
+      stageId: entry.stage_id,
+      workflow: entry.workflow,
+      reason: entry.reason,
+      warning: entry.warning,
+    }));
+  return { ...next, recommendations: { ...model, notes } };
+}
+
+function nextSuggestions(
+  input: ResultsInput,
+  sourceState: string,
+  entries: RecommendationEntry[],
+): Omit<ResultsNext, 'recommendations'> {
   const status = input.snapshots.find((snapshot) => snapshot.sessionId === input.sessionId)?.status;
   const published = status === undefined || status === null ? null : publishedOutputs(status).map(([name]) => name);
   const read = readNext(input.sessionDirPath);
@@ -251,6 +336,7 @@ function nextModel(input: ResultsInput, sourceState: string): ResultsNext {
             ),
             // `argv` and `command` are dropped on purpose: they are never shown or run.
             artifacts: suggestionArtifacts(entry, read.availability[index]),
+            recommendedBy: recommendedBy(entries, entry.workflow),
           };
         }),
       };
@@ -299,7 +385,7 @@ function unavailable(sessionId: string): ResultsModel {
     workflowId: null,
     meta: NO_SESSION_META,
     outputs: { rows: [], directoryError: null },
-    next: { state: 'missing', detail: null, suggestions: [] },
+    next: { state: 'missing', detail: null, suggestions: [], recommendations: NO_RECOMMENDATIONS },
     source: null,
     children: [],
   };

@@ -9,7 +9,7 @@ vi.mock('vscode', () => ({ ThemeIcon: class {}, window: {}, workspace: {}, comma
 const { createWorkflowCopy } = await import('./workflowCopy');
 
 const launch: LaunchSpec = { command: 'migent', prefixArgs: [], via: 'native' };
-const text = '# keep me\nschema_version: 7\nid: b\nstages: []\n';
+const text = '# keep me\nschema_version: 8\nid: b\nstages: []\n';
 const root = '/project';
 
 beforeEach(() => {
