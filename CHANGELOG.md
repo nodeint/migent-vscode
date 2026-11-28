@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The Session header now shows the status and workflow id, the session title, and labeled facts (Stage, Elapsed,
+  Last updated); the Overview Status card drops its duplicate badge and shows a message, facts and actions.
+  ([#96](https://github.com/nodeint/migent-vscode/pull/96))
 - The Session Overview Status card of a blocked session now shows the recorded blocker with its stage and attempt.
   ([#95](https://github.com/nodeint/migent-vscode/pull/95))
 

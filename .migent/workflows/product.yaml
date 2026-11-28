@@ -2,12 +2,12 @@ schema_version: 8
 id: product
 constraints:
   - Product specification only. Do not modify source code or design internal software architecture.
-  - Follow .agents/skills/product/SKILL.md and its template.
+  - Obtain human approval for major scope, user experience, and behavior decisions.
 
 artifacts:
   prd:
     file: prd.md
-    description: Completed product requirements document (PRD) using the product skill template.
+    description: Completed product requirements document (PRD).
   prd_comment:
     file: prd_comment.md
     required: false
@@ -15,24 +15,25 @@ artifacts:
 
 stages:
   - id: product
-    role: product
+    role: product_analyst
     max_revisions: 3
     ask: human
     instructions:
+      - Load the product skills.
       - Before starting, check that the workspace is on a working branch created from origin/next (the branch in the prior issue artifact when provided), not on main or next; otherwise ask the human how to proceed.
       - Read prior issue artifacts and their required References; stop and report missing or inconsistent required inputs.
-      - Follow the product skill in .agents/skills/product/SKILL.md and write prd.md using its template.
+      - Write prd.md.
+      - Cover both interactive developer CLI use and non-interactive agent/automation use in prd.md.
       - Resolve substantive review findings when revising.
     artifacts: [prd]
 
   - id: review_product
-    role: reviewer
+    role: product_reviewer
     depends_on:
       - product
     instructions:
-      - Follow .agents/skills/review/SKILL.md, reviewing prd.md against the issue, task, user requirements, and .agents/skills/product/SKILL.md and its template.
-      - Check that the proposed behavior directly addresses the stated user problem and is consistent with existing VS Code interactions in this extension.
-      - Keep comments observational; do not defer required product decisions.
+      - Load the review, product skills.
+      - Review prd.md against the task and prior issue artifacts.
     decision:
       - approved:
           when: The product specification meets review criteria, requirements are clear, and no comments remain.

@@ -283,7 +283,7 @@ describe('Overview page', () => {
     expect(page.titles()).toEqual(['Status', 'Outputs', 'Progress']);
   });
 
-  it('explains a Running session and draws exactly one primary action plus the danger Stop', () => {
+  it('shows the Provider update, the stage only when supplied, one primary action and a framed Stop while Running', () => {
     const page = load();
     page.deliver(pageModel({
       summary: summary({ state: 'running', isRunning: true, runningStage: 'draft', runningSummary: 'drafting' }),
@@ -291,14 +291,21 @@ describe('Overview page', () => {
     }));
 
     const [status] = page.sections();
-    expect(status?.textContent).toContain('Running');
-    expect(status?.textContent).toContain('Running stage draft.');
-    expect(status?.textContent).toContain('Latest update');
+    expect(status?.textContent).toContain('Stage');
+    expect(status?.textContent).toContain('draft');
+    expect(status?.textContent).toContain('Provider update');
     expect(status?.textContent).toContain('drafting');
+    expect(status?.textContent).not.toContain('Latest update');
+    expect(status?.querySelector('.mg-status')).toBeNull();
     const buttons = page.statusButtons();
     expect(buttons.map((button) => button.textContent)).toEqual(['View log', 'Stop']);
     expect(buttons[0]?.className).toContain('mg-btn--primary');
-    expect(buttons[1]?.className).toContain('mg-btn--danger');
+    expect(buttons[1]?.className).toContain('mg-btn--secondary');
+    expect(buttons.filter((button) => button.className.includes('mg-btn--primary'))).toHaveLength(1);
+    // Message, details, then actions, in that order.
+    const order = (status?.descendants() ?? []).map((node) => node.className.split(' ')[0]);
+    expect(order.indexOf('mg-kv')).toBeGreaterThan(-1);
+    expect(order.indexOf('mg-kv')).toBeLessThan(order.indexOf('mg-actions'));
 
     buttons[0]?.click();
     buttons[1]?.click();
@@ -328,6 +335,24 @@ describe('Overview page', () => {
     expect(page.statusButtons()[0]?.className).toContain('mg-btn--secondary');
   });
 
+  it('orders a Blocked card message, then details, then actions', () => {
+    const page = load();
+    page.deliver(pageModel({
+      summary: summary({
+        state: 'blocked',
+        blocked: [{ executionId: '0001-draft--attempt-01', stageId: 'draft', attempt: 1, blocker: 'needs a token' }],
+      }),
+      actions: { primary: null, secondary: ['showLog'] },
+    }));
+
+    const status = page.section('Status');
+    const order = (status?.descendants() ?? []).map((node) => node.className.split(' ')[0]);
+    const message = (status?.descendants() ?? []).findIndex((node) => node.textContent === 'The session waits on an external blocker.');
+    expect(message).toBeGreaterThan(-1);
+    expect(message).toBeLessThan(order.indexOf('mg-kv'));
+    expect(order.indexOf('mg-kv')).toBeLessThan(order.indexOf('mg-actions'));
+  });
+
   it('offers only Answer questions while a batch is pending', () => {
     const page = load();
     page.deliver(pageModel({
@@ -336,7 +361,6 @@ describe('Overview page', () => {
     }));
 
     const [status] = page.sections();
-    expect(status?.textContent).toContain('Question');
     expect(status?.textContent).toContain('2 questions pending.');
     expect(page.statusButtons().map((button) => button.textContent)).toEqual(['Answer questions']);
     expect(page.statusButtons()[0]?.className).toContain('mg-btn--primary');
@@ -350,11 +374,11 @@ describe('Overview page', () => {
     }));
 
     const [status] = page.sections();
-    expect(status?.textContent).toContain('Failed');
+    expect(status?.textContent).toContain('The last execution failed.');
     // Progress shows the latest execution and its decision, so Status does not repeat them.
     expect(status?.textContent).not.toContain('Latest execution');
     expect(status?.textContent).not.toContain('Decision');
-    expect(status?.querySelector('.mg-status')?.className).toContain('mg-status--error');
+    expect(status?.querySelector('.mg-status')).toBeNull();
     expect(page.statusButtons().map((button) => button.textContent)).toEqual([
       'Continue',
       'Open failure report',
@@ -369,7 +393,6 @@ describe('Overview page', () => {
     }));
 
     const [status] = page.sections();
-    expect(status?.textContent).toContain('Unknown');
     expect(status?.textContent).toContain('status.json is missing.');
     expect(page.statusButtons()).toEqual([]);
   });
@@ -1070,6 +1093,9 @@ describe('Overview page', () => {
     run.deliver(pageModel({ nextStep: { kind: 'run', workflow: 'next-wf' } }));
     expect(run.statusButtons().map((node) => node.textContent)).toEqual([]);
 
+    expect(run.section('Status')?.textContent).toContain('A next step can run. Start it under Next steps.');
+    expect(run.section('Status')?.textContent).not.toContain('No action is available.');
+
     const lines: [Record<string, unknown>, string][] = [
       [{ kind: 'choose', count: 2 }, '2 next steps can run. Pick one under Next steps.'],
       [{ kind: 'blocked', count: 1 }, 'The next steps are blocked. See Next steps for each reason.'],
@@ -1083,13 +1109,16 @@ describe('Overview page', () => {
     }
   });
 
-  it('always draws the overall state badge in Status, with an explanation when no action exists', () => {
+  it('draws no in-card badge or note, and only the fallback line when a state has no message, details or action', () => {
     const page = load();
     page.deliver(pageModel({ summary: summary({ state: 'cancelled' }) }));
     const status = page.section('Status');
-    expect(status?.descendants().some((node) => node.classList.contains('mg-status'))).toBe(true);
-    expect(status?.textContent).toContain('Cancelled');
-    expect(status?.textContent).toContain('No action is available.');
+    expect(status?.descendants().some((node) => node.classList.contains('mg-status'))).toBe(false);
+    expect(status?.textContent).toBe('StatusNo action is available.');
+
+    const withAction = load();
+    withAction.deliver(pageModel({ summary: summary({ state: 'stopped' }), actions: { primary: 'continue', secondary: [] } }));
+    expect(withAction.section('Status')?.textContent).toBe('StatusContinue');
   });
 
   it('clamps a long child task, shows its facts, and sends openSession from the whole row with no other control', () => {

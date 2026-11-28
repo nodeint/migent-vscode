@@ -18,18 +18,19 @@ stages:
     max_revisions: 3
     ask: human
     instructions:
+      - Load the planning skill.
       - Require a working branch created from origin/next and an approved prior design; ask the human if either is missing or unsuitable.
-      - Write plan.md using .agents/skills/planning/SKILL.md and its template. Address prior review comments or explain why not.
-      - Resolve substantive review findings when revising.
+      - Read prior artifacts and required References, including earlier inputs needed downstream. Report missing or inconsistent inputs and seek decisions on design gaps.
+      - Write plan.md. Address prior review comments or explain why not.
+      - Resolve substantive review findings when revising. Retain usable snapshot paths for prior artifacts and repository-relative paths for repository references.
     artifacts: [plan]
 
   - id: review_plan
-    role: reviewer
+    role: planner_reviewer
     depends_on: [plan]
     instructions:
-      - Follow .agents/skills/review/SKILL.md, reviewing plan.md against the approved design, acceptance criteria, and .agents/skills/planning/SKILL.md and its template.
-      - Check acceptance coverage against the actual phase scope and verification, including final integration. Flag missing or invented coverage and out-of-scope work.
-      - Do not block on routine implementation choices.
+      - Load the review, planning skills.
+      - Review plan.md against the approved design and its required inputs.
     decision:
       - approved:
           when: No substantive gaps or comments remain.

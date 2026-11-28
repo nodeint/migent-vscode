@@ -7,29 +7,11 @@
   window.MigentSessionOverviewCopy = {
     status: {
       title: 'Status',
-      note: 'Where the session stands and what you can do.',
-      /** The state badge's label, by the display state the host reports. */
-      state: {
-        prepared: 'Prepared',
-        running: 'Running',
-        blocked: 'Blocked',
-        question: 'Question',
-        failed: 'Failed',
-        stopped: 'Stopped',
-        cancelled: 'Cancelled',
-        completed: 'Completed',
-        unknown: 'Unknown',
-      },
-      /** The sentence under the badge, by state. */
+      /** The leading message of the states that need one. */
       reason: {
-        prepared: 'The session is ready to start.',
-        running: 'The session is running.',
         blocked: 'The session waits on an external blocker.',
         question: 'The session waits for an answer.',
         failed: 'The last execution failed.',
-        stopped: 'The session was stopped.',
-        cancelled: 'The session was cancelled.',
-        completed: 'The session completed.',
         unknown: 'The session state cannot be read.',
       },
       /** Why the state is Unknown, by the reason the host reports. */
@@ -41,7 +23,6 @@
         'invalid-manifest': 'manifest.yaml is invalid.',
         'unrecognized-status': 'status.json names an unrecognized state.',
       },
-      runningStage: (stage) => 'Running stage ' + stage + '.',
       pending: (count) => count + (count === 1 ? ' question pending.' : ' questions pending.'),
       /** `HH:MM` in UTC, prefixed with the day, so the page names one clock. */
       quotaReset: (time) => time + ' UTC',
@@ -50,6 +31,7 @@
       /** The next action of a Completed session, by what the host found launchable. */
       nextStep: {
         choose: (count) => count + ' next steps can run. Pick one under Next steps.',
+        run: 'A next step can run. Start it under Next steps.',
         blocked: 'The next steps are blocked. See Next steps for each reason.',
         done: 'Nothing left to run.',
       },
@@ -60,7 +42,8 @@
         blockedIn: 'Blocked in',
         blocker: 'Blocker',
         quotaResets: 'Quota resets',
-        latestUpdate: 'Latest update',
+        stage: 'Stage',
+        providerUpdate: 'Provider update',
       },
       unknownExecution: 'unknown',
     },

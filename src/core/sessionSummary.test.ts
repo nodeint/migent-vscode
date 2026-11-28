@@ -53,13 +53,13 @@ describe('buildSummary', () => {
     expect(summary).toMatchObject({
       state: 'running',
       unknownReason: null,
-      runningStage: 'implement',
+      runningStage: null,
       runningSummary: 'writing tests',
       isRunning: true,
     });
   });
 
-  it('falls back to the latest provider event, then the latest stage', () => {
+  it('names the provider event stage only when the status has no stage, then none', () => {
     const fromEvent = buildSummary(
       snapshot({
         state: 'running',
@@ -75,7 +75,7 @@ describe('buildSummary', () => {
       snapshot({ state: 'running', status: { latest_stage_id: 'plan' } }),
       [],
     );
-    expect(fromStage).toMatchObject({ runningStage: 'plan', runningSummary: null });
+    expect(fromStage).toMatchObject({ runningStage: null, runningSummary: null });
   });
 
   it('hides the running facts outside Running', () => {

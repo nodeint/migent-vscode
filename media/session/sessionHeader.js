@@ -47,20 +47,20 @@
   /**
    * The session facts every session page's header shows, in a fixed order and hidden when unknown: the stage, the
    * duration (to now while running), the time since the last update. Pending questions are the Questions tab's badge.
-   * `meta` is the model's `SessionMeta`. Returns `[{ icon, text, title?, tone?, live? }]`; `live` re-computes the text.
+   * `meta` is the model's `SessionMeta`. Returns `[{ label, text, mono?, title?, live? }]`; `live` re-computes the text.
    */
   function sessionFacts(meta) {
     const created = parseTime(meta.createdAt);
     const updated = parseTime(meta.updatedAt);
     const facts = [];
-    if (meta.stageId) facts.push({ icon: 'milestone', text: meta.stageId, title: 'Stage' });
+    if (meta.stageId) facts.push({ label: copy.facts.stage, text: meta.stageId, mono: true });
     if (created !== null && (meta.isRunning || updated !== null)) {
       const duration = () => formatDuration((meta.isRunning ? Date.now() : updated) - created);
-      facts.push({ icon: 'watch', text: duration(), title: 'Duration', live: meta.isRunning ? duration : null });
+      facts.push({ label: copy.facts.elapsed, text: duration(), live: meta.isRunning ? duration : null });
     }
     if (updated !== null) {
       const ago = () => formatAgo(Date.now() - updated);
-      facts.push({ icon: 'history', text: ago(), title: 'Updated ' + new Date(updated).toLocaleString(), live: ago });
+      facts.push({ label: copy.facts.lastUpdated, text: ago(), title: new Date(updated).toLocaleString(), live: ago });
     }
     return facts;
   }
@@ -83,6 +83,7 @@
       label: options.workflowId,
       title: options.title,
       clamp: true,
+      separators: true,
       facts: sessionFacts(options.meta),
       tabs: { label: copy.tabsLabel, tabs: options.tabs, current: options.current },
       menu: {

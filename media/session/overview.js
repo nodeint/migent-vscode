@@ -6,7 +6,6 @@
 
   const ui = window.MigentUi;
   const { el } = ui;
-  const header = window.MigentSessionHeader;
   const copy = window.MigentCopy;
   const text = window.MigentSessionOverviewCopy;
 
@@ -29,27 +28,35 @@
     });
   }
 
-  /** The Status badge: the shared state icon and tone, with the Overview copy's label. */
-  function stateBadge(summary) {
-    const states = header.sessionStates;
-    return { ...(states[summary.state] || states.unknown), text: text.status.state[summary.state] || summary.state };
+  /** The Completed session's next-step line; `null` when the host found no next-step facts. */
+  function nextStepLine(nextStep) {
+    const words = text.status.nextStep;
+    if (!nextStep) return null;
+    if (nextStep.kind === 'run') return words.run;
+    if (nextStep.kind === 'choose') return words.choose(nextStep.count);
+    if (nextStep.kind === 'blocked') return words.blocked;
+    return words.done;
   }
 
-  /** The state line is shown only when it says more than the header badge already does. */
-  function reasonOf(summary) {
-    if (summary.state === 'unknown') {
-      return (summary.unknownReason !== null && text.status.unknown[summary.unknownReason]) || text.status.reason.unknown;
-    }
-    if (summary.state === 'question') {
-      return summary.pendingQuestions > 0 ? text.status.pending(summary.pendingQuestions) : text.status.reason.question;
-    }
+  /**
+   * The message part of the Status card: what the state means, when the header badge does not already say it.
+   * Question leads with the pending count; Blocked, Failed and Unknown with their reason; Completed with its next step.
+   */
+  function messageOf(summary, nextStep) {
+    const pending = summary.pendingQuestions > 0 ? text.status.pending(summary.pendingQuestions) : null;
     const parts = [];
-    if (summary.state === 'running' && summary.runningStage !== null) {
-      parts.push(text.status.runningStage(summary.runningStage));
+    if (summary.state === 'unknown') {
+      parts.push((summary.unknownReason !== null && text.status.unknown[summary.unknownReason]) || text.status.reason.unknown);
+    } else if (summary.state === 'question') {
+      parts.push(pending || text.status.reason.question);
+      return parts.join(' ');
+    } else if (summary.state === 'blocked' || summary.state === 'failed') {
+      parts.push(text.status.reason[summary.state]);
+    } else if (summary.state === 'completed') {
+      const line = nextStepLine(nextStep);
+      if (line !== null) parts.push(line);
     }
-    if (summary.state === 'blocked') parts.push(text.status.reason.blocked);
-    if (summary.state === 'failed') parts.push(text.status.reason.failed);
-    if (summary.pendingQuestions > 0) parts.push(text.status.pending(summary.pendingQuestions));
+    if (pending !== null) parts.push(pending);
     return parts.length > 0 ? parts.join(' ') : null;
   }
 
@@ -77,8 +84,11 @@
         pairs.push({ label: text.status.labels.quotaResets, value: text.status.quotaReset(time) });
       }
     }
+    if (summary.state === 'running' && summary.runningStage !== null) {
+      pairs.push({ label: text.status.labels.stage, value: summary.runningStage, mono: true });
+    }
     if (summary.runningSummary !== null) {
-      pairs.push({ label: text.status.labels.latestUpdate, value: summary.runningSummary });
+      pairs.push({ label: text.status.labels.providerUpdate, value: summary.runningSummary });
     }
     return pairs;
   }
@@ -90,34 +100,20 @@
     return undefined;
   }
 
-  /**
-   * The next action of a Completed session as one line that points to Next steps or says nothing is left; a single
-   * runnable step adds nothing here because its Next steps card is the action. The host decided it from the launch state of every suggestion.
-   */
-  function nextStepNode(nextStep) {
-    const words = text.status.nextStep;
-    if (nextStep.kind === 'choose') return el('span', words.choose(nextStep.count), 'mg-muted');
-    if (nextStep.kind === 'blocked') return el('span', words.blocked, 'mg-muted');
-    return el('span', words.done, 'mg-muted');
-  }
-
+  /** The Status card: an optional message, an optional details grid, an optional action row, in that order. */
   function renderStatus(model) {
     const { summary, actions, nextStep } = model;
     const children = [];
-    const reason = reasonOf(summary);
-    const lead = [ui.statusIndicator(stateBadge(summary))];
-    if (reason !== null) lead.push(el('span', reason, 'mg-muted'));
-    children.push(ui.actions(lead));
+    const message = messageOf(summary, nextStep);
+    if (message !== null) children.push(el('p', message, 'mg-muted'));
     const pairs = pairsOf(summary);
     if (pairs.length > 0) children.push(ui.keyValues(pairs));
     const buttons = [];
     if (actions.primary !== null) buttons.push(actionButton(actions.primary, 'primary'));
-    for (const name of actions.secondary) buttons.push(actionButton(name, name === 'stop' ? 'danger' : 'secondary'));
+    for (const name of actions.secondary) buttons.push(actionButton(name, 'secondary'));
     if (buttons.length > 0) children.push(ui.actions(buttons));
-    if (nextStep && nextStep.kind !== 'run') children.push(nextStepNode(nextStep));
-    if (buttons.length === 0 && (!nextStep || nextStep.kind === 'run')) children.push(el('span', text.status.noAction, 'mg-muted'));
+    if (children.length === 0) children.push(el('p', text.status.noAction, 'mg-muted'));
     return ui.section(text.status.title, {
-      note: text.status.note,
       surface: true,
       accent: accentOf(summary.state),
       children,

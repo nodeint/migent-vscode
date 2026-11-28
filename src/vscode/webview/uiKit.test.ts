@@ -153,6 +153,47 @@ describe('UI kit builders', () => {
     expect(call(ui.button, 'x', { disabled: true }).disabled).toBe(true);
   });
 
+  it('pageHeader: labeled facts show label then value without an icon, unlabeled facts keep their icon, items join with a hidden dot', () => {
+    const { ui } = load();
+    const header = call(ui.pageHeader, {
+      state: { icon: 'pass', tone: 'ok', text: 'Done' },
+      label: 'wf',
+      separators: true,
+      title: 'Title',
+      facts: [
+        { label: 'Stage', text: 'plan', mono: true },
+        { icon: 'package', text: 'file.yaml' },
+      ],
+      tabs: { label: 'Views', tabs: [], current: 'x' },
+    });
+    const [identity, , meta] = header.children;
+    expect(identity?.textContent).toBe('Done·wf');
+    const dots = (node: FakeElement | undefined) => node?.children.filter((child) => child.className === 'mg-sep') ?? [];
+    expect(dots(identity)).toHaveLength(1);
+    expect(dots(identity)[0]?.attrs['aria-hidden']).toBe('true');
+    expect(dots(meta)).toHaveLength(1);
+    const [labeled, , plain] = meta?.children ?? [];
+    expect(labeled?.children.map((child) => child.className)).toEqual(['mg-meta-label', 'mg-mono']);
+    expect(labeled?.textContent).toBe('Stage:plan');
+    expect(labeled?.descendants().some((node) => node.tagName === 'SVG')).toBe(false);
+    expect(plain?.descendants().some((node) => node.tagName === 'SVG')).toBe(true);
+  });
+
+  it('pageHeader: without separators, several icon-only facts keep their old layout (no dots)', () => {
+    const { ui } = load();
+    const header = call(ui.pageHeader, {
+      eyebrow: 'Workflow',
+      title: 'Title',
+      facts: [{ icon: 'package', text: 'a.yaml' }, { icon: 'checklist', text: '3 stages' }],
+      tabs: { label: 'Views', tabs: [], current: 'x' },
+    });
+    const [identity, , meta] = header.children;
+    expect(header.className).not.toContain('mg-header--dotted');
+    expect(identity?.textContent).toBe('Workflow');
+    expect(meta?.children).toHaveLength(2);
+    expect(meta?.textContent).toBe('a.yaml3 stages');
+  });
+
   it('icon, remove and add buttons name themselves and carry the path', () => {
     const { ui } = load();
     const icon = call(ui.iconButton, 'Move up', { icon: 'arrow-up', path: 'stages.0.move-up', disabled: true });

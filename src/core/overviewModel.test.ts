@@ -109,6 +109,13 @@ describe('buildOverviewModel', () => {
     expect(model.actions).toEqual({ primary: null, secondary: [] });
   });
 
+  it('counts the pending recorded questions in the summary', () => {
+    const entry = (status: 'pending' | 'answered') => ({ item: {}, status, answer: null, answeredAt: null });
+    const questions = [entry('pending'), entry('answered'), entry('pending')] as unknown as OverviewInput['questions'];
+    expect(buildOverviewModel(sourceInput({ questions })).summary.pendingQuestions).toBe(2);
+    expect(buildOverviewModel(sourceInput()).summary.pendingQuestions).toBe(0);
+  });
+
   it('hides activity for a non-Running session even when events are supplied', () => {
     const model = buildOverviewModel(sourceInput({ events: recentEvents(7) }));
 
@@ -124,7 +131,7 @@ describe('buildOverviewModel', () => {
       events: recentEvents(7),
     }));
 
-    expect(model.summary).toMatchObject({ runningStage: 'draft', runningSummary: 'drafting' });
+    expect(model.summary).toMatchObject({ runningStage: null, runningSummary: 'drafting' });
     expect(model.activity.visible).toBe(true);
     if (model.activity.visible) {
       expect(model.activity.lines).toHaveLength(5);

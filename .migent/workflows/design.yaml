@@ -2,12 +2,12 @@ schema_version: 8
 id: design
 constraints:
   - Design only. Do not modify source code.
-  - Follow .agents/skills/design/SKILL.md, its matching type guide, and its design template.
+  - Obtain human approval for new structural decisions; reuse approval unless the decision or material trade-off changes.
 
 artifacts:
   design:
     file: design.md
-    description: Completed solution design using the design skill template.
+    description: Completed solution design.
   design_comment:
     file: design_comment.md
     required: false
@@ -19,21 +19,21 @@ stages:
     max_revisions: 3
     ask: human
     instructions:
+      - Load the design skill.
       - Check the working branch against CONTRIBUTING.md and any prior issue or prd artifact; ask if it does not comply.
       - Write the completed solution design to design.md.
       - Treat prior issue or prd artifacts as sourced input, not approval of proposed solutions.
+      - Complete the design only after required answers and approvals are recorded.
       - Resolve substantive review findings when revising.
     artifacts: [design]
 
   - id: review_design
-    role: reviewer
+    role: architect_reviewer
     depends_on:
       - design
     instructions:
-      - Follow .agents/skills/review/SKILL.md, reviewing design.md against .agents/skills/design/SKILL.md, its matching type guide, and its template.
-      - Trace each acceptance criterion through the solution's behavior and verification evidence.
-      - Flag scope expansion, unsupported extension points, and unnecessary complexity.
-      - Do not demand execution task lists or code. Keep comments observational; do not defer required corrections or solution decisions to later work.
+      - Load the review, design skills.
+      - Review design.md against the task and prior issue or prd artifacts.
     decision:
       - approved:
           when: The solution meets the review criteria, required decisions and approvals are resolved, and no comments remain.

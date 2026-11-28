@@ -338,7 +338,12 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
         this.#sendQuestions(entry, isForced);
         return;
       case 'overview':
-        entry.publish(this.#withQuestions(entry, buildOverviewPage(entry, this.#registry)), isForced);
+        {
+          // One read of the question history feeds both the Status count and the Questions tab availability.
+          const records = questionRecords(entry, this.#registry);
+          const model = buildOverviewPage(entry, this.#registry, records);
+          entry.publish(this.#withQuestions(entry, model, attemptsOf(entry, this.#registry, records)), isForced);
+        }
         return;
       case 'metrics':
         entry.publish(this.#withQuestions(entry, buildMetricsPage(entry, this.#registry)), isForced);
@@ -354,9 +359,11 @@ export class SessionPanels implements vscode.Disposable, ActiveTarget {
    * attempt is shown, else the latest one.
    */
   /** The model with the header's `hasQuestions`, which every tab shows (the Questions tab is disabled without). */
-  #withQuestions(entry: Entry, model: SessionPageModel): SessionPageModel {
+  #withQuestions(entry: Entry, model: SessionPageModel, known?: readonly QuestionAttempt[]): SessionPageModel {
     const attempts =
-      model.tab === 'questions' ? model.questions.attempts : attemptsOf(entry, this.#registry, questionRecords(entry, this.#registry));
+      model.tab === 'questions'
+        ? model.questions.attempts
+        : (known ?? attemptsOf(entry, this.#registry, questionRecords(entry, this.#registry)));
     return { ...model, header: { ...model.header, hasQuestions: attempts.length > 0 } };
   }
 
