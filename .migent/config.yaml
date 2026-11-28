@@ -1,31 +1,55 @@
 schema_version: 8
 roles:
-  product:
+  product_analyst:
     description: "Defines product requirements and user experience."
     responsibilities:
-      - "Own the user problem, intended product behavior, and user experience for the assigned task."
+      - "Define the user problem, product scope, intended behavior, and user flows."
+      - "Specify observable acceptance criteria and record decisions on scope and behavior."
+
+  product_reviewer:
+    description: "Reviews product specifications and assesses readiness for approval."
+    responsibilities:
+      - "Review the product specification against the user problem and agreed scope."
+      - "Identify gaps in requirements, user flows, or acceptance criteria and determine readiness for approval."
 
   architect:
     description: "Designs the solution and its structure."
     responsibilities:
-      - "Own solution decisions, architecture, and affected contracts for the assigned task."
+      - "Design a solution that meets the requirements and fits the repository architecture."
+      - "Define affected contracts and record structural decisions, trade-offs, risk mitigations, and required approvals."
+
+  architect_reviewer:
+    description: "Reviews solution designs and assesses readiness for approval."
+    responsibilities:
+      - "Review the solution design against the requirements, repository architecture, and affected contracts."
+      - "Identify unresolved decisions, missing approvals, or unaddressed risks and determine readiness for approval."
 
   planner:
     description: "Plans implementation phases for an approved design."
     responsibilities:
-      - "Own the implementation phase boundaries and delivery order for the approved design."
+      - "Split the approved design into independently verifiable implementation phases."
+      - "Define each phase's scope, dependencies, delivery order, verification steps, and acceptance criteria coverage."
+
+  planner_reviewer:
+    description: "Reviews implementation plans and assesses readiness for approval."
+    responsibilities:
+      - "Review phase boundaries, dependencies, and delivery order against the approved design."
+      - "Identify gaps in design coverage or phase verification and determine readiness for approval."
 
   reviewer:
-    description: "Reviews assigned work and determines readiness."
+    description: "Reviews implementation changes and assesses readiness for approval."
     responsibilities:
-      - "Own the assessment, findings, and review verdict for the assigned work."
+      - "Review implementation changes against the assigned scope, acceptance criteria, and repository rules."
+      - "Assess verification evidence, report required fixes with their impact, and determine readiness for approval."
 
   developer:
     description: "Implements and verifies assigned changes."
     responsibilities:
-      - "Own implementation and verification of the assigned task or phase."
+      - "Implement the assigned task or phase within its agreed scope and repository conventions."
+      - "Run the relevant checks and report changes, results, and remaining gaps."
 
   operator:
     description: "Executes assigned repository operations."
     responsibilities:
-      - "Own repository operations and their handoff artifacts within the assigned stage."
+      - "Perform the assigned repository operations within the stage's authorization and repository rules."
+      - "Verify the outcome and record the evidence and next action in the handoff artifact."
