@@ -2,6 +2,7 @@ import type { EventEntry } from './eventTail';
 import type { ExecutionEntry } from './executions';
 import type { HumanInputFact } from './humanInput';
 import { type OverviewActions,overviewActions } from './overviewActions';
+import type { QuestionEntry } from './questions';
 import { buildResultsModel, type ResultsInput, type ResultsModel,type ResultsNext } from './resultsModel';
 import { buildActivity, type SessionActivity } from './sessionActivity';
 import type { ExecutionView } from './sessionMetricsModel';
@@ -56,6 +57,12 @@ export interface OverviewInput extends ResultsInput {
   inputs?: ReadonlyMap<string, HumanInputFact>;
   /** Already-read recent events; the host passes none unless the session is Running. */
   events: readonly EventEntry[];
+  /** The recorded questions (`questions.json`); the Status card counts those still pending. */
+  questions?: readonly QuestionEntry[];
+}
+
+function pendingCount(questions: readonly QuestionEntry[] | undefined): number {
+  return (questions ?? []).filter(({ status }) => status === 'pending').length;
 }
 
 export function buildOverviewModel(input: OverviewInput): OverviewModel {
@@ -72,7 +79,7 @@ export function buildOverviewModel(input: OverviewInput): OverviewModel {
     };
   }
 
-  const summary = buildSummary(snapshot, input.executions);
+  const summary = buildSummary(snapshot, input.executions, pendingCount(input.questions));
   return {
     ...base,
     summary,

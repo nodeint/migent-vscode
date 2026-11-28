@@ -75,7 +75,11 @@ function resultsInputOf(entry: PageEntry, registry: ProjectRegistry): ResultsInp
  * events. Events are read only while the session is Running; the tab still posts
  * the `results` model until P5 renames it.
  */
-export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): SessionPageModel {
+export function buildOverviewPage(
+  entry: PageEntry,
+  registry: ProjectRegistry,
+  records: readonly QuestionEntry[] = questionRecords(entry, registry),
+): SessionPageModel {
   const context = registry.project(entry.project);
   const snapshot = context?.store.snapshot(entry.sessionId);
   const input: OverviewInput = {
@@ -88,6 +92,7 @@ export function buildOverviewPage(entry: PageEntry, registry: ProjectRegistry): 
     input.executions = listExecutions(input.sessionDirPath);
     input.plan = readSessionStagePlan(context.root, entry.sessionId);
     input.inputs = readInputIndex(input.sessionDirPath);
+    input.questions = records;
     const metrics = readMetrics(input.sessionDirPath);
     if (metrics.kind === 'ok') {
       input.metrics = metrics.metrics.executions.map(executionView);

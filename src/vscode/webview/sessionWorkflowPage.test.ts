@@ -712,11 +712,15 @@ describe('Session Overview and Metrics tabs', () => {
     const tiers = (header as FakeElement).children.map((child) => (child as FakeElement).className.split(' ')[0]);
     expect(tiers).toEqual(['mg-header-row', 'mg-title', 'mg-subtitle', 'mg-tabbar']);
     const [identity, title, facts, bar] = (header as FakeElement).children as FakeElement[];
-    expect(identity.textContent).toBe('Stoppedwf');
+    expect(identity.textContent).toBe('Stopped·wf');
     expect(title.classList.contains('mg-title--clamp')).toBe(true);
-    const chips = facts.children.map((chip) => (chip as FakeElement).textContent);
-    expect(chips[0]).toBe('plan');
-    expect(chips[1]).toBe('5m 0s');
+    const chips = facts.children
+      .filter((chip) => !(chip as FakeElement).classList.contains('mg-sep'))
+      .map((chip) => (chip as FakeElement).textContent);
+    expect(chips[0]).toBe('Stage:plan');
+    expect(chips[1]).toBe('Elapsed:5m 0s');
+    expect(chips[2]).toMatch(/^Last updated:/);
+    expect(facts.children.filter((chip) => (chip as FakeElement).classList.contains('mg-sep'))).toHaveLength(2);
     // Pending questions are the Questions tab's badge, not a fact.
     expect(chips.some((chip) => chip.endsWith('pending'))).toBe(false);
     const barKinds = bar.children.map((child) => (child as FakeElement).className.split(' ')[0]);

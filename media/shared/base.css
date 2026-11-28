@@ -113,6 +113,11 @@ body {
   gap: var(--mg-space-3);
 }
 
+.mg-header--dotted .mg-header-row {
+  flex-wrap: wrap;
+  gap: var(--mg-space-1) var(--mg-space-2);
+}
+
 .mg-header--session > * + * {
   margin-top: var(--mg-space-2);
 }
@@ -133,7 +138,6 @@ body {
 }
 
 .mg-title--clamp {
-  font-size: 1.3em;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -147,10 +151,38 @@ body {
   margin-bottom: 0;
 }
 
+.mg-header--dotted .mg-meta {
+  align-items: center;
+  gap: var(--mg-space-1) var(--mg-space-2);
+}
+
+.mg-sep {
+  color: var(--mg-muted);
+}
+
 .mg-meta-item {
   display: inline-flex;
   align-items: center;
   gap: var(--mg-space-1);
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* The label of a labeled header fact; it never shrinks, so a long value wraps beside it. */
+.mg-meta-label {
+  color: var(--mg-muted);
+  flex: none;
+  white-space: nowrap;
+}
+
+.mg-meta-label + span {
+  color: var(--vscode-foreground);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mg-meta-item:has(.mg-meta-label) {
+  align-items: baseline;
 }
 
 .mg-icon {

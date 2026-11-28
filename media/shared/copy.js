@@ -15,6 +15,9 @@
     },
     tabsLabel: 'Session pages',
 
+    /** The labels of the session header facts. */
+    facts: { stage: 'Stage', elapsed: 'Elapsed', lastUpdated: 'Last updated' },
+
     /** The more menu of a session page, and the actions several pages add to it. */
     menu: {
       label: 'More actions',

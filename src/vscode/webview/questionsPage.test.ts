@@ -365,9 +365,9 @@ describe('Questions page', () => {
     expect(badge?.textContent).toBe('Question');
     const facts = page.doc.root.descendants().filter((node) => node.className.includes('mg-meta-item'));
     expect(facts.map((fact) => fact.textContent)).toEqual([
-      'plan',
-      '9m 48s',
-      expect.stringMatching(/ ago$/),
+      'Stage:plan',
+      'Elapsed:9m 48s',
+      expect.stringMatching(/^Last updated:.* ago$/),
     ]);
     const banners = (): string[] =>
       page.doc.root

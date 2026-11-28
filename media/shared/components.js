@@ -713,28 +713,44 @@
    * - `options.state`: `{ icon, tone, text }` for the status badge; or `options.eyebrow`, a plain label for a page
    *   that has no state. `options.label` is an optional secondary label (the workflow id).
    * - `options.title`; `options.clamp` limits it to two lines and puts the full text in its tooltip.
-   * - `options.facts`: `[{ icon, text, title?, tone?, live? }]`; `live` re-computes the text twice a minute.
+   * - `options.facts`: `[{ icon?, label?, text, mono?, title?, tone?, live? }]`; `label` renders `<label>: <text>` with the
+   *   label muted, `icon` is optional, `live` re-computes the text twice a minute. `options.separators` joins identity items and facts with a middle dot and tightens their spacing (the Session header).
    * - `options.tabs`: `{ label, tabs, current }` as for `pageTabs`. `options.actions`: nodes between tabs and menu.
    * - `options.menu`: `{ label, items }` for the more menu.
    */
+  /** The decorative middle dot between header items; hidden from assistive technology. */
+  function separator() {
+    const node = el('span', '·', 'mg-sep');
+    node.setAttribute('aria-hidden', 'true');
+    return node;
+  }
+
   function pageHeader(options) {
-    const header = el('header', null, 'mg-header mg-header--session');
+    const header = el('header', null, 'mg-header mg-header--session' + (options.separators ? ' mg-header--dotted' : ''));
 
     const identity = el('div', null, 'mg-header-row');
     if (options.state) identity.append(statusIndicator(options.state));
     else if (options.eyebrow) identity.append(el('span', options.eyebrow, 'mg-eyebrow'));
-    if (options.label) identity.append(el('span', options.label, 'mg-workflow'));
+    if (options.label) {
+      if (options.separators && (options.state || options.eyebrow)) identity.append(separator());
+      identity.append(el('span', options.label, 'mg-workflow'));
+    }
 
     const title = el('h1', options.title, 'mg-title' + (options.clamp ? ' mg-title--clamp' : ''));
     if (options.clamp) title.title = options.title;
 
     const meta = el('p', null, 'mg-subtitle mg-meta');
     liveChips = [];
+    let first = true;
     for (const fact of options.facts || []) {
+      if (options.separators && !first) meta.append(separator());
+      first = false;
       const factNode = el('span', null, 'mg-meta-item' + (fact.tone ? ' mg-status mg-status--' + fact.tone : ''));
       if (fact.title) factNode.title = fact.title;
-      const text = el('span', fact.text);
-      factNode.append(icon(fact.icon), text);
+      const text = el('span', fact.text, fact.mono ? 'mg-mono' : undefined);
+      if (fact.icon) factNode.append(icon(fact.icon));
+      if (fact.label) factNode.append(el('span', fact.label + ':', 'mg-meta-label'));
+      factNode.append(text);
       meta.append(factNode);
       if (fact.live) liveChips.push({ node: text, text: fact.live });
     }

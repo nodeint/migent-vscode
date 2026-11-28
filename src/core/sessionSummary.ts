@@ -1,6 +1,5 @@
 import { executionBlocker, type ExecutionEntry } from './executions';
 import type { DisplayStateName, SessionSnapshot, UnknownReason } from './model';
-import { pendingQuestions } from './questions';
 import { blockedTargets, quotaFailure } from './replyFlow';
 import { stageOf } from './sessionPresentation';
 import { providerEventField } from './statusReader';
@@ -22,7 +21,10 @@ export interface SessionSummary {
   state: DisplayStateName;
   /** Set only when `state` is `unknown`; the page owns the wording. */
   unknownReason: UnknownReason | null;
-  /** The stage running now; null unless the session is Running. */
+  /**
+   * The running stage the header does not show, from the provider event; null unless Running and the status
+   * names no stage.
+   */
   runningStage: string | null;
   /** The latest provider event's summary; null unless the session is Running. */
   runningSummary: string | null;
@@ -62,9 +64,12 @@ function latestExecutionOf(
   return latest;
 }
 
-/** Running stage from the status's latest stage, then its latest provider event. */
+/**
+ * The stage only the provider event knows. When the status names a stage the page header already shows it, so the
+ * card stage is null; otherwise it is the latest provider event's stage.
+ */
 function runningStageOf(snapshot: SessionSnapshot): string | null {
-  return stageOf(snapshot) ?? providerEventField(snapshot.status, 'stage_id');
+  return stageOf(snapshot) === null ? providerEventField(snapshot.status, 'stage_id') : null;
 }
 
 /** The blocked execution of an ordinary blocker with its recorded blocker text; a blank record counts as none. */
@@ -90,6 +95,7 @@ function blockedFacts(
 export function buildSummary(
   snapshot: SessionSnapshot,
   executions: readonly ExecutionEntry[],
+  pending = 0,
 ): SessionSummary {
   const { state } = snapshot.displayState;
   const isRunning = state === 'running';
@@ -100,7 +106,7 @@ export function buildSummary(
     runningSummary: isRunning ? providerEventField(snapshot.status, 'summary') : null,
     blocked: blockedFacts(snapshot, executions),
     quotaResetAt: quotaFailure(snapshot)?.retryAt ?? null,
-    pendingQuestions: pendingQuestions().length,
+    pendingQuestions: pending,
     latestExecution: latestExecutionOf(snapshot, executions),
     isRunning,
   };
