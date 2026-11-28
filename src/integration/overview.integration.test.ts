@@ -14,6 +14,7 @@ import type { TreeNode } from '../vscode/views/nodes';
 import {
   createProject,
   type Env,
+  executionRecord,
   freshLock,
   manifest,
   migentPath,
@@ -228,6 +229,41 @@ const scenarios: Scenario[] = [
       assert.ok(same(activeFile(), taskFile), 'the active editor did not change');
       assert.equal(env.api.session.activeTarget(), undefined, 'the panel was not focused');
       assert.equal(env.api.session.count, 1, 'no second panel was opened');
+      await closeAll(env);
+    },
+  },
+  {
+    name: 'Status: a blocked session reports its blocked stage, attempt and recorded blocker, or none when unrecorded',
+    async run(env) {
+      const execution = '0001-plan--attempt-01';
+      for (const [sessionId, outcome] of [
+        ['with-blocker', { blocker: 'needs a decision' }],
+        ['no-blocker', {}],
+      ] as const) {
+        write(migentPath(env.root, 'sessions', sessionId, 'manifest.yaml'), manifest(sessionId, 'workflow_id: plan\n'));
+        write(
+          migentPath(env.root, 'sessions', sessionId, 'status.json'),
+          status('blocked', { latest_execution_id: execution, blocked_by_execution_ids: [execution] }),
+        );
+        write(
+          migentPath(env.root, 'sessions', sessionId, 'executions', execution, 'execution.json'),
+          executionRecord(execution, 'plan', { status: 'blocked', outcome }),
+        );
+      }
+      await createProject(env);
+      await waitFor('blocked sessions loaded', () => env.project()?.store.snapshot('no-blocker') !== undefined);
+
+      for (const [sessionId, blocker] of [
+        ['with-blocker', 'needs a decision'],
+        ['no-blocker', null],
+      ] as const) {
+        const id = identity(env, sessionId);
+        env.api.session.open(id, { tab: 'overview' });
+        await waitFor(`${sessionId} overview posted`, () => overviewOf(env, id)?.summary.state === 'blocked');
+        assert.deepEqual(overviewOf(env, id)?.summary.blocked, [
+          { executionId: execution, stageId: 'plan', attempt: 1, blocker },
+        ]);
+      }
       await closeAll(env);
     },
   },

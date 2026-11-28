@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The Session Overview Status card of a blocked session now shows the recorded blocker with its stage and attempt.
+  ([#95](https://github.com/nodeint/migent-vscode/pull/95))
+
 ## 0.1.15
 
 - Require Migent CLI 0.10.1 or newer and schema version 8 for config and workflow files; run `migent migrate` on

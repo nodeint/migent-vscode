@@ -1,7 +1,7 @@
-import type { ExecutionEntry } from './executions';
+import { executionBlocker, type ExecutionEntry } from './executions';
 import type { DisplayStateName, SessionSnapshot, UnknownReason } from './model';
 import { pendingQuestions } from './questions';
-import { quotaFailure } from './replyFlow';
+import { blockedTargets, quotaFailure } from './replyFlow';
 import { stageOf } from './sessionPresentation';
 import { providerEventField } from './statusReader';
 
@@ -67,6 +67,25 @@ function runningStageOf(snapshot: SessionSnapshot): string | null {
   return stageOf(snapshot) ?? providerEventField(snapshot.status, 'stage_id');
 }
 
+/** The blocked execution of an ordinary blocker with its recorded blocker text; a blank record counts as none. */
+function blockedFacts(
+  snapshot: SessionSnapshot,
+  executions: readonly ExecutionEntry[],
+): BlockedExecutionFact[] {
+  const facts: BlockedExecutionFact[] = [];
+  for (const target of blockedTargets(snapshot)) {
+    const entry = executions.find((execution) => execution.id === target.executionId);
+    const recorded = entry === undefined ? null : executionBlocker(entry.execution);
+    facts.push({
+      executionId: target.executionId,
+      stageId: target.stageId ?? '',
+      attempt: target.attempt,
+      blocker: recorded !== null && recorded.trim() !== '' ? recorded : null,
+    });
+  }
+  return facts;
+}
+
 /** Collect the Status facts from a snapshot and its execution summaries. */
 export function buildSummary(
   snapshot: SessionSnapshot,
@@ -79,7 +98,7 @@ export function buildSummary(
     unknownReason: snapshot.displayState.unknownReason ?? null,
     runningStage: isRunning ? runningStageOf(snapshot) : null,
     runningSummary: isRunning ? providerEventField(snapshot.status, 'summary') : null,
-    blocked: [],
+    blocked: blockedFacts(snapshot, executions),
     quotaResetAt: quotaFailure(snapshot)?.retryAt ?? null,
     pendingQuestions: pendingQuestions().length,
     latestExecution: latestExecutionOf(snapshot, executions),
