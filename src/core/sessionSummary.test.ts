@@ -93,8 +93,7 @@ describe('buildSummary', () => {
     expect(summary).toMatchObject({ runningStage: null, runningSummary: null, isRunning: false });
   });
 
-  // B6: `blocked_by_execution_ids` is not in the contract, so a blocked session lists no blocked execution.
-  it('lists no blocked execution, even when the executions record a blocker', () => {
+  it('lists the latest blocked execution with its recorded blocker', () => {
     const summary = buildSummary(
       snapshot({
         state: 'blocked',
@@ -102,8 +101,30 @@ describe('buildSummary', () => {
       }),
       [
         execution('0001-plan--attempt-01', 'plan', { status: 'blocked', blocker: 'needs a decision' }),
-        execution('0002-review--attempt-02', 'review', { status: 'blocked', attempt: 2 }),
+        execution('0002-review--attempt-02', 'review', { status: 'blocked', attempt: 2, blocker: 'other' }),
       ],
+    );
+
+    expect(summary.blocked).toEqual([
+      { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, blocker: 'needs a decision' },
+    ]);
+  });
+
+  it('keeps the blocked execution but no blocker when none was recorded', () => {
+    const summary = buildSummary(
+      snapshot({ state: 'blocked', status: { latest_execution_id: '0001-plan--attempt-01' } }),
+      [execution('0001-plan--attempt-01', 'plan', { status: 'blocked', blocker: '  ' })],
+    );
+
+    expect(summary.blocked).toEqual([
+      { executionId: '0001-plan--attempt-01', stageId: 'plan', attempt: 1, blocker: null },
+    ]);
+  });
+
+  it('lists nothing outside Blocked', () => {
+    const summary = buildSummary(
+      snapshot({ state: 'failed', status: { latest_execution_id: '0001-plan--attempt-01' } }),
+      [execution('0001-plan--attempt-01', 'plan', { blocker: 'x' })],
     );
 
     expect(summary.blocked).toEqual([]);
